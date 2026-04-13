@@ -19,9 +19,7 @@ const {
   clearMedicalPermits,
 } = require('../../../../../services/permit.js');
 const {
-  getKey,
   setKey,
-  delKey,
   listUserSessions,
   listUserSessionsWithMeta,
   scanAllRefreshSessions,
@@ -787,17 +785,24 @@ const Query = {
       [normalizedBranch, normalizedType, normalizedStatus, searchPattern]
     );
 
-    const users = listResult.rows.map((row) => ({
-      id: String(row.id),
-      name: row.name || '--',
-      email: row.email || '--',
-      // Branch is sourced from UsersPersonal.branch only.
-      branch: row.branch || '--',
-      type: row.type || 'Unknown',
-      status: row.status || 'Unknown',
-      // Last login is sourced from UserLoginAttempt successful attempts only.
-      lastLogin: row.last_login ? new Date(row.last_login).toISOString() : null,
-    }));
+    const users = listResult.rows.map((row) => {
+      const resolvedStatus = String(row.status || 'Unknown');
+      const isUnverified = resolvedStatus.toLowerCase() === 'unverified';
+
+      return {
+        id: String(row.id),
+        // Name is sourced from UsersPersonal only. Unverified users use a fixed placeholder.
+        name: isUnverified ? 'Unverified User' : (row.name || 'Unknown User'),
+        // Email is sourced from UserCredentials.email.
+        email: row.email || '--',
+        // Branch is sourced from UsersPersonal.branch only.
+        branch: row.branch || '--',
+        type: row.type || 'Unknown',
+        status: resolvedStatus,
+        // Last login is sourced from UserLoginAttempt successful attempts only.
+        lastLogin: row.last_login ? new Date(row.last_login).toISOString() : null,
+      };
+    });
 
     return {
       users,
@@ -840,6 +845,27 @@ const Query = {
     }
 
     const cutoffMs = Date.now() - normalizedDays * 24 * 60 * 60 * 1000;
+    const activeSessions = await getActiveRefreshSessionsAcrossUsers();
+    const activeUserIds = new Set();
+
+    for (const session of activeSessions) {
+      const activityMs = getSessionActivityMs(session);
+      if (Number.isFinite(activityMs) && activityMs >= cutoffMs) {
+        activeUserIds.add(String(session.userId));
+      }
+    }
+
+    return activeUserIds.size;
+  },
+
+  _countMaxActiveUsersInHours: async (_, { hours }, { user, res }) => {
+    const normalizedHours = Number(hours);
+
+    if (!Number.isInteger(normalizedHours) || normalizedHours < 6 || normalizedHours > 72) {
+      throwGraphQLError(res).message('hours must be an integer between 6 and 72').status(400).throw();
+    }
+
+    const cutoffMs = Date.now() - normalizedHours * 60 * 60 * 1000;
     const activeSessions = await getActiveRefreshSessionsAcrossUsers();
     const activeUserIds = new Set();
 
@@ -961,7 +987,7 @@ const Query = {
       }
 
       const status = String(rawSession.status || 'active').toLowerCase();
-      if (status !== 'active') {
+      if (!['active', 'revoked'].includes(status)) {
         continue;
       }
 
@@ -1007,13 +1033,41 @@ const Query = {
       .sort((left, right) => (right._sortMs || 0) - (left._sortMs || 0))
       .map(({ _sortMs, ...session }) => session);
 
-    const totalCount = sessions.length;
-    const paginatedSessions = sessions.slice(offset, offset + limit);
+    return sessions.slice(offset, offset + limit);
+  },
 
-    return {
-      sessions: paginatedSessions,
-      totalCount,
-    };
+  _listUserLoginAttempts: async (_, { userId, offset = 0, limit = 10 }, { user, res }) => {
+    if (!userId) {
+      throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    if (offset < 0) {
+      throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
+    }
+
+    if (limit < 1 || limit > 100) {
+      throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
+    }
+
+    const result = await db.query(
+      `SELECT
+         attempted_at,
+         was_successful
+       FROM "UserLoginAttempt"
+       WHERE user_id = $1
+       ORDER BY attempted_at DESC
+       OFFSET $2
+       LIMIT $3`,
+      [userId, offset, limit]
+    );
+
+    return result.rows.map((row) => ({
+      timestamp: row.attempted_at ? new Date(row.attempted_at).toISOString() : new Date(0).toISOString(),
+      // UserLoginAttempt currently stores no IP/device columns; provide stable placeholders.
+      ip: 'N/A',
+      device: 'Unknown Device',
+      status: row.was_successful ? 'Success' : 'Failed',
+    }));
   },
 
   _listPermissionTemplates: async (_, __, { user, res }) => {
@@ -1722,9 +1776,10 @@ const Mutation = {
     }
   },
 
-  _revokeUserSession: async (_, { userId, deviceId }, { user, res }) => {
+  _setUserSessionRevoked: async (_, { userId, deviceId, revoked }, { user, res }) => {
     const normalizedUserId = String(userId || '').trim();
     const normalizedDeviceId = String(deviceId || '').trim();
+    const shouldRevoke = Boolean(revoked);
 
     if (!normalizedUserId) {
       throwGraphQLError(res).message('userId is required').status(400).throw();
@@ -1734,45 +1789,168 @@ const Mutation = {
       throwGraphQLError(res).message('deviceId is required').status(400).throw();
     }
 
-    const sessionKey = `rt:${normalizedUserId}:${normalizedDeviceId}`;
-    const rawSession = await getKey(sessionKey);
+    const sessionRecords = await listUserSessionsWithMeta(normalizedUserId);
+    const matchedRecord = sessionRecords.find((record) => {
+      const rawSession = record?.session;
+      if (!rawSession || typeof rawSession !== 'object') return false;
 
-    if (!rawSession) {
+      const key = String(record.key || '');
+      const keyDeviceId = key.split(':')[2] || '';
+      const resolvedDeviceId = String(rawSession.deviceId || keyDeviceId || '');
+      return resolvedDeviceId === normalizedDeviceId;
+    });
+
+    if (!matchedRecord || !matchedRecord.session) {
       return {
         ok: true,
-        message: 'Session already revoked or expired.',
+        message: 'Session not found or already expired.',
       };
     }
 
-    let parsedSession = null;
-    try {
-      parsedSession = JSON.parse(rawSession);
-    } catch {
-      parsedSession = null;
-    }
-
-    if (parsedSession && typeof parsedSession === 'object') {
-      const revokedPayload = {
-        ...parsedSession,
-        status: 'revoked',
-        updatedAt: Date.now(),
+    const ttlSeconds = Number(matchedRecord.ttlSeconds) || 0;
+    if (ttlSeconds <= 0) {
+      return {
+        ok: true,
+        message: 'Session already expired.',
       };
-
-      // Persist revoked status briefly before key deletion to satisfy audit semantics.
-      await setKey(sessionKey, JSON.stringify(revokedPayload), 5);
     }
 
-    await delKey(sessionKey);
+    const sessionKey = String(matchedRecord.key || `rt:${normalizedUserId}:${normalizedDeviceId}`);
+    const currentSession = matchedRecord.session;
+    const currentStatus = String(currentSession.status || 'active').toLowerCase();
+    const nextStatus = shouldRevoke ? 'revoked' : 'active';
 
-    logger.info('User refresh session revoked by admin', {
+    if (currentStatus === nextStatus) {
+      return {
+        ok: true,
+        message: shouldRevoke ? 'Session already revoked.' : 'Session already active.',
+      };
+    }
+
+    const updatedPayload = {
+      ...currentSession,
+      status: nextStatus,
+      updatedAt: Date.now(),
+    };
+
+    await setKey(sessionKey, JSON.stringify(updatedPayload), ttlSeconds);
+
+    logger.info('User refresh session status toggled by admin', {
       adminId: String(user?.id || ''),
       userId: normalizedUserId,
       deviceId: normalizedDeviceId,
+      revoked: shouldRevoke,
     });
 
     return {
       ok: true,
-      message: 'Session revoked successfully.',
+      message: shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.',
+    };
+  },
+
+  _revokeUserSession: async (_, { userId, deviceId }, { user, res }) => {
+    return Mutation._setUserSessionRevoked(_, { userId, deviceId, revoked: true }, { user, res });
+  },
+
+  _setUserAccountLocked: async (_, { userId, locked }, { user, res }) => {
+    const normalizedUserId = String(userId || '').trim();
+    const shouldLock = Boolean(locked);
+
+    if (!normalizedUserId) {
+      throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    const existingResult = await db.query(
+      `SELECT id
+       FROM "UserCredentials"
+       WHERE id = $1
+       LIMIT 1`,
+      [normalizedUserId]
+    );
+
+    if (existingResult.rows.length === 0) {
+      throwGraphQLError(res).message('User not found').status(404).throw();
+    }
+
+    const nextStatus = shouldLock ? 'Locked' : 'Active';
+    await db.query(
+      `UPDATE "UserCredentials"
+       SET credentials_status = $1::"CredentialStatus",
+           locked_until = CASE WHEN $2::boolean THEN NOW() ELSE NULL END
+       WHERE id = $3`,
+      [nextStatus, shouldLock, normalizedUserId]
+    );
+
+    logger.info('User account lock status updated by admin', {
+      adminId: String(user?.id || ''),
+      userId: normalizedUserId,
+      locked: shouldLock,
+    });
+
+    return {
+      ok: true,
+      message: shouldLock ? 'Account locked successfully.' : 'Account unlocked successfully.',
+    };
+  },
+
+  _setUserSuperior: async (_, { userId }, { user, res }) => {
+    const normalizedUserId = String(userId || '').trim();
+
+    if (!normalizedUserId) {
+      throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    const client = await db.db().connect();
+    try {
+      await client.query('BEGIN');
+
+      const existingResult = await client.query(
+        `SELECT id, identity
+         FROM "UserCredentials"
+         WHERE id = $1
+         FOR UPDATE`,
+        [normalizedUserId]
+      );
+
+      if (existingResult.rows.length === 0) {
+        throwGraphQLError(res).message('User not found').status(404).throw();
+      }
+
+      if (String(existingResult.rows[0].identity || '').toLowerCase() !== 'superior') {
+        await client.query(
+          `UPDATE "UserCredentials"
+           SET identity = 'Superior'
+           WHERE id = $1`,
+          [normalizedUserId]
+        );
+      }
+
+      await client.query(
+        `UPDATE "Patients"
+         SET profile = 'Superior'
+         WHERE id = $1`,
+        [normalizedUserId]
+      );
+
+      await client.query('COMMIT');
+
+      logger.info('User upgraded to Superior by admin', {
+        adminId: String(user?.id || ''),
+        userId: normalizedUserId,
+      });
+
+      return {
+        ok: true,
+        message: 'User set as Superior successfully.',
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (error?.name === 'GraphQLError') {
+        throw error;
+      }
+      throwGraphQLError(res).message(error.message || 'Failed to set Superior identity.').status(500).throw();
+    } finally {
+      client.release();
     };
   },
 

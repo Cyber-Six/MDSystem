@@ -128,7 +128,7 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
         email: email,
     });
     const tokens = await AuthSession.create(req, user.id);
-
+    await query.recordLoginAttempt(email, true);
     return res.status(201).json({
         ok: true,
         ...tokens,

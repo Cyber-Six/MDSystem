@@ -69,6 +69,11 @@ const Query = {
     return await Wrapper.Query._countActiveUsersInDays(_, args, context);
   },
 
+  countMaxActiveUsersInHours: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._countMaxActiveUsersInHours(_, args, context);
+  },
+
   listUsers: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listUsers(_, args, context);
@@ -77,6 +82,11 @@ const Query = {
   listUserSessions: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listUserSessions(_, args, context);
+  },
+
+  listUserLoginAttempts: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._listUserLoginAttempts(_, args, context);
   },
 
   listAllSessions: async (_, args, context) => {
@@ -141,6 +151,21 @@ const Mutation = {
   revokeUserSession: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._revokeUserSession(_, args, context);
+  },
+
+  setUserSessionRevoked: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._setUserSessionRevoked(_, args, context);
+  },
+
+  setUserAccountLocked: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._setUserAccountLocked(_, args, context);
+  },
+
+  setUserSuperior: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._setUserSuperior(_, args, context);
   },
 
   createPermissionTemplate: async (_, args, context) => {
