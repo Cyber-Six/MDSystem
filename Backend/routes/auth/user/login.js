@@ -41,7 +41,7 @@ function isCredentialTemporarilyLocked(lockState) {
 router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   try {
   const { email, password, recaptchaToken } = req.body;
-  const account_type = detectPortalFromSubdomain(req);
+  let account_type = detectPortalFromSubdomain(req);
   const auditMetadata = getRequestAuditMetadata(req);
   const recordAttempt = async (wasSuccessful, targetEmail = email, userId = null) => {
     try {

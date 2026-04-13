@@ -63,7 +63,7 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   const { credential } = req.body;
-  const account_type = detectPortalFromSubdomain(req);
+  let account_type = detectPortalFromSubdomain(req);
   const auditMetadata = getRequestAuditMetadata(req);
   const recordAttempt = async (wasSuccessful, targetEmail = null, userId = null) => {
     try {
