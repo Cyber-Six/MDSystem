@@ -73,54 +73,12 @@ async function validateAllUpdateTicket(id) {
       CASE WHEN NOT EXISTS (SELECT 1 FROM "OralAppliance" oap WHERE oap.id = pul.id) THEN 'OralAppliance' END AS missing_oralappliance,
       CASE WHEN NOT EXISTS (SELECT 1 FROM "DentalProcedure" dpp WHERE dpp.id = pul.id) THEN 'DentalProcedure' END AS missing_dentalprocedure,
 
-      -- Inactive recovery is medical/dental-only. Personal/profile validation
-      -- applies to non-inactive credentials only.
-      CASE
-        WHEN COALESCE(uc.credentials_status::text, '') <> 'Inactive'
-          AND NOT EXISTS (SELECT 1 FROM "profileRecord" pr WHERE pr.id = pul.id)
-        THEN 'profileRecord'
-      END AS missing_profile,
-      CASE
-        WHEN COALESCE(uc.credentials_status::text, '') <> 'Inactive'
-          AND NOT EXISTS (SELECT 1 FROM "EmergencyContact" ec WHERE ec.id = pul.id)
-        THEN 'EmergencyContact'
-      END AS missing_emergencycontact,
-      CASE
-        WHEN COALESCE(uc.credentials_status::text, '') <> 'Inactive'
-          AND (
-            up.first_name IS NULL OR TRIM(up.first_name) = ''
-            OR up.last_name IS NULL OR TRIM(up.last_name) = ''
-            OR up.date_of_birth IS NULL
-            OR up.sex IS NULL
-            OR up."contactNumber" IS NULL OR TRIM(up."contactNumber") = ''
-          )
-        THEN 'BasicPersonalInfo'
-      END AS missing_basic_personal,
-      CASE
-        WHEN COALESCE(uc.credentials_status::text, '') <> 'Inactive'
-          AND COALESCE(uc.identity::text, '') = 'Student'
-          AND NOT EXISTS (
-            SELECT 1
-            FROM "student_profile" sp
-            WHERE sp."profileId" = pul.id
-              AND sp."programId" IS NOT NULL
-          )
-        THEN 'StudentProgram'
-      END AS missing_student_program,
-      CASE
-        WHEN COALESCE(uc.credentials_status::text, '') <> 'Inactive'
-          AND COALESCE(uc.identity::text, '') = 'Employee'
-          AND NOT EXISTS (
-            SELECT 1
-            FROM "employee_profile" ep
-            WHERE ep."profileId" = pul.id
-              AND NULLIF(TRIM(COALESCE(ep.role, '')), '') IS NOT NULL
-          )
-        THEN 'EmployeeRole'
-      END AS missing_employee_role
+      -- Profile and emergency-contact requirements are enforced for all statuses,
+      -- including Inactive users.
+      CASE WHEN NOT EXISTS (SELECT 1 FROM "profileRecord" pr WHERE pr.id = pul.id) THEN 'profileRecord' END AS missing_profile,
+      CASE WHEN NOT EXISTS (SELECT 1 FROM "EmergencyContact" ec WHERE ec.id = pul.id) THEN 'EmergencyContact' END AS missing_emergencycontact
 
     FROM "patientUpdateLog" pul
-    LEFT JOIN "UserCredentials" uc ON uc.id = pul."patientId"
     LEFT JOIN "UsersPersonal" up ON up.id = pul."patientId"
 
     WHERE pul.id = $1
