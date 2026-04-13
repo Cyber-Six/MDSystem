@@ -17,7 +17,7 @@ enum AccountStatus {
 enum CredentialsStatus {
   Active
   Unverified
-  Suspended
+  Inactive
   Locked
 }
 
@@ -395,10 +395,13 @@ type Mutation {
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!
   revokeUserSession(userId: ID!, deviceId: String!): MutationResult!
   setUserSessionRevoked(userId: ID!, deviceId: String!, revoked: Boolean!): MutationResult!
+  setAllUserSessionsRevoked(userId: ID!, revoked: Boolean!): MutationResult!
 
   # Patient/User Account Controls
   setUserAccountLocked(userId: ID!, locked: Boolean!): MutationResult!
   setUserSuperior(userId: ID!): MutationResult!
+  setUserSuperiorStatus(userId: ID!, superior: Boolean!): MutationResult!
+  applySemestralInactivation(branch: String, department: String): MutationResult!
 
   # Permission Templates
   createPermissionTemplate(input: CreateTemplateInput!): TemplateMutationResult!

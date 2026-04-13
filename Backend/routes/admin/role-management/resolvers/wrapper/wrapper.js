@@ -194,6 +194,60 @@ async function ensureUserIdentityEnumValues() {
   }
 }
 
+function normalizeOptionalScopeValue(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized || normalized.toLowerCase() === 'all') return null;
+  return normalized;
+}
+
+function normalizeMutableUserSessionRecord(record, expectedUserId) {
+  const rawSession = record?.session;
+  if (!rawSession || typeof rawSession !== 'object') {
+    return null;
+  }
+
+  const key = String(record.key || '').trim();
+  const keyParts = key.split(':');
+  const keyUserId = keyParts[1];
+  const keyDeviceId = keyParts[2];
+
+  const resolvedUserId = String(rawSession.userId ?? keyUserId ?? '').trim();
+  if (!resolvedUserId || resolvedUserId !== expectedUserId) {
+    return null;
+  }
+
+  const status = String(rawSession.status || 'active').trim().toLowerCase();
+  if (!['active', 'revoked'].includes(status)) {
+    return null;
+  }
+
+  const ttlSeconds = Number(record.ttlSeconds) || 0;
+  if (ttlSeconds <= 0) {
+    return null;
+  }
+
+  const deviceId = String(rawSession.deviceId || keyDeviceId || '').trim();
+  if (!deviceId) {
+    return null;
+  }
+
+  const refreshToken = typeof rawSession.refreshToken === 'string'
+    ? rawSession.refreshToken.trim()
+    : '';
+  if (!refreshToken) {
+    return null;
+  }
+
+  return {
+    sessionKey: key || `rt:${expectedUserId}:${deviceId}`,
+    session: rawSession,
+    deviceId,
+    status,
+    ttlSeconds,
+  };
+}
+
 function buildUserInfo(row) {
   const nameParts = [
     row.first_name,
@@ -1838,34 +1892,22 @@ const Mutation = {
     }
 
     const sessionRecords = await listUserSessionsWithMeta(normalizedUserId);
-    const matchedRecord = sessionRecords.find((record) => {
-      const rawSession = record?.session;
-      if (!rawSession || typeof rawSession !== 'object') return false;
+    const mutableRecords = sessionRecords
+      .map((record) => normalizeMutableUserSessionRecord(record, normalizedUserId))
+      .filter(Boolean);
 
-      const key = String(record.key || '');
-      const keyDeviceId = key.split(':')[2] || '';
-      const resolvedDeviceId = String(rawSession.deviceId || keyDeviceId || '');
-      return resolvedDeviceId === normalizedDeviceId;
-    });
+    const matchedRecord = mutableRecords.find((record) => record.deviceId === normalizedDeviceId);
 
-    if (!matchedRecord || !matchedRecord.session) {
+    if (!matchedRecord) {
       return {
         ok: true,
         message: 'Session not found or already expired.',
       };
     }
 
-    const ttlSeconds = Number(matchedRecord.ttlSeconds) || 0;
-    if (ttlSeconds <= 0) {
-      return {
-        ok: true,
-        message: 'Session already expired.',
-      };
-    }
-
-    const sessionKey = String(matchedRecord.key || `rt:${normalizedUserId}:${normalizedDeviceId}`);
+    const sessionKey = matchedRecord.sessionKey;
     const currentSession = matchedRecord.session;
-    const currentStatus = String(currentSession.status || 'active').toLowerCase();
+    const currentStatus = matchedRecord.status;
     const nextStatus = shouldRevoke ? 'revoked' : 'active';
 
     if (currentStatus === nextStatus) {
@@ -1881,7 +1923,7 @@ const Mutation = {
       updatedAt: Date.now(),
     };
 
-    await setKey(sessionKey, JSON.stringify(updatedPayload), ttlSeconds);
+    await setKey(sessionKey, JSON.stringify(updatedPayload), matchedRecord.ttlSeconds);
 
     logger.info('User refresh session status toggled by admin', {
       adminId: String(user?.id || ''),
@@ -1893,6 +1935,63 @@ const Mutation = {
     return {
       ok: true,
       message: shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.',
+    };
+  },
+
+  _setAllUserSessionsRevoked: async (_, { userId, revoked }, { user, res }) => {
+    const normalizedUserId = String(userId || '').trim();
+    const shouldRevoke = Boolean(revoked);
+    const nextStatus = shouldRevoke ? 'revoked' : 'active';
+
+    if (!normalizedUserId) {
+      throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    const sessionRecords = await listUserSessionsWithMeta(normalizedUserId);
+    const mutableRecords = sessionRecords
+      .map((record) => normalizeMutableUserSessionRecord(record, normalizedUserId))
+      .filter(Boolean);
+
+    if (mutableRecords.length === 0) {
+      return {
+        ok: true,
+        message: 'No active sessions found for this user.',
+      };
+    }
+
+    const recordsToUpdate = mutableRecords.filter((record) => record.status !== nextStatus);
+
+    if (recordsToUpdate.length === 0) {
+      return {
+        ok: true,
+        message: shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.',
+      };
+    }
+
+    const updatedAt = Date.now();
+    for (const record of recordsToUpdate) {
+      const updatedPayload = {
+        ...record.session,
+        status: nextStatus,
+        updatedAt,
+      };
+
+      await setKey(record.sessionKey, JSON.stringify(updatedPayload), record.ttlSeconds);
+    }
+
+    logger.info('All user refresh sessions status toggled by admin', {
+      adminId: String(user?.id || ''),
+      userId: normalizedUserId,
+      revoked: shouldRevoke,
+      totalSessions: mutableRecords.length,
+      updatedSessions: recordsToUpdate.length,
+    });
+
+    return {
+      ok: true,
+      message: shouldRevoke
+        ? `${recordsToUpdate.length} session(s) revoked successfully.`
+        : `${recordsToUpdate.length} session(s) unrevoked successfully.`,
     };
   },
 
@@ -1942,7 +2041,12 @@ const Mutation = {
   },
 
   _setUserSuperior: async (_, { userId }, { user, res }) => {
+    return Mutation._setUserSuperiorStatus(_, { userId, superior: true }, { user, res });
+  },
+
+  _setUserSuperiorStatus: async (_, { userId, superior }, { user, res }) => {
     const normalizedUserId = String(userId || '').trim();
+    const shouldBeSuperior = Boolean(superior);
 
     if (!normalizedUserId) {
       throwGraphQLError(res).message('userId is required').status(400).throw();
@@ -1973,34 +2077,141 @@ const Mutation = {
         throwGraphQLError(res).message('User not found').status(404).throw();
       }
 
-      if (String(existingResult.rows[0].identity || '').toLowerCase() !== 'superior') {
+      const currentIdentity = String(existingResult.rows[0].identity || '').trim();
+      const currentIdentityLower = currentIdentity.toLowerCase();
+
+      if (!['student', 'employee', 'superior'].includes(currentIdentityLower)) {
+        throwGraphQLError(res)
+          .message('Only Student, Employee, and Superior identities are eligible for Superior role toggling.')
+          .status(409)
+          .throw();
+      }
+
+      let nextIdentity = currentIdentity;
+      if (shouldBeSuperior) {
+        nextIdentity = 'Superior';
+      } else if (currentIdentityLower === 'superior') {
+        nextIdentity = 'Employee';
+      }
+
+      const hasIdentityChanged = String(nextIdentity).toLowerCase() !== currentIdentityLower;
+
+      if (hasIdentityChanged) {
         await client.query(
           `UPDATE "UserCredentials"
-           SET identity = 'Superior'
-           WHERE id = $1`,
-          [normalizedUserId]
+           SET identity = $1
+           WHERE id = $2`,
+          [nextIdentity, normalizedUserId]
         );
       }
 
       await client.query('COMMIT');
 
-      logger.info('User upgraded to Superior by admin', {
+      logger.info('User superior status toggled by admin', {
         adminId: String(user?.id || ''),
         userId: normalizedUserId,
+        superior: shouldBeSuperior,
+        previousIdentity: currentIdentity,
+        nextIdentity,
       });
+
+      if (!hasIdentityChanged) {
+        return {
+          ok: true,
+          message: shouldBeSuperior ? 'User is already Superior.' : 'User is already not Superior.',
+        };
+      }
 
       return {
         ok: true,
-        message: 'User set as Superior successfully.',
+        message: shouldBeSuperior
+          ? 'User set as Superior successfully.'
+          : 'Superior role removed successfully.',
       };
     } catch (error) {
       await client.query('ROLLBACK');
       if (error?.name === 'GraphQLError') {
         throw error;
       }
-      throwGraphQLError(res).message(error.message || 'Failed to set Superior identity.').status(500).throw();
+      throwGraphQLError(res).message(error.message || 'Failed to toggle Superior identity.').status(500).throw();
     } finally {
       client.release();
+    }
+  },
+
+  _applySemestralInactivation: async (_, { branch, department }, { user, res }) => {
+    const normalizedBranch = normalizeOptionalScopeValue(branch);
+    const normalizedDepartment = normalizeOptionalScopeValue(department);
+
+    if (!normalizedBranch && !normalizedDepartment) {
+      throwGraphQLError(res)
+        .message('Either branch or department must be provided.')
+        .status(400)
+        .throw();
+    }
+
+    if (normalizedBranch && !['Manila', 'QuezonCity', 'Both'].includes(normalizedBranch)) {
+      throwGraphQLError(res)
+        .message('branch must be one of Manila, QuezonCity, or Both.')
+        .status(400)
+        .throw();
+    }
+
+    const summaryResult = await db.query(
+      `WITH scoped_users AS (
+         SELECT uc.id
+         FROM "UserCredentials" uc
+         LEFT JOIN "UsersPersonal" up ON up.id = uc.id
+         LEFT JOIN LATERAL (
+           SELECT ep.department
+           FROM "patientUpdateLog" pul
+           JOIN "profileRecord" pr ON pr.id = pul.id
+           JOIN "employee_profile" ep ON ep."profileId" = pr.id
+           WHERE pul."patientId" = uc.id
+             AND pr.profile_type = 'Employee'
+           ORDER BY pul.created_at DESC
+           LIMIT 1
+         ) latest_employee ON true
+         WHERE uc.identity::text = ANY($1::text[])
+           AND ($2::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($2))
+           AND ($3::text IS NULL OR LOWER(COALESCE(latest_employee.department, '')) = LOWER($3))
+       ),
+       updated_users AS (
+         UPDATE "UserCredentials" uc
+         SET credentials_status = 'Inactive'::"CredentialStatus",
+             locked_until = NULL
+         FROM scoped_users su
+         WHERE uc.id = su.id
+           AND COALESCE(uc.credentials_status::text, '') <> 'Inactive'
+         RETURNING uc.id
+       )
+       SELECT
+         (SELECT COUNT(*)::int FROM scoped_users) AS scoped_count,
+         (SELECT COUNT(*)::int FROM updated_users) AS updated_count`,
+      [['Student', 'Employee'], normalizedBranch, normalizedDepartment]
+    );
+
+    const scopedCount = Number(summaryResult.rows?.[0]?.scoped_count) || 0;
+    const updatedCount = Number(summaryResult.rows?.[0]?.updated_count) || 0;
+
+    if (scopedCount === 0) {
+      return {
+        ok: true,
+        message: 'No Student or Employee accounts matched the selected scope.',
+      };
+    }
+
+    logger.info('Semestral inactivation applied by admin', {
+      adminId: String(user?.id || ''),
+      branch: normalizedBranch,
+      department: normalizedDepartment,
+      scopedCount,
+      updatedCount,
+    });
+
+    return {
+      ok: true,
+      message: `${updatedCount} of ${scopedCount} account(s) set to Inactive.`,
     };
   },
 

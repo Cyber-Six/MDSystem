@@ -158,6 +158,11 @@ const Mutation = {
     return await Wrapper.Mutation._setUserSessionRevoked(_, args, context);
   },
 
+  setAllUserSessionsRevoked: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._setAllUserSessionsRevoked(_, args, context);
+  },
+
   setUserAccountLocked: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._setUserAccountLocked(_, args, context);
@@ -166,6 +171,16 @@ const Mutation = {
   setUserSuperior: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._setUserSuperior(_, args, context);
+  },
+
+  setUserSuperiorStatus: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._setUserSuperiorStatus(_, args, context);
+  },
+
+  applySemestralInactivation: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._applySemestralInactivation(_, args, context);
   },
 
   createPermissionTemplate: async (_, args, context) => {
