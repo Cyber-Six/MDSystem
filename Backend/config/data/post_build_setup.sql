@@ -369,6 +369,7 @@ VALUES
 
 ('ALLOW_TO_VIEW_DOCUMENTS', 'Permission to view documents'),
 ('ALLOW_TO_MANAGE_DOCUMENTS', 'Permission to manage (create/edit/delete) documents'),
+('ALLOW_TO_GENERATE_DOCUMENTS', 'Permission to generate documents'),
 
 ('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
 ('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates')
