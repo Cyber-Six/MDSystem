@@ -881,7 +881,7 @@ const Query = {
         upl.last_name,
         upl.middle_name,
         upl.suffix,
-        COALESCE(to_jsonb(p)->>'type', to_jsonb(p)->>'profile') AS profile_type,
+        p.profile::"patientIdentity" AS profile_type,
         spd.label as program,
         sp.year,
         ep.department,
@@ -890,7 +890,35 @@ const Query = {
         latest.id           AS latest_ticket_id,
         latest.status       AS latest_status,
         latest.scope        AS latest_scope,
-        latest.created_at   AS latest_updated_at
+        latest.created_at   AS latest_updated_at,
+        CASE
+          WHEN latest.status IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted') THEN 'pending'
+          WHEN latest.status = 'Approved' THEN 'approved'
+          WHEN latest_consult.status IN ('Completed', 'Referred', 'Monitored') THEN 'completed'
+          ELSE NULL
+        END AS medical_status,
+        CASE
+          WHEN latest_appt.status IN ('Scheduled', 'InProgress') THEN 'scheduled'
+          WHEN latest_appt.status = 'Pending' THEN 'pending'
+          WHEN latest_appt.status = 'Completed' THEN 'completed'
+          ELSE NULL
+        END AS appointment_status,
+        CASE
+          WHEN latest_med.status IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted') THEN 'pending'
+          WHEN latest_med.status = 'Approved' THEN 'approved'
+          WHEN latest_med.status = 'Completed' THEN 'dispensed'
+          ELSE NULL
+        END AS medicine_status,
+        CASE
+          WHEN latest_chat.status IN ('Open', 'Ongoing') THEN 'active'
+          ELSE 'inactive'
+        END AS healthchat_status,
+        CASE
+          WHEN latest_doc.status = 'Pending' THEN 'submitted'
+          WHEN latest_doc.status = 'Requested' THEN 'pending'
+          WHEN latest_doc.status = 'Recorded' THEN 'approved'
+          ELSE NULL
+        END AS document_status
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
       LEFT JOIN "UserCredentials" uc ON uc.id = up.id
@@ -908,6 +936,42 @@ const Query = {
         ORDER BY pul.created_at DESC
         LIMIT 1
       ) latest ON true
+      LEFT JOIN LATERAL (
+        SELECT c.status
+        FROM "Consultation" c
+        WHERE c."patientId" = up.id
+        ORDER BY c."updatedAt" DESC
+        LIMIT 1
+      ) latest_consult ON true
+      LEFT JOIN LATERAL (
+        SELECT ps.status
+        FROM "patientSlot" ps
+        WHERE ps."patientId" = up.id
+        ORDER BY ps.id DESC
+        LIMIT 1
+      ) latest_appt ON true
+      LEFT JOIN LATERAL (
+        SELECT mrl.status
+        FROM "MedicineRequestLog" mrl
+        WHERE mrl."patientId" = up.id
+        ORDER BY mrl.created_at DESC
+        LIMIT 1
+      ) latest_med ON true
+      LEFT JOIN LATERAL (
+        SELECT hc.status
+        FROM "HealthChat" hc
+        WHERE hc."patientId" = up.id
+        ORDER BY hc.id DESC
+        LIMIT 1
+      ) latest_chat ON true
+      LEFT JOIN LATERAL (
+        SELECT prd.status
+        FROM "patientRawDocument" prd
+        WHERE prd."patientId" = up.id
+          AND prd.status <> 'Archived'
+        ORDER BY prd."created_at" DESC
+        LIMIT 1
+      ) latest_doc ON true
       LEFT JOIN LATERAL (
         SELECT pr2.id, pr2.profile_type
         FROM "profileRecord" pr2
@@ -949,7 +1013,7 @@ const Query = {
         upl.last_name,
         upl.middle_name,
         upl.suffix,
-        COALESCE(to_jsonb(p)->>'type', to_jsonb(p)->>'profile') AS profile_type,
+        p.profile::"patientIdentity" AS profile_type,
         spd.label as program,
         sp.year,
         ep.department,
@@ -998,7 +1062,7 @@ const Query = {
         )
         AND (
           COALESCE(array_length($7::text[], 1), 0) = 0
-          OR COALESCE(to_jsonb(p)->>'type', to_jsonb(p)->>'profile') = ANY($7::text[])
+          OR p.profile::"patientIdentity" = ANY($7::"patientIdentity"[])
         )
         AND (
           up.identifier::text ILIKE $2

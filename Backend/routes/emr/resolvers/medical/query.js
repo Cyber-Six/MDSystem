@@ -25,6 +25,11 @@ function maskRestrictedSuperiorBasicInfo(row) {
     latest_status: null,
     latest_scope: null,
     latest_updated_at: null,
+    medical_status: null,
+    appointment_status: null,
+    medicine_status: null,
+    healthchat_status: null,
+    document_status: null,
     access_denied: true,
   };
 }
@@ -358,6 +363,17 @@ const Query = {
       logger.warn(
         `Restricted Superior details for user ID ${user.id} on patient ${args.userId} at ${auditTs}: access_denied=true`
       );
+    } else {
+      // Audit-oriented snapshot of module statuses shown in the patient header.
+      logger.info('Patient module statuses resolved', {
+        staffId: String(user.id),
+        patientId: String(args.userId),
+        medical_status: response?.medical_status || null,
+        appointment_status: response?.appointment_status || null,
+        medicine_status: response?.medicine_status || null,
+        healthchat_status: response?.healthchat_status || null,
+        document_status: response?.document_status || null,
+      });
     }
 
     return response;
