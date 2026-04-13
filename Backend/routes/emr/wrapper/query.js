@@ -881,7 +881,7 @@ const Query = {
         upl.last_name,
         upl.middle_name,
         upl.suffix,
-        p.type::text AS profile_type,
+        p.profile::"patientIdentity" AS profile_type,
         spd.label as program,
         sp.year,
         ep.department,
@@ -949,7 +949,7 @@ const Query = {
         upl.last_name,
         upl.middle_name,
         upl.suffix,
-        p.type::text AS profile_type,
+        p.profile::"patientIdentity" AS profile_type,
         spd.label as program,
         sp.year,
         ep.department,
@@ -998,7 +998,7 @@ const Query = {
         )
         AND (
           COALESCE(array_length($7::text[], 1), 0) = 0
-          OR p.type::text = ANY($7::text[])
+          OR p.profile::"patientIdentity" = ANY($7::"patientIdentity"[])
         )
         AND (
           up.identifier::text ILIKE $2
