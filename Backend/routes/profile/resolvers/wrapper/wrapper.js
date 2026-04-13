@@ -311,7 +311,7 @@ const Mutation = {
     }
   },
 
-  _reloadCredentialStatus: async (_, { userId, client=db }, { user, res }) => {
+  _reloadCredentialStatus: async (_, { userId, client=db, caller="profile" }, { user, res }) => {
     const checkQuery = `
       SELECT EXISTS (
         SELECT 1
@@ -329,7 +329,9 @@ const Mutation = {
       const updateQuery = `
         UPDATE "UserCredentials"
         SET credentials_status = 'Active'
-        WHERE id = $1;
+        WHERE id = $1
+        ${caller === "emr" ? "" : "AND credentials_status != 'Inactive'"}
+        ;
       `;
       await client.query(updateQuery, [userId]);
       return { success: true, message: "Credential status updated to Active." };
