@@ -99,7 +99,7 @@ const StaffAnalytics = () => {
   const [activeCategory, setActiveCategory] = useState(DEFAULT_CATEGORY);
   const [demographicDimension, setDemographicDimension] = useState('all');
 
-  // Department / sex filter (demographics tab)
+  // Department / sex filter (global across analytics categories)
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedSex, setSelectedSex] = useState('');
   const [filterOptions, setFilterOptions] = useState({ departments: [], sexes: [] });
@@ -157,14 +157,13 @@ const StaffAnalytics = () => {
     }
   }, []); // Run once on mount
 
-  // Build filters object for demographic queries
-  const demoFilters = useMemo(() => {
-    if (activeCategory !== 'demographics') return {};
+  // Build filters object used by all analytics queries
+  const activeFilters = useMemo(() => {
     const f = {};
     if (selectedDepartment) f.department = selectedDepartment;
     if (selectedSex) f.sex = selectedSex;
     return f;
-  }, [activeCategory, selectedDepartment, selectedSex]);
+  }, [selectedDepartment, selectedSex]);
 
   // Current visible queries based on active tab + dimension
   const visibleQueries = useMemo(() =>
@@ -209,58 +208,44 @@ const StaffAnalytics = () => {
    * Uses a category-level flag so we don't re-fetch when switching back.
    */
   const loadActiveCategory = useCallback(async (force = false) => {
-    const deptSex = activeCategory === 'demographics'
-      ? `:dept=${selectedDepartment}:sex=${selectedSex}` : '';
+    const deptSex = `:dept=${selectedDepartment || 'all'}:sex=${selectedSex || 'all'}`;
     const catKey = activeCategory === 'demographics'
       ? `demographics:${demographicDimension}${deptSex}`
-      : activeCategory;
+      : `${activeCategory}${deptSex}`;
 
     if (!force && fetchedCategories.has(catKey)) return;
 
     const queries = getQueriesForCategory(activeCategory, demographicDimension);
-    const filters = activeCategory === 'demographics' ? demoFilters : {};
+    const filters = activeFilters;
     await fetchQueries(queries, { force, filters });
 
     setFetchedCategories(prev => new Set(prev).add(catKey));
-  }, [activeCategory, demographicDimension, selectedDepartment, selectedSex, demoFilters, fetchedCategories, fetchQueries]);
+  }, [activeCategory, demographicDimension, selectedDepartment, selectedSex, activeFilters, fetchedCategories, fetchQueries]);
 
   // Fetch on tab switch or initial mount
   useEffect(() => {
     loadActiveCategory();
   }, [activeCategory, demographicDimension]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-fetch demographics when dept/sex filter changes
-  useEffect(() => {
-    if (activeCategory === 'demographics') {
-      // Clear demographic cache entries and re-fetch
-      setCache(prev => {
-        const next = new Map(prev);
-        const demoKeys = QUERY_CATEGORIES.demographics?.queries || [];
-        demoKeys.forEach(k => next.delete(k));
-        return next;
-      });
-      // Remove all demographics fetched keys so they re-load
-      setFetchedCategories(prev => {
-        const next = new Set();
-        for (const k of prev) { if (!k.startsWith('demographics:')) next.add(k); }
-        return next;
-      });
-      loadActiveCategory(true);
-    }
-  }, [selectedDepartment, selectedSex]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Clear cache + re-fetch when filters change (branch, dates, groupBy)
-  const prevFiltersRef = useRef({ branch, startDate, endDate, groupBy });
+  // Clear cache + re-fetch when filters change
+  const prevFiltersRef = useRef({ branch, startDate, endDate, groupBy, selectedDepartment, selectedSex });
   useEffect(() => {
     const prev = prevFiltersRef.current;
-    if (prev.branch === branch && prev.startDate === startDate && prev.endDate === endDate && prev.groupBy === groupBy) return;
-    prevFiltersRef.current = { branch, startDate, endDate, groupBy };
+    if (
+      prev.branch === branch &&
+      prev.startDate === startDate &&
+      prev.endDate === endDate &&
+      prev.groupBy === groupBy &&
+      prev.selectedDepartment === selectedDepartment &&
+      prev.selectedSex === selectedSex
+    ) return;
+    prevFiltersRef.current = { branch, startDate, endDate, groupBy, selectedDepartment, selectedSex };
 
     // Filters changed — clear everything and re-fetch active tab
     setCache(new Map());
     setFetchedCategories(new Set());
     // loadActiveCategory with force will be triggered by the dependency change
-  }, [branch, startDate, endDate, groupBy]);
+  }, [branch, startDate, endDate, groupBy, selectedDepartment, selectedSex]);
 
   // After cache/fetchedCategories are cleared by filter change, re-load active tab
   useEffect(() => {
@@ -272,9 +257,9 @@ const StaffAnalytics = () => {
   // Manual refresh — force re-fetch active tab
   const handleRefresh = useCallback(() => {
     const queries = getQueriesForCategory(activeCategory, demographicDimension);
-    const filters = activeCategory === 'demographics' ? demoFilters : {};
+    const filters = activeFilters;
     fetchQueries(queries, { force: true, filters });
-  }, [activeCategory, demographicDimension, demoFilters, fetchQueries]);
+  }, [activeCategory, demographicDimension, activeFilters, fetchQueries]);
 
   return (
     <div className="space-y-1.5">
