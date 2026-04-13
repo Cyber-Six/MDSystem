@@ -484,8 +484,8 @@ const Dashboard = () => {
                   <RecordUpdateForm
                     forceRecordType={isInactiveCredential ? 'both' : null}
                     hideRecordChoice={false}
-                    skipPersonalStep={isInactiveCredential}
-                    skipPersonalSubmit={isInactiveCredential}
+                    skipPersonalStep={false}
+                    skipPersonalSubmit={false}
                     isInactiveMode={isInactiveCredential}
                     onSubmissionSuccess={isInactiveCredential ? handleInactiveUpdateSubmissionSuccess : undefined}
                   />
