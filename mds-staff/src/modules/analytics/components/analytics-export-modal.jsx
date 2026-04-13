@@ -69,7 +69,7 @@ const ALL_METRIC_KEYS = Object.keys(CHART_TYPE_MAP);
  * Analytics Export Modal
  * Allows the user to pick format, scope (preset), and trigger download.
  */
-const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, groupBy }) => {
+const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, groupBy, department, sex }) => {
   const [format, setFormat] = useState('pdf');
   const [scope, setScope] = useState('full-report');
   const [selectedMetrics, setSelectedMetrics] = useState([]);
@@ -92,6 +92,8 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
         endDate,
         groupBy,
       };
+      if (department) opts.department = department;
+      if (sex) opts.sex = sex;
 
       if (scope === 'custom') {
         if (selectedMetrics.length === 0) {
@@ -111,7 +113,7 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
     } finally {
       setLoading(false);
     }
-  }, [format, scope, selectedMetrics, branch, startDate, endDate, groupBy, onClose]);
+  }, [format, scope, selectedMetrics, branch, startDate, endDate, groupBy, department, sex, onClose]);
 
   if (!open) return null;
 

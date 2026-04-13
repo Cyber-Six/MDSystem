@@ -3,18 +3,24 @@ import { BRANCHES, PERIOD_PRESETS } from '../analytics-service';
 
 /**
  * Analytics Filter Bar
- * Controls for branch, period, and date range filters.
+ * Controls for branch, period, date range, sex, and department/program filters.
  */
 const AnalyticsFilterBar = memo(({
   branch,
   startDate,
   endDate,
   groupBy,
+  sex,
+  department,
+  sexOptions = [],
+  departmentOptions = [],
   allowedBranches,
   onBranchChange,
   onStartDateChange,
   onEndDateChange,
   onGroupByChange,
+  onSexChange,
+  onDepartmentChange,
   onRefresh,
   loading,
 }) => {
@@ -31,6 +37,7 @@ const AnalyticsFilterBar = memo(({
               value={branch}
               onChange={(e) => onBranchChange(e.target.value)}
               disabled={isRestricted}
+              title="Select branch"
               className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {branchOptions.map((b) => (
@@ -44,6 +51,7 @@ const AnalyticsFilterBar = memo(({
         <select
           value={groupBy}
           onChange={(e) => onGroupByChange(e.target.value)}
+          title="Select period"
           className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
         >
           {PERIOD_PRESETS.map((p) => (
@@ -56,6 +64,7 @@ const AnalyticsFilterBar = memo(({
           type="date"
           value={startDate}
           onChange={(e) => onStartDateChange(e.target.value)}
+          title="Start date"
           className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
         />
         <span className="text-[10px] text-secondary-400 dark:text-neutral-500">–</span>
@@ -63,13 +72,45 @@ const AnalyticsFilterBar = memo(({
           type="date"
           value={endDate}
           onChange={(e) => onEndDateChange(e.target.value)}
+          title="End date"
           className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
         />
+
+        {/* Sex Filter */}
+        <select
+          value={sex}
+          onChange={(e) => onSexChange(e.target.value)}
+          title="Filter by sex (Male/Female)"
+          className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+        >
+          <option value="">All Sex</option>
+          {sexOptions && sexOptions.length > 0 ? (
+            sexOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))
+          ) : null}
+        </select>
+
+        {/* Department & Program Filter */}
+        <select
+          value={department}
+          onChange={(e) => onDepartmentChange(e.target.value)}
+          title="Filter by department or program"
+          className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+        >
+          <option value="">All Departments & Programs</option>
+          {departmentOptions && departmentOptions.length > 0 ? (
+            departmentOptions.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))
+          ) : null}
+        </select>
 
         {/* Refresh */}
         <button
           onClick={onRefresh}
           disabled={loading}
+          title="Refresh data"
           className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white text-xs font-medium rounded-md transition-colors"
         >
           {loading ? (
