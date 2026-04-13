@@ -102,16 +102,24 @@ const GQL_COUNT_ACTIVE_REFRESH_TOKENS = `
   }
 `;
 
+const GQL_COUNT_MAX_ACTIVE_USERS_IN_HOURS = `
+  query CountMaxActiveUsersInHours($hours: Int!) {
+    countMaxActiveUsersInHours(hours: $hours)
+  }
+`;
+
 const GQL_LIST_USERS = `
-  query ListUsers($offset: Int!, $limit: Int!) {
-    listUsers(offset: $offset, limit: $limit) {
+  query ListUsers($offset: Int!, $limit: Int!, $search: String, $branch: String, $type: String, $status: String, $includeUnverified: Boolean) {
+    listUsers(offset: $offset, limit: $limit, search: $search, branch: $branch, type: $type, status: $status, includeUnverified: $includeUnverified) {
       users {
         id
         name
         email
         branch
         type
+        userType
         status
+        inactiveExpiresAt
         lastLogin
       }
       totalCount
@@ -120,8 +128,8 @@ const GQL_LIST_USERS = `
 `;
 
 const GQL_LIST_USER_SESSIONS = `
-  query ListUserSessions($userId: ID!) {
-    listUserSessions(userId: $userId) {
+  query ListUserSessions($userId: ID!, $offset: Int!, $limit: Int!) {
+    listUserSessions(userId: $userId, offset: $offset, limit: $limit) {
       deviceId
       refreshToken
       status
@@ -129,6 +137,17 @@ const GQL_LIST_USER_SESSIONS = `
       updatedAt
       ttlSeconds
       expiresAt
+    }
+  }
+`;
+
+const GQL_LIST_USER_LOGIN_ATTEMPTS = `
+  query UserLoginHistory($userId: ID!, $offset: Int!, $limit: Int!) {
+    listUserLoginAttempts(userId: $userId, offset: $offset, limit: $limit) {
+      timestamp
+      ip
+      device
+      status
     }
   }
 `;
@@ -150,6 +169,80 @@ const GQL_LIST_ALL_SESSIONS = `
         exp
       }
       totalCount
+    }
+  }
+`;
+
+const GQL_REVOKE_USER_SESSION = `
+  mutation RevokeUserSession($userId: ID!, $deviceId: String!) {
+    revokeUserSession(userId: $userId, deviceId: $deviceId) {
+      ok
+      message
+    }
+  }
+`;
+
+const GQL_SET_USER_SESSION_REVOKED = `
+  mutation SetUserSessionRevoked($userId: ID!, $deviceId: String!, $revoked: Boolean!) {
+    setUserSessionRevoked(userId: $userId, deviceId: $deviceId, revoked: $revoked) {
+      ok
+      message
+    }
+  }
+`;
+
+const GQL_SET_USER_ACCOUNT_LOCKED = `
+  mutation SetUserAccountLocked($userId: ID!, $locked: Boolean!) {
+    setUserAccountLocked(userId: $userId, locked: $locked) {
+      ok
+      message
+    }
+  }
+`;
+
+const GQL_SET_USER_SUPERIOR = `
+  mutation SetUserSuperior($userId: ID!) {
+    setUserSuperior(userId: $userId) {
+      ok
+      message
+    }
+  }
+`;
+
+const GQL_SET_USER_SUPERIOR_STATUS = `
+  mutation SetUserSuperiorStatus($userId: ID!, $superior: Boolean!) {
+    setUserSuperiorStatus(userId: $userId, superior: $superior) {
+      ok
+      message
+    }
+  }
+`;
+
+const GQL_SET_ALL_USER_SESSIONS_REVOKED = `
+  mutation SetAllUserSessionsRevoked($userId: ID!, $revoked: Boolean!) {
+    setAllUserSessionsRevoked(userId: $userId, revoked: $revoked) {
+      ok
+      message
+    }
+  }
+`;
+
+const GQL_APPLY_SEMESTRAL_INACTIVATION = `
+  mutation ApplySemestralInactivation($branch: String, $department: String, $identities: [Identity!]) {
+    applySemestralInactivation(branch: $branch, department: $department, identities: $identities) {
+      ok
+      message
+    }
+  }
+`;
+
+const GQL_PREVIEW_SEMESTRAL_INACTIVATION = `
+  query PreviewSemestralInactivation($branch: String, $department: String, $identities: [Identity!]) {
+    previewSemestralInactivation(branch: $branch, department: $department, identities: $identities) {
+      ok
+      message
+      scopedCount
+      willUpdateCount
     }
   }
 `;
@@ -348,19 +441,123 @@ export const fetchActiveRefreshTokenCount = async () => {
   return data.countActiveRefreshTokens || 0;
 };
 
-export const fetchUsers = async (offset = 0, limit = 100) => {
-  const data = await sendGraphQL(GQL_LIST_USERS, { offset, limit });
+export const fetchMaxActiveUsersInHours = async (hours = 24) => {
+  const data = await sendGraphQL(GQL_COUNT_MAX_ACTIVE_USERS_IN_HOURS, { hours });
+  return Number(data.countMaxActiveUsersInHours) || 0;
+};
+
+export const fetchUsers = async (offset = 0, limit = 100, filters = {}) => {
+  const normalizedSearch = typeof filters.search === 'string' ? filters.search.trim() : '';
+  const branchFilter = typeof filters.branch === 'string' ? filters.branch.trim() : '';
+  const typeFilter = typeof filters.type === 'string' ? filters.type.trim() : '';
+  const statusFilter = typeof filters.status === 'string' ? filters.status.trim() : '';
+  const includeUnverified = Boolean(filters.includeUnverified);
+
+  const data = await sendGraphQL(GQL_LIST_USERS, {
+    offset,
+    limit,
+    search: normalizedSearch || null,
+    branch: branchFilter && branchFilter.toLowerCase() !== 'all' ? branchFilter : null,
+    type: typeFilter && typeFilter.toLowerCase() !== 'all' ? typeFilter : null,
+    status: statusFilter && statusFilter.toLowerCase() !== 'all' ? statusFilter : null,
+    includeUnverified,
+  });
+
   return data.listUsers || { users: [], totalCount: 0 };
 };
 
-export const fetchUserSessions = async (userId) => {
-  const data = await sendGraphQL(GQL_LIST_USER_SESSIONS, { userId });
-  return data.listUserSessions || [];
+export const fetchUserSessions = async (userId, offset = 0, limit = 10) => {
+  const effectiveLimit = Math.max(1, Number(limit) + 1);
+  const data = await sendGraphQL(GQL_LIST_USER_SESSIONS, { userId, offset, limit: effectiveLimit });
+  const sessions = Array.isArray(data.listUserSessions) ? data.listUserSessions : [];
+
+  return {
+    sessions: sessions.slice(0, limit),
+    hasMore: sessions.length > limit,
+  };
+};
+
+export const fetchUserLoginAttempts = async (userId, offset = 0, limit = 10) => {
+  const effectiveLimit = Math.max(1, Number(limit) + 1);
+  const data = await sendGraphQL(GQL_LIST_USER_LOGIN_ATTEMPTS, { userId, offset, limit: effectiveLimit });
+  const attempts = Array.isArray(data.listUserLoginAttempts) ? data.listUserLoginAttempts : [];
+
+  return {
+    attempts: attempts.slice(0, limit),
+    hasMore: attempts.length > limit,
+  };
 };
 
 export const fetchAllSessions = async (offset = 0, limit = 10) => {
   const data = await sendGraphQL(GQL_LIST_ALL_SESSIONS, { offset, limit });
   return data.listAllSessions || { sessions: [], totalCount: 0 };
+};
+
+export const revokeUserSession = async (userId, deviceId) => {
+  const data = await sendGraphQL(GQL_REVOKE_USER_SESSION, { userId, deviceId });
+  return data.revokeUserSession || { ok: false, message: 'Failed to revoke session.' };
+};
+
+export const setUserSessionRevoked = async (userId, deviceId, revoked) => {
+  const data = await sendGraphQL(GQL_SET_USER_SESSION_REVOKED, { userId, deviceId, revoked: Boolean(revoked) });
+  return data.setUserSessionRevoked || { ok: false, message: 'Failed to update session status.' };
+};
+
+export const setUserAccountLocked = async (userId, locked) => {
+  const data = await sendGraphQL(GQL_SET_USER_ACCOUNT_LOCKED, { userId, locked: Boolean(locked) });
+  return data.setUserAccountLocked || { ok: false, message: 'Failed to update account lock status.' };
+};
+
+export const setUserSuperior = async (userId) => {
+  const data = await sendGraphQL(GQL_SET_USER_SUPERIOR, { userId });
+  return data.setUserSuperior || { ok: false, message: 'Failed to set Superior account.' };
+};
+
+export const setUserSuperiorStatus = async (userId, superior) => {
+  const data = await sendGraphQL(GQL_SET_USER_SUPERIOR_STATUS, { userId, superior: Boolean(superior) });
+  return data.setUserSuperiorStatus || { ok: false, message: 'Failed to update Superior role.' };
+};
+
+export const setAllUserSessionsRevoked = async (userId, revoked) => {
+  const data = await sendGraphQL(GQL_SET_ALL_USER_SESSIONS_REVOKED, { userId, revoked: Boolean(revoked) });
+  return data.setAllUserSessionsRevoked || { ok: false, message: 'Failed to update all session tickets.' };
+};
+
+export const applySemestralInactivation = async ({ branch = null, department = null, identities = null } = {}) => {
+  const normalizedBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : null;
+  const normalizedDepartment = typeof department === 'string' && department.trim() ? department.trim() : null;
+  const normalizedIdentities = Array.isArray(identities) && identities.length > 0
+    ? identities.map((value) => String(value || '').trim()).filter(Boolean)
+    : null;
+
+  const data = await sendGraphQL(GQL_APPLY_SEMESTRAL_INACTIVATION, {
+    branch: normalizedBranch,
+    department: normalizedDepartment,
+    identities: normalizedIdentities,
+  });
+
+  return data.applySemestralInactivation || { ok: false, message: 'Failed to apply semestral inactivation.' };
+};
+
+export const previewSemestralInactivation = async ({ branch = null, department = null, identities = null } = {}) => {
+  const normalizedBranch = typeof branch === 'string' && branch.trim() ? branch.trim() : null;
+  const normalizedDepartment = typeof department === 'string' && department.trim() ? department.trim() : null;
+  const normalizedIdentities = Array.isArray(identities) && identities.length > 0
+    ? identities.map((value) => String(value || '').trim()).filter(Boolean)
+    : null;
+
+  const data = await sendGraphQL(GQL_PREVIEW_SEMESTRAL_INACTIVATION, {
+    branch: normalizedBranch,
+    department: normalizedDepartment,
+    identities: normalizedIdentities,
+  });
+
+  return data.previewSemestralInactivation || {
+    ok: false,
+    message: 'Failed to preview semestral inactivation.',
+    scopedCount: 0,
+    willUpdateCount: 0,
+  };
 };
 
 // ─── TEMPLATE OPERATIONS ──────────────────────────────────────────────────────

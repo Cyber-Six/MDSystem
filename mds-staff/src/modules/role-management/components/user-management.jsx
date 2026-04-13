@@ -1,22 +1,62 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchActiveRefreshTokenCount,
+  fetchMaxActiveUsersInHours,
+  applySemestralInactivation,
+  previewSemestralInactivation,
   fetchAllSessions,
+  fetchUserLoginAttempts,
   fetchUserSessions,
   fetchUsers,
+  setAllUserSessionsRevoked,
+  setUserAccountLocked,
+  setUserSessionRevoked,
+  setUserSuperiorStatus,
 } from '../staff-service';
 
-const USER_SCAN_LIMIT = 100;
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50];
+const LOGIN_HISTORY_LIMIT_OPTIONS = [10, 20, 50];
 const SESSION_LIMIT_OPTIONS = [10, 20, 50];
+const ACTIVE_USER_WINDOW_OPTIONS = [6, 12, 24, 48, 72];
 const USER_INITIAL_PAGE_SIZE = 10;
+const LOGIN_HISTORY_INITIAL_LIMIT = 10;
 const SESSION_INITIAL_LIMIT = 10;
+const ACTIVE_USERS_DEFAULT_HOURS = 24;
+const ADMIN_REFETCH_MIN_WAIT_MS = 15000;
+
+const USER_BRANCH_FILTER_OPTIONS = [
+  { value: 'all', label: 'All Branches' },
+  { value: 'Manila', label: 'Manila' },
+  { value: 'QuezonCity', label: 'QuezonCity' },
+  { value: 'Both', label: 'Both' },
+];
+
+const USER_STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'All Status' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Inactive', label: 'Inactive' },
+  { value: 'Unverified', label: 'Unverified' },
+  { value: 'Locked', label: 'Locked' },
+];
+
+const SEMESTRAL_BRANCH_OPTIONS = [
+  { value: 'Manila', label: 'Manila' },
+  { value: 'QuezonCity', label: 'QuezonCity' },
+  { value: 'Both', label: 'Both' },
+];
+
+const SEMESTRAL_TARGET_OPTIONS = [
+  { value: 'both', label: 'Students and Employees' },
+  { value: 'students', label: 'Students only' },
+  { value: 'employees', label: 'Employees only' },
+];
 
 const RATE_LIMIT_MESSAGE = 'Rate limit exceeded, please retry later';
 const NETWORK_ERROR_MESSAGE = 'Unable to connect to server. Please check your connection.';
 
 const STATUS_DOT_CLASS = {
   active: 'bg-success-500',
+  revoked: 'bg-error-500',
   unverified: 'bg-warning-500',
   inactive: 'bg-neutral-400',
   suspended: 'bg-neutral-400',
@@ -26,11 +66,15 @@ const STATUS_DOT_CLASS = {
   unknown: 'bg-neutral-400',
 };
 
-let USERS_MOUNT_FETCH_IN_FLIGHT = null;
-let SESSIONS_MOUNT_FETCH_IN_FLIGHT = null;
-
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function resolveSemestralTargetIdentities(target) {
+  const normalized = normalizeText(target);
+  if (normalized === 'students') return ['Student'];
+  if (normalized === 'employees') return ['Employee'];
+  return ['Student', 'Employee'];
 }
 
 function toDate(value) {
@@ -61,6 +105,15 @@ function formatDateTime(value) {
   });
 }
 
+function formatWindowLabel(hours) {
+  const normalizedHours = Number(hours) || 0;
+  if (normalizedHours >= 24 && normalizedHours % 24 === 0) {
+    const days = normalizedHours / 24;
+    return `${days}d`;
+  }
+  return `${normalizedHours}h`;
+}
+
 function normalizeBranchLabel(branch) {
   const normalized = String(branch || '').trim();
   return normalized || '--';
@@ -74,6 +127,7 @@ function normalizeTypeLabel(type) {
 function getStatusKey(rawStatus) {
   const normalized = normalizeText(rawStatus);
   if (normalized === 'active') return 'active';
+  if (normalized === 'revoked') return 'revoked';
   if (normalized === 'unverified') return 'unverified';
   if (normalized === 'inactive') return 'inactive';
   if (normalized === 'suspended') return 'suspended';
@@ -86,6 +140,7 @@ function getStatusKey(rawStatus) {
 function formatStatusLabel(rawStatus) {
   const key = getStatusKey(rawStatus);
   if (key === 'unknown') return 'Unknown';
+  if (key === 'revoked') return 'Revoked';
   if (key === 'unverified') return 'Unverified';
   if (key === 'inactive') return 'Inactive';
   if (key === 'suspended') return 'Suspended';
@@ -116,24 +171,44 @@ const UserManagement = () => {
   const [activeTab, setActiveTab] = useState('patients-list');
 
   const [users, setUsers] = useState([]);
+  const [userTotal, setUserTotal] = useState(0);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState(null);
 
   const [userSearch, setUserSearch] = useState('');
   const [userBranchFilter, setUserBranchFilter] = useState('all');
-  const [userTypeFilter, setUserTypeFilter] = useState('all');
   const [userStatusFilter, setUserStatusFilter] = useState('all');
+  const [userShowUnverified, setUserShowUnverified] = useState(false);
   const [userPage, setUserPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState(USER_INITIAL_PAGE_SIZE);
 
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [loginHistoryRows, setLoginHistoryRows] = useState([]);
+  const [loginHistoryLoading, setLoginHistoryLoading] = useState(false);
+  const [loginHistoryError, setLoginHistoryError] = useState(null);
+  const [loginHistoryOffset, setLoginHistoryOffset] = useState(0);
+  const [loginHistoryLimit, setLoginHistoryLimit] = useState(LOGIN_HISTORY_INITIAL_LIMIT);
+  const [loginHistoryHasMore, setLoginHistoryHasMore] = useState(false);
+  const [lockingAccount, setLockingAccount] = useState(false);
+  const [settingSuperior, setSettingSuperior] = useState(false);
+  const [superiorActionUserId, setSuperiorActionUserId] = useState(null);
+
+  const [selectedSessionUser, setSelectedSessionUser] = useState(null);
   const [userSessionRows, setUserSessionRows] = useState([]);
+  const [userSessionOffset, setUserSessionOffset] = useState(0);
+  const [userSessionLimit, setUserSessionLimit] = useState(SESSION_INITIAL_LIMIT);
+  const [userSessionHasMore, setUserSessionHasMore] = useState(false);
   const [userSessionsLoading, setUserSessionsLoading] = useState(false);
   const [userSessionsError, setUserSessionsError] = useState(null);
 
   const [tokenCount, setTokenCount] = useState(0);
   const [tokenCountLoading, setTokenCountLoading] = useState(false);
   const [tokenCountError, setTokenCountError] = useState(null);
+
+  const [activeUsersWindowHours, setActiveUsersWindowHours] = useState(ACTIVE_USERS_DEFAULT_HOURS);
+  const [activeUsersCount, setActiveUsersCount] = useState(0);
+  const [activeUsersLoading, setActiveUsersLoading] = useState(false);
+  const [activeUsersError, setActiveUsersError] = useState(null);
 
   const [sessionRows, setSessionRows] = useState([]);
   const [sessionTotal, setSessionTotal] = useState(0);
@@ -142,19 +217,39 @@ const UserManagement = () => {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState(null);
 
+  const [revokingSessionRowId, setRevokingSessionRowId] = useState(null);
+  const [bulkSessionAction, setBulkSessionAction] = useState(null);
+  const [sessionToastMessage, setSessionToastMessage] = useState(null);
+
+  const [semestralScopeType, setSemestralScopeType] = useState('branch');
+  const [semestralScopeValue, setSemestralScopeValue] = useState(SEMESTRAL_BRANCH_OPTIONS[0].value);
+  const [semestralTarget, setSemestralTarget] = useState('both');
+  const [semestralPreview, setSemestralPreview] = useState(null);
+  const [semestralPreviewLoading, setSemestralPreviewLoading] = useState(false);
+  const [semestralApplying, setSemestralApplying] = useState(false);
+  const [semestralNotice, setSemestralNotice] = useState(null);
+  const [semestralReviewModal, setSemestralReviewModal] = useState(null);
+
   const [banner, setBanner] = useState(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const rateLimitedRef = useRef(false);
 
-  const loadTokenCountRef = useRef(null);
-  const loadSessionsPageRef = useRef(null);
+  const patientsTabRef = useRef(activeTab);
+  const sessionsTabRef = useRef(activeTab);
+  const tabRefetchAtRef = useRef({
+    'patients-list': 0,
+    'active-sessions': 0,
+    'semestral-action': 0,
+  });
 
   const markRateLimited = useCallback(() => {
     rateLimitedRef.current = true;
     setIsRateLimited(true);
     setBanner({ type: 'rate-limit', message: RATE_LIMIT_MESSAGE });
     setUsersError(RATE_LIMIT_MESSAGE);
+    setLoginHistoryError(RATE_LIMIT_MESSAGE);
     setTokenCountError(RATE_LIMIT_MESSAGE);
+    setActiveUsersError(RATE_LIMIT_MESSAGE);
     setSessionsError(RATE_LIMIT_MESSAGE);
     setUserSessionsError(RATE_LIMIT_MESSAGE);
   }, []);
@@ -162,6 +257,27 @@ const UserManagement = () => {
   const markNetworkError = useCallback(() => {
     if (rateLimitedRef.current) return;
     setBanner({ type: 'network', message: NETWORK_ERROR_MESSAGE });
+  }, []);
+
+  const getTabRefetchRemainingMs = useCallback((tabKey) => {
+    const lastRefetchAt = Number(tabRefetchAtRef.current?.[tabKey]) || 0;
+    if (lastRefetchAt <= 0) return 0;
+
+    const elapsedMs = Date.now() - lastRefetchAt;
+    const remainingMs = ADMIN_REFETCH_MIN_WAIT_MS - elapsedMs;
+    return remainingMs > 0 ? remainingMs : 0;
+  }, []);
+
+  const markTabRefetch = useCallback((tabKey) => {
+    tabRefetchAtRef.current[tabKey] = Date.now();
+  }, []);
+
+  const showRefetchCooldown = useCallback((remainingMs) => {
+    const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    setBanner({
+      type: 'cooldown',
+      message: `Please wait ${remainingSeconds}s before refetching this admin tab again.`,
+    });
   }, []);
 
   const loadUsers = useCallback(async () => {
@@ -173,37 +289,29 @@ const UserManagement = () => {
     try {
       setBanner(null);
 
-      const allUsers = [];
-      let offset = 0;
-      let totalCount = 0;
-      let safetyCounter = 0;
+      const offset = Math.max(0, (userPage - 1) * userPageSize);
+      const page = await fetchUsers(offset, userPageSize, {
+        search: userSearch,
+        branch: userBranchFilter,
+        status: userStatusFilter,
+        includeUnverified: userShowUnverified || normalizeText(userStatusFilter) === 'unverified',
+      });
 
-      do {
-        const page = await fetchUsers(offset, USER_SCAN_LIMIT);
-        const pageUsers = Array.isArray(page.users) ? page.users : [];
-
-        allUsers.push(...pageUsers);
-        totalCount = Number(page.totalCount) || 0;
-        offset += USER_SCAN_LIMIT;
-        safetyCounter += 1;
-
-        if (pageUsers.length === 0) {
-          break;
-        }
-      } while (offset < totalCount && safetyCounter < 100);
-
-      const normalizedUsers = allUsers.map((row) => ({
+      const pageUsers = Array.isArray(page.users) ? page.users : [];
+      const normalizedUsers = pageUsers.map((row) => ({
         id: String(row.id || ''),
-        name: row.name || row.email || `User ${row.id}`,
+        name: row.name || '--',
         email: row.email || '--',
         branch: normalizeBranchLabel(row.branch),
         type: normalizeTypeLabel(row.type),
+        userType: normalizeText(row.userType) === 'medical' ? 'medical' : 'patient',
         status: row.status || 'Unknown',
+        inactiveExpiresAt: row.inactiveExpiresAt || null,
         lastLogin: row.lastLogin || null,
       }));
 
       setUsers(normalizedUsers);
-      setUserPage(1);
+      setUserTotal(Number(page.totalCount) || 0);
     } catch (error) {
       if (isRateLimitedError(error)) {
         markRateLimited();
@@ -216,12 +324,13 @@ const UserManagement = () => {
 
       setUsersError(error?.message || 'Failed to load users.');
       setUsers([]);
+      setUserTotal(0);
     } finally {
       setUsersLoading(false);
     }
-  }, [markNetworkError, markRateLimited]);
+  }, [markNetworkError, markRateLimited, userBranchFilter, userPage, userPageSize, userSearch, userShowUnverified, userStatusFilter]);
 
-  const loadUserSessions = useCallback(async (userId) => {
+  const loadUserSessions = useCallback(async (userId, nextOffset = 0, nextLimit = userSessionLimit) => {
     if (rateLimitedRef.current) return;
     if (!userId) return;
 
@@ -229,14 +338,16 @@ const UserManagement = () => {
     setUserSessionsError(null);
 
     try {
-      const sessions = await fetchUserSessions(String(userId));
-      const rows = (Array.isArray(sessions) ? sessions : [])
+      const page = await fetchUserSessions(String(userId), nextOffset, nextLimit);
+      const sessions = Array.isArray(page.sessions) ? page.sessions : [];
+
+      const rows = sessions
         .map((session, index) => {
           const ttlSeconds = Number(session.ttlSeconds) || 0;
           const expiresAt = session.expiresAt || (ttlSeconds > 0 ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null);
 
           return {
-            rowId: `${userId}:${session.deviceId || index}`,
+            rowId: `${userId}:${session.deviceId || 'unknown'}:${nextOffset + index}`,
             deviceId: session.deviceId || '--',
             refreshToken: session.refreshToken || '--',
             status: session.status || 'unknown',
@@ -253,6 +364,9 @@ const UserManagement = () => {
         });
 
       setUserSessionRows(rows);
+      setUserSessionOffset(nextOffset);
+      setUserSessionLimit(nextLimit);
+      setUserSessionHasMore(Boolean(page.hasMore));
     } catch (error) {
       if (isRateLimitedError(error)) {
         markRateLimited();
@@ -265,10 +379,54 @@ const UserManagement = () => {
 
       setUserSessionsError(error?.message || 'Failed to load linked sessions.');
       setUserSessionRows([]);
+      setUserSessionOffset(0);
+      setUserSessionHasMore(false);
     } finally {
       setUserSessionsLoading(false);
     }
-  }, [markNetworkError, markRateLimited]);
+  }, [markNetworkError, markRateLimited, userSessionLimit]);
+
+  const loadLoginHistory = useCallback(async (userId, nextOffset = 0, nextLimit = loginHistoryLimit) => {
+    if (rateLimitedRef.current) return;
+    if (!userId) return;
+
+    setLoginHistoryLoading(true);
+    setLoginHistoryError(null);
+
+    try {
+      const page = await fetchUserLoginAttempts(String(userId), nextOffset, nextLimit);
+      const attempts = Array.isArray(page.attempts) ? page.attempts : [];
+
+      const rows = attempts.map((attempt, index) => ({
+        rowId: `${userId}:attempt:${nextOffset + index}`,
+        timestamp: attempt.timestamp || null,
+        ip: attempt.ip || 'N/A',
+        device: attempt.device || 'Unknown Device',
+        status: attempt.status || 'Unknown',
+      }));
+
+      setLoginHistoryRows(rows);
+      setLoginHistoryOffset(nextOffset);
+      setLoginHistoryLimit(nextLimit);
+      setLoginHistoryHasMore(Boolean(page.hasMore));
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setLoginHistoryError(error?.message || 'Failed to load login history.');
+      setLoginHistoryRows([]);
+      setLoginHistoryOffset(0);
+      setLoginHistoryHasMore(false);
+    } finally {
+      setLoginHistoryLoading(false);
+    }
+  }, [loginHistoryLimit, markNetworkError, markRateLimited]);
 
   const loadTokenCount = useCallback(async () => {
     if (rateLimitedRef.current) return;
@@ -293,6 +451,32 @@ const UserManagement = () => {
       setTokenCount(0);
     } finally {
       setTokenCountLoading(false);
+    }
+  }, [markNetworkError, markRateLimited]);
+
+  const loadActiveUsersInHours = useCallback(async (hours) => {
+    if (rateLimitedRef.current) return;
+
+    setActiveUsersLoading(true);
+    setActiveUsersError(null);
+
+    try {
+      const count = await fetchMaxActiveUsersInHours(Number(hours));
+      setActiveUsersCount(Number(count) || 0);
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setActiveUsersError(error?.message || 'Failed to load active user metric.');
+      setActiveUsersCount(0);
+    } finally {
+      setActiveUsersLoading(false);
     }
   }, [markNetworkError, markRateLimited]);
 
@@ -340,116 +524,108 @@ const UserManagement = () => {
   }, [markNetworkError, markRateLimited]);
 
   useEffect(() => {
-    loadTokenCountRef.current = loadTokenCount;
-    loadSessionsPageRef.current = loadSessionsPage;
-  }, [loadSessionsPage, loadTokenCount]);
+    const switchedTabs = patientsTabRef.current !== activeTab;
+    patientsTabRef.current = activeTab;
+    const hasPatientsFetched = Number(tabRefetchAtRef.current['patients-list']) > 0;
 
-  useEffect(() => {
-    if (!USERS_MOUNT_FETCH_IN_FLIGHT) {
-      USERS_MOUNT_FETCH_IN_FLIGHT = loadUsers().finally(() => {
-        USERS_MOUNT_FETCH_IN_FLIGHT = null;
-      });
+    if (activeTab !== 'patients-list') return;
+    if (rateLimitedRef.current) return;
+
+    if (switchedTabs) {
+      const remainingMs = getTabRefetchRemainingMs('patients-list');
+      if (remainingMs > 0) {
+        showRefetchCooldown(remainingMs);
+        return;
+      }
+      markTabRefetch('patients-list');
+    } else if (!hasPatientsFetched) {
+      markTabRefetch('patients-list');
     }
 
-    void USERS_MOUNT_FETCH_IN_FLIGHT;
-  }, [loadUsers]);
+    void loadUsers();
+  }, [activeTab, getTabRefetchRemainingMs, loadUsers, markTabRefetch, showRefetchCooldown]);
 
   useEffect(() => {
-    if (!SESSIONS_MOUNT_FETCH_IN_FLIGHT) {
-      SESSIONS_MOUNT_FETCH_IN_FLIGHT = Promise.allSettled([
-        loadTokenCountRef.current?.(),
-        loadSessionsPageRef.current?.(0, SESSION_INITIAL_LIMIT),
-      ]).finally(() => {
-        SESSIONS_MOUNT_FETCH_IN_FLIGHT = null;
-      });
+    const switchedTabs = sessionsTabRef.current !== activeTab;
+    sessionsTabRef.current = activeTab;
+
+    if (activeTab !== 'active-sessions') return;
+    if (rateLimitedRef.current) return;
+
+    if (switchedTabs) {
+      const remainingMs = getTabRefetchRemainingMs('active-sessions');
+      if (remainingMs > 0) {
+        showRefetchCooldown(remainingMs);
+        return;
+      }
+
+      markTabRefetch('active-sessions');
+      void Promise.allSettled([
+        loadTokenCount(),
+        loadActiveUsersInHours(activeUsersWindowHours),
+        loadSessionsPage(sessionOffset, sessionLimit),
+      ]);
+      return;
     }
 
-    void SESSIONS_MOUNT_FETCH_IN_FLIGHT;
-  }, []);
+    void loadActiveUsersInHours(activeUsersWindowHours);
+  }, [
+    activeTab,
+    activeUsersWindowHours,
+    getTabRefetchRemainingMs,
+    loadActiveUsersInHours,
+    loadSessionsPage,
+    loadTokenCount,
+    markTabRefetch,
+    sessionLimit,
+    sessionOffset,
+    showRefetchCooldown,
+  ]);
+
+  useEffect(() => {
+    if (!sessionToastMessage) return;
+
+    const timeoutId = setTimeout(() => {
+      setSessionToastMessage(null);
+    }, 2500);
+
+    return () => clearTimeout(timeoutId);
+  }, [sessionToastMessage]);
+
+  useEffect(() => {
+    if (!semestralNotice) return;
+
+    const timeoutId = setTimeout(() => {
+      setSemestralNotice(null);
+    }, 3000);
+
+    return () => clearTimeout(timeoutId);
+  }, [semestralNotice]);
+
+  useEffect(() => {
+    if (semestralScopeType === 'branch') {
+      setSemestralScopeValue(SEMESTRAL_BRANCH_OPTIONS[0].value);
+      return;
+    }
+
+    setSemestralScopeValue('');
+  }, [semestralScopeType]);
+
+  useEffect(() => {
+    setSemestralPreview(null);
+    setSemestralReviewModal(null);
+  }, [semestralScopeType, semestralScopeValue, semestralTarget]);
 
   useEffect(() => {
     setUserPage(1);
-  }, [userSearch, userBranchFilter, userTypeFilter, userStatusFilter, userPageSize]);
+  }, [userSearch, userBranchFilter, userStatusFilter, userShowUnverified, userPageSize]);
 
-  const branchOptions = useMemo(() => {
-    const optionsMap = new Map();
-
-    for (const row of users) {
-      const label = normalizeBranchLabel(row.branch);
-      const value = normalizeText(label);
-      if (!value || value === '--') continue;
-      optionsMap.set(value, label);
-    }
-
-    return [
-      { value: 'all', label: 'All Branches' },
-      ...Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label })),
-    ];
-  }, [users]);
-
-  const typeOptions = useMemo(() => {
-    const optionsMap = new Map();
-
-    for (const row of users) {
-      const label = normalizeTypeLabel(row.type);
-      const value = normalizeText(label);
-      if (!value) continue;
-      optionsMap.set(value, label);
-    }
-
-    return [
-      { value: 'all', label: 'All Types' },
-      ...Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label })),
-    ];
-  }, [users]);
-
-  const statusOptions = useMemo(() => {
-    const optionsMap = new Map();
-
-    for (const row of users) {
-      const label = formatStatusLabel(row.status);
-      const value = normalizeText(label);
-      if (!value) continue;
-      optionsMap.set(value, label);
-    }
-
-    return [
-      { value: 'all', label: 'All Status' },
-      ...Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label })),
-    ];
-  }, [users]);
-
-  const filteredUsers = useMemo(() => {
-    const searchValue = normalizeText(userSearch);
-
-    return users.filter((row) => {
-      if (userBranchFilter !== 'all' && normalizeText(row.branch) !== userBranchFilter) {
-        return false;
-      }
-
-      if (userTypeFilter !== 'all' && normalizeText(row.type) !== userTypeFilter) {
-        return false;
-      }
-
-      if (userStatusFilter !== 'all' && normalizeText(formatStatusLabel(row.status)) !== userStatusFilter) {
-        return false;
-      }
-
-      if (!searchValue) {
-        return true;
-      }
-
-      const searchable = [row.name, row.email, row.id]
-        .map((value) => normalizeText(value))
-        .join(' ');
-
-      return searchable.includes(searchValue);
-    });
-  }, [userBranchFilter, userSearch, userStatusFilter, userTypeFilter, users]);
+  const branchOptions = USER_BRANCH_FILTER_OPTIONS;
+  const statusOptions = USER_STATUS_FILTER_OPTIONS;
 
   const userTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredUsers.length / userPageSize)),
-    [filteredUsers.length, userPageSize]
+    () => Math.max(1, Math.ceil(userTotal / userPageSize)),
+    [userPageSize, userTotal]
   );
 
   useEffect(() => {
@@ -458,20 +634,22 @@ const UserManagement = () => {
     }
   }, [userPage, userTotalPages]);
 
-  const userPageRows = useMemo(() => {
-    const start = (userPage - 1) * userPageSize;
-    return filteredUsers.slice(start, start + userPageSize);
-  }, [filteredUsers, userPage, userPageSize]);
+  const userPageRows = users;
+
+  const hasSuperiorUserInPage = useMemo(
+    () => userPageRows.some((row) => normalizeText(row.type) === 'superior'),
+    [userPageRows]
+  );
 
   const userRangeLabel = useMemo(() => {
-    if (filteredUsers.length === 0 || userPageRows.length === 0) {
+    if (userTotal === 0 || userPageRows.length === 0) {
       return 'Showing 0 of 0';
     }
 
     const start = (userPage - 1) * userPageSize + 1;
-    const end = Math.min(start + userPageRows.length - 1, filteredUsers.length);
-    return `Showing ${start}-${end} of ${filteredUsers.length}`;
-  }, [filteredUsers.length, userPage, userPageRows.length, userPageSize]);
+    const end = Math.min(start + userPageRows.length - 1, userTotal);
+    return `Showing ${start}-${end} of ${userTotal}`;
+  }, [userPage, userPageRows.length, userPageSize, userTotal]);
 
   const canSessionPrev = sessionOffset > 0;
   const canSessionNext = sessionOffset + sessionLimit < sessionTotal;
@@ -486,25 +664,253 @@ const UserManagement = () => {
     return `Showing ${start}-${end} of ${sessionTotal}`;
   }, [sessionOffset, sessionRows.length, sessionTotal]);
 
+  const canUserSessionPrev = userSessionOffset > 0;
+  const canUserSessionNext = userSessionHasMore;
+
+  const canLoginHistoryPrev = loginHistoryOffset > 0;
+  const canLoginHistoryNext = loginHistoryHasMore;
+
+  const loginHistoryRangeLabel = useMemo(() => {
+    if (loginHistoryRows.length === 0) {
+      return 'Showing 0 of 0';
+    }
+
+    const start = loginHistoryOffset + 1;
+    const end = loginHistoryOffset + loginHistoryRows.length;
+    return `Showing ${start}-${end}${loginHistoryHasMore ? '+' : ''}`;
+  }, [loginHistoryHasMore, loginHistoryOffset, loginHistoryRows.length]);
+
+  const userSessionRangeLabel = useMemo(() => {
+    if (userSessionRows.length === 0) {
+      return 'Showing 0 of 0';
+    }
+
+    const start = userSessionOffset + 1;
+    const end = userSessionOffset + userSessionRows.length;
+    return `Showing ${start}-${end}${userSessionHasMore ? '+' : ''}`;
+  }, [userSessionHasMore, userSessionOffset, userSessionRows.length]);
+
   const refreshActiveTab = useCallback(() => {
     if (rateLimitedRef.current) return;
+
+    const remainingMs = getTabRefetchRemainingMs(activeTab);
+    if (remainingMs > 0) {
+      showRefetchCooldown(remainingMs);
+      return;
+    }
+
+    markTabRefetch(activeTab);
 
     if (activeTab === 'patients-list') {
       void loadUsers();
       return;
     }
 
+    if (activeTab === 'semestral-action') {
+      const identities = resolveSemestralTargetIdentities(semestralTarget);
+      const payload = semestralScopeType === 'branch'
+        ? { branch: semestralScopeValue, department: null, identities }
+        : { branch: null, department: semestralScopeValue, identities };
+
+      const normalizedBranch = typeof payload.branch === 'string' ? payload.branch.trim() : '';
+      const normalizedDepartment = typeof payload.department === 'string' ? payload.department.trim() : '';
+
+      if (!normalizedBranch && !normalizedDepartment) {
+        setSemestralNotice({ type: 'error', message: 'Please select a branch or provide a department first.' });
+        return;
+      }
+
+      void (async () => {
+        setSemestralPreviewLoading(true);
+        try {
+          const preview = await previewSemestralInactivation(payload);
+          setSemestralPreview(preview);
+          setSemestralNotice({
+            type: Number(preview?.scopedCount) > 0 ? 'success' : 'warning',
+            message: preview?.message || 'Semestral impact refreshed.',
+          });
+        } catch (error) {
+          if (isRateLimitedError(error)) {
+            markRateLimited();
+            return;
+          }
+
+          if (isConnectivityError(error)) {
+            markNetworkError();
+          }
+
+          setSemestralNotice({ type: 'error', message: error?.message || 'Failed to refresh semestral impact.' });
+        } finally {
+          setSemestralPreviewLoading(false);
+        }
+      })();
+      return;
+    }
+
     void Promise.allSettled([
       loadTokenCount(),
+      loadActiveUsersInHours(activeUsersWindowHours),
       loadSessionsPage(sessionOffset, sessionLimit),
     ]);
-  }, [activeTab, loadSessionsPage, loadTokenCount, loadUsers, sessionLimit, sessionOffset]);
+  }, [
+    activeTab,
+    activeUsersWindowHours,
+    getTabRefetchRemainingMs,
+    loadActiveUsersInHours,
+    loadSessionsPage,
+    loadTokenCount,
+    loadUsers,
+    markNetworkError,
+    markRateLimited,
+    markTabRefetch,
+    previewSemestralInactivation,
+    semestralScopeType,
+    semestralScopeValue,
+    semestralTarget,
+    sessionLimit,
+    sessionOffset,
+    showRefetchCooldown,
+  ]);
 
   const retryAfterNetworkError = useCallback(() => {
     if (rateLimitedRef.current) return;
     setBanner(null);
     refreshActiveTab();
   }, [refreshActiveTab]);
+
+  const openPatientDetail = useCallback(async (row) => {
+    const normalizedPatient = {
+      id: String(row.id || ''),
+      name: row.name || '--',
+      email: row.email || '--',
+      branch: row.branch || '--',
+      type: row.type || 'Unknown',
+      userType: normalizeText(row.userType) === 'medical' ? 'medical' : 'patient',
+      status: row.status || 'Unknown',
+      inactiveExpiresAt: row.inactiveExpiresAt || null,
+      lastLogin: row.lastLogin || null,
+    };
+
+    if (!normalizedPatient.id || normalizedPatient.id === '--') {
+      return;
+    }
+
+    setSelectedPatient(normalizedPatient);
+    setLoginHistoryRows([]);
+    setLoginHistoryOffset(0);
+    setLoginHistoryHasMore(false);
+    setLoginHistoryError(null);
+    await loadLoginHistory(normalizedPatient.id, 0, loginHistoryLimit);
+  }, [loadLoginHistory, loginHistoryLimit]);
+
+  const closePatientDetail = useCallback(() => {
+    setSelectedPatient(null);
+    setLoginHistoryRows([]);
+    setLoginHistoryOffset(0);
+    setLoginHistoryHasMore(false);
+    setLoginHistoryError(null);
+    setLoginHistoryLoading(false);
+    setLockingAccount(false);
+    setSettingSuperior(false);
+    setSuperiorActionUserId(null);
+  }, []);
+
+  const handleToggleLockAccount = useCallback(async () => {
+    if (rateLimitedRef.current) return;
+    if (!selectedPatient?.id) return;
+
+    const currentlyLocked = getStatusKey(selectedPatient.status) === 'locked';
+    const nextLocked = !currentlyLocked;
+
+    setLockingAccount(true);
+    setLoginHistoryError(null);
+
+    try {
+      await setUserAccountLocked(String(selectedPatient.id), nextLocked);
+
+      setSelectedPatient((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          status: nextLocked ? 'Locked' : 'Active',
+        };
+      });
+
+      setUsers((currentRows) => currentRows.map((currentRow) => {
+        if (currentRow.id !== String(selectedPatient.id)) return currentRow;
+        return {
+          ...currentRow,
+          status: nextLocked ? 'Locked' : 'Active',
+        };
+      }));
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setLoginHistoryError(error?.message || 'Failed to update account lock status.');
+    } finally {
+      setLockingAccount(false);
+    }
+  }, [markNetworkError, markRateLimited, selectedPatient]);
+
+  const applySuperiorTypeToState = useCallback((targetUserId, superiorEnabled) => {
+    const normalizedUserId = String(targetUserId || '');
+    const nextType = superiorEnabled ? 'Superior' : 'Employee';
+
+    setUsers((currentRows) => currentRows.map((currentRow) => {
+      if (String(currentRow.id) !== normalizedUserId) return currentRow;
+      return {
+        ...currentRow,
+        type: nextType,
+      };
+    }));
+
+    setSelectedPatient((current) => {
+      if (!current) return current;
+      if (String(current.id) !== normalizedUserId) return current;
+      return {
+        ...current,
+        type: nextType,
+      };
+    });
+  }, []);
+
+  const handleSetSuperiorAccount = useCallback(async () => {
+    if (rateLimitedRef.current) return;
+    if (!selectedPatient?.id) return;
+
+    const normalizedUserId = String(selectedPatient.id);
+    const nextSuperior = normalizeText(selectedPatient.type) !== 'superior';
+
+    setSettingSuperior(true);
+    setSuperiorActionUserId(normalizedUserId);
+    setLoginHistoryError(null);
+
+    try {
+      await setUserSuperiorStatus(normalizedUserId, nextSuperior);
+      applySuperiorTypeToState(normalizedUserId, nextSuperior);
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setLoginHistoryError(error?.message || 'Failed to update Superior role.');
+    } finally {
+      setSettingSuperior(false);
+      setSuperiorActionUserId(null);
+    }
+  }, [applySuperiorTypeToState, markNetworkError, markRateLimited, selectedPatient]);
 
   const openSessionDetail = useCallback(async (row) => {
     const normalizedUser = {
@@ -517,17 +923,224 @@ const UserManagement = () => {
       return;
     }
 
-    setSelectedUser(normalizedUser);
+    setSelectedSessionUser(normalizedUser);
+    setUserSessionOffset(0);
+    setUserSessionHasMore(false);
     setUserSessionRows([]);
     setUserSessionsError(null);
-    await loadUserSessions(normalizedUser.id);
-  }, [loadUserSessions]);
+    setSessionToastMessage(null);
+    await loadUserSessions(normalizedUser.id, 0, userSessionLimit);
+  }, [loadUserSessions, userSessionLimit]);
+
+  const handleRevokeSession = useCallback(async (row) => {
+    if (rateLimitedRef.current) return;
+    if (!selectedSessionUser?.id || !row?.deviceId) return;
+
+    setRevokingSessionRowId(row.rowId);
+    setUserSessionsError(null);
+
+    try {
+      const shouldRevoke = getStatusKey(row.status) !== 'revoked';
+      await setUserSessionRevoked(String(selectedSessionUser.id), String(row.deviceId), shouldRevoke);
+
+      setUserSessionRows((currentRows) => currentRows.map((currentRow) => {
+        if (currentRow.rowId !== row.rowId) return currentRow;
+        return {
+          ...currentRow,
+          status: shouldRevoke ? 'revoked' : 'active',
+          updatedAt: new Date().toISOString(),
+        };
+      }));
+
+      setSessionToastMessage(shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.');
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setUserSessionsError(error?.message || 'Failed to update this session ticket.');
+    } finally {
+      setRevokingSessionRowId(null);
+    }
+  }, [
+    markNetworkError,
+    markRateLimited,
+    selectedSessionUser,
+  ]);
+
+  const handleBulkSessionAction = useCallback(async (revoked) => {
+    if (rateLimitedRef.current) return;
+    if (!selectedSessionUser?.id) return;
+
+    const shouldRevoke = Boolean(revoked);
+    const targetStatus = shouldRevoke ? 'revoked' : 'active';
+    const hasRowsToChange = userSessionRows.some((row) => getStatusKey(row.status) !== targetStatus);
+
+    if (!hasRowsToChange) {
+      setSessionToastMessage(shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.');
+      return;
+    }
+
+    setBulkSessionAction(shouldRevoke ? 'revoke' : 'unrevoke');
+    setUserSessionsError(null);
+
+    try {
+      const result = await setAllUserSessionsRevoked(String(selectedSessionUser.id), shouldRevoke);
+
+      setUserSessionRows((currentRows) => currentRows.map((currentRow) => {
+        const currentStatus = getStatusKey(currentRow.status);
+        if (!['active', 'revoked'].includes(currentStatus)) return currentRow;
+
+        return {
+          ...currentRow,
+          status: targetStatus,
+          updatedAt: new Date().toISOString(),
+        };
+      }));
+
+      setSessionToastMessage(result?.message || (shouldRevoke
+        ? 'All sessions revoked successfully.'
+        : 'All sessions unrevoked successfully.'));
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setUserSessionsError(error?.message || 'Failed to update all session tickets.');
+    } finally {
+      setBulkSessionAction(null);
+    }
+  }, [markNetworkError, markRateLimited, selectedSessionUser, userSessionRows]);
+
+  const handleApplySemestralInactivation = useCallback(async () => {
+    if (rateLimitedRef.current) return;
+
+    const identities = resolveSemestralTargetIdentities(semestralTarget);
+
+    const payload = semestralScopeType === 'branch'
+      ? { branch: semestralScopeValue, department: null, identities }
+      : { branch: null, department: semestralScopeValue, identities };
+
+    const normalizedBranch = typeof payload.branch === 'string' ? payload.branch.trim() : '';
+    const normalizedDepartment = typeof payload.department === 'string' ? payload.department.trim() : '';
+
+    if (!normalizedBranch && !normalizedDepartment) {
+      setSemestralNotice({ type: 'error', message: 'Please select a branch or provide a department.' });
+      return;
+    }
+
+    setSemestralPreviewLoading(true);
+    setSemestralNotice(null);
+
+    let preview;
+    try {
+      preview = await previewSemestralInactivation(payload);
+      setSemestralPreview(preview);
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setSemestralNotice({ type: 'error', message: error?.message || 'Failed to preview semestral impact.' });
+      return;
+    } finally {
+      setSemestralPreviewLoading(false);
+    }
+
+    const scopedCount = Number(preview?.scopedCount) || 0;
+    const willUpdateCount = Number(preview?.willUpdateCount) || 0;
+
+    if (scopedCount === 0) {
+      setSemestralNotice({ type: 'warning', message: preview?.message || 'No matching accounts found for the selected scope.' });
+      return;
+    }
+
+    setSemestralNotice({
+      type: 'warning',
+      message: `Warning: ${willUpdateCount} of ${scopedCount} scoped account(s) will be set to Inactive.`,
+    });
+
+    const scopeLabel = normalizedBranch || normalizedDepartment;
+    const scopeTypeLabel = normalizedBranch ? 'branch' : 'department';
+    const targetLabel = semestralTarget === 'students'
+      ? 'Student'
+      : (semestralTarget === 'employees' ? 'Employee' : 'Student and Employee');
+
+    setSemestralReviewModal({
+      payload,
+      scopedCount,
+      willUpdateCount,
+      scopeLabel,
+      scopeTypeLabel,
+      targetLabel,
+    });
+  }, [
+    markNetworkError,
+    markRateLimited,
+    previewSemestralInactivation,
+    semestralScopeType,
+    semestralScopeValue,
+    semestralTarget,
+  ]);
+
+  const handleConfirmSemestralInactivation = useCallback(async () => {
+    if (!semestralReviewModal?.payload) return;
+    if (rateLimitedRef.current) return;
+
+    setSemestralApplying(true);
+
+    try {
+      const result = await applySemestralInactivation(semestralReviewModal.payload);
+      setSemestralNotice({ type: 'success', message: result?.message || 'Semestral action applied successfully.' });
+      await loadUsers();
+      setSemestralReviewModal(null);
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setSemestralNotice({ type: 'error', message: error?.message || 'Failed to apply semestral inactivation.' });
+    } finally {
+      setSemestralApplying(false);
+    }
+  }, [
+    applySemestralInactivation,
+    loadUsers,
+    markNetworkError,
+    markRateLimited,
+    semestralReviewModal,
+  ]);
 
   const closeUserDetail = useCallback(() => {
-    setSelectedUser(null);
+    setSelectedSessionUser(null);
     setUserSessionRows([]);
+    setUserSessionOffset(0);
+    setUserSessionHasMore(false);
     setUserSessionsError(null);
     setUserSessionsLoading(false);
+    setRevokingSessionRowId(null);
+    setBulkSessionAction(null);
+    setSessionToastMessage(null);
   }, []);
 
   return (
@@ -558,6 +1171,18 @@ const UserManagement = () => {
           >
             Active Sessions
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('semestral-action')}
+            aria-pressed={activeTab === 'semestral-action'}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeTab === 'semestral-action'
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+            }`}
+          >
+            Semestral Action
+          </button>
         </div>
 
         <button
@@ -565,7 +1190,11 @@ const UserManagement = () => {
           onClick={refreshActiveTab}
           disabled={isRateLimited}
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label={`Refresh ${activeTab === 'patients-list' ? 'patients list' : 'active sessions'}`}
+          aria-label={`Refresh ${
+            activeTab === 'patients-list'
+              ? 'patients list'
+              : (activeTab === 'active-sessions' ? 'active sessions' : 'semestral action')
+          }`}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -586,7 +1215,7 @@ const UserManagement = () => {
               <button
                 type="button"
                 onClick={retryAfterNetworkError}
-                disabled={usersLoading || sessionsLoading || tokenCountLoading}
+                disabled={usersLoading || sessionsLoading || tokenCountLoading || activeUsersLoading}
                 className="px-2.5 py-1 text-xs rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-100 dark:hover:bg-warning-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Retry
@@ -598,7 +1227,7 @@ const UserManagement = () => {
 
       {activeTab === 'patients-list' && (
         <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <input
               type="text"
               value={userSearch}
@@ -618,18 +1247,14 @@ const UserManagement = () => {
             </select>
 
             <select
-              value={userTypeFilter}
-              onChange={(event) => setUserTypeFilter(event.target.value)}
-              className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-            >
-              {typeOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-
-            <select
               value={userStatusFilter}
-              onChange={(event) => setUserStatusFilter(event.target.value)}
+              onChange={(event) => {
+                const nextStatus = event.target.value;
+                setUserStatusFilter(nextStatus);
+                if (normalizeText(nextStatus) === 'unverified') {
+                  setUserShowUnverified(true);
+                }
+              }}
               className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
             >
               {statusOptions.map((option) => (
@@ -638,9 +1263,35 @@ const UserManagement = () => {
             </select>
           </div>
 
+          <div className="flex items-center justify-between gap-3">
+            <label className="inline-flex items-center gap-2 text-xs text-secondary-600 dark:text-neutral-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={userShowUnverified}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setUserShowUnverified(checked);
+                  if (!checked && normalizeText(userStatusFilter) === 'unverified') {
+                    setUserStatusFilter('all');
+                  }
+                }}
+                className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-600 focus:ring-primary-500"
+              />
+              Show unverified users
+            </label>
+          </div>
+
           <p className="text-xs text-secondary-500 dark:text-neutral-400">
-            {filteredUsers.length} patient account{filteredUsers.length !== 1 ? 's' : ''} matched
+            {userTotal} patient account{userTotal !== 1 ? 's' : ''} matched
           </p>
+
+          {hasSuperiorUserInPage && (
+            <div className="rounded-lg border border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/20 px-3 py-2">
+              <p className="text-xs text-primary-700 dark:text-primary-300">
+                Superior account detected in this result set. Superior users remain protected by stricter permission checks.
+              </p>
+            </div>
+          )}
 
           {usersLoading ? (
             <div className="py-12 text-center">
@@ -675,19 +1326,66 @@ const UserManagement = () => {
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Email</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Branch</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Account Status</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Last Login</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {userPageRows.map((row) => (
-                        <tr key={row.id} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0">
-                          <td className="py-2.5 px-3 text-xs font-medium text-secondary-900 dark:text-white">{row.name}</td>
-                          <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{row.email}</td>
-                          <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.branch}</td>
-                          <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.type}</td>
-                          <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.lastLogin)}</td>
-                        </tr>
-                      ))}
+                      {userPageRows.map((row) => {
+                        const statusKey = getStatusKey(row.status);
+                        const isLocked = statusKey === 'locked';
+                        const isSuperior = normalizeText(row.type) === 'superior';
+
+                        return (
+                          <tr
+                            key={row.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              void openPatientDetail(row);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                void openPatientDetail(row);
+                              }
+                            }}
+                            aria-label={`Open account details for user ${row.id}`}
+                            className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer"
+                          >
+                            <td className="py-2.5 px-3 text-xs font-medium text-secondary-900 dark:text-white">{row.name}</td>
+                            <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{row.email}</td>
+                            <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.branch}</td>
+                            <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.type}</td>
+                            <td className="py-2.5 px-3">
+                              <div className="space-y-1">
+                                <div className="inline-flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 text-xs text-secondary-700 dark:text-neutral-200">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
+                                    {formatStatusLabel(row.status)}
+                                  </span>
+                                  {isLocked && (
+                                    <span className="inline-flex items-center rounded-full border border-error-300 dark:border-error-700 px-1.5 py-0.5 text-[10px] font-medium text-error-700 dark:text-error-300">
+                                      Locked
+                                    </span>
+                                  )}
+                                  {isSuperior && (
+                                    <span className="inline-flex items-center rounded-full border border-primary-300 dark:border-primary-700 px-1.5 py-0.5 text-[10px] font-medium text-primary-700 dark:text-primary-300">
+                                      Superior
+                                    </span>
+                                  )}
+                                </div>
+                                {statusKey === 'inactive' && (
+                                  <p className="text-[10px] text-secondary-500 dark:text-neutral-400">
+                                    Update window ends: {formatDateTime(row.inactiveExpiresAt)}
+                                  </p>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.lastLogin)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -735,9 +1433,9 @@ const UserManagement = () => {
 
       {activeTab === 'active-sessions' && (
         <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-3">
-              <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Active Refresh Tokens</p>
+              <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Active Session Token</p>
               {tokenCountLoading ? (
                 <div className="mt-2 w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
               ) : tokenCountError ? (
@@ -748,10 +1446,36 @@ const UserManagement = () => {
             </div>
 
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Max Total Active Users in {formatWindowLabel(activeUsersWindowHours)}</p>
+                <label htmlFor="active-users-days" className="sr-only">Active user day window</label>
+                <select
+                  id="active-users-days"
+                  value={activeUsersWindowHours}
+                  onChange={(event) => setActiveUsersWindowHours(Number(event.target.value))}
+                  disabled={activeUsersLoading || isRateLimited}
+                  className="px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {ACTIVE_USER_WINDOW_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{formatWindowLabel(option)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {activeUsersLoading ? (
+                <div className="mt-2 w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              ) : activeUsersError ? (
+                <p className="mt-2 text-xs text-error-600 dark:text-error-400">{activeUsersError}</p>
+              ) : (
+                <p className="mt-1 text-2xl font-bold text-secondary-900 dark:text-white">{activeUsersCount}</p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-3">
               <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Access Mode</p>
-              <p className="mt-1 text-sm font-semibold text-secondary-900 dark:text-white">Read-only monitoring</p>
+              <p className="mt-1 text-sm font-semibold text-secondary-900 dark:text-white">Monitoring and session control</p>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                This section is strictly observational and does not modify sessions.
+                Open a user row to review device tickets and revoke individual sessions.
               </p>
             </div>
           </div>
@@ -882,26 +1606,409 @@ const UserManagement = () => {
         </div>
       )}
 
-      {selectedUser && (
+      {activeTab === 'semestral-action' && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-4 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-secondary-900 dark:text-white">Semestral Credential Action</p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                Set all Student and Employee accounts in a selected scope to Inactive.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <select
+                value={semestralScopeType}
+                onChange={(event) => setSemestralScopeType(event.target.value)}
+                disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="branch">Branch Scope</option>
+                <option value="department">Department Scope</option>
+              </select>
+
+              {semestralScopeType === 'branch' ? (
+                <select
+                  value={semestralScopeValue}
+                  onChange={(event) => setSemestralScopeValue(event.target.value)}
+                  disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                  className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {SEMESTRAL_BRANCH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={semestralScopeValue}
+                  onChange={(event) => setSemestralScopeValue(event.target.value)}
+                  placeholder="Enter employee department"
+                  disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                  className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 placeholder:text-secondary-400 dark:placeholder:text-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+              )}
+
+              <select
+                value={semestralTarget}
+                onChange={(event) => setSemestralTarget(event.target.value)}
+                disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {SEMESTRAL_TARGET_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void handleApplySemestralInactivation();
+                }}
+                disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                className="px-3 py-2 text-xs font-medium rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {semestralApplying ? 'Applying...' : (semestralPreviewLoading ? 'Reviewing...' : 'Set Accounts to Inactive')}
+              </button>
+            </div>
+          </div>
+
+          {semestralPreview && (
+            <div className="rounded-lg border border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20 px-3 py-2">
+              <p className="text-xs font-medium text-warning-700 dark:text-warning-300">Impact Preview</p>
+              <p className="text-xs text-warning-700 dark:text-warning-300 mt-1">
+                {Number(semestralPreview.willUpdateCount) || 0} of {Number(semestralPreview.scopedCount) || 0} scoped account(s) will be updated to Inactive.
+              </p>
+            </div>
+          )}
+
+          {semestralNotice && (
+            <div
+              role="status"
+              aria-live="polite"
+              className={`rounded-lg border px-3 py-2 ${
+                semestralNotice.type === 'error'
+                  ? 'border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20'
+                  : semestralNotice.type === 'warning'
+                    ? 'border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20'
+                  : 'border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/20'
+              }`}
+            >
+              <p className={`text-xs ${
+                semestralNotice.type === 'error'
+                  ? 'text-error-700 dark:text-error-300'
+                  : semestralNotice.type === 'warning'
+                    ? 'text-warning-700 dark:text-warning-300'
+                  : 'text-success-700 dark:text-success-300'
+              }`}
+              >
+                {semestralNotice.message}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {semestralReviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="semestral-review-title">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => {
+              if (!semestralApplying) {
+                setSemestralReviewModal(null);
+              }
+            }}
+            aria-hidden="true"
+          />
+
+          <div className="relative w-full max-w-lg rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
+              <h3 id="semestral-review-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Review Semestral Action</h3>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                Please review the impact before applying this bulk credential update.
+              </p>
+            </div>
+
+            <div className="px-4 py-3 space-y-2">
+              <p className="text-xs text-secondary-700 dark:text-neutral-200">
+                <span className="font-medium">Scope:</span> {semestralReviewModal.scopeTypeLabel} "{semestralReviewModal.scopeLabel}"
+              </p>
+              <p className="text-xs text-secondary-700 dark:text-neutral-200">
+                <span className="font-medium">Target:</span> {semestralReviewModal.targetLabel}
+              </p>
+              <div className="rounded border border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20 px-3 py-2">
+                <p className="text-xs text-warning-700 dark:text-warning-300">
+                  {semestralReviewModal.willUpdateCount} of {semestralReviewModal.scopedCount} scoped account(s) will be set to Inactive.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSemestralReviewModal(null)}
+                disabled={semestralApplying}
+                className="px-3 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleConfirmSemestralInactivation();
+                }}
+                disabled={semestralApplying}
+                className="px-3 py-1.5 text-xs rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {semestralApplying ? 'Applying...' : 'Confirm and Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="patient-detail-title">
+          <div className="absolute inset-0 bg-black/40" onClick={closePatientDetail} aria-hidden="true" />
+          <div className="relative w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
+              <div>
+                <h3 id="patient-detail-title" className="text-sm font-semibold text-secondary-900 dark:text-white">User Account Controls and Login History</h3>
+                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{selectedPatient.name} ({selectedPatient.email})</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleToggleLockAccount();
+                  }}
+                  disabled={lockingAccount || settingSuperior || isRateLimited}
+                  className="px-2.5 py-1 text-xs rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {lockingAccount
+                    ? 'Updating...'
+                    : (getStatusKey(selectedPatient.status) === 'locked' ? 'Unlock Account' : 'Lock Account')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSetSuperiorAccount();
+                  }}
+                  disabled={settingSuperior || lockingAccount || isRateLimited || superiorActionUserId === String(selectedPatient.id)}
+                  className="px-2.5 py-1 text-xs rounded border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {settingSuperior
+                    ? 'Updating...'
+                    : (normalizeText(selectedPatient.type) === 'superior' ? 'Unset Superior' : 'Set Superior')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closePatientDetail}
+                  className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                  aria-label="Close patient account details"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 overflow-auto max-h-[calc(85vh-64px)] space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Type</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{selectedPatient.type}</p>
+                </div>
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Account Status</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{formatStatusLabel(selectedPatient.status)}</p>
+                  {getStatusKey(selectedPatient.status) === 'inactive' && (
+                    <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mt-1">
+                      Update window ends: {formatDateTime(selectedPatient.inactiveExpiresAt)}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Branch</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{selectedPatient.branch}</p>
+                </div>
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Last Login</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{formatDateTime(selectedPatient.lastLogin)}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-secondary-900 dark:text-white">Login History</p>
+                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">Superior accounts are protected by stricter permission checks for non-admin staff.</p>
+              </div>
+
+              {loginHistoryError && (
+                <div className="rounded border border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20 px-3 py-2">
+                  <p className="text-xs text-error-700 dark:text-error-300">{loginHistoryError}</p>
+                </div>
+              )}
+
+              {loginHistoryLoading ? (
+                <div className="py-10 text-center">
+                  <div className="w-6 h-6 mx-auto border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-2" />
+                  <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading login history...</p>
+                </div>
+              ) : loginHistoryRows.length === 0 ? (
+                <div className="py-10 text-center border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">No login attempts found for this account.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+                    <div className="overflow-auto">
+                      <table className="w-full text-xs min-w-[760px]">
+                        <thead>
+                          <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Timestamp</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">IP</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Device</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {loginHistoryRows.map((attempt) => {
+                            const attemptStatus = normalizeText(attempt.status) === 'success' ? 'active' : 'unknown';
+                            return (
+                              <tr key={attempt.rowId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0">
+                                <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{formatDateTime(attempt.timestamp)}</td>
+                                <td className="py-2.5 px-3 text-xs font-mono text-secondary-600 dark:text-neutral-300">{attempt.ip}</td>
+                                <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{attempt.device}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[attemptStatus] || STATUS_DOT_CLASS.unknown}`} />
+                                    {attempt.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400">{loginHistoryRangeLabel}</p>
+
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="login-history-limit" className="text-xs text-secondary-500 dark:text-neutral-400">Rows</label>
+                      <select
+                        id="login-history-limit"
+                        value={loginHistoryLimit}
+                        onChange={(event) => {
+                          const nextLimit = Number(event.target.value);
+                          void loadLoginHistory(selectedPatient.id, 0, nextLimit);
+                        }}
+                        disabled={isRateLimited || loginHistoryLoading}
+                        className="px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {LOGIN_HISTORY_LIMIT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextOffset = Math.max(0, loginHistoryOffset - loginHistoryLimit);
+                          void loadLoginHistory(selectedPatient.id, nextOffset, loginHistoryLimit);
+                        }}
+                        disabled={!canLoginHistoryPrev || loginHistoryLoading || isRateLimited}
+                        className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextOffset = loginHistoryOffset + loginHistoryLimit;
+                          void loadLoginHistory(selectedPatient.id, nextOffset, loginHistoryLimit);
+                        }}
+                        disabled={!canLoginHistoryNext || loginHistoryLoading || isRateLimited}
+                        className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedSessionUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="user-session-title">
           <div className="absolute inset-0 bg-black/40" onClick={closeUserDetail} aria-hidden="true" />
           <div className="relative w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
               <div>
                 <h3 id="user-session-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Active Tickets (Devices and Refresh Tokens)</h3>
-                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{selectedUser.name} ({selectedUser.email})</p>
+                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{selectedSessionUser.name} ({selectedSessionUser.email})</p>
               </div>
-              <button
-                type="button"
-                onClick={closeUserDetail}
-                className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800"
-                aria-label="Close user session details"
-              >
-                Close
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void loadUserSessions(selectedSessionUser.id, userSessionOffset, userSessionLimit);
+                  }}
+                  disabled={userSessionsLoading || bulkSessionAction !== null || revokingSessionRowId !== null || isRateLimited}
+                  className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Refresh Tickets
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleBulkSessionAction(true);
+                  }}
+                  disabled={userSessionsLoading || bulkSessionAction !== null || revokingSessionRowId !== null || isRateLimited}
+                  className="px-2.5 py-1 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {bulkSessionAction === 'revoke' ? 'Revoking...' : 'Revoke All'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleBulkSessionAction(false);
+                  }}
+                  disabled={userSessionsLoading || bulkSessionAction !== null || revokingSessionRowId !== null || isRateLimited}
+                  className="px-2.5 py-1 text-xs rounded border border-success-300 dark:border-success-700 text-success-700 dark:text-success-300 hover:bg-success-50 dark:hover:bg-success-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {bulkSessionAction === 'unrevoke' ? 'Updating...' : 'Unrevoke All'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closeUserDetail}
+                  className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                  aria-label="Close user session details"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             <div className="p-4 overflow-auto max-h-[calc(85vh-64px)]">
+              {sessionToastMessage && (
+                <div className="mb-3 rounded border border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/20 px-3 py-2" role="status" aria-live="polite">
+                  <p className="text-xs text-success-700 dark:text-success-300">{sessionToastMessage}</p>
+                </div>
+              )}
+
               {userSessionsLoading ? (
                 <div className="py-10 text-center">
                   <div className="w-6 h-6 mx-auto border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-2" />
@@ -914,7 +2021,7 @@ const UserManagement = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        void loadUserSessions(selectedUser.id);
+                        void loadUserSessions(selectedSessionUser.id, userSessionOffset, userSessionLimit);
                       }}
                       className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
                     >
@@ -924,41 +2031,104 @@ const UserManagement = () => {
                 </div>
               ) : userSessionRows.length === 0 ? (
                 <div className="py-10 text-center border border-neutral-200 dark:border-neutral-700 rounded-lg">
-                  <p className="text-xs text-secondary-500 dark:text-neutral-400">No active tickets found for this user.</p>
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">No session tickets found for this user.</p>
                 </div>
               ) : (
-                <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                  <div className="overflow-auto">
-                    <table className="w-full text-xs min-w-[760px]">
-                      <thead>
-                        <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Device ID</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Refresh Token</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {userSessionRows.map((row) => {
-                          const statusKey = getStatusKey(row.status);
-                          return (
-                            <tr key={row.rowId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
-                              <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">{row.deviceId}</td>
-                              <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300 max-w-[360px] truncate" title={row.refreshToken}>{row.refreshToken}</td>
-                              <td className="py-2.5 px-3">
-                                <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
-                                  {formatStatusLabel(row.status)}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.expiresAt)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                <>
+                  <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+                    <div className="overflow-auto">
+                      <table className="w-full text-xs min-w-[760px]">
+                        <thead>
+                          <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Device ID</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Refresh Token</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {userSessionRows.map((row) => {
+                            const statusKey = getStatusKey(row.status);
+                            const isRevoking = revokingSessionRowId === row.rowId;
+                            return (
+                              <tr key={row.rowId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
+                                <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">{row.deviceId}</td>
+                                <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300 max-w-[360px] truncate" title={row.refreshToken}>{row.refreshToken}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
+                                    {formatStatusLabel(row.status)}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.expiresAt)}</td>
+                                <td className="py-2.5 px-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void handleRevokeSession(row);
+                                    }}
+                                    disabled={isRevoking || bulkSessionAction !== null || isRateLimited}
+                                    className="px-2.5 py-1 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    aria-label={`${getStatusKey(row.status) === 'revoked' ? 'Unrevoke' : 'Revoke'} session for device ${row.deviceId}`}
+                                  >
+                                    {isRevoking ? 'Updating...' : (getStatusKey(row.status) === 'revoked' ? 'Unrevoke' : 'Revoke')}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400">{userSessionRangeLabel}</p>
+
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="user-session-limit" className="text-xs text-secondary-500 dark:text-neutral-400">Rows</label>
+                      <select
+                        id="user-session-limit"
+                        value={userSessionLimit}
+                        onChange={(event) => {
+                          const nextLimit = Number(event.target.value);
+                          void loadUserSessions(selectedSessionUser.id, 0, nextLimit);
+                        }}
+                        disabled={isRateLimited || userSessionsLoading}
+                        className="px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {SESSION_LIMIT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextOffset = Math.max(0, userSessionOffset - userSessionLimit);
+                          void loadUserSessions(selectedSessionUser.id, nextOffset, userSessionLimit);
+                        }}
+                        disabled={!canUserSessionPrev || userSessionsLoading || isRateLimited}
+                        className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextOffset = userSessionOffset + userSessionLimit;
+                          void loadUserSessions(selectedSessionUser.id, nextOffset, userSessionLimit);
+                        }}
+                        disabled={!canUserSessionNext || userSessionsLoading || isRateLimited}
+                        className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>

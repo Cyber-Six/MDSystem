@@ -362,7 +362,6 @@ export const getUserObgynHistory = async (userId) => {
          lastMenstrualPeriod
          hasDysmenorrhea
          notes
-         status
          created_at
        }
      }`,
@@ -577,7 +576,7 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex =
       id notes acuity { id acuityId left_eye right_eye notes recorded_at } created_at
     }
     obgynHistory: getUserObgynHistory(userId: $userId) {
-      id lastMenstrualPeriod hasDysmenorrhea notes status created_at
+      id lastMenstrualPeriod hasDysmenorrhea notes created_at
     }` : '';
 
   const dentalFields = includeDental ? `

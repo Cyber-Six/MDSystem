@@ -2151,7 +2151,7 @@ export const checkInitialRecordStatus = async () => {
       { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
-      `query GetUpdateTicket { getUpdateTicket { id status notes } }`,
+      `query GetUpdateTicket { getUpdateTicket { id status notes created_at } }`,
       {}
     ),
   ]);
@@ -2172,14 +2172,28 @@ export const checkInitialRecordStatus = async () => {
   if (credentialStatus === 'Unverified') {
     const ticketStatus = ticket?.status || null;
     console.log('[EMR Service] Credential is Unverified — initial record required. Ticket status:', ticketStatus);
-    return { needsInitialRecord: true, status: ticketStatus, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
+    return {
+      needsInitialRecord: true,
+      status: ticketStatus,
+      ticketId: ticket?.id ?? null,
+      notes: ticket?.notes ?? null,
+      ticketCreatedAt: ticket?.created_at ?? null,
+      credentialStatus,
+    };
   }
 
   // Secondary check: non-Unverified credential (Active / Locked / Disabled) means
   // the patient has already completed and passed the initial record step.
   if (credentialStatus && credentialStatus !== 'Unverified') {
     console.log('[EMR Service] Credential is', credentialStatus, '— initial record already completed');
-    return { needsInitialRecord: false, status: ticket?.status ?? null, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
+    return {
+      needsInitialRecord: false,
+      status: ticket?.status ?? null,
+      ticketId: ticket?.id ?? null,
+      notes: ticket?.notes ?? null,
+      ticketCreatedAt: ticket?.created_at ?? null,
+      credentialStatus,
+    };
   }
 
   // Fallback (credential fetch failed): fall back to update-ticket heuristic.
@@ -2187,7 +2201,7 @@ export const checkInitialRecordStatus = async () => {
 
   if (!ticket) {
     console.log('[EMR Service] No update ticket found - initial record required');
-    return { needsInitialRecord: true, status: null };
+    return { needsInitialRecord: true, status: null, credentialStatus: null, ticketCreatedAt: null };
   }
 
   const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
@@ -2198,7 +2212,14 @@ export const checkInitialRecordStatus = async () => {
     currentStatus: ticket.status,
   });
 
-  return { needsInitialRecord, status: ticket.status, ticketId: ticket.id, notes: ticket.notes ?? null };
+  return {
+    needsInitialRecord,
+    status: ticket.status,
+    ticketId: ticket.id,
+    notes: ticket.notes ?? null,
+    ticketCreatedAt: ticket.created_at ?? null,
+    credentialStatus: null,
+  };
 };
 
 export default {

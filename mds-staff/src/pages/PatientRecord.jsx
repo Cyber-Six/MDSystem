@@ -69,7 +69,7 @@ const GQL_LIFESTYLE = `
 const GQL_OBGYN = `
   query GetObgyn($userId: ID!) {
     getUserObgynHistory(userId: $userId, limit: 1) {
-      id lastMenstrualPeriod hasDysmenorrhea notes status created_at
+      id lastMenstrualPeriod hasDysmenorrhea notes created_at
     }
   }
 `;
@@ -157,7 +157,7 @@ const GQL_FULL_RECORD = `
       notes status created_at
     }
     getUserObgynHistory(userId: $userId, limit: 1) {
-      id lastMenstrualPeriod hasDysmenorrhea notes status created_at
+      id lastMenstrualPeriod hasDysmenorrhea notes created_at
     }
     getUserEmergencyContact(userId: $userId, limit: 1) {
       id status created_at

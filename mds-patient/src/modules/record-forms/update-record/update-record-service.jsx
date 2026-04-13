@@ -1477,10 +1477,11 @@ async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId) {
 /**
  * Main submission handler - orchestrates the entire update process
  */
-export async function submitUpdateRecord(formData, recordType) {
+export async function submitUpdateRecord(formData, recordType, options = {}) {
   console.log('📋 ==================== STARTING UPDATE RECORD SUBMISSION ====================');
   console.log('Record Type:', recordType);
   console.log('Form Data:', formData);
+  const skipPersonalUpdate = Boolean(options?.skipPersonalUpdate);
 
   let ticketId = null;
   
@@ -1512,10 +1513,14 @@ export async function submitUpdateRecord(formData, recordType) {
 
     const results = { ticketId };
 
-    // Step 3: Submit personal information (requires active ticket)
-    console.log('📝 Submitting personal information...');
-    await updatePersonalInfo(formData);
-    console.log('✅ Personal information submitted');
+    // Step 3: Submit personal information unless explicitly skipped by caller.
+    if (!skipPersonalUpdate) {
+      console.log('📝 Submitting personal information...');
+      await updatePersonalInfo(formData);
+      console.log('✅ Personal information submitted');
+    } else {
+      console.log('⏭️ Skipping personal information update for this submission mode');
+    }
 
     // Step 4: Submit medical data only when scope includes medical
     if (recordType === 'medical' || recordType === 'both') {
