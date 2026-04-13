@@ -904,9 +904,9 @@ const Query = {
           ELSE NULL
         END AS appointment_status,
         CASE
-          WHEN latest_med.status IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted') THEN 'pending'
+          WHEN latest_med.status = 'Pending' THEN 'pending'
           WHEN latest_med.status = 'Approved' THEN 'approved'
-          WHEN latest_med.status = 'Completed' THEN 'dispensed'
+          WHEN latest_med.status = 'Completed' AND latest_med.approved_by < NOW() + INTERVAL '1 day' THEN 'dispensed'
           ELSE NULL
         END AS medicine_status,
         CASE
