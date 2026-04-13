@@ -61,6 +61,18 @@ function branchFilter(branch, alias = 'up', paramIndex = 3) {
 }
 
 /**
+ * Normalize sex input to supported analytics filter values.
+ * Returns empty string when the value is not a supported filter option.
+ */
+function normalizeSexFilterValue(value) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'male' || normalized === 'm') return 'Male';
+  if (normalized === 'female' || normalized === 'f') return 'Female';
+  return '';
+}
+
+/**
  * Generate SQL WHERE clause fragment to filter patients by department, program, or sex.
  * @param {object} options - { department?: string, sex?: string }
  * @param {string} patientIdExpr - SQL expression for patient ID (e.g. 'p.id')
@@ -87,11 +99,14 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
   }
 
   if (options.sex) {
-    clause += ` AND (
-      SELECT up_sex.sex FROM "UsersPersonal" up_sex WHERE up_sex.id = ${patientIdExpr}
-    ) = $${startIdx}`;
-    params.push(options.sex);
-    startIdx++;
+    const normalizedSex = normalizeSexFilterValue(options.sex);
+    if (normalizedSex) {
+      clause += ` AND LOWER(COALESCE((
+        SELECT up_sex.sex FROM "UsersPersonal" up_sex WHERE up_sex.id = ${patientIdExpr}
+      ), '')) = LOWER($${startIdx})`;
+      params.push(normalizedSex);
+      startIdx++;
+    }
   }
 
   return { clause, params, nextIndex: startIdx };
@@ -132,16 +147,18 @@ function dateGroupExpr(groupBy, dateColumn) {
 /**
  * Consultations by Type (Medical vs Dental)
  */
-async function consultationsByType(branch, startDate, endDate) {
+async function consultationsByType(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT c.type, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
     GROUP BY c.type ORDER BY count DESC
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.type);
   const values = result.rows.map(r => parseInt(r.count));
@@ -152,16 +169,18 @@ async function consultationsByType(branch, startDate, endDate) {
 /**
  * Consultations by Mode (Onsite vs Virtual)
  */
-async function consultationsByMode(branch, startDate, endDate) {
+async function consultationsByMode(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT c.mode, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
     GROUP BY c.mode ORDER BY count DESC
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.mode);
   const values = result.rows.map(r => parseInt(r.count));
@@ -172,8 +191,10 @@ async function consultationsByMode(branch, startDate, endDate) {
 /**
  * Top 10 Diagnoses by ICD Code
  */
-async function topDiagnoses(branch, startDate, endDate) {
+async function topDiagnoses(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT COALESCE(icd.title, cd."diagnosisName") as diagnosis, icd.code as icd_code, COUNT(*) as count
     FROM "ConsultationDiagnosis" cd
@@ -182,9 +203,9 @@ async function topDiagnoses(branch, startDate, endDate) {
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     LEFT JOIN "ICDLookup" icd ON cd."icdId" = icd.id
-    WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause}
+    WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
     GROUP BY icd.title, cd."diagnosisName", icd.code ORDER BY count DESC LIMIT 10
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.icd_code ? `${r.diagnosis} (${r.icd_code})` : r.diagnosis);
   const values = result.rows.map(r => parseInt(r.count));
@@ -195,8 +216,10 @@ async function topDiagnoses(branch, startDate, endDate) {
 /**
  * Diagnoses by Type (Primary, Secondary, etc.)
  */
-async function diagnosesByType(branch, startDate, endDate) {
+async function diagnosesByType(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT cd."diagnosisType", COUNT(*) as count
     FROM "ConsultationDiagnosis" cd
@@ -204,9 +227,9 @@ async function diagnosesByType(branch, startDate, endDate) {
     INNER JOIN "Consultation" c ON co."consultationId" = c.id
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause}
+    WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
     GROUP BY cd."diagnosisType" ORDER BY count DESC
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.diagnosisType);
   const values = result.rows.map(r => parseInt(r.count));
@@ -221,6 +244,8 @@ async function bmiTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
   const dg = dateGroupExpr(groupBy, 'vs.created_at');
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT ${dg.expr} as ${dg.alias},
       ROUND(AVG(vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric, 2) as avg_bmi,
@@ -228,9 +253,9 @@ async function bmiTrends(branch, startDate, endDate, options = {}) {
     FROM "VitalSigns" vs
     INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE vs.created_at BETWEEN $1 AND $2 AND vs.height_cm > 0 AND vs.weight_kg > 0 ${bf.clause}
+    WHERE vs.created_at BETWEEN $1 AND $2 AND vs.height_cm > 0 AND vs.weight_kg > 0 ${bf.clause} ${pf.clause}
     GROUP BY ${dg.expr} ORDER BY ${dg.alias}
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.period);
   const values = result.rows.map(r => parseFloat(r.avg_bmi));
@@ -246,6 +271,8 @@ async function bloodPressureTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
   const dg = dateGroupExpr(groupBy, 'vs.created_at');
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT ${dg.expr} as ${dg.alias},
       ROUND(AVG(CAST(SPLIT_PART(vs.blood_pressure, '/', 1) AS INTEGER))::numeric, 1) as avg_systolic,
@@ -255,9 +282,9 @@ async function bloodPressureTrends(branch, startDate, endDate, options = {}) {
     INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     WHERE vs.created_at BETWEEN $1 AND $2 AND vs.blood_pressure IS NOT NULL
-    AND vs.blood_pressure ~ '^[0-9]+/[0-9]+$' ${bf.clause}
+    AND vs.blood_pressure ~ '^[0-9]+/[0-9]+$' ${bf.clause} ${pf.clause}
     GROUP BY ${dg.expr} ORDER BY ${dg.alias}
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.period);
   const values = result.rows.map(r => parseFloat(r.avg_systolic));
@@ -269,8 +296,10 @@ async function bloodPressureTrends(branch, startDate, endDate, options = {}) {
 /**
  * Immunization Coverage Rate by Vaccine Type
  */
-async function immunizationCoverage(branch, startDate, endDate) {
+async function immunizationCoverage(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'pul."patientId"', baseParams.length + 1);
   const result = await db.query(`
     SELECT dtc.name as vaccine, COUNT(DISTINCT pul."patientId") as patient_count, SUM(ir."doseNumber") as total_doses
     FROM "ImmunizationRecord" ir
@@ -278,9 +307,9 @@ async function immunizationCoverage(branch, startDate, endDate) {
     INNER JOIN "patientUpdateLog" pul ON i.id = pul.id
     INNER JOIN "DomainTypeCatalog" dtc ON ir."vaccineTypeId" = dtc.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE ir."immunizationDate" BETWEEN $1 AND $2 AND dtc.domain = 'Immunization' ${bf.clause}
+    WHERE ir."immunizationDate" BETWEEN $1 AND $2 AND dtc.domain = 'Immunization' ${bf.clause} ${pf.clause}
     GROUP BY dtc.name ORDER BY patient_count DESC LIMIT 10
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.vaccine);
   const values = result.rows.map(r => parseInt(r.patient_count));
@@ -291,8 +320,10 @@ async function immunizationCoverage(branch, startDate, endDate) {
 /**
  * Top Dental Procedures
  */
-async function dentalProcedures(branch, startDate, endDate) {
+async function dentalProcedures(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'pul."patientId"', baseParams.length + 1);
   const result = await db.query(`
     SELECT dtc.name as procedure, COUNT(*) as count
     FROM "DentalProcedureRecord" dpr
@@ -300,9 +331,9 @@ async function dentalProcedures(branch, startDate, endDate) {
     INNER JOIN "patientUpdateLog" pul ON dp.id = pul.id
     INNER JOIN "DomainTypeCatalog" dtc ON dpr."procedureTypeId" = dtc.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE dpr."procedureDate" BETWEEN $1 AND $2 AND dtc.domain = 'DentalProcedure' ${bf.clause}
+    WHERE dpr."procedureDate" BETWEEN $1 AND $2 AND dtc.domain = 'DentalProcedure' ${bf.clause} ${pf.clause}
     GROUP BY dtc.name ORDER BY count DESC LIMIT 10
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.procedure);
   const values = result.rows.map(r => parseInt(r.count));
@@ -313,8 +344,10 @@ async function dentalProcedures(branch, startDate, endDate) {
 /**
  * Lifestyle Risk Factors Prevalence
  */
-async function lifestyleRisks(branch, startDate, endDate) {
+async function lifestyleRisks(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'pul."patientId"', baseParams.length + 1);
   const result = await db.query(`
     SELECT
       SUM(CASE WHEN l.smoker = true THEN 1 ELSE 0 END) as smokers,
@@ -324,8 +357,8 @@ async function lifestyleRisks(branch, startDate, endDate) {
     FROM "Lifestyle" l
     INNER JOIN "patientUpdateLog" pul ON l.id = pul.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause}
-  `, [startDate, endDate, ...bf.params]);
+    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause} ${pf.clause}
+  `, [...baseParams, ...pf.params]);
 
   if (result.rows.length === 0) {
     return { labels: [], values: [], total: 0 };
@@ -345,8 +378,10 @@ async function lifestyleRisks(branch, startDate, endDate) {
 /**
  * Allergy Prevalence by Type
  */
-async function allergyByType(branch, startDate, endDate) {
+async function allergyByType(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'pul."patientId"', baseParams.length + 1);
   const result = await db.query(`
     SELECT ac.type, COUNT(*) as count
     FROM "AllergyRecord" ar
@@ -354,9 +389,9 @@ async function allergyByType(branch, startDate, endDate) {
     INNER JOIN "patientUpdateLog" pul ON a.id = pul.id
     INNER JOIN "AllergenCatalog" ac ON ar."allergenCatalogId" = ac.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause}
+    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause} ${pf.clause}
     GROUP BY ac.type ORDER BY count DESC
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.type);
   const values = result.rows.map(r => parseInt(r.count));
@@ -367,18 +402,20 @@ async function allergyByType(branch, startDate, endDate) {
 /**
  * Allergy by Severity
  */
-async function allergyBySeverity(branch, startDate, endDate) {
+async function allergyBySeverity(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'pul."patientId"', baseParams.length + 1);
   const result = await db.query(`
     SELECT ar.severity, COUNT(*) as count
     FROM "AllergyRecord" ar
     INNER JOIN "Allergy" a ON ar."allergyId" = a.id
     INNER JOIN "patientUpdateLog" pul ON a.id = pul.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause}
+    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause} ${pf.clause}
     GROUP BY ar.severity
     ORDER BY CASE ar.severity WHEN 'Severe' THEN 1 WHEN 'Moderate' THEN 2 WHEN 'Mild' THEN 3 WHEN 'Unknown' THEN 4 END
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.severity);
   const values = result.rows.map(r => parseInt(r.count));
@@ -389,16 +426,18 @@ async function allergyBySeverity(branch, startDate, endDate) {
 /**
  * Appointment Usage per Category (Student/Employee)
  */
-async function appointmentsByCategory(branch, startDate, endDate) {
+async function appointmentsByCategory(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT p.profile as category, COUNT(*) as count
     FROM "patientSlot" ps
     INNER JOIN "Patients" p ON ps."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE ps.created_at BETWEEN $1 AND $2 ${bf.clause}
+    WHERE ps.created_at BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
     GROUP BY p.profile ORDER BY count DESC
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.category);
   const values = result.rows.map(r => parseInt(r.count));
@@ -409,16 +448,18 @@ async function appointmentsByCategory(branch, startDate, endDate) {
 /**
  * Appointment Status Distribution
  */
-async function appointmentsByStatus(branch, startDate, endDate) {
+async function appointmentsByStatus(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT ps.status, COUNT(*) as count
     FROM "patientSlot" ps
     INNER JOIN "Patients" p ON ps."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE ps.created_at BETWEEN $1 AND $2 ${bf.clause}
+    WHERE ps.created_at BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
     GROUP BY ps.status ORDER BY count DESC
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.status);
   const values = result.rows.map(r => parseInt(r.count));
@@ -429,16 +470,18 @@ async function appointmentsByStatus(branch, startDate, endDate) {
 /**
  * Appointments by Session (Morning/Afternoon)
  */
-async function appointmentsBySession(branch, startDate, endDate) {
+async function appointmentsBySession(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT ps.session, COUNT(*) as count
     FROM "patientSlot" ps
     INNER JOIN "Patients" p ON ps."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE ps.created_at BETWEEN $1 AND $2 AND ps.session IS NOT NULL ${bf.clause}
+    WHERE ps.created_at BETWEEN $1 AND $2 AND ps.session IS NOT NULL ${bf.clause} ${pf.clause}
     GROUP BY ps.session ORDER BY count DESC
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.session);
   const values = result.rows.map(r => parseInt(r.count));
@@ -453,14 +496,16 @@ async function consultationTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
   const dg = dateGroupExpr(groupBy, 'c."createdAt"');
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT ${dg.expr} as ${dg.alias}, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
     GROUP BY ${dg.expr} ORDER BY ${dg.alias}
-  `, [startDate, endDate, ...bf.params]);
+  `, [...baseParams, ...pf.params]);
 
   const labels = result.rows.map(r => r.period);
   const values = result.rows.map(r => parseInt(r.count));
@@ -742,11 +787,25 @@ async function diagnosesByAgeGroup(branch, startDate, endDate, options = {}) {
  * Employee consultation volume per department
  */
 async function consultationsByDepartment(branch, startDate, endDate, options = {}) {
-  const bf = branchFilter(branch);
-  const deptCteFilter = options.department ? `AND ep.department = $3` : '';
-  const deptCteParams = options.department ? [options.department] : [];
-  const bfIdx = options.department ? 4 : 3;
-  const bf2 = branchFilter(branch, 'up', bfIdx);
+  const params = [startDate, endDate];
+  let paramIndex = 3;
+
+  const deptCteFilter = options.department ? `AND ep.department = $${paramIndex}` : '';
+  if (options.department) {
+    params.push(options.department);
+    paramIndex++;
+  }
+
+  const bf = branchFilter(branch, 'up', paramIndex);
+  params.push(...bf.params);
+  paramIndex += bf.params.length;
+
+  const normalizedSex = normalizeSexFilterValue(options.sex);
+  const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
+  if (normalizedSex) {
+    params.push(normalizedSex);
+  }
+
   const result = await db.query(`
     WITH patient_dept AS (
       SELECT DISTINCT ON (pul."patientId") pul."patientId", ep.department
@@ -761,9 +820,9 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     INNER JOIN patient_dept pd ON pd."patientId" = p.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf2.clause}
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${sexFilter}
     GROUP BY pd.department ORDER BY count DESC LIMIT 15
-  `, [startDate, endDate, ...deptCteParams, ...bf2.params]);
+  `, params);
 
   const labels = result.rows.map(r => r.department);
   const values = result.rows.map(r => parseInt(r.count));
@@ -775,15 +834,32 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
  * Student consultation volume per program
  */
 async function consultationsByProgram(branch, startDate, endDate, options = {}) {
-  const bf = branchFilter(branch);
-  const bf2 = branchFilter(branch, 'up', 3);
+  const params = [startDate, endDate];
+  let paramIndex = 3;
+
+  const programCteFilter = options.department ? `AND sp.program = $${paramIndex}` : '';
+  if (options.department) {
+    params.push(options.department);
+    paramIndex++;
+  }
+
+  const bf = branchFilter(branch, 'up', paramIndex);
+  params.push(...bf.params);
+  paramIndex += bf.params.length;
+
+  const normalizedSex = normalizeSexFilterValue(options.sex);
+  const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
+  if (normalizedSex) {
+    params.push(normalizedSex);
+  }
+
   const result = await db.query(`
     WITH patient_prog AS (
       SELECT DISTINCT ON (pul."patientId") pul."patientId", sp.program
       FROM "patientUpdateLog" pul
       INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Student'
       INNER JOIN "student_profile" sp ON sp."profileId" = pr.id
-      WHERE pul.status = 'Approved' AND sp.program IS NOT NULL
+      WHERE pul.status = 'Approved' AND sp.program IS NOT NULL ${programCteFilter}
       ORDER BY pul."patientId", pul.created_at DESC
     )
     SELECT pp.program, COUNT(*) as count
@@ -791,9 +867,9 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     INNER JOIN patient_prog pp ON pp."patientId" = p.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf2.clause}
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${sexFilter}
     GROUP BY pp.program ORDER BY count DESC LIMIT 15
-  `, [startDate, endDate, ...bf2.params]);
+  `, params);
 
   const labels = result.rows.map(r => r.program);
   const values = result.rows.map(r => parseInt(r.count));
@@ -806,11 +882,25 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
  * Returns series data: [{ name: 'Smokers', values: [count per dept] }, ...]
  */
 async function lifestyleRisksByDepartment(branch, startDate, endDate, options = {}) {
-  const bf = branchFilter(branch);
-  const deptCteFilter = options.department ? `AND ep.department = $3` : '';
-  const deptCteParams = options.department ? [options.department] : [];
-  const bfIdx = options.department ? 4 : 3;
-  const bf2 = branchFilter(branch, 'up', bfIdx);
+  const params = [startDate, endDate];
+  let paramIndex = 3;
+
+  const deptCteFilter = options.department ? `AND ep.department = $${paramIndex}` : '';
+  if (options.department) {
+    params.push(options.department);
+    paramIndex++;
+  }
+
+  const bf = branchFilter(branch, 'up', paramIndex);
+  params.push(...bf.params);
+  paramIndex += bf.params.length;
+
+  const normalizedSex = normalizeSexFilterValue(options.sex);
+  const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
+  if (normalizedSex) {
+    params.push(normalizedSex);
+  }
+
   const result = await db.query(`
     WITH patient_dept AS (
       SELECT DISTINCT ON (pul."patientId") pul."patientId", ep.department
@@ -829,9 +919,9 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
     INNER JOIN "patientUpdateLog" pul ON l.id = pul.id AND pul.status = 'Approved'
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
     INNER JOIN patient_dept pd ON pd."patientId" = pul."patientId"
-    WHERE pul.created_at BETWEEN $1 AND $2 ${bf2.clause}
+    WHERE pul.created_at BETWEEN $1 AND $2 ${bf.clause} ${sexFilter}
     GROUP BY pd.department ORDER BY total_records DESC LIMIT 15
-  `, [startDate, endDate, ...deptCteParams, ...bf2.params]);
+  `, params);
 
   const labels = result.rows.map(r => r.department);
   const series = [
@@ -1213,11 +1303,11 @@ function hasReport(reportType) {
  * Get distinct departments and sex values for filter dropdowns
  */
 async function getFilterOptions() {
-  const cacheKey = `${CACHE_PREFIX}filter-options`;
+  const cacheKey = `${CACHE_PREFIX}filter-options:v3`;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
-  const [deptResult, programResult, sexResult] = await Promise.all([
+  const [deptResult, programResult] = await Promise.all([
     // Fetch all departments
     db.query(`
       SELECT DISTINCT ep.department
@@ -1236,20 +1326,11 @@ async function getFilterOptions() {
       WHERE sp.program IS NOT NULL AND sp.program <> ''
       ORDER BY sp.program
     `),
-    // Fetch all sex values (Male, Female, Other, etc.)
-    db.query(`
-      SELECT DISTINCT up.sex
-      FROM "UsersPersonal" up
-      INNER JOIN "Patients" p ON up.id = p.id
-      WHERE up.sex IS NOT NULL AND up.sex <> ''
-      ORDER BY up.sex
-    `),
   ]);
 
   // Combine departments and programs for the departments filter
   const departments = deptResult.rows.map(r => r.department);
   const programs = programResult.rows.map(r => r.program);
-  const sexes = sexResult.rows.map(r => r.sex);
 
   // Academic programs list for analytics department
   const academicPrograms = [
@@ -1269,6 +1350,8 @@ async function getFilterOptions() {
     'BS Information Systems',
     'BS Accountancy',
     'BS Accounting Information Systems',
+    'BSBA Financial Management',
+    'BSBA Human Resource Management',
     'BSBA Logistics and Supply Chain Management',
     'BSBA Marketing Management',
     'Bachelor of Arts in English Language',
@@ -1280,12 +1363,20 @@ async function getFilterOptions() {
     'Teaching Certificate Program'
   ];
 
-  // Merge database programs with academic programs, avoiding duplicates
-  const uniquePrograms = Array.from(new Set([...programs, ...academicPrograms]));
+  // Merge departments + programs from DB with required academic programs.
+  const departmentProgramOptions = Array.from(
+    new Set(
+      [...departments, ...programs, ...academicPrograms]
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+
+  const sexFilterOptions = ['Male', 'Female'];
 
   const data = {
-    departments: [...departments, ...uniquePrograms], // Include all departments and programs
-    sexes: sexes,
+    departments: departmentProgramOptions,
+    sexes: sexFilterOptions,
   };
   await setCachedResult(cacheKey, data);
   return data;

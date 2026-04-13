@@ -128,6 +128,47 @@ export const BRANCHES = [
   { value: 'QuezonCity', label: 'Quezon City' },
 ];
 
+export const SEX_FILTER_OPTIONS = ['Male', 'Female'];
+
+// Canonical program list required in department/program analytics filter.
+export const ACADEMIC_PROGRAM_FILTER_OPTIONS = [
+  'BS Architecture',
+  'BS Chemical Engineering',
+  'BS Civil Engineering',
+  'BS Computer Engineering',
+  'BS Electrical Engineering',
+  'BS Electronics Engineering',
+  'BS Industrial Engineering',
+  'BS Mechanical Engineering',
+  'BS Environmental and Sanitary Engineering',
+  'BS Computer Science',
+  'BS Data Science and Analytics',
+  'BS Entertainment and Multimedia Computing',
+  'BS Information Technology',
+  'BS Information Systems',
+  'BS Accountancy',
+  'BS Accounting Information Systems',
+  'BSBA Financial Management',
+  'BSBA Human Resource Management',
+  'BSBA Logistics and Supply Chain Management',
+  'BSBA Marketing Management',
+  'Bachelor of Arts in English Language',
+  'Bachelor of Arts in Political Science',
+  'Bachelor of Secondary Education Major in English',
+  'Bachelor of Secondary Education Major in Mathematics',
+  'Bachelor of Secondary Education Major in Sciences',
+  'Bachelor of Special Needs Education',
+  'Teaching Certificate Program',
+];
+
+function normalizeSexOption(value) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'male' || normalized === 'm') return 'Male';
+  if (normalized === 'female' || normalized === 'f') return 'Female';
+  return '';
+}
+
 // ── API Functions ────────────────────────────────────────────────────────────
 
 /**
@@ -144,16 +185,35 @@ export async function fetchAvailableQueries() {
 export async function fetchFilterOptions() {
   try {
     const response = await axiosRequest.get('/analytics/filter-options');
+    const backendDepartmentOptions = Array.isArray(response.data.departments) ? response.data.departments : [];
+    const mergedDepartmentOptions = Array.from(
+      new Set(
+        [...backendDepartmentOptions, ...ACADEMIC_PROGRAM_FILTER_OPTIONS]
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    const backendSexOptions = Array.isArray(response.data.sexes) ? response.data.sexes : [];
+    const mergedSexOptions = Array.from(
+      new Set(
+        [...backendSexOptions, ...SEX_FILTER_OPTIONS]
+          .map(normalizeSexOption)
+          .filter(Boolean)
+      )
+    );
+    const orderedSexOptions = SEX_FILTER_OPTIONS.filter((sex) => mergedSexOptions.includes(sex));
+
     return {
-      departments: Array.isArray(response.data.departments) ? response.data.departments : [],
-      sexes: Array.isArray(response.data.sexes) ? response.data.sexes : []
+      departments: mergedDepartmentOptions,
+      sexes: orderedSexOptions.length > 0 ? orderedSexOptions : [...SEX_FILTER_OPTIONS],
     };
   } catch (error) {
     console.error('Error fetching filter options:', error);
-    // Return empty arrays as fallback
+    // Keep required program options available even if backend filter API fails.
     return {
-      departments: [],
-      sexes: []
+      departments: [...ACADEMIC_PROGRAM_FILTER_OPTIONS],
+      sexes: [...SEX_FILTER_OPTIONS],
     };
   }
 }
