@@ -139,11 +139,23 @@ export async function fetchAvailableQueries() {
 }
 
 /**
- * Fetch distinct departments and programs for demographic filter dropdowns
+ * Fetch distinct departments and sex values for demographic filter dropdowns
  */
 export async function fetchFilterOptions() {
-  const response = await axiosRequest.get('/analytics/filter-options');
-  return { departments: response.data.departments || [], programs: response.data.programs || [] };
+  try {
+    const response = await axiosRequest.get('/analytics/filter-options');
+    return {
+      departments: Array.isArray(response.data.departments) ? response.data.departments : [],
+      sexes: Array.isArray(response.data.sexes) ? response.data.sexes : []
+    };
+  } catch (error) {
+    console.error('Error fetching filter options:', error);
+    // Return empty arrays as fallback
+    return {
+      departments: [],
+      sexes: []
+    };
+  }
 }
 
 /**
@@ -153,12 +165,15 @@ export async function fetchFilterOptions() {
  * @param {string} startDate - ISO date string (YYYY-MM-DD)
  * @param {string} endDate - ISO date string (YYYY-MM-DD)
  * @param {string} [groupBy] - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+ * @param {object} [filters] - Optional { department, sex } filters
  * @returns {Promise<{labels: string[], values: number[], total: number}>}
  */
-export async function fetchQueryData(dataType, branch, startDate, endDate, groupBy) {
-  const response = await axiosRequest.get(`/analytics/query/${encodeURIComponent(dataType)}`, {
-    params: { branch, startDate, endDate, groupBy },
-  });
+export async function fetchQueryData(dataType, branch, startDate, endDate, groupBy, filters = {}) {
+  const params = { branch, startDate, endDate, groupBy };
+  if (filters.department) params.department = filters.department;
+  if (filters.sex) params.sex = filters.sex;
+
+  const response = await axiosRequest.get(`/analytics/query/${encodeURIComponent(dataType)}`, { params });
   return response.data;
 }
 
@@ -169,22 +184,24 @@ export async function fetchQueryData(dataType, branch, startDate, endDate, group
  * @param {string} startDate
  * @param {string} endDate
  * @param {string} [groupBy] - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
- * @param {object} [filters] - Optional { department, program } filters
+ * @param {object} [filters] - Optional { department, sex } filters
  * @returns {Promise<Map<string, object>>} Map of dataType -> response data
  */
 export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate, groupBy, filters = {}) {
   const results = new Map();
 
   try {
-    const response = await axiosRequest.post('/analytics/batch', {
+    const body = {
       dataTypes,
       branch,
       startDate,
       endDate,
       groupBy,
-      ...(filters.department && { department: filters.department }),
-      ...(filters.program && { program: filters.program }),
-    });
+    };
+    if (filters.department) body.department = filters.department;
+    if (filters.sex) body.sex = filters.sex;
+
+    const response = await axiosRequest.post('/analytics/batch', body);
 
     if (response.data.success && response.data.results) {
       for (const [dataType, result] of Object.entries(response.data.results)) {
@@ -205,7 +222,7 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
     // Fallback: if batch endpoint fails, fetch individually
     const promises = dataTypes.map(async (dataType) => {
       try {
-        const data = await fetchQueryData(dataType, branch, startDate, endDate, groupBy);
+        const data = await fetchQueryData(dataType, branch, startDate, endDate, groupBy, filters);
         // Guard: if the backend returned HTML instead of JSON (e.g. not yet deployed),
         // treat it as an error so charts show an empty/error state instead of crashing.
         if (typeof data !== 'object' || data === null) {
@@ -242,32 +259,44 @@ export const EXPORT_PRESETS = {
  * The response is a Blob (binary file) that gets saved by the browser.
  *
  * @param {'csv'|'excel'|'pdf'} format
- * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset?, groupBy? }
+ * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset?, groupBy?, department?, sex? }
  */
 export async function exportAnalytics(format, opts) {
-  const { branch, startDate, endDate, dataTypes, preset, groupBy } = opts;
-  const response = await axiosRequest.post(
-    '/analytics/export',
-    { format, branch, startDate, endDate, dataTypes, preset, groupBy },
-    { responseType: 'blob' },
-  );
+  const { branch, startDate, endDate, dataTypes, preset, groupBy, department, sex } = opts;
+  const body = {
+    format,
+    branch,
+    startDate,
+    endDate,
+    dataTypes,
+    preset,
+    groupBy
+  };
+  if (department) body.department = department;
+  if (sex) body.sex = sex;
 
+  const response = await axiosRequest.post('/analytics/export', body, { responseType: 'blob' });
   triggerDownload(response);
 }
 
 /**
  * Download a focused single-metric PDF report.
  * @param {string} dataType
- * @param {Object} opts - { branch, startDate, endDate, groupBy? }
+ * @param {Object} opts - { branch, startDate, endDate, groupBy?, department?, sex? }
  */
 export async function exportSingleMetric(dataType, opts) {
-  const { branch, startDate, endDate, groupBy } = opts;
-  const response = await axiosRequest.post(
-    '/analytics/export/single',
-    { dataType, branch, startDate, endDate, groupBy },
-    { responseType: 'blob' },
-  );
+  const { branch, startDate, endDate, groupBy, department, sex } = opts;
+  const body = {
+    dataType,
+    branch,
+    startDate,
+    endDate,
+    groupBy,
+  };
+  if (department) body.department = department;
+  if (sex) body.sex = sex;
 
+  const response = await axiosRequest.post('/analytics/export/single', body, { responseType: 'blob' });
   triggerDownload(response);
 }
 

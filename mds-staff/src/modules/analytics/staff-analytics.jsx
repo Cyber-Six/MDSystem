@@ -99,10 +99,10 @@ const StaffAnalytics = () => {
   const [activeCategory, setActiveCategory] = useState(DEFAULT_CATEGORY);
   const [demographicDimension, setDemographicDimension] = useState('all');
 
-  // Department / program filter (demographics tab)
+  // Department / sex filter (demographics tab)
   const [selectedDepartment, setSelectedDepartment] = useState('');
-  const [selectedProgram, setSelectedProgram] = useState('');
-  const [filterOptions, setFilterOptions] = useState({ departments: [], programs: [] });
+  const [selectedSex, setSelectedSex] = useState('');
+  const [filterOptions, setFilterOptions] = useState({ departments: [], sexes: [] });
 
   // Cache: Map<queryKey, result> — persists across tab switches, cleared on filter change
   const [cache, setCache] = useState(new Map());
@@ -132,21 +132,39 @@ const StaffAnalytics = () => {
     return () => observer.disconnect();
   }, []);
 
-  // Load filter options for demographics (departments / programs)
+  // Load filter options on initial mount (not just demographics tab)
   useEffect(() => {
-    if (activeCategory === 'demographics' && filterOptions.departments.length === 0) {
-      fetchFilterOptions().then(setFilterOptions).catch(() => {});
+    const loadFilters = async () => {
+      try {
+        const options = await fetchFilterOptions();
+        setFilterOptions({
+          departments: options.departments || [],
+          sexes: options.sexes || []
+        });
+      } catch (error) {
+        console.error('Failed to load filter options:', error);
+        // Set empty arrays as fallback so dropdowns don't show "Loading..."
+        setFilterOptions({
+          departments: [],
+          sexes: []
+        });
+      }
+    };
+
+    // Load immediately on component mount
+    if (filterOptions.departments.length === 0 && filterOptions.sexes.length === 0) {
+      loadFilters();
     }
-  }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   // Build filters object for demographic queries
   const demoFilters = useMemo(() => {
     if (activeCategory !== 'demographics') return {};
     const f = {};
     if (selectedDepartment) f.department = selectedDepartment;
-    if (selectedProgram) f.program = selectedProgram;
+    if (selectedSex) f.sex = selectedSex;
     return f;
-  }, [activeCategory, selectedDepartment, selectedProgram]);
+  }, [activeCategory, selectedDepartment, selectedSex]);
 
   // Current visible queries based on active tab + dimension
   const visibleQueries = useMemo(() =>
@@ -191,10 +209,10 @@ const StaffAnalytics = () => {
    * Uses a category-level flag so we don't re-fetch when switching back.
    */
   const loadActiveCategory = useCallback(async (force = false) => {
-    const deptProg = activeCategory === 'demographics'
-      ? `:dept=${selectedDepartment}:prog=${selectedProgram}` : '';
+    const deptSex = activeCategory === 'demographics'
+      ? `:dept=${selectedDepartment}:sex=${selectedSex}` : '';
     const catKey = activeCategory === 'demographics'
-      ? `demographics:${demographicDimension}${deptProg}`
+      ? `demographics:${demographicDimension}${deptSex}`
       : activeCategory;
 
     if (!force && fetchedCategories.has(catKey)) return;
@@ -204,14 +222,14 @@ const StaffAnalytics = () => {
     await fetchQueries(queries, { force, filters });
 
     setFetchedCategories(prev => new Set(prev).add(catKey));
-  }, [activeCategory, demographicDimension, selectedDepartment, selectedProgram, demoFilters, fetchedCategories, fetchQueries]);
+  }, [activeCategory, demographicDimension, selectedDepartment, selectedSex, demoFilters, fetchedCategories, fetchQueries]);
 
   // Fetch on tab switch or initial mount
   useEffect(() => {
     loadActiveCategory();
   }, [activeCategory, demographicDimension]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-fetch demographics when dept/program filter changes
+  // Re-fetch demographics when dept/sex filter changes
   useEffect(() => {
     if (activeCategory === 'demographics') {
       // Clear demographic cache entries and re-fetch
@@ -229,7 +247,7 @@ const StaffAnalytics = () => {
       });
       loadActiveCategory(true);
     }
-  }, [selectedDepartment, selectedProgram]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDepartment, selectedSex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear cache + re-fetch when filters change (branch, dates, groupBy)
   const prevFiltersRef = useRef({ branch, startDate, endDate, groupBy });
@@ -314,6 +332,10 @@ const StaffAnalytics = () => {
         startDate={startDate}
         endDate={endDate}
         groupBy={groupBy}
+        sex={selectedSex}
+        department={selectedDepartment}
+        sexOptions={filterOptions.sexes}
+        departmentOptions={filterOptions.departments}
         allowedBranches={allowedBranches()}
         onBranchChange={setBranch}
         onStartDateChange={setStartDate}
@@ -326,6 +348,8 @@ const StaffAnalytics = () => {
             setEndDate(range.endDate);
           }
         }}
+        onSexChange={setSelectedSex}
+        onDepartmentChange={setSelectedDepartment}
         onRefresh={handleRefresh}
         loading={loading}
       />
@@ -355,7 +379,7 @@ const StaffAnalytics = () => {
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-[11px] px-2 py-0.5 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                className="text-[11px] px-2 py-0.5 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
               >
                 <option value="">All Departments</option>
                 {filterOptions.departments.map(d => (
@@ -365,16 +389,16 @@ const StaffAnalytics = () => {
             </>
           )}
 
-          {/* Program filter dropdown */}
-          {filterOptions.programs.length > 0 && (
+          {/* Sex filter dropdown */}
+          {filterOptions.sexes.length > 0 && (
             <select
-              value={selectedProgram}
-              onChange={(e) => setSelectedProgram(e.target.value)}
-              className="text-[11px] px-2 py-0.5 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              value={selectedSex}
+              onChange={(e) => setSelectedSex(e.target.value)}
+              className="text-[11px] px-2 py-0.5 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
-              <option value="">All Programs</option>
-              {filterOptions.programs.map(p => (
-                <option key={p} value={p}>{p}</option>
+              <option value="">All Sex</option>
+              {filterOptions.sexes.map(s => (
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           )}
@@ -429,6 +453,8 @@ const StaffAnalytics = () => {
         startDate={startDate}
         endDate={endDate}
         groupBy={groupBy}
+        department={selectedDepartment}
+        sex={selectedSex}
       />
     </div>
   );

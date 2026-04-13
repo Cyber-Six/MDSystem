@@ -25,7 +25,7 @@ router.get('/queries', jwtProtect('medical'), async (req, res) => {
 
 /**
  * GET /analytics/filter-options
- * Returns distinct departments and programs for filter dropdowns
+ * Returns distinct departments and sex values for filter dropdowns
  */
 router.get('/filter-options', jwtProtect('medical'), async (req, res) => {
   try {
@@ -63,7 +63,7 @@ router.get('/reports', jwtProtect('medical'), async (req, res) => {
 router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
   try {
     const { dataType } = req.params;
-    const { branch, startDate, endDate, groupBy } = req.query;
+    const { branch, startDate, endDate, groupBy, sex, department } = req.query;
 
     // Validate required params
     if (!branch) {
@@ -108,7 +108,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
       userId: req.user.id,
     });
 
-    const data = await analytics.executeQuery(dataType, branch, startDate, endDate, { groupBy });
+    const data = await analytics.executeQuery(dataType, branch, startDate, endDate, { groupBy, sex, department });
 
     res.json({
       success: true,
@@ -132,7 +132,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
  */
 router.post('/batch', jwtProtect('medical'), async (req, res) => {
   try {
-    const { dataTypes, branch, startDate, endDate, groupBy, department, program } = req.body;
+    const { dataTypes, branch, startDate, endDate, groupBy, department, sex } = req.body;
 
     if (!Array.isArray(dataTypes) || dataTypes.length === 0) {
       return res.status(400).json({ error: 'DATA_TYPES_REQUIRED' });
@@ -175,7 +175,7 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
       userId: req.user.id,
     });
 
-    const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate, { groupBy, department, program });
+    const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate, { groupBy, department, sex });
 
     res.json({
       success: true,
@@ -356,7 +356,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     if (!params) return;
 
     const { format, branch, startDate, endDate } = params;
-    const { dataTypes: rawDataTypes, preset, groupBy } = req.body;
+    const { dataTypes: rawDataTypes, preset, groupBy, sex, department } = req.body;
 
     // Resolve which queries to include
     const dataTypes = analyticsExport.resolveDataTypes(rawDataTypes, preset);
@@ -382,7 +382,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     });
 
     // Fetch analytics data
-    const data = await analyticsExport.fetchExportData(dataTypes, branch, startDate, endDate, { groupBy });
+    const data = await analyticsExport.fetchExportData(dataTypes, branch, startDate, endDate, { groupBy, sex, department });
 
     if (Object.keys(data).length === 0) {
       return res.status(404).json({ error: 'NO_DATA', message: 'No data found for the selected queries' });
@@ -459,7 +459,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
  */
 router.post('/export/single', jwtProtect('medical'), async (req, res) => {
   try {
-    const { dataType, branch, startDate, endDate, groupBy } = req.body;
+    const { dataType, branch, startDate, endDate, groupBy, sex, department } = req.body;
 
     if (!dataType || !analyticsExport.EXPORT_META[dataType]) {
       return res.status(400).json({ error: 'INVALID_DATA_TYPE' });
@@ -491,7 +491,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     });
 
     // Fetch data for single metric
-    const fetchResult = await analyticsExport.fetchExportData([dataType], branch, startDate, endDate, { groupBy });
+    const fetchResult = await analyticsExport.fetchExportData([dataType], branch, startDate, endDate, { groupBy, sex, department });
     const result = fetchResult[dataType];
 
     if (!result) {
