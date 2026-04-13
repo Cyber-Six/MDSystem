@@ -1319,11 +1319,12 @@ async function getFilterOptions() {
     `),
     // Fetch all programs
     db.query(`
-      SELECT DISTINCT sp.program
+      SELECT DISTINCT spg.label AS program
       FROM "student_profile" sp
       INNER JOIN "profileRecord" pr ON sp."profileId" = pr.id AND pr.profile_type = 'Student'
       INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
-      WHERE sp.program IS NOT NULL AND sp.program <> ''
+      INNER JOIN "student_programs" spg ON spg.id = sp."programId"
+      WHERE spg.label IS NOT NULL AND spg.label <> ''
       ORDER BY sp.program
     `),
   ]);
