@@ -16,6 +16,8 @@ export const MODULE_PERMISSION_MAP = {
   healthChat: ['health_chat_allow_access'],
   sendNotification: ['notification_allow_send_to_patients'],
   analytics: ['analytics_allow_view', 'analytics_allow_export'],
+  // Documents reuses the same parent toggle + child dropdown tiering behavior.
+  documents: ['document_allow_view', 'document_allow_manage', 'document_allow_generate'],
   // superiorAccess tracked here so the key is included in template CRUD operations
   // Rendered as a Major Permission Switch in the UI (not a regular expandable module)
   superiorAccess: ['privileged_to_perform_on_superior'],
@@ -47,6 +49,9 @@ export const PERMISSION_KEY_LABELS = {
   health_chat_allow_access: 'Access Health Chat',
   analytics_allow_view: 'View Analytics',
   analytics_allow_export: 'Export Analytics',
+  document_allow_view: 'View Documents',
+  document_allow_manage: 'Manage Documents',
+  document_allow_generate: 'Generate Documents',
   // Keys now in their respective modules
   emr_allow_set_vital_sign: 'Set Vital Signs',
   notification_allow_send_to_patients: 'Send Notification to Patients',
@@ -69,6 +74,7 @@ export const PERMISSION_MODULES = [
   { id: 'healthChat', label: 'Health Chat', description: 'Access health chat consultation and messaging features', icon: 'chat' },
   { id: 'sendNotification', label: 'Send Notification', description: 'Send push notifications and alerts directly to patients', icon: 'notification' },
   { id: 'analytics', label: 'Analytics', description: 'View reports, dashboards, and system analytics', icon: 'chart' },
+  { id: 'documents', label: 'Documents', description: 'View, manage, and generate patient documents and templates', icon: 'document' },
   // superiorAccess excluded here — rendered as a Major Permission Switch instead
   // roleManagement excluded — admin-only access
 ];
@@ -158,7 +164,7 @@ export const DEFAULT_ROLE_TEMPLATES = [
     permissions: expandModulePermissions({
       patientSearch: true, pendingRequests: true, medicalRecords: true,
       dentalRecords: false, appointments: true, inventory: false,
-      announcements: false, healthChat: false, sendNotification: false, analytics: false,
+      announcements: false, healthChat: false, sendNotification: false, analytics: false, documents: false,
       superiorAccess: false,
     }),
   },
@@ -171,7 +177,7 @@ export const DEFAULT_ROLE_TEMPLATES = [
     permissions: expandModulePermissions({
       patientSearch: true, pendingRequests: true, medicalRecords: false,
       dentalRecords: true, appointments: true, inventory: false,
-      announcements: false, healthChat: false, sendNotification: false, analytics: false,
+      announcements: false, healthChat: false, sendNotification: false, analytics: false, documents: false,
       superiorAccess: false,
     }),
   },
@@ -184,7 +190,7 @@ export const DEFAULT_ROLE_TEMPLATES = [
     permissions: expandModulePermissions({
       patientSearch: true, pendingRequests: true, medicalRecords: true,
       dentalRecords: false, appointments: true, inventory: true,
-      announcements: false, healthChat: false, sendNotification: false, analytics: false,
+      announcements: false, healthChat: false, sendNotification: false, analytics: false, documents: false,
       superiorAccess: false,
     }),
   },

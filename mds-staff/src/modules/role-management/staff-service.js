@@ -269,6 +269,15 @@ const GQL_LIST_TEMPLATES = `
         createdBy
         createdAt
         permissions { key enabled branch }
+        permissionGroups {
+          id
+          label
+          enabled
+          fullyEnabled
+          childCount
+          enabledChildCount
+          children { key enabled branch }
+        }
         permissionCount
       }
       count
@@ -287,6 +296,15 @@ const GQL_CREATE_TEMPLATE = `
         createdBy
         createdAt
         permissions { key enabled branch }
+        permissionGroups {
+          id
+          label
+          enabled
+          fullyEnabled
+          childCount
+          enabledChildCount
+          children { key enabled branch }
+        }
         permissionCount
       }
     }
@@ -304,6 +322,15 @@ const GQL_UPDATE_TEMPLATE = `
         createdBy
         createdAt
         permissions { key enabled branch }
+        permissionGroups {
+          id
+          label
+          enabled
+          fullyEnabled
+          childCount
+          enabledChildCount
+          children { key enabled branch }
+        }
         permissionCount
       }
     }
@@ -570,6 +597,7 @@ export const fetchTemplates = async () => {
     createdBy: t.createdBy,
     createdAt: t.createdAt,
     permissions: templatePermsToGranular(t.permissions),
+    permissionGroups: t.permissionGroups || [],
     permissionCount: t.permissionCount,
   }));
 };
@@ -586,6 +614,7 @@ export const createTemplate = async (label, granularPerms) => {
   return t ? {
     id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
     permissions: templatePermsToGranular(t.permissions),
+    permissionGroups: t.permissionGroups || [],
     permissionCount: t.permissionCount,
   } : null;
 };
@@ -605,6 +634,7 @@ export const updateTemplate = async (templateId, label, granularPerms) => {
     template: t ? {
       id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
       permissions: templatePermsToGranular(t.permissions),
+      permissionGroups: t.permissionGroups || [],
       permissionCount: t.permissionCount,
     } : null,
   };
