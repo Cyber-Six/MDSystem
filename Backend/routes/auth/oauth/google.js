@@ -30,10 +30,7 @@ function isCredentialTemporarilyLocked(lockState) {
   if (!lockState) return false;
 
   const status = String(lockState.status || '').toLowerCase();
-  if (status !== 'locked') return false;
-
-  const lockUntilMs = lockState.lockedUntil ? new Date(lockState.lockedUntil).getTime() : NaN;
-  return Number.isFinite(lockUntilMs) && lockUntilMs > Date.now();
+  return status === 'locked';
 }
 
 /**
@@ -142,7 +139,7 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
     await recordAttempt(false, email, user.id);
     return res.status(403).json({
       error: 'ACCOUNT_LOCKED',
-      message: `This account is locked until ${new Date(lockState.lockedUntil).toISOString()}.`,
+      message: 'This account is locked.',
     });
   }
 

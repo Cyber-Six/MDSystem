@@ -50,6 +50,8 @@ dotenv.config({ path: path.resolve(__dirname, "../../../../../.env") });
 
 const REFRESH_SESSION_TTL_SECONDS = Number(process.env.JWT_REFRESH_EXPIRATION) || 604800;
 const REFRESH_SESSION_TTL_MS = REFRESH_SESSION_TTL_SECONDS * 1000;
+const USER_IDENTITY_ENUM_CANDIDATES = ['userIdentity', 'userIdentity_new'];
+const REQUIRED_USER_IDENTITY_VALUES = ['Student', 'Employee', 'Superior'];
 
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
@@ -158,6 +160,38 @@ function deriveModulePermissions(branchPermissions) {
   }
 
   return { modules, count: modules.length };
+}
+
+async function ensureUserIdentityEnumValues() {
+  const enumTypesResult = await db.query(
+    `SELECT typname
+     FROM pg_type
+     WHERE typtype = 'e'
+       AND typname = ANY($1::text[])`,
+    [USER_IDENTITY_ENUM_CANDIDATES]
+  );
+
+  const enumTypes = enumTypesResult.rows.map((row) => String(row.typname || ''));
+
+  for (const enumType of enumTypes) {
+    const labelsResult = await db.query(
+      `SELECT e.enumlabel
+       FROM pg_type t
+       JOIN pg_enum e ON e.enumtypid = t.oid
+       WHERE t.typname = $1`,
+      [enumType]
+    );
+
+    const existingLabels = new Set(labelsResult.rows.map((row) => String(row.enumlabel || '')));
+
+    for (const requiredValue of REQUIRED_USER_IDENTITY_VALUES) {
+      if (existingLabels.has(requiredValue)) continue;
+
+      // enumType is sourced from USER_IDENTITY_ENUM_CANDIDATES and pg_type, so this is safe.
+      await db.query(`ALTER TYPE "${enumType}" ADD VALUE IF NOT EXISTS '${requiredValue}'`);
+      existingLabels.add(requiredValue);
+    }
+  }
 }
 
 function buildUserInfo(row) {
@@ -1890,9 +1924,9 @@ const Mutation = {
     await db.query(
       `UPDATE "UserCredentials"
        SET credentials_status = $1::"CredentialStatus",
-           locked_until = CASE WHEN $2::boolean THEN NOW() ELSE NULL END
-       WHERE id = $3`,
-      [nextStatus, shouldLock, normalizedUserId]
+           locked_until = NULL
+       WHERE id = $2`,
+      [nextStatus, normalizedUserId]
     );
 
     logger.info('User account lock status updated by admin', {
@@ -1912,6 +1946,15 @@ const Mutation = {
 
     if (!normalizedUserId) {
       throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    try {
+      await ensureUserIdentityEnumValues();
+    } catch (error) {
+      throwGraphQLError(res)
+        .message(error.message || 'Failed to validate userIdentity enum values.')
+        .status(500)
+        .throw();
     }
 
     const client = await db.db().connect();
