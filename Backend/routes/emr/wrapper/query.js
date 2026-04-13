@@ -951,7 +951,7 @@ const Query = {
         LIMIT 1
       ) latest_appt ON true
       LEFT JOIN LATERAL (
-        SELECT mrl.status
+        SELECT mrl.status, mrl.approved_by
         FROM "MedicineRequestLog" mrl
         WHERE mrl."patientId" = up.id
         ORDER BY mrl.created_at DESC
