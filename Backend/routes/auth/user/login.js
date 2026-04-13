@@ -17,13 +17,57 @@ const router = express.Router();
 
 const VERIFICATIONKEY_PURPOSE = "2fa";
 
+function getRequestAuditMetadata(req) {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const forwardedIp = Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : String(forwardedFor || '').split(',')[0];
+
+  const ipAddress = String(
+    forwardedIp || req.ip || req.socket?.remoteAddress || ''
+  ).trim() || null;
+  const userAgent = String(req.headers['user-agent'] || '').trim() || null;
+
+  return { ipAddress, userAgent };
+}
+
+function isCredentialTemporarilyLocked(lockState) {
+  if (!lockState) return false;
+
+  const status = String(lockState.status || '').toLowerCase();
+  if (status !== 'locked') return false;
+
+  const lockUntilMs = lockState.lockedUntil ? new Date(lockState.lockedUntil).getTime() : NaN;
+  return Number.isFinite(lockUntilMs) && lockUntilMs > Date.now();
+}
+
 router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   try {
   const { email, password, recaptchaToken } = req.body;
   const account_type = detectPortalFromSubdomain(req);
+  const auditMetadata = getRequestAuditMetadata(req);
+  const recordAttempt = async (wasSuccessful, targetEmail = email, userId = null) => {
+    try {
+      await query.recordLoginAttempt({
+        email: targetEmail || null,
+        userId,
+        wasSuccessful,
+        ipAddress: auditMetadata.ipAddress,
+        userAgent: auditMetadata.userAgent,
+      });
+    } catch (auditErr) {
+      logger.warn('[LOGIN] Failed to write login attempt audit record', {
+        email: targetEmail || null,
+        userId: userId || null,
+        ipAddress: auditMetadata.ipAddress,
+        error: auditErr?.message || 'Unknown audit write error',
+      });
+    }
+  };
 
   // ✅ Required fields
   if (!email || !password) {
+    await recordAttempt(false, email);
     return res.status(400).json({
       error: "MISSING_FIELDS",
       message: "Email and password are required."
@@ -32,6 +76,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 
   const loginTtl = await isLoginLocked(email, account_type);
   if (loginTtl > 0) {
+    await recordAttempt(false, email);
     return res.status(403).json({
       error: "ACCOUNT_LOCKED",
       message: `Too many failed login attempts. Please try in ${loginTtl} seconds.`
@@ -40,6 +85,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 
   // ✅ Institutional email → detect role from email
   if (!isValidEmail(email)) {
+    await recordAttempt(false, email);
     return res.status(400).json({
       error: "INVALID_INSTITUTION_EMAIL",
       message: "Email must follow TIP institutional format."
@@ -50,6 +96,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   const captchaRequired = await shouldRequireRecaptcha(email, account_type);
   if (captchaRequired) {
     if (!recaptchaToken) {
+      await recordAttempt(false, email);
       return res.status(400).json({
         error: "RECAPTCHA_REQUIRED",
         message: "Please complete the reCAPTCHA check.",
@@ -58,6 +105,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     }
     const captchaValid = await verifyRecaptcha(recaptchaToken);
     if (!captchaValid) {
+      await recordAttempt(false, email);
       return res.status(400).json({
         error: "INVALID_RECAPTCHA",
         message: "reCAPTCHA verification failed. Please try again.",
@@ -71,6 +119,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   if (!user) {
     const count = await incrementLoginFailure(email, account_type);
     const nextRequiresCaptcha = await shouldRequireRecaptcha(email, account_type);
+    await recordAttempt(false, email);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
       message: `Email or password is incorrect. ${count} failed attempts.`,
@@ -78,11 +127,24 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
+  const lockState = {
+    status: user.credentials_status,
+    lockedUntil: user.locked_until,
+  };
+
+  if (isCredentialTemporarilyLocked(lockState)) {
+    await recordAttempt(false, email, user.id);
+    return res.status(403).json({
+      error: 'ACCOUNT_LOCKED',
+      message: `This account is locked until ${new Date(user.locked_until).toISOString()}.`,
+    });
+  }
+
   // ✅ Check password
   const passwordValid = await verifyPassword(password, user.password_hash);
   if (!passwordValid) {
     const count = await incrementLoginFailure(email, account_type);
-    await query.recordLoginAttempt(email, false);
+    await recordAttempt(false, email, user.id);
     const nextRequiresCaptcha = await shouldRequireRecaptcha(email, account_type);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
@@ -99,11 +161,13 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
       const nextRequiresCaptcha = await shouldRequireRecaptcha(email, account_type);
       const isActive = await query.getMedicalPersonnelStatus(user.id);
       if (isActive === false) {
+        await recordAttempt(false, email, user.id);
         return res.status(403).json({
           error: "STAFF_ACCOUNT_SUSPENDED",
           message: "Your staff account has been suspended.",
         });
       }
+      await recordAttempt(false, email, user.id);
       return res.status(400).json({
         error: "INVALID_CREDENTIALS",
         message: `Email or password is incorrect. ${count} failed attempts.`,
@@ -114,6 +178,8 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 
   // ✅ Create login verification session (always the same purpose)
   const verificationKey = await createVerificationSession(email, VERIFICATIONKEY_PURPOSE, account_type);
+  // Stage-1 login audit is recorded as non-success; full success is recorded at /complete.
+  await recordAttempt(false, email, user.id);
 
   // ✅ Email OTP is always required; TOTP is the preferred alternative when enabled
   return res.status(200).json({
@@ -133,8 +199,28 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   try {
   const { LoginKey: verificationKey } = req.body;
+  const auditMetadata = getRequestAuditMetadata(req);
+  const recordAttempt = async (wasSuccessful, targetEmail = null, userId = null) => {
+    try {
+      await query.recordLoginAttempt({
+        email: targetEmail,
+        userId,
+        wasSuccessful,
+        ipAddress: auditMetadata.ipAddress,
+        userAgent: auditMetadata.userAgent,
+      });
+    } catch (auditErr) {
+      logger.warn('[LOGIN_COMPLETE] Failed to write login attempt audit record', {
+        email: targetEmail || null,
+        userId: userId || null,
+        ipAddress: auditMetadata.ipAddress,
+        error: auditErr?.message || 'Unknown audit write error',
+      });
+    }
+  };
 
   if (!verificationKey) {
+    await recordAttempt(false, null, null);
     return res.status(400).json({
       error: "MISSING_FIELDS",
       message: "Login key is required."
@@ -144,6 +230,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   const session = await getVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
 
   if (!session || !session.email || session.user_exists !== "true" || session.user_id === "") {
+    await recordAttempt(false, session?.email || null, session?.user_id || null);
     return res.status(400).json({
       error: "INVALID_LOGIN_SESSION",
       message: "Login session is invalid or expired."
@@ -155,6 +242,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   const emailVerified = session.email_2fa_verified === "true";
   const totpVerified = session.totp_2fa_verified === "true";
   if (!emailVerified && !totpVerified) {
+    await recordAttempt(false, session.email, session.user_id);
     return res.status(400).json({
       error: "2FA_NOT_VERIFIED",
       message: "Two-factor authentication has not been completed."
@@ -163,6 +251,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
 
 
   if (session.data_consent !== "true") {
+    await recordAttempt(false, session.email, session.user_id);
       return res.status(400).json({
           error: "DATA_CONSENT_REQUIRED",
           message: "You must agree to the data consent policy to login."
@@ -170,6 +259,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   if (session.data_consent_version !== process.env.DATA_CONSENT_VERSION) {
+    await recordAttempt(false, session.email, session.user_id);
       return res.status(400).json({
           error: "OUTDATED_CONSENT",
           message: "You must agree to the latest data consent policy."
@@ -178,40 +268,40 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
 
   await deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
 
+  const lockState = await query.getCredentialLockStateByUserId(session.user_id);
+  if (isCredentialTemporarilyLocked(lockState)) {
+    await recordAttempt(false, lockState?.email || session.email, session.user_id);
+    return res.status(403).json({
+      error: 'ACCOUNT_LOCKED',
+      message: `This account is locked until ${new Date(lockState.lockedUntil).toISOString()}.`,
+    });
+  }
+
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
   const portal = detectPortalFromSubdomain(req);
   if (portal === "medical") {
-    const credentialsStatus = await query.getUserCredentialStatus(session.user_id);
-    switch (credentialsStatus) {
-      case "Unverified":
-        return res.status(403).json({
-          error: "STAFF_ACCOUNT_NOT_VERIFIED",
-          message: "Please ask your admin to verify your account first.",
-        });
-      case "Locked":
-        return res.status(403).json({
-          error: "STAFF_ACCOUNT_LOCKED",
-          message: "Your staff account is currently locked. Contact your administrator.",
-        });
-      case "Inactive":
-        return res.status(403).json({
-          error: "STAFF_ACCOUNT_INACTIVE",
-          message: "Your account does not yet have staff access. Ask your administrator to activate your account.",
-        });
-      case "Active":
-        break; // continue with login
-      default:
+    const isMedical = await query.isActiveMedicalPersonnel(session.user_id);
+    if (!isMedical) {
+      const isActive = await query.getMedicalPersonnelStatus(session.user_id);
+      await recordAttempt(false, session.email, session.user_id);
+      if (isActive === false) {
         return res.status(403).json({
           error: "STAFF_ACCOUNT_SUSPENDED",
           message: "Your staff account is currently suspended. Contact your administrator.",
         });
+      }
+
+      return res.status(403).json({
+        error: 'STAFF_ACCOUNT_INACTIVE',
+        message: 'Your account does not currently have active staff access.',
+      });
     } 
   }
 
   // ✅ Create actual auth session (JWT, cookie, etc.)
   //const authToken = await query.createAuthToken(session.user_id);
 
-  await query.recordLoginAttempt(session.email, true); // record successful login
+  await recordAttempt(true, session.email, session.user_id);
   await resetLoginFailures(session.email, portal);     // clear failure count so next login starts fresh
   const tokens = await AuthSession.create(req, session.user_id);
   return res.status(200).json({

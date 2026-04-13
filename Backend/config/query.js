@@ -310,6 +310,60 @@ async function getUserCredentialStatus(userId) {
   }
 }
 
+async function getCredentialLockStateByEmail(email) {
+  const sql = `
+    SELECT
+      id,
+      credentials_status AS status,
+      locked_until
+    FROM "UserCredentials"
+    WHERE email = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [email]);
+    if (result.rows.length === 0) return null;
+
+    return {
+      userId: result.rows[0].id,
+      status: result.rows[0].status || null,
+      lockedUntil: result.rows[0].locked_until || null,
+    };
+  } catch (err) {
+    logger.error(`Error fetching lock state by email=${email}:`, err);
+    throw err;
+  }
+}
+
+async function getCredentialLockStateByUserId(userId) {
+  const sql = `
+    SELECT
+      id,
+      email,
+      credentials_status AS status,
+      locked_until
+    FROM "UserCredentials"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) return null;
+
+    return {
+      userId: result.rows[0].id,
+      email: result.rows[0].email || null,
+      status: result.rows[0].status || null,
+      lockedUntil: result.rows[0].locked_until || null,
+    };
+  } catch (err) {
+    logger.error(`Error fetching lock state by userId=${userId}:`, err);
+    throw err;
+  }
+}
+
 async function getUserBranch(userId) {
   const sql = `
     SELECT branch
@@ -331,19 +385,38 @@ async function getUserBranch(userId) {
   }
 }
 
-async function recordLoginAttempt(email, wasSuccessful) {
+async function recordLoginAttempt(emailOrInput, wasSuccessfulLegacy, metadata = {}) {
+  const hasInputObject = emailOrInput && typeof emailOrInput === 'object' && !Array.isArray(emailOrInput);
+
+  const email = hasInputObject ? (emailOrInput.email || null) : (emailOrInput || null);
+  const explicitUserId = hasInputObject ? (emailOrInput.userId || null) : null;
+  const wasSuccessful = hasInputObject
+    ? Boolean(emailOrInput.wasSuccessful)
+    : Boolean(wasSuccessfulLegacy);
+  const ipAddress = hasInputObject
+    ? (emailOrInput.ipAddress || null)
+    : (metadata.ipAddress || null);
+  const userAgent = hasInputObject
+    ? (emailOrInput.userAgent || null)
+    : (metadata.userAgent || null);
+
   const sql = `
-    INSERT INTO "UserLoginAttempt" (user_id, was_successful)
+    INSERT INTO "UserLoginAttempt" (user_id, was_successful, ip_address, user_agent)
     VALUES (
-      (SELECT id FROM "UserCredentials" WHERE email = $1),
-      $2
+      COALESCE(
+        $1::integer,
+        (SELECT id FROM "UserCredentials" WHERE email = $2 LIMIT 1)
+      ),
+      $3,
+      $4,
+      $5
     );
   `;
 
   try {
-    await query(sql, [email, wasSuccessful]);
+    await query(sql, [explicitUserId, email, wasSuccessful, ipAddress, userAgent]);
   } catch (err) {
-    logger.error("Error recording login attempt:", err);
+    logger.error('Error recording login attempt:', err);
     throw err;
   }
 }
@@ -684,6 +757,8 @@ module.exports = {
     setExpiredUpdateTickets,
     setExpiredPersonalTickets,
     getUserBranch,
+    getCredentialLockStateByEmail,
+    getCredentialLockStateByUserId,
     recordLoginAttempt,
     getUserPatientType,
     isActiveMedicalPersonnel,

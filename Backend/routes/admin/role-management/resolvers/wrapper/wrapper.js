@@ -1065,7 +1065,9 @@ const Query = {
     const result = await db.query(
       `SELECT
          attempted_at,
-         was_successful
+         was_successful,
+         ip_address,
+         user_agent
        FROM "UserLoginAttempt"
        WHERE user_id = $1
        ORDER BY attempted_at DESC
@@ -1076,9 +1078,8 @@ const Query = {
 
     return result.rows.map((row) => ({
       timestamp: row.attempted_at ? new Date(row.attempted_at).toISOString() : new Date(0).toISOString(),
-      // UserLoginAttempt currently stores no IP/device columns; provide stable placeholders.
-      ip: 'N/A',
-      device: 'Unknown Device',
+      ip: row.ip_address || 'N/A',
+      device: row.user_agent || 'Unknown Device',
       status: row.was_successful ? 'Success' : 'Failed',
     }));
   },
@@ -1937,13 +1938,6 @@ const Mutation = {
           [normalizedUserId]
         );
       }
-
-      await client.query(
-        `UPDATE "Patients"
-         SET profile = 'Superior'
-         WHERE id = $1`,
-        [normalizedUserId]
-      );
 
       await client.query('COMMIT');
 
