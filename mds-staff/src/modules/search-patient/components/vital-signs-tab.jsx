@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { useSettings } from '../../../context/settings-context';
 import PatientSectionCard from './section-card';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -128,30 +129,6 @@ const AXIS_STYLE = { fontSize: 11, fill: '#9ca3af' };
 const GRID_STYLE = { stroke: '#374151', strokeDasharray: '3 3' };
 const CHART_MARGIN = { top: 8, right: 12, left: -16, bottom: 4 };
 
-function useIsDarkTheme() {
-  const getIsDark = () => (
-    typeof document !== 'undefined'
-    && document.documentElement.classList.contains('dark')
-  );
-
-  const [isDarkTheme, setIsDarkTheme] = useState(getIsDark);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
-
-    const root = document.documentElement;
-    const update = () => setIsDarkTheme(root.classList.contains('dark'));
-    update();
-
-    const observer = new MutationObserver(update);
-    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
-
-    return () => observer.disconnect();
-  }, []);
-
-  return isDarkTheme;
-}
-
 function fmtChartTick(value) {
   if (!value) return '';
   const d = new Date(value);
@@ -240,10 +217,10 @@ function MiniLineChart({ data, dataKeys, height = 150, xDataKey = 'x', xTickForm
 }
 
 function VitalSignsAnalytics({ history }) {
-  const isDarkTheme = useIsDarkTheme();
+  const { isDarkMode } = useSettings();
 
   const chartTheme = useMemo(() => {
-    if (isDarkTheme) {
+    if (isDarkMode) {
       return {
         axisTick: '#d1d5db',
         axisLine: '#4b5563',
@@ -284,7 +261,7 @@ function VitalSignsAnalytics({ history }) {
         heartRate: '#047857',
       },
     };
-  }, [isDarkTheme]);
+  }, [isDarkMode]);
 
   const chartData = useMemo(() => {
     return [...history].reverse().map((r, i) => {

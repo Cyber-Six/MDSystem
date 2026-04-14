@@ -220,14 +220,31 @@ const StaffSettings = () => {
   // Live theme preview — applies draft.themeMode immediately without saving.
   // On unmount (navigating away without saving) the DOM is restored to the saved theme.
   useEffect(() => {
+    let rafOne = 0;
+    let rafTwo = 0;
+
     const applyTheme = (mode) => {
-      document.documentElement.classList.toggle(
-        'dark',
-        mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches),
-      );
+      const root = document.documentElement;
+      const nextIsDark = mode === 'dark'
+        || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+      root.classList.add('theme-switching');
+      root.classList.toggle('dark', nextIsDark);
+
+      rafOne = window.requestAnimationFrame(() => {
+        rafTwo = window.requestAnimationFrame(() => {
+          root.classList.remove('theme-switching');
+        });
+      });
     };
+
     applyTheme(draft.themeMode);
-    return () => applyTheme(savedThemeModeRef.current);
+
+    return () => {
+      if (rafOne) window.cancelAnimationFrame(rafOne);
+      if (rafTwo) window.cancelAnimationFrame(rafTwo);
+      applyTheme(savedThemeModeRef.current);
+    };
   }, [draft.themeMode]);
 
   const hasChangesRef = useRef(hasChanges);
@@ -322,6 +339,7 @@ const StaffSettings = () => {
         [moduleKey]: { ...prev.moduleChannels[moduleKey], [channel]: value },
       },
     }));
+    setHasUserInteracted(true);
     setSaved(false);
   }, []);
 
@@ -333,6 +351,7 @@ const StaffSettings = () => {
       }
       return { ...prev, channels: { ...prev.channels, [channel]: value }, moduleChannels: next };
     });
+    setHasUserInteracted(true);
     setSaved(false);
   }, []);
 

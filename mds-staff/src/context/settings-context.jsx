@@ -151,6 +151,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const SETTINGS_STORAGE_PREFIX = 'staff_settings_';
+const THEME_SWITCHING_CLASS = 'theme-switching';
 
 // SECURITY: Only allow alphanumeric, underscore, and hyphen in userId to prevent
 // key injection / namespace pollution in localStorage.
@@ -321,8 +322,17 @@ const SettingsContext = createContext(null);
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => loadSettings());
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => (
+    typeof window !== 'undefined'
+      && window.matchMedia('(prefers-color-scheme: dark)').matches
+  ));
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
+  const resolvedTheme = settings.themeMode === 'system'
+    ? (systemPrefersDark ? 'dark' : 'light')
+    : settings.themeMode;
+  const isDarkMode = resolvedTheme === 'dark';
 
   // Track which key we last loaded so we can detect user switches.
   const currentKeyRef = useRef(getUserSettingsKey());
@@ -392,23 +402,47 @@ export function SettingsProvider({ children }) {
     }
   }, [settings.fontSize]);
 
-  // Apply theme mode to <html>
+  // Track system appearance so resolved theme updates immediately when in 'system' mode.
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (event) => setSystemPrefersDark(event.matches);
+
+    setSystemPrefersDark(mediaQuery.matches);
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
+
+    mediaQuery.addListener(handler);
+    return () => mediaQuery.removeListener(handler);
+  }, []);
+
+  // Apply resolved theme atomically to avoid per-component transition lag.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
     const root = document.documentElement;
-    const applyTheme = (mode) => {
-      if (mode === 'system') {
-        root.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
-      } else {
-        root.classList.toggle('dark', mode === 'dark');
-      }
+    let rafOne = 0;
+    let rafTwo = 0;
+
+    root.classList.add(THEME_SWITCHING_CLASS);
+    root.classList.toggle('dark', isDarkMode);
+
+    rafOne = window.requestAnimationFrame(() => {
+      rafTwo = window.requestAnimationFrame(() => {
+        root.classList.remove(THEME_SWITCHING_CLASS);
+      });
+    });
+
+    return () => {
+      if (rafOne) window.cancelAnimationFrame(rafOne);
+      if (rafTwo) window.cancelAnimationFrame(rafTwo);
+      root.classList.remove(THEME_SWITCHING_CLASS);
     };
-    applyTheme(settings.themeMode);
-    // Keep in sync when system preference changes and mode is 'system'
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => { if (settings.themeMode === 'system') applyTheme('system'); };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [settings.themeMode]);
+  }, [isDarkMode]);
 
   const updateSettings = useCallback((next) => {
     const updated = typeof next === 'function' ? next(settingsRef.current) : next;
@@ -433,6 +467,8 @@ export function SettingsProvider({ children }) {
     settings,
     updateSettings,
     isModuleSoundEnabled,
+    resolvedTheme,
+    isDarkMode,
     DEFAULT_SETTINGS,
   };
 
