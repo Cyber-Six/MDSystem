@@ -4,6 +4,7 @@ import AnalyticsFilterBar from './components/analytics-filter-bar';
 import AnalyticsChartCard from './components/analytics-chart-card';
 import AnalyticsSummaryCards from './components/analytics-summary-cards';
 import AnalyticsExportModal from './components/analytics-export-modal';
+import { readPersistedViewState, writePersistedViewState } from '../../utils/persistent-view-state';
 import {
   fetchMultipleQueries,
   fetchFilterOptions,
@@ -69,6 +70,13 @@ const DEMOGRAPHIC_DIMENSION_QUERIES = {
   matrix:     ['sex-age-group-matrix', 'diagnoses-sex-age'],
 };
 
+const ANALYTICS_CATEGORY_STORAGE_KEY = 'mds_staff_analytics_active_category';
+const ANALYTICS_DIMENSION_STORAGE_KEY = 'mds_staff_analytics_demographic_dimension';
+const ANALYTICS_CATEGORY_KEYS = ['all', ...Object.keys(QUERY_CATEGORIES)];
+const ANALYTICS_DIMENSION_KEYS = DEMOGRAPHIC_DIMENSIONS.map((dimension) => dimension.key);
+const isAnalyticsCategory = (value) => ANALYTICS_CATEGORY_KEYS.includes(value);
+const isAnalyticsDimension = (value) => ANALYTICS_DIMENSION_KEYS.includes(value);
+
 // ── Default tab (lightest load for RPi) ──────────────────────────────────────
 
 const DEFAULT_CATEGORY = 'consultations';
@@ -96,8 +104,12 @@ const StaffAnalytics = () => {
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [groupBy, setGroupBy] = useState('monthly');
-  const [activeCategory, setActiveCategory] = useState(DEFAULT_CATEGORY);
-  const [demographicDimension, setDemographicDimension] = useState('all');
+  const [activeCategory, setActiveCategory] = useState(() => (
+    readPersistedViewState(ANALYTICS_CATEGORY_STORAGE_KEY, DEFAULT_CATEGORY, isAnalyticsCategory)
+  ));
+  const [demographicDimension, setDemographicDimension] = useState(() => (
+    readPersistedViewState(ANALYTICS_DIMENSION_STORAGE_KEY, 'all', isAnalyticsDimension)
+  ));
 
   // Department / sex filter (global across analytics categories)
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -112,6 +124,16 @@ const StaffAnalytics = () => {
   const [initialLoad, setInitialLoad] = useState(true);
   const [exportOpen, setExportOpen] = useState(false);
   const abortRef = useRef(0);
+
+  useEffect(() => {
+    if (!isAnalyticsCategory(activeCategory)) return;
+    writePersistedViewState(ANALYTICS_CATEGORY_STORAGE_KEY, activeCategory);
+  }, [activeCategory]);
+
+  useEffect(() => {
+    if (!isAnalyticsDimension(demographicDimension)) return;
+    writePersistedViewState(ANALYTICS_DIMENSION_STORAGE_KEY, demographicDimension);
+  }, [demographicDimension]);
 
   // Sync branch when permissions finish loading
   useEffect(() => {

@@ -51,6 +51,7 @@ export const listOpenAppointments = async (offset = 0, limit = 20) => {
       listOpenAppointments(offset: $offset, limit: $limit) {
         id label location patientType schedulePerWeek
         morningAllowed afternoonAllowed notes
+        purposeRequired
         isActive containsCustomDates whitelistOnly
       }
     }
@@ -101,19 +102,23 @@ export const submitAppointment = async (
   schedulerId: string,
   date: string,
   session: string,
-  requirements: Array<{ scheduleRequirementId: string; filename: string }> = []
+  requirements: Array<{ scheduleRequirementId: string; filename: string }> = [],
+  purpose?: string
 ) => {
+  const normalizedPurpose = (purpose || '').trim();
   const data = await sendGraphQL(`
     mutation SubmitAppointment(
       $schedulerId: ID!, $date: Date!, $session: SCHEDULE_SESSION!,
-      $requirements: [patientScheduleRequirementInput!]!
+      $requirements: [patientScheduleRequirementInput!]!,
+      $purpose: String
     ) {
       submitAppointment(
         schedulerId: $schedulerId, date: $date,
-        session: $session, requirements: $requirements
-      ) { id patientId slotEntityId status session notes created_at }
+        session: $session, requirements: $requirements,
+        purpose: $purpose
+      ) { id patientId slotEntityId status session purpose notes created_at }
     }
-  `, { schedulerId, date, session, requirements });
+  `, { schedulerId, date, session, requirements, purpose: normalizedPurpose || null });
   return data.submitAppointment;
 };
 
