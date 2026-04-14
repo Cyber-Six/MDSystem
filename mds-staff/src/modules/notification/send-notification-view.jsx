@@ -6,7 +6,7 @@ import { useStaffProfile } from '../../hooks/use-staff-profile';
 
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_TITLE_LENGTH = 80;
-const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_DEBOUNCE_MS = 500;
 
 /**
  * Send Notification View — multicast support

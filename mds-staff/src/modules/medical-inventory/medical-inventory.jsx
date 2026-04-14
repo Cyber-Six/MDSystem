@@ -28,6 +28,11 @@ import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
+import { readPersistedViewState, writePersistedViewState } from '../../utils/persistent-view-state';
+
+const INVENTORY_SECTION_STORAGE_KEY = 'mds_staff_inventory_active_section';
+const INVENTORY_PERSISTABLE_SECTIONS = ['dashboard', 'items', 'dispense', 'direct-release'];
+const isPersistableInventorySection = (value) => INVENTORY_PERSISTABLE_SECTIONS.includes(value);
 
 // ── Approval persistence helpers (localStorage) ───────────────────────────
 // The backend does not store approved quantities, so we persist them locally.
@@ -70,11 +75,13 @@ const isApprovalExpired = (requestId) => {
  */
 const MedicalInventory = () => {
   const routerLocation = useLocation();
+  const routeSection = routerLocation.state?.section;
   const { subscribe, refreshInventoryAlerts } = useStaffNotifications();
   const { hasPermission, branch: staffBranch } = usePermissions();
-  const [activeSection, setActiveSection] = useState(
-    routerLocation.state?.section ?? 'dashboard'
-  );
+  const [activeSection, setActiveSection] = useState(() => {
+    if (isPersistableInventorySection(routeSection)) return routeSection;
+    return readPersistedViewState(INVENTORY_SECTION_STORAGE_KEY, 'dashboard', isPersistableInventorySection);
+  });
   const [directReleaseLocation, setDirectReleaseLocation] = useState(null); // Will be set based on user's allowed locations
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -139,6 +146,16 @@ const MedicalInventory = () => {
   const [successModalData, setSuccessModalData] = useState({ title: 'Success', message: '' });
   const hasLoadedRequestsRef = useRef(false);
   const patientNameCacheRef = useRef({}); // Cache for patient names to avoid redundant API calls
+
+  useEffect(() => {
+    if (!isPersistableInventorySection(routeSection)) return;
+    setActiveSection(routeSection);
+  }, [routeSection]);
+
+  useEffect(() => {
+    if (!isPersistableInventorySection(activeSection)) return;
+    writePersistedViewState(INVENTORY_SECTION_STORAGE_KEY, activeSection);
+  }, [activeSection]);
 
   // Helper function to enrich multiple requests with patient names.
   // Uses a single batched /emr/medical request for all unique patient IDs

@@ -527,12 +527,21 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    const normalizedPurpose = typeof purpose === "string" ? purpose.trim() : "";
     let allowedScheduler;
 
     try {
       allowedScheduler = await Query._listOpenAppointments(_, { offset: 0, limit: 1, schedulerId }, { user, res });
       if (allowedScheduler.length === 0) {
         throwGraphQLError(res).message("Scheduler not found or not allowed.").status(404).throw();
+      }
+
+      const purposeRequired = allowedScheduler[0]?.purposeRequired === true;
+      if (purposeRequired && !normalizedPurpose) {
+        throwGraphQLError(res)
+          .message("Purpose / reason for visit is required for this appointment type")
+          .status(400)
+          .throw();
       }
 
       // Validate scheduler/date
@@ -626,7 +635,7 @@ const Mutation = {
         `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session", "purpose")
          VALUES ($1, $2, 'Pending', $3, $4)
          RETURNING *;`,
-        [user.id, schedule.id, session, purpose || null]
+        [user.id, schedule.id, session, normalizedPurpose || null]
       );
 
       const patientSlotId = psResult.rows[0].id;
