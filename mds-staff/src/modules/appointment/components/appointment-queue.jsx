@@ -6,7 +6,7 @@ import { getLocationsByBranch } from '../../../utils/branch-utils';
 /* ── constants ─────────────────────────────────────── */
 
 const PAGE_SIZE = 15;
-const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_DEBOUNCE_MS = 500;
 
 const STATUS_STYLES = {
   Pending:             'bg-warning-100 dark:bg-warning-900/40 text-warning-800 dark:text-warning-300',

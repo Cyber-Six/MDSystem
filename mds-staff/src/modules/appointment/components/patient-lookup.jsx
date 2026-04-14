@@ -5,7 +5,7 @@ import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import AppointmentDetailModal from './appointment-detail-modal';
 
 // ── Change this value to adjust the search debounce delay ───────────────────
-const LOOKUP_DEBOUNCE_MS = 1000;
+const LOOKUP_DEBOUNCE_MS = 500;
 
 const PAGE_SIZE = 10;
 
