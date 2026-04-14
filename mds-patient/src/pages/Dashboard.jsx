@@ -55,7 +55,20 @@ const RouteLoader = () => (
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const INACTIVE_REACTIVATION_LOCK_KEY = 'patient_inactive_reactivation_lock';
+  const INACTIVE_REACTIVATION_LOCK_LEGACY_KEY = 'patient_inactive_reactivation_lock';
+  const getPatientLockKey = () => {
+    try {
+      const refreshToken = localStorage.getItem('patient_refreshToken') || '';
+      const [userId] = refreshToken.split(':');
+      if (userId) {
+        return `${INACTIVE_REACTIVATION_LOCK_LEGACY_KEY}:${userId}`;
+      }
+    } catch {
+      // Fall through to legacy key.
+    }
+    return INACTIVE_REACTIVATION_LOCK_LEGACY_KEY;
+  };
+  const INACTIVE_REACTIVATION_LOCK_KEY = getPatientLockKey();
   const normalizeCredentialStatus = (status) => (
     typeof status === 'string' ? status.trim().toLowerCase() : null
   );
@@ -71,7 +84,18 @@ const Dashboard = () => {
   const [firstName, setFirstName] = useState(null);
   const [inactiveLockPersisted, setInactiveLockPersisted] = useState(() => {
     try {
-      return localStorage.getItem(INACTIVE_REACTIVATION_LOCK_KEY) === '1';
+      const scopedLock = localStorage.getItem(INACTIVE_REACTIVATION_LOCK_KEY) === '1';
+      const legacyLock = localStorage.getItem(INACTIVE_REACTIVATION_LOCK_LEGACY_KEY) === '1';
+
+      // One-time migration: move legacy lock to scoped key, then remove legacy key.
+      if (!scopedLock && legacyLock && INACTIVE_REACTIVATION_LOCK_KEY !== INACTIVE_REACTIVATION_LOCK_LEGACY_KEY) {
+        localStorage.setItem(INACTIVE_REACTIVATION_LOCK_KEY, '1');
+      }
+      if (legacyLock) {
+        localStorage.removeItem(INACTIVE_REACTIVATION_LOCK_LEGACY_KEY);
+      }
+
+      return scopedLock || legacyLock;
     } catch {
       return false;
     }
@@ -159,9 +183,16 @@ const Dashboard = () => {
 
   const normalizedCredentialStatus = normalizeCredentialStatus(credentialStatus);
   const isInactiveCredential = normalizedCredentialStatus === 'inactive';
+  const hasPendingInactiveWorkflow = ['Pending', 'Revision', 'RevisionSubmitted'].includes(recordStatus);
+  const shouldKeepInactiveLock = inactiveLockPersisted && (
+    normalizedCredentialStatus !== 'active' || hasPendingInactiveWorkflow
+  );
   const shouldRestrictInactiveFlow =
-    isInactiveCredential || (inactiveLockPersisted && normalizedCredentialStatus !== 'active');
+    isInactiveCredential || shouldKeepInactiveLock;
   const isOnRecordUpdateRoute = location.pathname.endsWith('/record-update');
+  const hasSubmittedInactiveUpdate =
+    shouldRestrictInactiveFlow && (recordStatus === 'Pending' || recordStatus === 'RevisionSubmitted');
+  const needsInactiveRevision = shouldRestrictInactiveFlow && recordStatus === 'Revision';
 
   // Persist inactive reactivation lock while credential status is Inactive.
   // Once status is Active again, remove the lock immediately.
@@ -180,7 +211,11 @@ const Dashboard = () => {
       return;
     }
 
-    if (inactiveLockPersisted && normalizedCredential === 'active') {
+    if (
+      inactiveLockPersisted &&
+      normalizedCredential === 'active' &&
+      !['Pending', 'Revision', 'RevisionSubmitted'].includes(recordStatus)
+    ) {
       try {
         localStorage.removeItem(INACTIVE_REACTIVATION_LOCK_KEY);
       } catch {
@@ -188,7 +223,7 @@ const Dashboard = () => {
       }
       setInactiveLockPersisted(false);
     }
-  }, [credentialStatus, inactiveLockPersisted]);
+  }, [credentialStatus, inactiveLockPersisted, recordStatus]);
 
   // Re-sync access gating state whenever route changes.
   // This keeps inactive restrictions accurate when staff actions happen mid-session.
@@ -294,10 +329,8 @@ const Dashboard = () => {
     );
   }
 
-  if (shouldRestrictInactiveFlow && !isOnRecordUpdateRoute) {
+  if (shouldRestrictInactiveFlow && (!isOnRecordUpdateRoute || hasSubmittedInactiveUpdate)) {
     const INACTIVE_TICKET_EXPIRY_DAYS = 7;
-    const hasSubmittedInactiveUpdate = recordStatus === 'Pending' || recordStatus === 'RevisionSubmitted';
-    const needsInactiveRevision = recordStatus === 'Revision';
     const createdAtDate = inactiveTicketCreatedAt ? new Date(inactiveTicketCreatedAt) : null;
     const expiryDate = createdAtDate && !Number.isNaN(createdAtDate.getTime())
       ? new Date(createdAtDate.getTime() + INACTIVE_TICKET_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
@@ -307,7 +340,7 @@ const Dashboard = () => {
       : null;
 
     return (
-      <Layout isInactive={true}>
+      <Layout isInactive={true} allowInactiveRecordUpdate={!hasSubmittedInactiveUpdate}>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="max-w-2xl mx-auto px-4">
             <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-8 text-center">
@@ -567,7 +600,7 @@ const Dashboard = () => {
         )}
       </InitialRecordModal>
 
-      <Layout isInactive={shouldRestrictInactiveFlow}>
+      <Layout isInactive={shouldRestrictInactiveFlow} allowInactiveRecordUpdate={!hasSubmittedInactiveUpdate}>
         <ErrorBoundary>
           <Suspense fallback={<RouteLoader />}>
             <Routes>

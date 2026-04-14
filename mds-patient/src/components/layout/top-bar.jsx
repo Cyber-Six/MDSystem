@@ -72,6 +72,16 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
       // Clear stored role used for routing
       localStorage.removeItem('patient_role');
       localStorage.removeItem('patient_email'); // remove legacy key too
+      localStorage.removeItem('patient_inactive_reactivation_lock');
+      try {
+        const refreshToken = localStorage.getItem('patient_refreshToken') || '';
+        const [userId] = refreshToken.split(':');
+        if (userId) {
+          localStorage.removeItem(`patient_inactive_reactivation_lock:${userId}`);
+        }
+      } catch {
+        // Ignore storage parsing errors during logout cleanup.
+      }
 
       // Call the proper logout function from token service
       // This clears tokens, calls backend logout, and navigates to /auth

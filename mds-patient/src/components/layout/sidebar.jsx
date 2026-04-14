@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
 
-const Sidebar = ({ isOpen, onClose, isInactive = false }) => {
+const Sidebar = ({ isOpen, onClose, isInactive = false, allowInactiveRecordUpdate = true }) => {
   const location = useLocation();
 
   const handleLogoClick = () => {
@@ -88,7 +88,7 @@ const Sidebar = ({ isOpen, onClose, isInactive = false }) => {
               // Exact match for all paths
               const isActive = location.pathname === item.path;
               // When account is inactive, only Record Update is accessible
-              const isDisabled = isInactive && item.path !== '/record-update';
+              const isDisabled = isInactive && (!allowInactiveRecordUpdate || item.path !== '/record-update');
 
               const itemClassName = `flex items-center transition-all duration-200 ${
                 isOpen

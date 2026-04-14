@@ -22,6 +22,7 @@ const RecordUpdateForm = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
   const effectiveRecordType = forceRecordType || recordType;
+  const shouldShowRecordChoice = !effectiveRecordType && !hideRecordChoice;
   const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
 
   // Revision tracking
@@ -632,7 +633,7 @@ const RecordUpdateForm = ({
         </div>
       )}
 
-      {!recordType && !hideRecordChoice ? (
+      {shouldShowRecordChoice ? (
         <RecordChoicePage
           onSelect={handleChoiceSelect}
           disabledChoiceIds={forceRecordType === 'both' ? ['medical', 'dental'] : []}
