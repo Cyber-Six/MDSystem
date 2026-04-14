@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   ScrollView,
   RefreshControl,
   TouchableOpacity,
@@ -167,6 +168,7 @@ export const AppointmentScreen: React.FC = () => {
     Array<{ scheduleRequirementId: string; filename: string; localUri: string }>
   >([]);
   const [pickingForReq, setPickingForReq] = useState<string | null>(null);
+  const [purpose, setPurpose] = useState('');
 
   // Submission
   const [submitting, setSubmitting] = useState(false);
@@ -242,6 +244,7 @@ export const AppointmentScreen: React.FC = () => {
       unstageFile(r.filename).catch(() => {});
     }
     setUploadedRequirements([]);
+    setPurpose('');
 
     if (scheduler.containsCustomDates) {
       try {
@@ -284,6 +287,14 @@ export const AppointmentScreen: React.FC = () => {
   };
 
   const handleSubmit = async () => {
+    const purposeRequired = selectedScheduler?.purposeRequired ?? false;
+    const normalizedPurpose = purpose.trim();
+
+    if (purposeRequired && !normalizedPurpose) {
+      setError('Purpose / reason for visit is required for this appointment type.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -291,9 +302,10 @@ export const AppointmentScreen: React.FC = () => {
         scheduleRequirementId: r.scheduleRequirementId,
         filename: r.filename,
       }));
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqs);
+      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqs, normalizedPurpose);
       setSuccessMessage('Your appointment has been submitted successfully!');
       setUploadedRequirements([]);
+      setPurpose('');
       await loadStatus();
       setStep(0);
     } catch (err: any) {
@@ -430,6 +442,9 @@ export const AppointmentScreen: React.FC = () => {
     requirements
       .filter((r) => r.isDigital)
       .every((r) => uploadedRequirements.some((u) => u.scheduleRequirementId === r.id));
+
+  const purposeRequired = selectedScheduler?.purposeRequired ?? false;
+  const trimmedPurpose = purpose.trim();
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -973,6 +988,43 @@ export const AppointmentScreen: React.FC = () => {
                   )}
                 </View>
 
+                <View style={[styles.purposeSection, { borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+                  <Text style={[styles.purposeLabel, { color: isDark ? colors.neutral[300] : colors.neutral[700] }]}>
+                    Purpose / Reason for Visit
+                    {purposeRequired ? ' *' : ''}
+                  </Text>
+                  <Text style={[styles.purposeMeta, { color: isDark ? colors.neutral[500] : colors.neutral[500] }]}>
+                    {purposeRequired ? 'Required' : 'Optional'} · {purpose.length}/250
+                  </Text>
+                  <TextInput
+                    value={purpose}
+                    onChangeText={(text) => setPurpose(text.slice(0, 250))}
+                    multiline
+                    numberOfLines={4}
+                    maxLength={250}
+                    textAlignVertical="top"
+                    placeholder={
+                      purposeRequired
+                        ? 'Briefly describe the reason for your appointment (Required)'
+                        : 'Briefly describe the reason for your appointment (optional)'
+                    }
+                    placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                    style={[
+                      styles.purposeInput,
+                      {
+                        backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+                        borderColor:
+                          purposeRequired && !trimmedPurpose
+                            ? colors.error[400]
+                            : isDark
+                            ? colors.neutral[600]
+                            : colors.neutral[200],
+                        color: isDark ? colors.neutral[100] : colors.secondary[900],
+                      },
+                    ]}
+                  />
+                </View>
+
                 <View style={styles.navRow}>
                   <TouchableOpacity
                     style={[styles.backButton, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
@@ -981,9 +1033,9 @@ export const AppointmentScreen: React.FC = () => {
                     <Text style={[styles.backButtonText, { color: isDark ? colors.neutral[200] : colors.secondary[700] }]}>‹ Back</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.submitButton, { opacity: submitting ? 0.5 : 1 }]}
+                    style={[styles.submitButton, { opacity: submitting || (purposeRequired && !trimmedPurpose) ? 0.5 : 1 }]}
                     onPress={handleSubmit}
-                    disabled={submitting}
+                    disabled={submitting || (purposeRequired && !trimmedPurpose)}
                   >
                     {submitting && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />}
                     <Text style={styles.submitButtonText}>
@@ -1242,6 +1294,29 @@ const styles = StyleSheet.create({
   },
   reviewLabel: { fontSize: 14 },
   reviewValue: { fontSize: 14, fontWeight: '500', flexShrink: 1, textAlign: 'right' },
+
+  purposeSection: {
+    marginBottom: 2,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  purposeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  purposeMeta: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  purposeInput: {
+    minHeight: 96,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
 
   // Requirements
   reqItem: { padding: 14, borderWidth: 1, borderRadius: 12, marginBottom: 10 },
