@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatPatientName, getPatientInitials, getProfileLabel } from '../../../services/patient-search-service';
+import PatientInitialBadge from './patient-initial-badge';
 
 // ── Badge helpers ────────────────────────────────────────────────────────────────
 const STATUS_STYLES = {
@@ -93,12 +94,7 @@ const SearchResultsList = ({ patients, hasFired, isLoading, error, searchTerm, f
                       : 'hover:bg-neutral-50 dark:hover:bg-neutral-700/50'}`}
               >
                 {/* Avatar */}
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                  style={{ background: '#C9A01E' }}
-                >
-                  {getPatientInitials(p)}
-                </div>
+                <PatientInitialBadge initials={getPatientInitials(p)} />
 
                 {/* Name + meta */}
                 <div className="min-w-0 flex flex-col" style={{ gap: '2px' }}>
