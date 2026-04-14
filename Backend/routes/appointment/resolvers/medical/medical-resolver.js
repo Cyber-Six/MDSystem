@@ -19,6 +19,16 @@ function hasValue(value) {
   return value !== undefined && value !== null && String(value).trim() !== '';
 }
 
+async function getPatientIdFromSlotIdOrThrow(slotId, res) {
+  try {
+    return await getPatientIdFromSlotId(slotId);
+  } catch (err) {
+    const message = err?.message === 'Slot not found' ? 'Slot not found' : 'Failed to resolve slot';
+    const statusCode = err?.message === 'Slot not found' ? 404 : 500;
+    throwGraphQLError(res).message(message).status(statusCode).throw();
+  }
+}
+
 async function resolvePatientId({ userId, patientIdentifier, staffBranch, res }) {
   if (hasValue(userId)) {
     return String(userId);
@@ -170,7 +180,20 @@ const Mutation = {
       resolvedUserId = await resolvePatientId({ userId, patientIdentifier, staffBranch, res });
     }
 
-    const patientId = resolvedUserId || (slotId ? await getPatientIdFromSlotId(slotId) : null);
+    const slotPatientId = slotId ? await getPatientIdFromSlotIdOrThrow(slotId, res) : null;
+
+    if (
+      resolvedUserId &&
+      slotPatientId &&
+      Number.parseInt(String(resolvedUserId), 10) !== Number.parseInt(String(slotPatientId), 10)
+    ) {
+      throwGraphQLError(res)
+        .message("Provided slotId does not belong to the specified user")
+        .status(400)
+        .throw();
+    }
+
+    const patientId = resolvedUserId || slotPatientId;
     if (!patientId) {
       throwGraphQLError(res).message("Either slotId or userId/patientIdentifier is required").status(400).throw();
     }
@@ -218,7 +241,7 @@ const Mutation = {
   },
 
   recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
-    const patientId = await getPatientIdFromSlotId(slotId);
+    const patientId = await getPatientIdFromSlotIdOrThrow(slotId, res);
     const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_approval, patientId, false);
     if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

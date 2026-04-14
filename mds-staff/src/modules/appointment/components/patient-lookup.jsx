@@ -103,9 +103,14 @@ const PatientLookup = () => {
     setSearchFired(false);
 
     try {
-      const internalId = String(patient.id);
+      const internalId = patient?.id !== undefined && patient?.id !== null ? String(patient.id) : null;
       const lookupIdentifier = patient?.identifier ? String(patient.identifier) : null;
-      const lookupUserId = lookupIdentifier ? null : internalId;
+      const lookupUserId = internalId;
+
+      if (!lookupUserId && !lookupIdentifier) {
+        throw new Error('Unable to identify selected patient.');
+      }
+
       const [status] = await Promise.all([
         getPatientStatus(lookupUserId, lookupIdentifier),
         fetchRecords(lookupUserId, 0, false, lookupIdentifier),
@@ -135,7 +140,7 @@ const PatientLookup = () => {
 
   const refreshRecords = useCallback(async () => {
     if (!resolvedUserId && !resolvedPatientIdentifier) return;
-    const lookupUserId = resolvedPatientIdentifier ? null : resolvedUserId;
+    const lookupUserId = resolvedUserId || null;
     const data = await getPatientRecords(lookupUserId, 0, PAGE_SIZE, resolvedPatientIdentifier);
     setRecords(data || []);
     setOffset(0);
@@ -170,7 +175,7 @@ const PatientLookup = () => {
     const nextOffset = offset + PAGE_SIZE;
     setLoadingMore(true);
     try {
-      const lookupUserId = resolvedPatientIdentifier ? null : resolvedUserId;
+      const lookupUserId = resolvedUserId || null;
       await fetchRecords(lookupUserId, nextOffset, true, resolvedPatientIdentifier);
       setOffset(nextOffset);
     } catch (err) {
