@@ -43,6 +43,8 @@ export interface RecordStatus {
   status: string | null;
   ticketId?: string | null;
   notes?: string | null;
+  ticketCreatedAt?: string | null;
+  credentialStatus?: string | null;
 }
 
 export interface EmergencyContact {
@@ -1142,7 +1144,7 @@ export const checkInitialRecordStatus = async (): Promise<RecordStatus> => {
       { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
-      `query GetUpdateTicket { getUpdateTicket { id status notes } }`, {}
+      `query GetUpdateTicket { getUpdateTicket { id status notes created_at } }`, {}
     ),
   ]);
 
@@ -1157,6 +1159,8 @@ export const checkInitialRecordStatus = async (): Promise<RecordStatus> => {
       status: ticket?.status || null,
       ticketId: ticket?.id ?? null,
       notes: ticket?.notes ?? null,
+      ticketCreatedAt: ticket?.created_at ?? null,
+      credentialStatus,
     };
   }
 
@@ -1166,11 +1170,15 @@ export const checkInitialRecordStatus = async (): Promise<RecordStatus> => {
       status: ticket?.status ?? null,
       ticketId: ticket?.id ?? null,
       notes: ticket?.notes ?? null,
+      ticketCreatedAt: ticket?.created_at ?? null,
+      credentialStatus,
     };
   }
 
   // Fallback
-  if (!ticket) return { needsInitialRecord: true, status: null };
+  if (!ticket) {
+    return { needsInitialRecord: true, status: null, credentialStatus: null, ticketCreatedAt: null };
+  }
 
   const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
   return {
@@ -1178,6 +1186,8 @@ export const checkInitialRecordStatus = async (): Promise<RecordStatus> => {
     status: ticket.status,
     ticketId: ticket.id,
     notes: ticket.notes ?? null,
+    ticketCreatedAt: ticket.created_at ?? null,
+    credentialStatus: null,
   };
 };
 

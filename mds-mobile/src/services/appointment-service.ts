@@ -98,6 +98,25 @@ export const getScheduleAvailability = async (schedulerId: string, date: string)
   return data.listAppointmentSchedule;
 };
 
+export const getMonthAvailability = async (schedulerId: string, startDate: string, endDate: string) => {
+  const data = await sendGraphQL(`
+    query ListMonthAvailability($schedulerId: ID!, $startDate: Date!, $endDate: Date!) {
+      listMonthAvailability(schedulerId: $schedulerId, startDate: $startDate, endDate: $endDate) {
+        id
+        slotId
+        morningAllowed
+        morningRegistered
+        morningPending
+        afternoonAllowed
+        afternoonRegistered
+        afternoonPending
+        scheduledDate
+      }
+    }
+  `, { schedulerId, startDate, endDate });
+  return data.listMonthAvailability;
+};
+
 export const submitAppointment = async (
   schedulerId: string,
   date: string,
