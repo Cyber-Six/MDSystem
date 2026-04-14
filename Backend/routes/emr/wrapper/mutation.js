@@ -50,9 +50,12 @@ const Mutation = {
              AND ec.id = $1;`,
           [recordId]
         );
-      }
 
-      await reloadCredentialStatus(_, { userId: args.userId, client, caller:"emr" }, { user, res }); // reload credential status after approval
+        // Only Approved should trigger credential re-evaluation.
+        // Running this on Revision/Rejected can incorrectly reactivate
+        // users that were intentionally marked Inactive.
+        await reloadCredentialStatus(_, { userId: args.userId, client, caller:"emr" }, { user, res });
+      }
       
       await client.query('COMMIT');
       logger.info(`User ID ${user.id} updated ticket ID ${recordId} to status ${newStatus}`);
