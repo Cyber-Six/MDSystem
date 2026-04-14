@@ -30,10 +30,18 @@ export const generatePrescription = async (patientId, data) => {
  * @returns {Blob}
  */
 export const downloadDocumentBlob = async (documentId) => {
-  const response = await axiosRequest.get(`/documents/${documentId}`, {
-    responseType: 'blob',
-  });
-  return response.data;
+  try {
+    const response = await axiosRequest.get(`/documents/generated/download/${documentId}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  } catch {
+    // Backward-compatible fallback for older route variants.
+    const fallbackResponse = await axiosRequest.get(`/documents/${documentId}`, {
+      responseType: 'blob',
+    });
+    return fallbackResponse.data;
+  }
 };
 
 /**

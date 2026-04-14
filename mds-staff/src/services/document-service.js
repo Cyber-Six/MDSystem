@@ -132,3 +132,28 @@ export const viewDocumentFile = async (fileId) => {
   });
   return response.data;
 };
+
+/**
+ * Get all generated documents (prescriptions, certificates, etc.) for a patient.
+ * @param {string|number} patientId - The patient ID
+ * @returns {Promise<Array>} Generated documents with metadata
+ */
+export const getGeneratedDocuments = async (patientId) => {
+  const response = await axiosRequest.get(`/documents/generated/patient/${patientId}`);
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || 'Failed to load generated documents');
+  }
+  return response.data.documents;
+};
+
+/**
+ * Download a generated document PDF as Blob.
+ * @param {string|number} documentId - The generated document ID
+ * @returns {Promise<Blob>}
+ */
+export const downloadGeneratedDocumentBlob = async (documentId) => {
+  const response = await axiosRequest.get(`/documents/generated/download/${documentId}`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
