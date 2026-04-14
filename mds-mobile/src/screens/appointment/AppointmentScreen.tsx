@@ -18,6 +18,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -144,6 +145,7 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
 
 export const AppointmentScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const navigation = useNavigation<any>();
 
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -568,6 +570,24 @@ export const AppointmentScreen: React.FC = () => {
           />
         }
       >
+        <View style={styles.topMenuRow}>
+          <TouchableOpacity
+            style={[
+              styles.menuButton,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+            onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+            accessibilityRole="button"
+            accessibilityLabel="Open sidebar"
+          >
+            <Ionicons
+              name="menu"
+              size={22}
+              color={isDark ? colors.neutral[100] : colors.secondary[900]}
+            />
+          </TouchableOpacity>
+        </View>
+
         {/* Header Banner */}
         <View style={[styles.headerBanner, { backgroundColor: colors.primary[500] }]}>
           <Ionicons name="calendar" size={28} color="#FFFFFF" style={styles.headerIcon} />
@@ -1232,6 +1252,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
+  topMenuRow: { marginBottom: 12 },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, fontSize: 14 },
 
