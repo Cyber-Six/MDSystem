@@ -85,6 +85,7 @@ function RecordList({ records, startIndex, onSelect, emptyMessage }) {
 
 export default function PatientAppointmentsTab({ patient }) {
   const patientId = patient?.id;
+  const patientIdentifier = patient?.identifier ? String(patient.identifier) : null;
 
   const [records,        setRecords]        = useState([]);
   const [currentStatus,  setCurrentStatus]  = useState(null);
@@ -95,8 +96,8 @@ export default function PatientAppointmentsTab({ patient }) {
   const [offset,         setOffset]         = useState(0);
   const [selectedRecord, setSelectedRecord] = useState(null);
 
-  const fetchRecords = useCallback(async (id, pageOffset, append = false) => {
-    const data = await getPatientRecords(id, pageOffset, PAGE_SIZE);
+  const fetchRecords = useCallback(async (id, pageOffset, append = false, identifier = null) => {
+    const data = await getPatientRecords(id, pageOffset, PAGE_SIZE, identifier);
     if (append) {
       setRecords((prev) => [...prev, ...(data || [])]);
     } else {
@@ -114,8 +115,8 @@ export default function PatientAppointmentsTab({ patient }) {
     setRecords([]);
     setOffset(0);
     Promise.all([
-      getPatientStatus(patientId),
-      fetchRecords(patientId, 0),
+      getPatientStatus(patientIdentifier ? null : patientId, patientIdentifier),
+      fetchRecords(patientIdentifier ? null : patientId, 0, false, patientIdentifier),
     ]).then(([status]) => {
       if (!cancelled) setCurrentStatus(status);
     }).catch((err) => {
@@ -124,17 +125,17 @@ export default function PatientAppointmentsTab({ patient }) {
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [patientId, fetchRecords]);
+  }, [patientId, patientIdentifier, fetchRecords]);
 
   const refreshRecords = useCallback(async () => {
     if (!patientId) return;
-    const data = await getPatientRecords(patientId, 0, PAGE_SIZE);
+    const data = await getPatientRecords(patientIdentifier ? null : patientId, 0, PAGE_SIZE, patientIdentifier);
     setRecords(data || []);
     setOffset(0);
     setHasMore((data?.length ?? 0) === PAGE_SIZE);
-    const status = await getPatientStatus(patientId);
+    const status = await getPatientStatus(patientIdentifier ? null : patientId, patientIdentifier);
     setCurrentStatus(status);
-  }, [patientId]);
+  }, [patientId, patientIdentifier]);
 
   const handleModalConfirm = async (pid, slotId) => {
     await respondToAppointment(pid, STATUS.SCHEDULED, undefined, slotId);
@@ -164,7 +165,7 @@ export default function PatientAppointmentsTab({ patient }) {
     const nextOffset = offset + PAGE_SIZE;
     setLoadingMore(true);
     try {
-      await fetchRecords(patientId, nextOffset, true);
+      await fetchRecords(patientIdentifier ? null : patientId, nextOffset, true, patientIdentifier);
       setOffset(nextOffset);
     } catch (err) {
       setError(err.message);
