@@ -70,6 +70,13 @@ const normalizePatientIdentifier = (patientIdentifier) => {
   return value.length > 0 ? value : null;
 };
 
+const buildPatientLookupVariables = (userId = null, patientIdentifier = null, offset = 0, limit = 20) => ({
+  userId: userId || null,
+  patientIdentifier: normalizePatientIdentifier(patientIdentifier),
+  offset,
+  limit,
+});
+
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 /**
@@ -218,6 +225,7 @@ export const getPatientStatus = async (userId = null, patientIdentifier = null) 
  * @returns {Promise<Array>} patientSlot[]
  */
 export const getPatientRecords = async (userId, offset = 0, limit = 20, patientIdentifier = null) => {
+  const variables = buildPatientLookupVariables(userId, patientIdentifier, offset, limit);
   const data = await sendGraphQL(`
     query GetUserAppointmentRecords($userId: ID, $patientIdentifier: String, $offset: Int, $limit: Int) {
       getUserAppointmentRecords(userId: $userId, patientIdentifier: $patientIdentifier, offset: $offset, limit: $limit) {
@@ -241,8 +249,50 @@ export const getPatientRecords = async (userId, offset = 0, limit = 20, patientI
         }
       }
     }
-  `, { userId: userId || null, patientIdentifier: normalizePatientIdentifier(patientIdentifier), offset, limit });
+  `, variables);
   return data.getUserAppointmentRecords;
+};
+
+/**
+ * Load patient appointment status and records in one request.
+ * @param {string|null} [userId]
+ * @param {string|number|null} [patientIdentifier]
+ * @param {number} [offset=0]
+ * @param {number} [limit=20]
+ * @returns {Promise<{status: string|null, records: Array}>}
+ */
+export const getPatientAppointmentSnapshot = async (userId = null, patientIdentifier = null, offset = 0, limit = 20) => {
+  const variables = buildPatientLookupVariables(userId, patientIdentifier, offset, limit);
+  const data = await sendGraphQL(`
+    query GetPatientAppointmentSnapshot($userId: ID, $patientIdentifier: String, $offset: Int, $limit: Int) {
+      status: getUserAppointmentStatus(userId: $userId, patientIdentifier: $patientIdentifier)
+      records: getUserAppointmentRecords(userId: $userId, patientIdentifier: $patientIdentifier, offset: $offset, limit: $limit) {
+        id
+        patientId
+        patientIdentifier
+        patientName
+        slotEntityId
+        status
+        session
+        approvedBy
+        purpose
+        notes
+        arrived_at
+        created_at
+        requirements {
+          id
+          scheduleRequirementId
+          filename
+          created_at
+        }
+      }
+    }
+  `, variables);
+
+  return {
+    status: data.status || null,
+    records: data.records || [],
+  };
 };
 
 /**

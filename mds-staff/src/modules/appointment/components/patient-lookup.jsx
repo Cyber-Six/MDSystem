@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getPatientStatus, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
+import { getPatientAppointmentSnapshot, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
 import { searchPatients, formatPatientName, getProfileLabel } from '../../../services/patient-search-service';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import AppointmentDetailModal from './appointment-detail-modal';
@@ -111,11 +111,11 @@ const PatientLookup = () => {
         throw new Error('Unable to identify selected patient.');
       }
 
-      const [status] = await Promise.all([
-        getPatientStatus(lookupUserId, lookupIdentifier),
-        fetchRecords(lookupUserId, 0, false, lookupIdentifier),
-      ]);
-      setCurrentStatus(status);
+      const snapshot = await getPatientAppointmentSnapshot(lookupUserId, lookupIdentifier, 0, PAGE_SIZE);
+      setCurrentStatus(snapshot.status);
+      setRecords(snapshot.records);
+      setHasMore(snapshot.records.length === PAGE_SIZE);
+      setOffset(0);
       setResolvedUserId(internalId);
       setResolvedPatientIdentifier(lookupIdentifier);
     } catch (err) {
@@ -141,10 +141,11 @@ const PatientLookup = () => {
   const refreshRecords = useCallback(async () => {
     if (!resolvedUserId && !resolvedPatientIdentifier) return;
     const lookupUserId = resolvedUserId || null;
-    const data = await getPatientRecords(lookupUserId, 0, PAGE_SIZE, resolvedPatientIdentifier);
-    setRecords(data || []);
+    const snapshot = await getPatientAppointmentSnapshot(lookupUserId, resolvedPatientIdentifier, 0, PAGE_SIZE);
+    setRecords(snapshot.records);
     setOffset(0);
-    setHasMore((data?.length ?? 0) === PAGE_SIZE);
+    setHasMore(snapshot.records.length === PAGE_SIZE);
+    setCurrentStatus(snapshot.status);
   }, [resolvedUserId, resolvedPatientIdentifier]);
 
   const handleModalConfirm = async (patientId, slotId) => {

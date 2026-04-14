@@ -29,7 +29,7 @@ async function getPatientIdFromSlotIdOrThrow(slotId, res) {
   }
 }
 
-async function resolvePatientId({ userId, patientIdentifier, staffBranch, res }) {
+async function resolvePatientId({ userId, patientIdentifier, getStaffBranch, res }) {
   if (hasValue(userId)) {
     return String(userId);
   }
@@ -38,6 +38,7 @@ async function resolvePatientId({ userId, patientIdentifier, staffBranch, res })
     throwGraphQLError(res).message("Either userId or patientIdentifier is required").status(400).throw();
   }
 
+  const staffBranch = await getStaffBranch();
   const users = await getUserIDViaIdentifier(String(patientIdentifier).trim(), staffBranch);
   if (!users || users.length === 0) {
     throwGraphQLError(res).message("No user found for the provided identifier").status(404).throw();
@@ -58,8 +59,12 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 const Query = {
   getUserAppointmentStatus: async (_, { userId, patientIdentifier }, { user, res }) => {
-    const staffBranch = await permit.getStaffBranch(user.id);
-    const resolvedUserId = await resolvePatientId({ userId, patientIdentifier, staffBranch, res });
+    const resolvedUserId = await resolvePatientId({
+      userId,
+      patientIdentifier,
+      getStaffBranch: () => permit.getStaffBranch(user.id),
+      res,
+    });
     const permitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_view_records, resolvedUserId, false);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -68,8 +73,12 @@ const Query = {
   },
 
   getUserAppointmentRecords: async (_, { userId, patientIdentifier, offset, limit }, { user, res }) => {
-    const staffBranch = await permit.getStaffBranch(user.id);
-    const resolvedUserId = await resolvePatientId({ userId, patientIdentifier, staffBranch, res });
+    const resolvedUserId = await resolvePatientId({
+      userId,
+      patientIdentifier,
+      getStaffBranch: () => permit.getStaffBranch(user.id),
+      res,
+    });
     const permitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_view_records, resolvedUserId, false);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -173,11 +182,14 @@ const Query = {
 
 const Mutation = {
   respondAppointment: async (_, { userId, patientIdentifier, slotId, status, notes }, { user, res }) => {
-    const staffBranch = await permit.getStaffBranch(user.id);
-
     let resolvedUserId = null;
     if (hasValue(userId) || hasValue(patientIdentifier)) {
-      resolvedUserId = await resolvePatientId({ userId, patientIdentifier, staffBranch, res });
+      resolvedUserId = await resolvePatientId({
+        userId,
+        patientIdentifier,
+        getStaffBranch: () => permit.getStaffBranch(user.id),
+        res,
+      });
     }
 
     const slotPatientId = slotId ? await getPatientIdFromSlotIdOrThrow(slotId, res) : null;
