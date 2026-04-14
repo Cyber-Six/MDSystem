@@ -107,7 +107,7 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
   if (cleanedSex) {
     const normalizedSex = normalizeSexFilterValue(cleanedSex);
     if (normalizedSex) {
-      clause += ` AND LOWER(up.sex::"usersSex") = LOWER($${startIdx})`;
+      clause += ` AND LOWER(up.sex::text) = LOWER($${startIdx})`;
       params.push(normalizedSex);
       startIdx++;
     }
@@ -819,7 +819,7 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
   // Trim and validate sex input
   const cleanedSex = options.sex ? String(options.sex).trim() : '';
   const normalizedSex = normalizeSexFilterValue(cleanedSex);
-  const sexFilter = normalizedSex ? `AND LOWER(up.sex::"usersSex") = LOWER($${paramIndex})` : '';
+  const sexFilter = normalizedSex ? `AND LOWER(up.sex::text) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
     paramIndex++;
@@ -871,7 +871,7 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
   // Trim and validate sex input
   const cleanedSex = options.sex ? String(options.sex).trim() : '';
   const normalizedSex = normalizeSexFilterValue(cleanedSex);
-  const sexFilter = normalizedSex ? `AND LOWER(up.sex::"usersSex") = LOWER($${paramIndex})` : '';
+  const sexFilter = normalizedSex ? `AND LOWER(up.sex::text) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
     paramIndex++;
@@ -925,7 +925,7 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
   // Trim and validate sex input
   const cleanedSex = options.sex ? String(options.sex).trim() : '';
   const normalizedSex = normalizeSexFilterValue(cleanedSex);
-  const sexFilter = normalizedSex ? `AND LOWER(up.sex::"usersSex") = LOWER($${paramIndex})` : '';
+  const sexFilter = normalizedSex ? `AND LOWER(up.sex::text) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
     paramIndex++;
