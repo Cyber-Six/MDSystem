@@ -22,6 +22,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const [activeNotifTab, setActiveNotifTab] = useState('general');
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = usePatientNotifications();
   const { settings, updateSettings } = useSettings();
+  const displayUnreadCount = settings.showBadges ? unreadCount : 0;
 
   const handleNotifClick = (notif) => {
     markAsRead(notif.id);
@@ -134,9 +135,9 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
               <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              {unreadCount > 0 && (
+              {displayUnreadCount > 0 && (
                 <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {unreadCount}
+                  {displayUnreadCount}
                 </span>
               )}
             </button>
@@ -147,7 +148,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-gray-200 dark:border-neutral-700 flex items-center justify-between bg-gray-50 dark:bg-neutral-800/80 shrink-0">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
-                  {unreadCount > 0 && (
+                  {displayUnreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
                       className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
@@ -192,9 +193,9 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                     </svg>
                     General
-                    {unreadCount > 0 && (
+                    {displayUnreadCount > 0 && (
                       <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-primary-500 text-white leading-none">
-                        {unreadCount}
+                        {displayUnreadCount}
                       </span>
                     )}
                   </button>

@@ -152,6 +152,7 @@ const DEFAULT_SETTINGS = {
 
 const SETTINGS_STORAGE_PREFIX = 'staff_settings_';
 const THEME_SWITCHING_CLASS = 'theme-switching';
+const THEME_SWITCH_ANIMATION_MS = 260;
 
 // SECURITY: Only allow alphanumeric, underscore, and hyphen in userId to prevent
 // key injection / namespace pollution in localStorage.
@@ -425,21 +426,17 @@ export function SettingsProvider({ children }) {
     if (typeof window === 'undefined') return undefined;
 
     const root = document.documentElement;
-    let rafOne = 0;
-    let rafTwo = 0;
+    let cleanupTimer = 0;
 
     root.classList.add(THEME_SWITCHING_CLASS);
     root.classList.toggle('dark', isDarkMode);
 
-    rafOne = window.requestAnimationFrame(() => {
-      rafTwo = window.requestAnimationFrame(() => {
-        root.classList.remove(THEME_SWITCHING_CLASS);
-      });
-    });
+    cleanupTimer = window.setTimeout(() => {
+      root.classList.remove(THEME_SWITCHING_CLASS);
+    }, THEME_SWITCH_ANIMATION_MS);
 
     return () => {
-      if (rafOne) window.cancelAnimationFrame(rafOne);
-      if (rafTwo) window.cancelAnimationFrame(rafTwo);
+      if (cleanupTimer) window.clearTimeout(cleanupTimer);
       root.classList.remove(THEME_SWITCHING_CLASS);
     };
   }, [isDarkMode]);

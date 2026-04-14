@@ -537,13 +537,24 @@
    (scrollbar, theme transition — not overrideable by Tailwind)
    ================================ */
 
-/* Keep theme toggles in sync by disabling transitions during the switch frame. */
+/* Animate theme toggles in one synchronized pass across the UI. */
 html.theme-switching,
 html.theme-switching *,
 html.theme-switching *::before,
 html.theme-switching *::after {
-  transition: none !important;
-  animation: none !important;
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity;
+  transition-duration: 240ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-switching,
+  html.theme-switching *,
+  html.theme-switching *::before,
+  html.theme-switching *::after {
+    transition-duration: 0ms !important;
+    animation: none !important;
+  }
 }
 
 /* Scrollbar Styling */

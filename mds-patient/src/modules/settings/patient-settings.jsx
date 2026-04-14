@@ -125,6 +125,7 @@ const FONT_SIZE_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'large', label: 'Large' },
 ];
+const THEME_SWITCH_ANIMATION_MS = 260;
 
 /**
  * Patient Settings Page
@@ -152,29 +153,31 @@ const PatientSettings = () => {
   // Live theme preview — applies draft.themeMode immediately without saving.
   // On unmount (navigating away without saving) the DOM is restored to the saved theme.
   useEffect(() => {
-    let rafOne = 0;
-    let rafTwo = 0;
+    let cleanupTimer = 0;
 
     const applyTheme = (mode) => {
       const root = document.documentElement;
       const nextIsDark = mode === 'dark'
         || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
+
       root.classList.add('theme-switching');
       root.classList.toggle('dark', nextIsDark);
 
-      rafOne = window.requestAnimationFrame(() => {
-        rafTwo = window.requestAnimationFrame(() => {
-          root.classList.remove('theme-switching');
-        });
-      });
+      cleanupTimer = window.setTimeout(() => {
+        root.classList.remove('theme-switching');
+      }, THEME_SWITCH_ANIMATION_MS);
     };
 
     applyTheme(draft.themeMode);
 
     return () => {
-      if (rafOne) window.cancelAnimationFrame(rafOne);
-      if (rafTwo) window.cancelAnimationFrame(rafTwo);
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
       applyTheme(savedThemeModeRef.current);
     };
   }, [draft.themeMode]);
