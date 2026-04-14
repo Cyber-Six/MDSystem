@@ -216,6 +216,14 @@ const PatientAppointment = () => {
   };
 
   const handleSubmit = async () => {
+    const purposeRequired = selectedScheduler?.purposeRequired ?? false;
+    const normalizedPurpose = (purpose || '').trim();
+
+    if (purposeRequired && !normalizedPurpose) {
+      setError('Purpose / reason for visit is required for this appointment type.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -223,7 +231,7 @@ const PatientAppointment = () => {
         scheduleRequirementId: r.id,
         filename: uploadedFiles[r.id]?.fileId || '',
       }));
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqPayload, purpose);
+      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqPayload, normalizedPurpose);
       setSuccessMessage('Your appointment has been submitted successfully!');
       await loadStatus();
       setStep(0);

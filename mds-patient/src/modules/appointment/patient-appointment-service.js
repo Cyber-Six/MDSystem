@@ -76,6 +76,7 @@ export const listOpenAppointments = async (offset = 0, limit = 20) => {
         morningAllowed
         afternoonAllowed
         notes
+        purposeRequired
         isActive
         containsCustomDates
         whitelistOnly
@@ -195,6 +196,7 @@ export const getMonthAvailability = async (schedulerId, startDate, endDate) => {
  * @returns {Promise<object>} patientSlot
  */
 export const submitAppointment = async (schedulerId, date, session, requirements = [], purpose) => {
+  const normalizedPurpose = (purpose || '').trim();
   const data = await sendGraphQL(`
     mutation SubmitAppointment(
       $schedulerId: ID!,
@@ -220,7 +222,7 @@ export const submitAppointment = async (schedulerId, date, session, requirements
         created_at
       }
     }
-  `, { schedulerId, date, session, requirements, purpose: purpose || null });
+  `, { schedulerId, date, session, requirements, purpose: normalizedPurpose || null });
   return data.submitAppointment;
 };
 
