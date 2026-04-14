@@ -2,8 +2,13 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
 
-const Sidebar = ({ isOpen, onClose, isInactive = false }) => {
+const Sidebar = ({ isOpen, onClose, isInactive = false, compact = false }) => {
   const location = useLocation();
+  const isExpanded = isOpen || !compact;
+  const desktopWidthClass = compact ? 'w-24' : 'w-72';
+  const sidebarStateClass = isOpen
+    ? 'translate-x-0 w-72'
+    : `-translate-x-full ${desktopWidthClass} md:translate-x-0`;
 
   const handleLogoClick = () => {
     if (typeof onClose === 'function') onClose();
@@ -65,9 +70,7 @@ const Sidebar = ({ isOpen, onClose, isInactive = false }) => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 bg-primary-500 dark:bg-neutral-900 transform transition-transform duration-300 ease-in-out shadow-2xl ${
-          isOpen ? 'translate-x-0 w-72' : '-translate-x-full w-24 md:translate-x-0'
-        }`}
+        className={`fixed inset-y-0 left-0 z-40 bg-primary-500 dark:bg-neutral-900 transform transition-transform duration-300 ease-in-out shadow-2xl ${sidebarStateClass}`}
       >
         <div className="flex flex-col h-full">
           {/* Logo Section */}
@@ -91,7 +94,7 @@ const Sidebar = ({ isOpen, onClose, isInactive = false }) => {
               const isDisabled = isInactive && item.path !== '/record-update';
 
               const itemClassName = `flex items-center transition-all duration-200 ${
-                isOpen
+                isExpanded
                   ? 'flex-row space-x-4 py-4 px-6'
                   : 'flex-col justify-center space-y-1.5 py-4'
               } ${
@@ -105,7 +108,7 @@ const Sidebar = ({ isOpen, onClose, isInactive = false }) => {
               const itemContent = (
                 <>
                   <span>{icons[item.icon]}</span>
-                  <span className={`font-medium leading-tight ${isOpen ? 'text-base' : 'text-[11px] text-center'}`}>
+                  <span className={`font-medium leading-tight ${isExpanded ? 'text-base' : 'text-[11px] text-center'}`}>
                     {item.label}
                   </span>
                 </>

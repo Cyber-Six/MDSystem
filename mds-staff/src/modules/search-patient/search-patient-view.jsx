@@ -5,6 +5,7 @@ import { usePermissions } from '../../context/permissions-context';
 import { useBanner } from '../../context/use-banner';
 import SearchBar from './components/search-bar';
 import SearchResultsList from './components/search-results-list';
+import PatientInitialBadge from './components/patient-initial-badge';
 import { canExpandPatientDetails, SUPERIOR_DETAILS_DENIED_CUE } from './superior-access';
 
 const PatientRecordView = lazy(() => import('./patient-record-view.jsx'));
@@ -216,12 +217,7 @@ export default function SearchPatientView() {
               className="flex items-center gap-1.5 min-w-0 flex-1"
               title={`${tab.patientName} - ${tab.label}`}
             >
-              <span
-                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                style={{ background: '#C9A01E' }}
-              >
-                {tab.patientName.charAt(0)}
-              </span>
+              <PatientInitialBadge initials={tab.patientName.charAt(0)} size="sm" />
               <span className="truncate font-medium text-xs">
                 {tab.patientName}
               </span>

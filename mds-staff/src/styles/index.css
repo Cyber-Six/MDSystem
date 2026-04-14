@@ -537,17 +537,24 @@
    (scrollbar, theme transition — not overrideable by Tailwind)
    ================================ */
 
-/* Smooth theme transition to prevent flashbang effect */
-html,
-html body,
-html nav,
-html aside,
-html header,
-html footer,
-html main,
-html section,
-html div {
-  transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+/* Animate theme toggles in one synchronized pass across the UI. */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity;
+  transition-duration: 240ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-switching,
+  html.theme-switching *,
+  html.theme-switching *::before,
+  html.theme-switching *::after {
+    transition-duration: 0ms !important;
+    animation: none !important;
+  }
 }
 
 /* Scrollbar Styling */

@@ -5,6 +5,7 @@ import { GQL_FULL_RECORD, GQL_PERSONAL_PROFILE, MOCK_PATIENT_RECORDS, STATUS_BAN
 import * as consultationService from './consultation-service';
 import { ENUM_TO_CODE } from './components/tooth-chart-constants';
 import { fetchPatientMedicineRequests } from '../medical-inventory/medicine-request-service';
+import PatientInitialBadge from './components/patient-initial-badge';
 import { SUPERIOR_DETAILS_DENIED_CUE } from './superior-access';
 
 const GQL_PATIENT_ACCESS_PROBE = `
@@ -1027,12 +1028,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-12 h-12 rounded-full text-white font-semibold flex items-center justify-center shrink-0"
-              style={{ background: '#C9A01E' }}
-            >
-              {initials}
-            </div>
+            <PatientInitialBadge initials={initials} size="lg" />
             <div className="min-w-0 flex flex-col gap-0.5">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
@@ -1091,7 +1087,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   aria-controls={`tabpanel-${tab.id}`}
                   className={`px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 whitespace-nowrap ${
                     activeTab === tab.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white shadow-sm'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 shadow-sm'
                       : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1130,7 +1126,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setPersonalSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     personalSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1154,7 +1150,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setMedicalSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     medicalSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1178,7 +1174,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setDentalSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     dentalSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1201,7 +1197,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setConsultationSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     consultationSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
