@@ -702,6 +702,12 @@ router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, 
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
+    }
+
     // Find the current non-archived submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
@@ -786,7 +792,7 @@ router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, 
 router.get('/templates', jwtProtect('medical'), async (req, res) => {
   try {
 
-    const { permitted } = isMedicalPermitted(req.user.id, permissions.document_allow_generate);
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_generate);
     if (!permitted) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view document templates.' });
     }
@@ -808,7 +814,7 @@ router.get('/templates/:docType/sample', jwtProtect('medical'), async (req, res)
     const { docType } = req.params;
     const sampleData = docGen.getSampleData(docType);
 
-    const { permitted } = isMedicalPermitted(req.user.id, permissions.document_allow_generate);
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_generate);
     if (!permitted) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view document templates.' });
     }
@@ -837,7 +843,7 @@ router.post('/:docType/preview', jwtProtect('medical'), async (req, res) => {
     const { docType } = req.params;
     const { data } = req.body;
     
-    const { permitted } = isMedicalPermitted(req.user.id, permissions.document_allow_generate);
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_generate);
     if (!permitted) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to generate documents.' });
     }
@@ -876,7 +882,7 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
     const { docType } = req.params;
     const { patientId, data } = req.body;
 
-    const isPermitted = isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_generate, patientId);
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_generate, patientId);
     if (!isPermitted) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to generate documents for this patient.' });
     }
@@ -1067,7 +1073,7 @@ router.get('/:docType/patients', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType } = req.params;
 
-    const { permitted } = isMedicalPermitted(req.user.id, permissions.document_allow_view);
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_view);
     if (!permitted) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view documents.' });
     }
@@ -1108,7 +1114,7 @@ router.get('/:docType', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType } = req.params;
 
-    const { permitted } = isMedicalPermitted(req.user.id, permissions.document_allow_view);
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_view);
     if (!permitted) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view documents.' });
     }
