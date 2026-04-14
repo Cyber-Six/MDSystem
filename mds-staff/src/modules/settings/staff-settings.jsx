@@ -148,6 +148,7 @@ const FONT_SIZE_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'large', label: 'Large' },
 ];
+const THEME_SWITCH_ANIMATION_MS = 260;
 
 // Deep equality checker — handles nested objects and arrays reliably.
 const deepEqual = (a, b) => {
@@ -189,13 +190,10 @@ const StaffSettings = () => {
   const [draft, setDraft] = useState(() => structuredClone(savedSettings));
   const [saved, setSaved] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
-  const [showSaveBarAnim, setShowSaveBarAnim] = useState(false);
   // Track if user has interacted with any control
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   // 'back' = user hit browser back; null = user clicked Cancel in save bar
   const pendingActionRef = useRef(null);
-  const scrollTimeoutRef = useRef(null);
 
   // Sync draft when savedSettings change externally (e.g. another tab)
   useEffect(() => {
@@ -220,44 +218,37 @@ const StaffSettings = () => {
   // Live theme preview — applies draft.themeMode immediately without saving.
   // On unmount (navigating away without saving) the DOM is restored to the saved theme.
   useEffect(() => {
-    let rafOne = 0;
-    let rafTwo = 0;
+    let cleanupTimer = 0;
 
     const applyTheme = (mode) => {
       const root = document.documentElement;
       const nextIsDark = mode === 'dark'
         || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
+
       root.classList.add('theme-switching');
       root.classList.toggle('dark', nextIsDark);
 
-      rafOne = window.requestAnimationFrame(() => {
-        rafTwo = window.requestAnimationFrame(() => {
-          root.classList.remove('theme-switching');
-        });
-      });
+      cleanupTimer = window.setTimeout(() => {
+        root.classList.remove('theme-switching');
+      }, THEME_SWITCH_ANIMATION_MS);
     };
 
     applyTheme(draft.themeMode);
 
     return () => {
-      if (rafOne) window.cancelAnimationFrame(rafOne);
-      if (rafTwo) window.cancelAnimationFrame(rafTwo);
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
       applyTheme(savedThemeModeRef.current);
     };
   }, [draft.themeMode]);
 
   const hasChangesRef = useRef(hasChanges);
   useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
-  
-  // Control save bar animation — only show when there are real changes
-  useEffect(() => {
-    if (hasChanges && !isScrolling) {
-      setShowSaveBarAnim(true);
-    } else {
-      setShowSaveBarAnim(false);
-    }
-  }, [hasChanges, isScrolling]);
 
   // ── Intercept browser back button when there are unsaved changes ──
   const guardPushedRef = useRef(false);
@@ -284,26 +275,6 @@ const StaffSettings = () => {
 
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
-
-  // Hide the save bar while actively scrolling to reduce visual obstruction.
-  useEffect(() => {
-    const onScroll = () => {
-      if (!hasChangesRef.current) return;
-      setIsScrolling(true);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-      scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 180);
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
   }, []);
 
   // ── Draft updaters ──
@@ -427,10 +398,10 @@ const StaffSettings = () => {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
 
-  const showSaveBar = hasChanges && !isScrolling;
+  const showSaveBar = hasChanges;
 
   return (
-    <div className={`max-w-2xl mx-auto space-y-3 transition-all duration-200 ${showSaveBarAnim ? 'pb-24' : 'pb-4'}`}>
+    <div className={`max-w-2xl mx-auto space-y-3 transition-all duration-200 ${hasChanges ? 'pb-24' : 'pb-4'}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-0.5">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
