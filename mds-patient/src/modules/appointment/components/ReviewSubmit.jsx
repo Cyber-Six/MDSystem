@@ -2,8 +2,9 @@ import React from 'react';
 import { Spinner, BackButton } from './shared';
 import { SESSION } from '../patient-appointment-service';
 
-const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, uploadedFiles, purpose, onPurposeChange, submitting, onSubmit, onBack }) => {
+const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, uploadedFiles, purpose, onPurposeChange, showPurposeError, submitting, onSubmit, onBack }) => {
   const purposeRequired = scheduler?.purposeRequired ?? false;
+  const purposeMissing = purposeRequired && !(purpose || '').trim();
   return (
   <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
     <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-6">Review &amp; Submit</h2>
@@ -60,7 +61,7 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
           ? 'Briefly describe the reason for your appointment (Required)'
           : 'Briefly describe the reason for your appointment (optional)'}
         className={`w-full px-3 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none ${
-          purposeRequired && !(purpose || '').trim()
+          showPurposeError && purposeMissing
             ? 'border-red-400 dark:border-red-600'
             : 'border-neutral-300 dark:border-neutral-600'
         }`}
@@ -72,7 +73,7 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
       <BackButton onClick={onBack} />
       <button
         onClick={onSubmit}
-        disabled={submitting || (purposeRequired && !(purpose || '').trim())}
+        disabled={submitting}
         className="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
       >
         {submitting && <Spinner />}
