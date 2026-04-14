@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import RoleTemplates from './components/role-templates';
 import StaffAccounts from './components/staff-accounts';
 import AdminTransfer from './components/admin-transfer';
 import UserManagement from './components/user-management';
 import { usePermissions } from '../../context/permissions-context';
+import { readPersistedViewState, writePersistedViewState } from '../../utils/persistent-view-state';
+
+const ROLE_MANAGEMENT_MODULE_STORAGE_KEY = 'mds_staff_role_management_active_module';
+const ROLE_MANAGEMENT_SECTION_STORAGE_KEY = 'mds_staff_role_management_active_section';
+const ROLE_MANAGEMENT_MODULE_KEYS = ['roles', 'users'];
+const ROLE_MANAGEMENT_SECTION_KEYS = ['staff', 'roles', 'transfer'];
+const isRoleManagementModule = (value) => ROLE_MANAGEMENT_MODULE_KEYS.includes(value);
+const isRoleManagementSection = (value) => ROLE_MANAGEMENT_SECTION_KEYS.includes(value);
 
 /**
  * Role Management Page
@@ -13,9 +21,23 @@ import { usePermissions } from '../../context/permissions-context';
  * - Admin Transfer: transfer admin privileges to another staff member
  */
 const RoleManagementPage = () => {
-  const [activeModule, setActiveModule] = useState('roles');
-  const [activeSection, setActiveSection] = useState('staff');
+  const [activeModule, setActiveModule] = useState(() => (
+    readPersistedViewState(ROLE_MANAGEMENT_MODULE_STORAGE_KEY, 'roles', isRoleManagementModule)
+  ));
+  const [activeSection, setActiveSection] = useState(() => (
+    readPersistedViewState(ROLE_MANAGEMENT_SECTION_STORAGE_KEY, 'staff', isRoleManagementSection)
+  ));
   const { refetch: refetchPermissions } = usePermissions();
+
+  useEffect(() => {
+    if (!isRoleManagementModule(activeModule)) return;
+    writePersistedViewState(ROLE_MANAGEMENT_MODULE_STORAGE_KEY, activeModule);
+  }, [activeModule]);
+
+  useEffect(() => {
+    if (!isRoleManagementSection(activeSection)) return;
+    writePersistedViewState(ROLE_MANAGEMENT_SECTION_STORAGE_KEY, activeSection);
+  }, [activeSection]);
 
   const modules = [
     { id: 'roles', label: 'Role Management', icon: 'shield' },
