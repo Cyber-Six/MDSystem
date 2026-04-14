@@ -302,7 +302,14 @@ export const AppointmentScreen: React.FC = () => {
         scheduleRequirementId: r.scheduleRequirementId,
         filename: r.filename,
       }));
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqs, normalizedPurpose);
+      await submitAppointment(
+        selectedScheduler.id,
+        selectedDate,
+        selectedSession,
+        reqs,
+        normalizedPurpose,
+        purposeRequired
+      );
       setSuccessMessage('Your appointment has been submitted successfully!');
       setUploadedRequirements([]);
       setPurpose('');

@@ -103,9 +103,14 @@ export const submitAppointment = async (
   date: string,
   session: string,
   requirements: Array<{ scheduleRequirementId: string; filename: string }> = [],
-  purpose?: string
+  purpose?: string,
+  purposeRequired = false
 ) => {
   const normalizedPurpose = (purpose || '').trim();
+  if (purposeRequired && !normalizedPurpose) {
+    throw new Error('Purpose / reason for visit is required for this appointment type.');
+  }
+
   const data = await sendGraphQL(`
     mutation SubmitAppointment(
       $schedulerId: ID!, $date: Date!, $session: SCHEDULE_SESSION!,
