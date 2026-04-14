@@ -62,14 +62,15 @@ function branchFilter(branch, alias = 'up', paramIndex = 3) {
 
 /**
  * Normalize sex input to supported analytics filter values.
- * Returns empty string when the value is not a supported filter option.
+ * Returns null when the value is not a supported filter option.
  */
 function normalizeSexFilterValue(value) {
-  if (typeof value !== 'string') return '';
+  if (typeof value !== 'string') return null;
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'male' || normalized === 'm') return 'Male';
-  if (normalized === 'female' || normalized === 'f') return 'Female';
-  return '';
+  if (!normalized || normalized === 'all') return null;
+  if (normalized === 'male') return 'male';
+  if (normalized === 'female') return 'female';
+  return null;
 }
 
 /**
@@ -106,9 +107,7 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
   if (cleanedSex) {
     const normalizedSex = normalizeSexFilterValue(cleanedSex);
     if (normalizedSex) {
-      clause += ` AND LOWER(COALESCE((
-        SELECT up_sex.sex FROM "UsersPersonal" up_sex WHERE up_sex.id = ${patientIdExpr}
-      ), '')) = LOWER($${startIdx})`;
+      clause += ` AND LOWER(up.sex::text) = LOWER($${startIdx})`;
       params.push(normalizedSex);
       startIdx++;
     }
@@ -156,6 +155,16 @@ async function consultationsByType(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const baseParams = [startDate, endDate, ...bf.params];
   const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+  logger.error(`
+    SELECT c.type, COUNT(*) as count
+    FROM "Consultation" c
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
+    GROUP BY c.type ORDER BY count DESC`);
+
+  logger.error('Query params:', [...baseParams, ...pf.params]);
+  
   const result = await db.query(`
     SELECT c.type, COUNT(*) as count
     FROM "Consultation" c
