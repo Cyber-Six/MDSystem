@@ -30,6 +30,7 @@ import {
   listRequirements,
   listCustomDates,
   getScheduleAvailability,
+  getMonthAvailability,
   submitAppointment,
   cancelAppointment,
   stageFile,
@@ -161,6 +162,7 @@ export const AppointmentScreen: React.FC = () => {
   const [availability, setAvailability] = useState<any>(null);
   const [selectedSession, setSelectedSession] = useState('');
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [monthAvailability, setMonthAvailability] = useState<Record<string, any>>({});
 
   // Step 2 - requirements
   const [requirements, setRequirements] = useState<any[]>([]);
@@ -169,6 +171,7 @@ export const AppointmentScreen: React.FC = () => {
   >([]);
   const [pickingForReq, setPickingForReq] = useState<string | null>(null);
   const [purpose, setPurpose] = useState('');
+  const [showPurposeRequiredError, setShowPurposeRequiredError] = useState(false);
 
   // Submission
   const [submitting, setSubmitting] = useState(false);
@@ -193,6 +196,15 @@ export const AppointmentScreen: React.FC = () => {
   })();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
+
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const maxDateObj = new Date(maxDate + 'T00:00:00');
+  const maxMonth = maxDateObj.getMonth();
+  const maxYear = maxDateObj.getFullYear();
+  const spansNextMonth = maxYear > currentYear || maxMonth > currentMonth;
+  const canGoPrev = viewYear > currentYear || viewMonth > currentMonth;
+  const canGoNext = spansNextMonth && (viewYear < maxYear || viewMonth < maxMonth);
 
   // ── Load status ────────────────────────────────────────────────────────────
 
@@ -239,6 +251,10 @@ export const AppointmentScreen: React.FC = () => {
     setSelectedDate('');
     setSelectedSession('');
     setAvailability(null);
+    setMonthAvailability({});
+    setShowPurposeRequiredError(false);
+    setViewYear(currentYear);
+    setViewMonth(currentMonth);
     // Clear any previously staged requirement files when changing scheduler
     for (const r of uploadedRequirements) {
       unstageFile(r.filename).catch(() => {});
@@ -258,6 +274,38 @@ export const AppointmentScreen: React.FC = () => {
     }
     setStep(1);
   };
+
+  const handleMonthChange = useCallback(async (startDate: string, endDate: string) => {
+    if (!selectedScheduler?.id) return;
+    try {
+      const data = await getMonthAvailability(selectedScheduler.id, startDate, endDate);
+      const lookup: Record<string, any> = {};
+      for (const entry of data || []) {
+        let dateStr;
+        const s = String(entry.scheduledDate || '');
+        if (!s) continue;
+        if (!s.includes('T') && !s.endsWith('Z')) {
+          dateStr = s;
+        } else {
+          const d = new Date(s);
+          dateStr = isNaN(d.getTime())
+            ? s.split('T')[0]
+            : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        lookup[dateStr] = entry;
+      }
+      setMonthAvailability(lookup);
+    } catch {
+      setMonthAvailability({});
+    }
+  }, [selectedScheduler?.id]);
+
+  useEffect(() => {
+    if (!selectedScheduler?.id) return;
+    const startDate = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`;
+    const endDate = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(new Date(viewYear, viewMonth + 1, 0).getDate()).padStart(2, '0')}`;
+    handleMonthChange(startDate, endDate);
+  }, [selectedScheduler?.id, viewYear, viewMonth, handleMonthChange]);
 
   const handleDateChange = async (dateStr: string) => {
     setSelectedDate(dateStr);
@@ -291,10 +339,12 @@ export const AppointmentScreen: React.FC = () => {
     const normalizedPurpose = purpose.trim();
 
     if (purposeRequired && !normalizedPurpose) {
+      setShowPurposeRequiredError(true);
       setError('Purpose / reason for visit is required for this appointment type.');
       return;
     }
 
+    setShowPurposeRequiredError(false);
     setSubmitting(true);
     setError(null);
     try {
@@ -302,16 +352,31 @@ export const AppointmentScreen: React.FC = () => {
         scheduleRequirementId: r.scheduleRequirementId,
         filename: r.filename,
       }));
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqs, normalizedPurpose);
+      await submitAppointment(
+        selectedScheduler.id,
+        selectedDate,
+        selectedSession,
+        reqs,
+        normalizedPurpose,
+        purposeRequired
+      );
       setSuccessMessage('Your appointment has been submitted successfully!');
       setUploadedRequirements([]);
       setPurpose('');
+      setShowPurposeRequiredError(false);
       await loadStatus();
       setStep(0);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePurposeChange = (value: string) => {
+    setPurpose(value);
+    if (showPurposeRequiredError && value.trim()) {
+      setShowPurposeRequiredError(false);
     }
   };
 
@@ -412,6 +477,26 @@ export const AppointmentScreen: React.FC = () => {
     return isScheduleMatch(dateStr);
   };
 
+  const getDayStatus = (dateStr: string): 'available' | 'partial' | 'full' | 'unavailable' => {
+    if (!isDateAllowed(dateStr)) return 'unavailable';
+
+    const apiData = monthAvailability[dateStr];
+    if (!apiData) return 'available';
+
+    const totalAllowed = (apiData.morningAllowed || 0) + (apiData.afternoonAllowed || 0);
+    if (totalAllowed === 0) return 'unavailable';
+
+    const totalBooked =
+      (apiData.morningRegistered || 0) +
+      (apiData.morningPending || 0) +
+      (apiData.afternoonRegistered || 0) +
+      (apiData.afternoonPending || 0);
+
+    if (totalBooked >= totalAllowed) return 'full';
+    if (totalBooked / totalAllowed >= 0.7) return 'partial';
+    return 'available';
+  };
+
   const fmtDate = (y: number, m: number, d: number) =>
     `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
@@ -445,6 +530,7 @@ export const AppointmentScreen: React.FC = () => {
 
   const purposeRequired = selectedScheduler?.purposeRequired ?? false;
   const trimmedPurpose = purpose.trim();
+  const selectedDayStatus = selectedDate ? getDayStatus(selectedDate) : 'unavailable';
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -647,19 +733,27 @@ export const AppointmentScreen: React.FC = () => {
                 {/* Calendar */}
                 <View style={[styles.calendar, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
                   <View style={[styles.calendarHeader, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-                    <TouchableOpacity onPress={() => {
-                      if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11); }
-                      else setViewMonth(viewMonth - 1);
-                    }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!canGoPrev) return;
+                        if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11); }
+                        else setViewMonth(viewMonth - 1);
+                      }}
+                      disabled={!canGoPrev}
+                    >
                       <Text style={[styles.calendarNav, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>‹</Text>
                     </TouchableOpacity>
                     <Text style={[styles.calendarTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
                       {MONTH_NAMES[viewMonth]} {viewYear}
                     </Text>
-                    <TouchableOpacity onPress={() => {
-                      if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0); }
-                      else setViewMonth(viewMonth + 1);
-                    }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!canGoNext) return;
+                        if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0); }
+                        else setViewMonth(viewMonth + 1);
+                      }}
+                      disabled={!canGoNext}
+                    >
                       <Text style={[styles.calendarNav, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>›</Text>
                     </TouchableOpacity>
                   </View>
@@ -676,7 +770,10 @@ export const AppointmentScreen: React.FC = () => {
                   {/* Calendar grid */}
                   <View style={styles.calendarGrid}>
                     {calendarCells.map((cell, idx) => {
-                      const isAllowed = !cell.isOtherMonth && cell.dateStr ? isDateAllowed(cell.dateStr) : false;
+                      const dayStatus = !cell.isOtherMonth && cell.dateStr
+                        ? getDayStatus(cell.dateStr)
+                        : 'unavailable';
+                      const isClickable = dayStatus === 'available' || dayStatus === 'partial';
                       const isSelected = cell.dateStr === selectedDate;
                       const isToday = cell.dateStr === today;
 
@@ -686,25 +783,35 @@ export const AppointmentScreen: React.FC = () => {
                           style={[
                             styles.calendarCell,
                             isSelected && { backgroundColor: isDark ? 'rgba(241,197,38,0.2)' : colors.primary[50] },
-                            isAllowed && !isSelected && { backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : colors.success[50] },
+                            dayStatus === 'available' && !isSelected && { backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : colors.success[50] },
+                            dayStatus === 'partial' && !isSelected && { backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : '#FEF3C7' },
+                            dayStatus === 'full' && !isSelected && { backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#FEE2E2' },
                           ]}
-                          disabled={!isAllowed}
-                          onPress={() => cell.dateStr && handleDateChange(cell.dateStr)}
+                          disabled={!isClickable}
+                          onPress={() => cell.dateStr && isClickable && handleDateChange(cell.dateStr)}
                         >
                           <Text
                             style={[
                               styles.calendarDayText,
                               cell.isOtherMonth && { color: isDark ? colors.neutral[700] : colors.neutral[300] },
-                              !cell.isOtherMonth && !isAllowed && { color: isDark ? colors.neutral[600] : colors.neutral[300] },
-                              isAllowed && { color: isDark ? colors.success[300] : colors.success[700] },
+                              !cell.isOtherMonth && dayStatus === 'unavailable' && { color: isDark ? colors.neutral[600] : colors.neutral[300] },
+                              dayStatus === 'available' && { color: isDark ? colors.success[300] : colors.success[700] },
+                              dayStatus === 'partial' && { color: isDark ? '#FBBF24' : '#B45309' },
+                              dayStatus === 'full' && { color: isDark ? '#FCA5A5' : colors.error[600] },
                               isSelected && { color: isDark ? colors.primary[300] : colors.primary[700], fontWeight: 'bold' },
                               isToday && !isSelected && { color: colors.primary[500], fontWeight: 'bold' },
                             ]}
                           >
                             {cell.day}
                           </Text>
-                          {isAllowed && !isSelected && (
+                          {dayStatus === 'available' && !isSelected && (
                             <View style={[styles.availableDot, { backgroundColor: colors.success[500] }]} />
+                          )}
+                          {dayStatus === 'partial' && !isSelected && (
+                            <View style={[styles.availableDot, { backgroundColor: '#F59E0B' }]} />
+                          )}
+                          {dayStatus === 'full' && !isSelected && (
+                            <View style={[styles.availableDot, { backgroundColor: colors.error[500] }]} />
                           )}
                         </TouchableOpacity>
                       );
@@ -723,7 +830,7 @@ export const AppointmentScreen: React.FC = () => {
                 )}
 
                 {/* Session picker */}
-                {availability && selectedDate && isDateAllowed(selectedDate) && (
+                {availability && selectedDate && selectedDayStatus !== 'unavailable' && selectedDayStatus !== 'full' && (
                   <View style={styles.sessionSection}>
                     <Text style={[styles.sessionTitle, { color: isDark ? colors.neutral[300] : colors.neutral[700] }]}>
                       Select session for{' '}
@@ -801,8 +908,8 @@ export const AppointmentScreen: React.FC = () => {
                     <Text style={[styles.backButtonText, { color: isDark ? colors.neutral[200] : colors.secondary[700] }]}>‹ Back</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.primaryButton, { opacity: !selectedDate || !selectedSession ? 0.5 : 1 }]}
-                    disabled={!selectedDate || !selectedSession}
+                    style={[styles.primaryButton, { opacity: !selectedDate || !selectedSession || selectedDayStatus === 'full' ? 0.5 : 1 }]}
+                    disabled={!selectedDate || !selectedSession || selectedDayStatus === 'full'}
                     onPress={handleAdvanceToRequirements}
                   >
                     <Text style={styles.primaryButtonText}>Next ›</Text>
@@ -998,7 +1105,7 @@ export const AppointmentScreen: React.FC = () => {
                   </Text>
                   <TextInput
                     value={purpose}
-                    onChangeText={(text) => setPurpose(text.slice(0, 250))}
+                    onChangeText={(text) => handlePurposeChange(text.slice(0, 250))}
                     multiline
                     numberOfLines={4}
                     maxLength={250}
@@ -1014,7 +1121,7 @@ export const AppointmentScreen: React.FC = () => {
                       {
                         backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
                         borderColor:
-                          purposeRequired && !trimmedPurpose
+                          showPurposeRequiredError && purposeRequired && !trimmedPurpose
                             ? colors.error[400]
                             : isDark
                             ? colors.neutral[600]
@@ -1028,14 +1135,17 @@ export const AppointmentScreen: React.FC = () => {
                 <View style={styles.navRow}>
                   <TouchableOpacity
                     style={[styles.backButton, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
-                    onPress={() => setStep(requirements.length > 0 ? 2 : 1)}
+                    onPress={() => {
+                      setShowPurposeRequiredError(false);
+                      setStep(requirements.length > 0 ? 2 : 1);
+                    }}
                   >
                     <Text style={[styles.backButtonText, { color: isDark ? colors.neutral[200] : colors.secondary[700] }]}>‹ Back</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.submitButton, { opacity: submitting || (purposeRequired && !trimmedPurpose) ? 0.5 : 1 }]}
+                    style={[styles.submitButton, { opacity: submitting ? 0.5 : 1 }]}
                     onPress={handleSubmit}
-                    disabled={submitting || (purposeRequired && !trimmedPurpose)}
+                    disabled={submitting}
                   >
                     {submitting && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />}
                     <Text style={styles.submitButtonText}>

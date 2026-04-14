@@ -249,17 +249,17 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
             ]}
             onPress={() => navigation.navigate('More', {
               screen: 'InitialRecordForm',
-              params: { isRevision: recordStatus?.status === 'revision_requested' },
+              params: { isRevision: recordStatus?.status === 'Revision' },
             })}
             activeOpacity={0.7}
           >
             <Ionicons name="clipboard" size={22} color={colors.primary[500]} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.recordBannerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                {recordStatus?.status === 'revision_requested' ? 'Revision Requested' : 'Medical Record Required'}
+                {recordStatus?.status === 'Revision' ? 'Revision Requested' : 'Medical Record Required'}
               </Text>
               <Text style={[styles.recordBannerDesc, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
-                {recordStatus?.status === 'revision_requested'
+                {recordStatus?.status === 'Revision'
                   ? (recordStatus?.notes || 'Please revise your medical record.')
                   : 'Complete your initial medical record to access all features.'}
               </Text>

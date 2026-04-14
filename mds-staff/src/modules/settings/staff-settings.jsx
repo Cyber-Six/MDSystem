@@ -148,6 +148,7 @@ const FONT_SIZE_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'large', label: 'Large' },
 ];
+const THEME_SWITCH_ANIMATION_MS = 260;
 
 // Deep equality checker — handles nested objects and arrays reliably.
 const deepEqual = (a, b) => {
@@ -189,13 +190,13 @@ const StaffSettings = () => {
   const [draft, setDraft] = useState(() => structuredClone(savedSettings));
   const [saved, setSaved] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
-  const [showSaveBarAnim, setShowSaveBarAnim] = useState(false);
   // Track if user has interacted with any control
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  // Expanded/collapsed state for By Module sections
+  const [expandedSoundModules, setExpandedSoundModules] = useState(false);
+  const [expandedModuleChannels, setExpandedModuleChannels] = useState(false);
   // 'back' = user hit browser back; null = user clicked Cancel in save bar
   const pendingActionRef = useRef(null);
-  const scrollTimeoutRef = useRef(null);
 
   // Sync draft when savedSettings change externally (e.g. another tab)
   useEffect(() => {
@@ -220,27 +221,37 @@ const StaffSettings = () => {
   // Live theme preview — applies draft.themeMode immediately without saving.
   // On unmount (navigating away without saving) the DOM is restored to the saved theme.
   useEffect(() => {
+    let cleanupTimer = 0;
+
     const applyTheme = (mode) => {
-      document.documentElement.classList.toggle(
-        'dark',
-        mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches),
-      );
+      const root = document.documentElement;
+      const nextIsDark = mode === 'dark'
+        || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
+
+      root.classList.add('theme-switching');
+      root.classList.toggle('dark', nextIsDark);
+
+      cleanupTimer = window.setTimeout(() => {
+        root.classList.remove('theme-switching');
+      }, THEME_SWITCH_ANIMATION_MS);
     };
+
     applyTheme(draft.themeMode);
-    return () => applyTheme(savedThemeModeRef.current);
+
+    return () => {
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
+      applyTheme(savedThemeModeRef.current);
+    };
   }, [draft.themeMode]);
 
   const hasChangesRef = useRef(hasChanges);
   useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
-  
-  // Control save bar animation — only show when there are real changes
-  useEffect(() => {
-    if (hasChanges && !isScrolling) {
-      setShowSaveBarAnim(true);
-    } else {
-      setShowSaveBarAnim(false);
-    }
-  }, [hasChanges, isScrolling]);
 
   // ── Intercept browser back button when there are unsaved changes ──
   const guardPushedRef = useRef(false);
@@ -267,26 +278,6 @@ const StaffSettings = () => {
 
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
-
-  // Hide the save bar while actively scrolling to reduce visual obstruction.
-  useEffect(() => {
-    const onScroll = () => {
-      if (!hasChangesRef.current) return;
-      setIsScrolling(true);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-      scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 180);
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
   }, []);
 
   // ── Draft updaters ──
@@ -322,6 +313,7 @@ const StaffSettings = () => {
         [moduleKey]: { ...prev.moduleChannels[moduleKey], [channel]: value },
       },
     }));
+    setHasUserInteracted(true);
     setSaved(false);
   }, []);
 
@@ -333,6 +325,7 @@ const StaffSettings = () => {
       }
       return { ...prev, channels: { ...prev.channels, [channel]: value }, moduleChannels: next };
     });
+    setHasUserInteracted(true);
     setSaved(false);
   }, []);
 
@@ -408,10 +401,10 @@ const StaffSettings = () => {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
 
-  const showSaveBar = hasChanges && !isScrolling;
+  const showSaveBar = hasChanges;
 
   return (
-    <div className={`max-w-2xl mx-auto space-y-3 transition-all duration-200 ${showSaveBarAnim ? 'pb-24' : 'pb-4'}`}>
+    <div className={`max-w-2xl mx-auto space-y-3 transition-all duration-200 ${hasChanges ? 'pb-24' : 'pb-4'}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-0.5">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -505,49 +498,69 @@ const StaffSettings = () => {
           </div>
         </SettingRow>
 
-        {/* Per-module toggles + sound pickers */}
-        <div className="pt-0">
-          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5 pl-6">
+        {/* Per-module toggles + sound pickers — collapsible dropdown */}
+        <button
+          type="button"
+          onClick={() => setExpandedSoundModules(!expandedSoundModules)}
+          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 rounded transition-colors"
+        >
+          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
             By Module
           </p>
-          {Object.entries(MODULE_LABELS).map(([key, label]) => (
-            <SettingRow key={key} label={label} indent>
-              <div className="flex items-center gap-1.5">
-                <Toggle
-                  checked={draft.soundByModule[key]}
-                  onChange={(v) => setModuleSound(key, v)}
-                  disabled={!draft.soundEnabled}
-                />
-                <select
-                  value={draft.soundFileByModule[key]}
-                  onChange={(e) => setModuleSoundFile(key, e.target.value)}
-                  disabled={!draft.soundEnabled || !draft.soundByModule[key]}
-                  className="text-xs px-1.5 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40 max-w-[120px]"
-                >
-                  <option value="synthesis">System Chime</option>
-                  {AVAILABLE_SOUNDS.filter((s) => s.id !== 'synthesis').map((s) => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  title={`Preview ${label} sound`}
-                  disabled={!draft.soundEnabled || !draft.soundByModule[key]}
-                  onClick={() => playNotificationSound(
-                    draft.soundVolume,
-                    draft.soundFileByModule[key],
-                    draft.notificationSound,
-                  )}
-                  className="p-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                </button>
-              </div>
-            </SettingRow>
-          ))}
-        </div>
+          <svg
+            className={`w-4 h-4 text-secondary-500 dark:text-neutral-400 transition-transform ${
+              expandedSoundModules ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </button>
+
+        {/* Sound module toggles — hidden by default */}
+        {expandedSoundModules && (
+          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-700/50">
+            {Object.entries(MODULE_LABELS).map(([key, label]) => (
+              <SettingRow key={key} label={label}>
+                <div className="flex items-center gap-1.5">
+                  <Toggle
+                    checked={draft.soundByModule[key]}
+                    onChange={(v) => setModuleSound(key, v)}
+                    disabled={!draft.soundEnabled}
+                  />
+                  <select
+                    value={draft.soundFileByModule[key]}
+                    onChange={(e) => setModuleSoundFile(key, e.target.value)}
+                    disabled={!draft.soundEnabled || !draft.soundByModule[key]}
+                    className="text-xs px-1.5 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40 max-w-[120px]"
+                  >
+                    <option value="synthesis">System Chime</option>
+                    {AVAILABLE_SOUNDS.filter((s) => s.id !== 'synthesis').map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    title={`Preview ${label} sound`}
+                    disabled={!draft.soundEnabled || !draft.soundByModule[key]}
+                    onClick={() => playNotificationSound(
+                      draft.soundVolume,
+                      draft.soundFileByModule[key],
+                      draft.notificationSound,
+                    )}
+                    className="p-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                </div>
+              </SettingRow>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* ── Notification Display ── */}
@@ -663,46 +676,66 @@ const StaffSettings = () => {
           </div>
         )}
 
-        {/* Per-module channel overrides */}
-        <div className="pt-1">
-          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 pl-6">
+        {/* Per-module channel overrides — collapsible dropdown */}
+        <button
+          type="button"
+          onClick={() => setExpandedModuleChannels(!expandedModuleChannels)}
+          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 rounded transition-colors"
+        >
+          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
             By Module
           </p>
-          {Object.entries(CHANNEL_MODULE_LABELS).map(([key, label]) => (
-            <div key={key} className="py-2 pl-6">
-              <p className="text-xs font-medium text-secondary-700 dark:text-neutral-200 mb-1.5">{label}</p>
-              <div className="flex items-center gap-4 flex-wrap">
-                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draft.moduleChannels[key]?.web ?? true}
-                    onChange={(e) => setModuleChannel(key, 'web', e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
-                  />
-                  Web
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draft.moduleChannels[key]?.email ?? false}
-                    onChange={(e) => setModuleChannel(key, 'email', e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
-                  />
-                  Email
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draft.moduleChannels[key]?.emailFallback ?? true}
-                    onChange={(e) => setModuleChannel(key, 'emailFallback', e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
-                  />
-                  Email fallback
-                </label>
+          <svg
+            className={`w-4 h-4 text-secondary-500 dark:text-neutral-400 transition-transform ${
+              expandedModuleChannels ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </button>
+
+        {/* Module settings — hidden by default */}
+        {expandedModuleChannels && (
+          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-700/50">
+            {Object.entries(CHANNEL_MODULE_LABELS).map(([key, label]) => (
+              <div key={key} className="py-3 pl-0">
+                <p className="text-xs font-medium text-secondary-700 dark:text-neutral-200 mb-2">{label}</p>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.moduleChannels[key]?.web ?? true}
+                      onChange={(e) => setModuleChannel(key, 'web', e.target.checked)}
+                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                    />
+                    Web
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.moduleChannels[key]?.email ?? false}
+                      onChange={(e) => setModuleChannel(key, 'email', e.target.checked)}
+                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                    />
+                    Email
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.moduleChannels[key]?.emailFallback ?? true}
+                      onChange={(e) => setModuleChannel(key, 'emailFallback', e.target.checked)}
+                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                    />
+                    Email fallback
+                  </label>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* ── Security ── */}

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { usePermissions } from '../../context/permissions-context';
+import { useSettings } from '../../context/settings-context';
 import AnalyticsFilterBar from './components/analytics-filter-bar';
 import AnalyticsChartCard from './components/analytics-chart-card';
 import AnalyticsSummaryCards from './components/analytics-summary-cards';
@@ -100,6 +101,7 @@ function getQueriesForCategory(category, demoDimension = 'all') {
 const StaffAnalytics = () => {
   const defaults = getDateRangeForPeriod('monthly');
   const { branch: permBranch, allowedBranches, isAdmin } = usePermissions();
+  const { isDarkMode } = useSettings();
   const [branch, setBranch] = useState(() => permBranch || 'Both');
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
@@ -141,18 +143,6 @@ const StaffAnalytics = () => {
       setBranch(permBranch);
     }
   }, [permBranch]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Detect dark mode via class on <html>
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    const el = document.documentElement;
-    const observer = new MutationObserver(() => {
-      setDark(el.classList.contains('dark'));
-    });
-    setDark(el.classList.contains('dark'));
-    observer.observe(el, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
 
   // Load filter options on initial mount (not just demographics tab)
   useEffect(() => {
@@ -435,7 +425,7 @@ const StaffAnalytics = () => {
               data={cache.get(queryKey)}
               loading={loading && !cache.has(queryKey)}
               error={cache.get(queryKey)?.error}
-              dark={dark}
+              dark={isDarkMode}
               branch={branch}
               startDate={startDate}
               endDate={endDate}

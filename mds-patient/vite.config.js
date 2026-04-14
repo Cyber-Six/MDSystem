@@ -138,6 +138,13 @@ export default defineConfig(({ mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),
+          bypass: function(req) {
+            // Let React Router handle browser navigation to /settings.
+            // API requests to /settings (with Authorization header) should still be proxied.
+            if (req.method === 'GET' && !req.headers.authorization) {
+              return '/index.html';
+            }
+          },
         },
       },
     }

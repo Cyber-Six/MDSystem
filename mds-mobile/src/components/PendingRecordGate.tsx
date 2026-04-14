@@ -30,7 +30,7 @@ interface PendingRecordGateProps {
 
 const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
   const { isDark } = useTheme();
-  const { recordStatus, isRecordLoading, refreshRecordStatus } = useRecordStatus();
+  const { recordStatus, isRecordLoading } = useRecordStatus();
   const navigation = useNavigation<any>();
 
   // While checking, show a small loader — don't block the whole screen for long
@@ -45,12 +45,100 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
     );
   }
 
+  const status = recordStatus?.status ?? null;
+
+  // Inactive accounts must complete/update records before using gated modules.
+  if (recordStatus?.credentialStatus === 'Inactive') {
+    const INACTIVE_TICKET_EXPIRY_DAYS = 7;
+    const hasSubmittedInactiveUpdate = status === 'Pending' || status === 'RevisionSubmitted';
+    const needsInactiveRevision = status === 'Revision';
+    const createdAtDate = recordStatus.ticketCreatedAt ? new Date(recordStatus.ticketCreatedAt) : null;
+    const expiryDate = createdAtDate && !Number.isNaN(createdAtDate.getTime())
+      ? new Date(createdAtDate.getTime() + INACTIVE_TICKET_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+      : null;
+    const expiryLabel = expiryDate && !Number.isNaN(expiryDate.getTime())
+      ? expiryDate.toLocaleDateString()
+      : null;
+
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }}
+        contentContainerStyle={styles.gateContent}
+      >
+        <View style={[styles.gateCard, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderColor: isDark ? 'rgba(241,197,38,0.3)' : colors.primary[200] }]}>
+          <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50] }]}>
+            <Ionicons name="warning" size={30} color={isDark ? colors.primary[300] : colors.primary[700]} />
+          </View>
+
+          <Text style={[styles.gateTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+            {needsInactiveRevision
+              ? 'Medical and Dental Revision Required'
+              : hasSubmittedInactiveUpdate
+                ? 'Medical and Dental Update Submitted'
+                : 'Account Inactive - Update Required'}
+          </Text>
+
+          <Text style={[styles.gateMessage, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>
+            {needsInactiveRevision
+              ? 'Your update needs revision before your account can be reactivated.'
+              : hasSubmittedInactiveUpdate
+                ? 'Your update is pending staff review. Your account remains inactive until approval.'
+                : 'Your account is currently inactive. Submit your medical and dental updates to request reactivation.'}
+          </Text>
+
+          {needsInactiveRevision && recordStatus.notes && (
+            <View style={[styles.staffNoteBox, { backgroundColor: isDark ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.12)' }]}>
+              <Text style={[styles.staffNoteLabel, { color: isDark ? '#FBBF24' : '#92400E' }]}>Staff Notes</Text>
+              <Text style={[styles.staffNoteText, { color: isDark ? colors.neutral[200] : colors.secondary[800] }]}>
+                {recordStatus.notes}
+              </Text>
+            </View>
+          )}
+
+          <View style={[styles.nextBox, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}> 
+            <Text style={[styles.nextTitle, { color: isDark ? colors.neutral[200] : colors.secondary[800] }]}>What happens next?</Text>
+            <BulletItem isDark={isDark} text="Medical and dental sections must be completed before reactivation." />
+            <BulletItem isDark={isDark} text="Your account stays inactive until staff approves the submitted update." />
+            <BulletItem isDark={isDark} text="Please visit the clinic for in-person checking after submission." />
+          </View>
+
+          <View style={[styles.badgeRow, { backgroundColor: isDark ? 'rgba(241,197,38,0.1)' : colors.primary[50] }]}> 
+            <Ionicons name="time" size={14} color={isDark ? colors.primary[300] : colors.primary[700]} />
+            <Text style={[styles.statusText, { color: isDark ? colors.primary[300] : colors.primary[700] }]}>
+              {needsInactiveRevision
+                ? 'Status: Revision Required'
+                : hasSubmittedInactiveUpdate
+                  ? 'Status: Pending Inactive Review'
+                  : 'Status: Inactive'}
+            </Text>
+          </View>
+
+          <Text style={[styles.footerText, { color: isDark ? colors.neutral[500] : colors.neutral[400] }]}> 
+            {expiryLabel
+              ? `Ticket timing: In-progress updates expire after ${INACTIVE_TICKET_EXPIRY_DAYS} days (current window ends on ${expiryLabel}).`
+              : `Ticket timing: In-progress updates expire after ${INACTIVE_TICKET_EXPIRY_DAYS} days.`}
+          </Text>
+
+          {(needsInactiveRevision || !hasSubmittedInactiveUpdate) && (
+            <TouchableOpacity
+              style={styles.fillFormButton}
+              onPress={() => navigation.navigate('More', { screen: 'UpdateRecordChoice' })}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.fillFormButtonText}>
+                {needsInactiveRevision ? 'Continue Required Record Revision' : 'Start Required Record Update'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
   // Not gated — render children normally
   if (!recordStatus?.needsInitialRecord) {
     return <>{children}</>;
   }
-
-  const status = recordStatus.status;
 
   // ── State A: Pending Approval ──────────────────────────────────────────────
   if (status === 'Pending') {
