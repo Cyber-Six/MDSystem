@@ -15,6 +15,7 @@ import { AppointmentScreen } from '../screens/appointment/AppointmentScreen';
 import { HealthChatScreen } from '../screens/health-chat/HealthChatScreen';
 import { MedicineRequestScreen } from '../screens/medicine/MedicineRequestScreen';
 import { MoreStackNavigator } from './MoreStackNavigator';
+import { MyDocumentsScreen } from '../screens/more/MyDocumentsScreen';
 import { useTheme, colors } from '../context/ThemeContext';
 import PendingRecordGate from '../components/PendingRecordGate';
 import { useHealthChatBadge } from '../context/HealthChatNotificationProvider';
@@ -57,6 +58,7 @@ export const MainTabNavigator: React.FC = () => {
 
   return (
     <Tab.Navigator
+      initialRouteName="Home"
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -86,9 +88,21 @@ export const MainTabNavigator: React.FC = () => {
         name="Home"
         component={DashboardHomeScreen}
         options={{
+          tabBarButton: () => null,
+          tabBarItemStyle: { display: 'none' },
           tabBarLabel: 'Home',
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="MyDocuments"
+        component={MyDocumentsScreen}
+        options={{
+          tabBarLabel: 'Documents',
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'folder-open' : 'folder-open-outline'} focused={focused} color={color} />
           ),
         }}
       />
