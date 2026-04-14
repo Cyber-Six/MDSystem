@@ -1,5 +1,5 @@
 const db = require("../../../../../config/query.js");
-const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
+const { throwGraphQLError, GraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 const { ValidateBranchbyUserBranch } = require("../../../../../utils/validator.js");
 // Enhanced aggregation: includes medicine name by joining with MedicalItems

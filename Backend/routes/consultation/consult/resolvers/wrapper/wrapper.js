@@ -1,7 +1,7 @@
 const db  = require("../../../../../config/query.js");
 const { getLatestOutcome, getOutcomeData, groupByOutcome } = require("./helper.js");
 const { GetIcd, GetTitle, getIcdDetails } = require("../../../../../config/icdapi/icdmain.js");
-const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
+const { throwGraphQLError, GraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -342,7 +342,6 @@ const Mutation = {
     } catch (err) {
       await client.query('ROLLBACK');
       if (err instanceof GraphQLError) {
-        logger.error(`GraphQL error submitting consultation: ${err.message}`);
         throw err; // Re-throw known GraphQL errors without modification  
       }
       logger.error(`Error submitting consultation: ${err.message}`);
