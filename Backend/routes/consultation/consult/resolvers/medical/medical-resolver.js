@@ -136,7 +136,7 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const patientId = await getPatientIdFromConsultationId(input.consultationId);
     const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
@@ -164,7 +164,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const patientId = await getPatientIdFromConsultationId(input.consultationId);
     const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();

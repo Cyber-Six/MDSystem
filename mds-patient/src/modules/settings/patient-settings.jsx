@@ -125,6 +125,7 @@ const FONT_SIZE_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'large', label: 'Large' },
 ];
+const THEME_SWITCH_ANIMATION_MS = 260;
 
 /**
  * Patient Settings Page
@@ -137,6 +138,9 @@ const PatientSettings = () => {
   const [draft, setDraft] = useState(() => structuredClone(savedSettings));
   const [saved, setSaved] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  // Expanded/collapsed state for By Module sections
+  const [expandedSoundModules, setExpandedSoundModules] = useState(false);
+  const [expandedModuleChannels, setExpandedModuleChannels] = useState(false);
   // 'back' = user hit browser back; null = user clicked Cancel in save bar
   const pendingActionRef = useRef(null);
 
@@ -152,14 +156,33 @@ const PatientSettings = () => {
   // Live theme preview — applies draft.themeMode immediately without saving.
   // On unmount (navigating away without saving) the DOM is restored to the saved theme.
   useEffect(() => {
+    let cleanupTimer = 0;
+
     const applyTheme = (mode) => {
-      document.documentElement.classList.toggle(
-        'dark',
-        mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches),
-      );
+      const root = document.documentElement;
+      const nextIsDark = mode === 'dark'
+        || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
+
+      root.classList.add('theme-switching');
+      root.classList.toggle('dark', nextIsDark);
+
+      cleanupTimer = window.setTimeout(() => {
+        root.classList.remove('theme-switching');
+      }, THEME_SWITCH_ANIMATION_MS);
     };
+
     applyTheme(draft.themeMode);
-    return () => applyTheme(savedThemeModeRef.current);
+
+    return () => {
+      if (cleanupTimer) {
+        window.clearTimeout(cleanupTimer);
+      }
+      applyTheme(savedThemeModeRef.current);
+    };
   }, [draft.themeMode]);
 
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(savedSettings);
@@ -353,21 +376,41 @@ const PatientSettings = () => {
           </div>
         </SettingRow>
 
-        {/* Per-module toggles */}
-        <div className="pt-1">
-          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 pl-6">
+        {/* Per-module toggles — collapsible dropdown */}
+        <button
+          type="button"
+          onClick={() => setExpandedSoundModules(!expandedSoundModules)}
+          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 rounded transition-colors"
+        >
+          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
             By Module
           </p>
-          {Object.entries(MODULE_LABELS).map(([key, label]) => (
-            <SettingRow key={key} label={label} indent>
-              <Toggle
-                checked={draft.soundByModule[key]}
-                onChange={(v) => setModuleSound(key, v)}
-                disabled={!draft.soundEnabled}
-              />
-            </SettingRow>
-          ))}
-        </div>
+          <svg
+            className={`w-4 h-4 text-secondary-500 dark:text-neutral-400 transition-transform ${
+              expandedSoundModules ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </button>
+
+        {/* Sound module toggles — hidden by default */}
+        {expandedSoundModules && (
+          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-700/50">
+            {Object.entries(MODULE_LABELS).map(([key, label]) => (
+              <SettingRow key={key} label={label}>
+                <Toggle
+                  checked={draft.soundByModule[key]}
+                  onChange={(v) => setModuleSound(key, v)}
+                  disabled={!draft.soundEnabled}
+                />
+              </SettingRow>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* ── Notification Display ── */}
@@ -483,46 +526,66 @@ const PatientSettings = () => {
           </div>
         )}
 
-        {/* Per-module channel overrides */}
-        <div className="pt-1">
-          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 pl-6">
+        {/* Per-module channel overrides — collapsible dropdown */}
+        <button
+          type="button"
+          onClick={() => setExpandedModuleChannels(!expandedModuleChannels)}
+          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 rounded transition-colors"
+        >
+          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
             By Module
           </p>
-          {Object.entries(CHANNEL_MODULE_LABELS).map(([key, label]) => (
-            <div key={key} className="py-2 pl-6">
-              <p className="text-xs font-medium text-secondary-700 dark:text-neutral-200 mb-1.5">{label}</p>
-              <div className="flex items-center gap-4 flex-wrap">
-                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draft.moduleChannels[key]?.web ?? true}
-                    onChange={(e) => setModuleChannel(key, 'web', e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
-                  />
-                  Web
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draft.moduleChannels[key]?.email ?? false}
-                    onChange={(e) => setModuleChannel(key, 'email', e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
-                  />
-                  Email
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draft.moduleChannels[key]?.emailFallback ?? true}
-                    onChange={(e) => setModuleChannel(key, 'emailFallback', e.target.checked)}
-                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
-                  />
-                  Email fallback
-                </label>
+          <svg
+            className={`w-4 h-4 text-secondary-500 dark:text-neutral-400 transition-transform ${
+              expandedModuleChannels ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </button>
+
+        {/* Module settings — hidden by default */}
+        {expandedModuleChannels && (
+          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-700/50">
+            {Object.entries(CHANNEL_MODULE_LABELS).map(([key, label]) => (
+              <div key={key} className="py-3 pl-0">
+                <p className="text-xs font-medium text-secondary-700 dark:text-neutral-200 mb-2">{label}</p>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.moduleChannels[key]?.web ?? true}
+                      onChange={(e) => setModuleChannel(key, 'web', e.target.checked)}
+                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                    />
+                    Web
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.moduleChannels[key]?.email ?? false}
+                      onChange={(e) => setModuleChannel(key, 'email', e.target.checked)}
+                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                    />
+                    Email
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.moduleChannels[key]?.emailFallback ?? true}
+                      onChange={(e) => setModuleChannel(key, 'emailFallback', e.target.checked)}
+                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                    />
+                    Email fallback
+                  </label>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* ── Appearance ── */}

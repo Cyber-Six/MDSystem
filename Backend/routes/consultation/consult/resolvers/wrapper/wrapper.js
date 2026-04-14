@@ -341,6 +341,10 @@ const Mutation = {
       return true;
     } catch (err) {
       await client.query('ROLLBACK');
+      if (err instanceof GraphQLError) {
+        logger.error(`GraphQL error submitting consultation: ${err.message}`);
+        throw err; // Re-throw known GraphQL errors without modification  
+      }
       logger.error(`Error submitting consultation: ${err.message}`);
       throwGraphQLError(res).message("Database error").status(500).throw();
     } finally {

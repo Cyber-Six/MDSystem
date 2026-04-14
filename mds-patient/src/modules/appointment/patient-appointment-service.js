@@ -193,10 +193,15 @@ export const getMonthAvailability = async (schedulerId, startDate, endDate) => {
  * @param {'Morning'|'Afternoon'} session
  * @param {Array<{scheduleRequirementId: string, filename: string}>} requirements
  * @param {string} [purpose]
+ * @param {boolean} [purposeRequired=false]
  * @returns {Promise<object>} patientSlot
  */
-export const submitAppointment = async (schedulerId, date, session, requirements = [], purpose) => {
+export const submitAppointment = async (schedulerId, date, session, requirements = [], purpose, purposeRequired = false) => {
   const normalizedPurpose = (purpose || '').trim();
+  if (purposeRequired && !normalizedPurpose) {
+    throw new Error('Purpose / reason for visit is required for this appointment type.');
+  }
+
   const data = await sendGraphQL(`
     mutation SubmitAppointment(
       $schedulerId: ID!,

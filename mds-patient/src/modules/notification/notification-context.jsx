@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
+import SettingsContext, { DEFAULT_SETTINGS as DEFAULT_PATIENT_SETTINGS } from '../../context/settings-context.jsx';
 
 /**
  * Patient notification events emitted by the backend to this user.
@@ -151,6 +152,26 @@ const EVENT_MAP = {
   },
 };
 
+const EVENT_MODULE_MAP = {
+  'appointment:responded': 'appointments',
+  'appointment:attendance-recorded': 'appointments',
+  'healthchat:new-message': 'healthChat',
+  'healthchat:ticket-approved': 'healthChat',
+  'healthchat:ticket-rejected': 'healthChat',
+  'healthchat:ticket-closed': 'healthChat',
+  'medicine:request:approved': 'medicineRequests',
+  'medicine:request:rejected': 'medicineRequests',
+  'medicine:request:pending': 'medicineRequests',
+  'medicine:prescription:issued': 'medicineRequests',
+  'document:new': 'documents',
+  'document:requested': 'documents',
+  'document:approved': 'documents',
+  'document:rejected': 'documents',
+  'document:cancelled': 'documents',
+  'updateTicket:statusChanged': 'emr',
+  'staff:notification': 'general',
+};
+
 const STORAGE_KEY = 'patient_notifications';
 const MAX_NOTIFICATIONS = 50;
 
@@ -175,13 +196,28 @@ function persistNotifications(notifications) {
 const NotificationContext = createContext(null);
 
 export function PatientNotificationProvider({ children }) {
+  const settingsContext = useContext(SettingsContext);
   const [notifications, setNotifications] = useState(() => loadPersistedNotifications());
   const socketRef = useRef(null);
   const subscribersRef = useRef({});
+  const settingsRef = useRef(settingsContext?.settings ?? DEFAULT_PATIENT_SETTINGS);
+
+  useEffect(() => {
+    settingsRef.current = settingsContext?.settings ?? DEFAULT_PATIENT_SETTINGS;
+  }, [settingsContext]);
+
+  const isWebNotificationEnabled = useCallback((event) => {
+    const activeSettings = settingsRef.current ?? DEFAULT_PATIENT_SETTINGS;
+    if (activeSettings.channels?.web === false) return false;
+
+    const moduleKey = EVENT_MODULE_MAP[event] || 'general';
+    return activeSettings.moduleChannels?.[moduleKey]?.web !== false;
+  }, []);
 
   const addNotification = useCallback((event, data) => {
     const factory = EVENT_MAP[event];
     if (!factory) return;
+    if (!isWebNotificationEnabled(event)) return;
 
     const notif = factory(data);
     const entry = {
@@ -196,7 +232,7 @@ export function PatientNotificationProvider({ children }) {
       persistNotifications(next);
       return next;
     });
-  }, []);
+  }, [isWebNotificationEnabled]);
 
   const markAsRead = useCallback((id) => {
     setNotifications((prev) => {

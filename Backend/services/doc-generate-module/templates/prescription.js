@@ -171,14 +171,14 @@ class PrescriptionTemplate extends BaseTemplate {
 
     const fullName = patient
       ? [patient.firstName, patient.middleName, patient.lastName, patient.suffix]
-          .filter(Boolean).join(' ') || ''
-      : '';
+          .filter(Boolean).join(' ') || 'Unknown'
+      : 'Unknown';
 
     const age = patient?.dateOfBirth
       ? String(this._calculateAge(patient.dateOfBirth))
-      : (patient?.age || '');
+      : (patient?.age || 'Unknown');
 
-    const sex = patient?.sex || '';
+    const sex = patient?.sex || 'Unknown';
     const dateStr = this._formatDate(this.data.issuedDate);
 
     const rowH   = 18;
