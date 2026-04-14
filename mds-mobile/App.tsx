@@ -2,7 +2,7 @@
  * MDSystem Mobile App
  * 
  * React Native app with NativeWind styling, dark mode support,
- * React Navigation bottom tabs, and shared business logic from @mdsystem/core
+ * React Navigation drawer + bottom tabs, and shared business logic from @mdsystem/core
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -18,7 +18,7 @@ import { RecordStatusProvider } from './src/context/RecordStatusContext';
 import { SettingsProvider } from './src/context/SettingsContext';
 import { HealthChatNotificationProvider } from './src/context/HealthChatNotificationProvider';
 import { AuthScreen } from './src/screens/auth';
-import { MainTabNavigator } from './src/navigation/MainTabNavigator';
+import { AppDrawerNavigator } from './src/navigation/AppDrawerNavigator';
 import { Banner as BannerComponent } from './src/components/Banner';
 import { bannerService, setNavigationRef } from './src/core';
 
@@ -117,7 +117,9 @@ const AppContent: React.FC = () => {
         // Small delay to ensure NavigationContainer is fully mounted
         setTimeout(() => {
           try {
-            navigationRef.current?.navigate('HealthChat' as never);
+            (navigationRef.current as any)?.navigate('MainTabs', {
+              screen: 'HealthChat',
+            });
           } catch {
             // Navigation not ready
           }
@@ -138,7 +140,7 @@ const AppContent: React.FC = () => {
       {isAuthenticated ? (
         <NavigationContainer ref={navigationRef}>
           <HealthChatNotificationProvider>
-            <MainTabNavigator />
+            <AppDrawerNavigator />
           </HealthChatNotificationProvider>
         </NavigationContainer>
       ) : (
