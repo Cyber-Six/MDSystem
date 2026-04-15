@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
@@ -45,6 +46,12 @@ const BACKEND_ALLOWED_REQUIREMENT_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/webp',
+  'application/pdf',
+  'video/mp4',
+  'video/quicktime',
+];
+
+const FILE_REQUIREMENT_MIME_TYPES = [
   'application/pdf',
   'video/mp4',
   'video/quicktime',
@@ -79,6 +86,17 @@ const resolveUploadedRequirementKind = (file: UploadedRequirement): 'image' | 'v
   if (extension === 'pdf') return 'pdf';
 
   return 'file';
+};
+
+const mapUploadErrorMessage = (err: any) => {
+  const backendError = err?.response?.data?.error;
+  if (backendError === 'INVALID_FILE_TYPE') {
+    return 'Unsupported file type. Allowed: JPG, PNG, WEBP, PDF, MP4, MOV.';
+  }
+  if (backendError === 'MAX_FILES_STAGING_EXCEEDED') {
+    return 'You have uploaded too many files in staging. Please wait and try again.';
+  }
+  return err?.message || 'Failed to upload file. Please try again.';
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -421,18 +439,10 @@ export const AppointmentScreen: React.FC = () => {
     }
   };
 
-  const handlePickRequirement = async (reqId: string) => {
-    const result = await DocumentPicker.getDocumentAsync({
-      multiple: false,
-      copyToCacheDirectory: true,
-      type: BACKEND_ALLOWED_REQUIREMENT_MIME_TYPES,
-    });
-
-    if (result.canceled || !result.assets?.length) {
-      return;
-    }
-
-    const asset = result.assets[0];
+  const stageRequirementAsset = async (
+    reqId: string,
+    asset: { uri: string; name?: string | null; mimeType?: string | null },
+  ) => {
     const name = asset.name || asset.uri.split('/').pop() || `requirement-${Date.now()}`;
     const type = asset.mimeType || 'application/octet-stream';
 
@@ -457,17 +467,80 @@ export const AppointmentScreen: React.FC = () => {
         },
       ]);
     } catch (err: any) {
-      const backendError = err?.response?.data?.error;
-      if (backendError === 'INVALID_FILE_TYPE') {
-        setError('Unsupported file type. Allowed: JPG, PNG, WEBP, PDF, MP4, MOV.');
-      } else if (backendError === 'MAX_FILES_STAGING_EXCEEDED') {
-        setError('You have uploaded too many files in staging. Please wait and try again.');
-      } else {
-        setError(err.message || 'Failed to upload file. Please try again.');
-      }
+      setError(mapUploadErrorMessage(err));
     } finally {
       setPickingForReq(null);
     }
+  };
+
+  const handlePickRequirementImage = async (reqId: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Permission to access your photo library is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9,
+      allowsEditing: false,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const imageAsset = result.assets[0];
+    await stageRequirementAsset(reqId, {
+      uri: imageAsset.uri,
+      name: imageAsset.fileName || imageAsset.uri.split('/').pop(),
+      mimeType: imageAsset.mimeType || 'image/jpeg',
+    });
+  };
+
+  const handlePickRequirementFile = async (reqId: string) => {
+    const result = await DocumentPicker.getDocumentAsync({
+      multiple: false,
+      copyToCacheDirectory: true,
+      type: FILE_REQUIREMENT_MIME_TYPES,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const fileAsset = result.assets[0];
+    await stageRequirementAsset(reqId, {
+      uri: fileAsset.uri,
+      name: fileAsset.name || fileAsset.uri.split('/').pop(),
+      mimeType: fileAsset.mimeType || 'application/octet-stream',
+    });
+  };
+
+  const handlePickRequirement = (reqId: string) => {
+    Alert.alert(
+      'Upload Requirement',
+      'Choose what you want to upload.',
+      [
+        {
+          text: 'Upload Image',
+          onPress: () => {
+            void handlePickRequirementImage(reqId);
+          },
+        },
+        {
+          text: 'Upload File',
+          onPress: () => {
+            void handlePickRequirementFile(reqId);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true },
+    );
   };
 
   const handleRemoveRequirement = async (reqId: string) => {
@@ -1128,7 +1201,7 @@ export const AppointmentScreen: React.FC = () => {
                             <Text style={[styles.reqUploadBtnText, {
                               color: isDark ? colors.primary[300] : colors.primary[700],
                             }]}>
-                              {isPickingThis ? 'Uploading...' : 'Tap to upload file'}
+                              {isPickingThis ? 'Uploading...' : 'Tap to choose image or file'}
                             </Text>
                           </TouchableOpacity>
                         )

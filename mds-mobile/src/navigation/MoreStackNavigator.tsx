@@ -31,7 +31,10 @@ const HeaderMenuButton: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
   return (
     <TouchableOpacity
-      style={styles.headerMenuButton}
+      style={[
+        styles.headerMenuButton,
+        { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+      ]}
       onPress={() => toggleAppDrawer(navigation)}
       accessibilityRole="button"
       accessibilityLabel="Open sidebar"
@@ -39,7 +42,7 @@ const HeaderMenuButton: React.FC<{ isDark: boolean }> = ({ isDark }) => {
     >
       <Ionicons
         name="menu"
-        size={20}
+        size={22}
         color={isDark ? colors.neutral[100] : colors.secondary[900]}
       />
     </TouchableOpacity>
@@ -79,9 +82,9 @@ export const MoreStackNavigator: React.FC = () => {
 
 const styles = StyleSheet.create({
   headerMenuButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 4,

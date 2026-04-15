@@ -27,7 +27,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -73,7 +73,9 @@ const isPendingStatus = (status?: string | null) => normalizeStatus(status) === 
 export const MedicineRequestScreen: React.FC = () => {
   const { isDark } = useTheme();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { showBanner } = useBanner();
+  const showInlineMenuButton = route.name !== 'MedicineRequest';
 
   // Views
   const [view, setView] = useState<'form' | 'status'>('form');
@@ -446,23 +448,25 @@ export const MedicineRequestScreen: React.FC = () => {
         </View>
       </Modal>
 
-      <View style={styles.topMenuRow}>
-        <TouchableOpacity
-          style={[
-            styles.menuButton,
-            { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-          ]}
-          onPress={() => toggleAppDrawer(navigation)}
-          accessibilityRole="button"
-          accessibilityLabel="Open sidebar"
-        >
-          <Ionicons
-            name="menu"
-            size={22}
-            color={isDark ? colors.neutral[100] : colors.secondary[900]}
-          />
-        </TouchableOpacity>
-      </View>
+      {showInlineMenuButton && (
+        <View style={styles.topMenuRow}>
+          <TouchableOpacity
+            style={[
+              styles.menuButton,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+            onPress={() => toggleAppDrawer(navigation)}
+            accessibilityRole="button"
+            accessibilityLabel="Open sidebar"
+          >
+            <Ionicons
+              name="menu"
+              size={22}
+              color={isDark ? colors.neutral[100] : colors.secondary[900]}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Tab bar ─────────────────────────────────────────────────────── */}
       <View style={[styles.tabBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
