@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
-  LineChart, Line,
+  LineChart, Line, AreaChart, Area,
 } from 'recharts';
 
 // ── Theme Colors ─────────────────────────────────────────────────────────────
@@ -96,6 +96,129 @@ const AnalyticsLineChart = memo(({ data, dark = false }) => {
   );
 });
 
+// ── Stacked Area Chart ──────────────────────────────────────────────────────
+
+const AnalyticsStackedAreaChart = memo(({ data, series = [], dark = false }) => {
+  if (!data?.length || !series?.length) return <EmptyState />;
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <AreaChart data={data} margin={{ top: 4, right: 16, left: -8, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={dark ? DARK_GRID : LIGHT_GRID} />
+        <XAxis
+          dataKey="name"
+          tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}
+          axisLine={false}
+          tickLine={false}
+          allowDecimals={false}
+        />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Legend iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+        {series.map((entry, index) => (
+          <Area
+            key={entry.name}
+            type="monotone"
+            dataKey={entry.name}
+            stackId="stack"
+            stroke={CHART_COLORS[index % CHART_COLORS.length]}
+            fill={CHART_COLORS[index % CHART_COLORS.length]}
+            fillOpacity={0.35}
+          />
+        ))}
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+});
+
+// ── Box Plot (custom renderer) ──────────────────────────────────────────────
+
+const AnalyticsBoxPlotChart = memo(({ data }) => {
+  if (!data?.length) return <EmptyState />;
+
+  const allMins = data.map((item) => Number(item.min)).filter(Number.isFinite);
+  const allMaxs = data.map((item) => Number(item.max)).filter(Number.isFinite);
+
+  if (allMins.length === 0 || allMaxs.length === 0) return <EmptyState />;
+
+  const globalMin = Math.min(...allMins);
+  const globalMax = Math.max(...allMaxs);
+  const range = globalMax - globalMin || 1;
+
+  const toPercent = (value) => ((Number(value) - globalMin) / range) * 100;
+  const formatValue = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  return (
+    <div className="h-[280px] overflow-y-auto pr-1">
+      <div className="flex justify-between text-[10px] text-secondary-400 dark:text-neutral-500 mb-2">
+        <span>{formatValue(globalMin)}</span>
+        <span>{formatValue(globalMax)}</span>
+      </div>
+
+      <div className="space-y-4">
+        {data.map((item) => (
+          <div key={item.name} className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] text-secondary-500 dark:text-neutral-400">
+              <span className="font-medium truncate pr-2">{item.name}</span>
+              <span className="text-[10px]">n={item.count || 0}</span>
+            </div>
+
+            <div className="relative h-8">
+              <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px bg-neutral-200 dark:bg-neutral-700" />
+
+              {/* whisker */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 h-px bg-neutral-500 dark:bg-neutral-300"
+                style={{
+                  left: `${toPercent(item.min)}%`,
+                  width: `${Math.max(toPercent(item.max) - toPercent(item.min), 0.8)}%`,
+                }}
+              />
+
+              {/* box (Q1-Q3) */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 h-5 rounded-sm border border-primary-600/70 bg-primary-500/25"
+                style={{
+                  left: `${toPercent(item.q1)}%`,
+                  width: `${Math.max(toPercent(item.q3) - toPercent(item.q1), 1)}%`,
+                }}
+              />
+
+              {/* median */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-px h-6 bg-primary-700 dark:bg-primary-300"
+                style={{ left: `${toPercent(item.median)}%` }}
+              />
+
+              {/* min/max dots */}
+              <div
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-neutral-500 dark:bg-neutral-300"
+                style={{ left: `${toPercent(item.min)}%` }}
+              />
+              <div
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-neutral-500 dark:bg-neutral-300"
+                style={{ left: `${toPercent(item.max)}%` }}
+              />
+            </div>
+
+            <div className="grid grid-cols-5 gap-1 text-[10px] text-secondary-400 dark:text-neutral-500">
+              <span>Min {formatValue(item.min)}</span>
+              <span>Q1 {formatValue(item.q1)}</span>
+              <span>Med {formatValue(item.median)}</span>
+              <span>Q3 {formatValue(item.q3)}</span>
+              <span>Max {formatValue(item.max)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+
 // ── Pie / Doughnut Chart ─────────────────────────────────────────────────────
 
 const AnalyticsPieChart = memo(({ data, isDoughnut = false, dark = false }) => {
@@ -153,6 +276,15 @@ function EmptyState() {
 
 AnalyticsBarChart.displayName = 'AnalyticsBarChart';
 AnalyticsLineChart.displayName = 'AnalyticsLineChart';
+AnalyticsStackedAreaChart.displayName = 'AnalyticsStackedAreaChart';
+AnalyticsBoxPlotChart.displayName = 'AnalyticsBoxPlotChart';
 AnalyticsPieChart.displayName = 'AnalyticsPieChart';
 
-export { AnalyticsBarChart, AnalyticsLineChart, AnalyticsPieChart, CHART_COLORS };
+export {
+  AnalyticsBarChart,
+  AnalyticsLineChart,
+  AnalyticsStackedAreaChart,
+  AnalyticsBoxPlotChart,
+  AnalyticsPieChart,
+  CHART_COLORS,
+};
