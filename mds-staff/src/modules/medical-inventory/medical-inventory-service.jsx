@@ -29,6 +29,15 @@ export const LOCATION_DISPLAY = {
 export const ALL_CATEGORIES = Object.values(ITEM_CATEGORY);
 export const ALL_LOCATIONS = Object.values(LOCATION);
 
+// Map legacy/lowercase category values to GraphQL enum casing.
+const normalizeItemCategory = (category) => {
+  if (!category || typeof category !== 'string') return undefined;
+  const normalized = category.trim().toLowerCase();
+  if (normalized === 'medicine') return ITEM_CATEGORY.MEDICINE;
+  if (normalized === 'supply') return ITEM_CATEGORY.SUPPLY;
+  return undefined;
+};
+
 // Helper to display location name
 export const getDisplayLocation = (location) => {
   return LOCATION_DISPLAY[location] || location;
@@ -203,12 +212,17 @@ const MEDICAL_ITEM_FIELDS = `
  * @returns {Promise<Object>} Created MedicalItem
  */
 export const createMedicalItem = async (input) => {
+  const payload = {
+    ...input,
+    category: normalizeItemCategory(input?.category),
+  };
+
   const data = await sendGraphQL(
     `mutation CreateMedicalItem($input: MedicalItemInput!) {
       createMedicalItems(input: $input) {${MEDICAL_ITEM_FIELDS}
       }
     }`,
-    { input },
+    { input: payload },
   );
   return data.createMedicalItems;
 };
@@ -220,12 +234,22 @@ export const createMedicalItem = async (input) => {
  * @returns {Promise<Object>} Updated MedicalItem
  */
 export const updateMedicalItem = async (id, input) => {
+  const payload = { ...input };
+  if (Object.prototype.hasOwnProperty.call(payload, 'category')) {
+    const normalizedCategory = normalizeItemCategory(payload.category);
+    if (normalizedCategory) {
+      payload.category = normalizedCategory;
+    } else {
+      delete payload.category;
+    }
+  }
+
   const data = await sendGraphQL(
     `mutation UpdateMedicalItem($id: ID!, $input: MedicalItemUpdateInput!) {
       updateMedicalItems(id: $id, input: $input) {${MEDICAL_ITEM_FIELDS}
       }
     }`,
-    { id, input },
+    { id, input: payload },
   );
   return data.updateMedicalItems;
 };
