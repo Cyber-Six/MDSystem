@@ -35,7 +35,7 @@ const InitialRecordFormScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { isDark } = useTheme();
-  const { refreshRecordStatus } = useRecordStatus();
+  const { refreshRecordStatus, recordStatus, isRecordLoading } = useRecordStatus();
   const scrollRef = useRef<ScrollView>(null);
 
   const isRevision = route.params?.isRevision ?? false;
@@ -65,6 +65,12 @@ const InitialRecordFormScreen: React.FC = () => {
   // Load revision/update data if applicable
   useEffect(() => {
     if (!isRevision && !isUpdate) return;
+
+    // Reactivation update flow can legitimately have no active EMR profile yet.
+    // Skip prefill request to avoid expected 404 GraphQL "No active profile found" errors.
+    if (isRecordLoading) return;
+    if (isUpdate && recordStatus?.credentialStatus === 'Inactive') return;
+
     fetchRevisionPrefill()
       .then(data => {
         if (data) {
@@ -79,7 +85,7 @@ const InitialRecordFormScreen: React.FC = () => {
         }
       })
       .catch(err => console.warn('[RecordForm] Prefill failed:', err.message));
-  }, [isRevision, isUpdate]);
+  }, [isRevision, isUpdate, isRecordLoading, recordStatus?.credentialStatus]);
 
   const isFemale = formData.personalInfo.gender === 'Female';
 

@@ -327,6 +327,148 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
           </TouchableOpacity>
         )}
 
+        {/* Announcements Carousel */}
+        {announcements.length > 0 && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+          >
+            <View style={styles.cardHeaderRow}>
+              <Text
+                style={[
+                  styles.cardTitle,
+                  { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                ]}
+              >
+                Announcements
+              </Text>
+              <Text
+                style={[
+                  styles.carouselCounter,
+                  { color: isDark ? colors.neutral[500] : colors.neutral[400] },
+                ]}
+              >
+                {announcementIndex + 1}/{announcements.length}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.announcementCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(241,197,38,0.06)'
+                    : 'rgba(241,197,38,0.08)',
+                  borderColor: isDark
+                    ? 'rgba(241,197,38,0.15)'
+                    : 'rgba(241,197,38,0.2)',
+                },
+                isAnnouncementTransitioning && styles.announcementCardTransitioning,
+              ]}
+              activeOpacity={0.85}
+              onPress={() => setSelectedAnnouncement(announcements[announcementIndex] ?? null)}
+            >
+              <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
+              <View style={styles.announcementTextContainer}>
+                <Text
+                  style={[
+                    styles.announcementTitle,
+                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {announcements[announcementIndex]?.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.announcementDesc,
+                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {announcements[announcementIndex]?.description}
+                </Text>
+                <Text
+                  style={[
+                    styles.announcementReadMore,
+                    { color: isDark ? colors.primary[400] : colors.primary[500] },
+                  ]}
+                >
+                  Tap to view full details
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {announcements.length > 1 && (
+              <View style={styles.carouselNavRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.carouselNavButton,
+                    {
+                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
+                    },
+                  ]}
+                  onPress={() => goToAnnouncement((prev) => prev - 1)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={16}
+                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
+                  />
+                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Prev</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.carouselNavButton,
+                    {
+                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
+                    },
+                  ]}
+                  onPress={() => goToAnnouncement((prev) => prev + 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Next</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Dot indicators */}
+            {announcements.length > 1 && (
+              <View style={styles.dotRow}>
+                {announcements.map((item, i) => (
+                  <TouchableOpacity
+                    key={item.id ?? `${i}`}
+                    onPress={() => goToAnnouncement(i)}
+                    style={[
+                      styles.dot,
+                      {
+                        width: i === announcementIndex ? 18 : 7,
+                        backgroundColor:
+                          i === announcementIndex
+                            ? colors.primary[500]
+                            : isDark
+                              ? colors.neutral[700]
+                              : colors.neutral[300],
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Go to announcement ${i + 1}`}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Quick Actions */}
         <View
           style={[
@@ -571,148 +713,6 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                 No recent activity
               </Text>
             </View>
-          </View>
-        )}
-
-        {/* Announcements Carousel */}
-        {announcements.length > 0 && (
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-          >
-            <View style={styles.cardHeaderRow}>
-              <Text
-                style={[
-                  styles.cardTitle,
-                  { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                ]}
-              >
-                Announcements
-              </Text>
-              <Text
-                style={[
-                  styles.carouselCounter,
-                  { color: isDark ? colors.neutral[500] : colors.neutral[400] },
-                ]}
-              >
-                {announcementIndex + 1}/{announcements.length}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.announcementCard,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(241,197,38,0.06)'
-                    : 'rgba(241,197,38,0.08)',
-                  borderColor: isDark
-                    ? 'rgba(241,197,38,0.15)'
-                    : 'rgba(241,197,38,0.2)',
-                },
-                isAnnouncementTransitioning && styles.announcementCardTransitioning,
-              ]}
-              activeOpacity={0.85}
-              onPress={() => setSelectedAnnouncement(announcements[announcementIndex] ?? null)}
-            >
-              <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
-              <View style={styles.announcementTextContainer}>
-                <Text
-                  style={[
-                    styles.announcementTitle,
-                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {announcements[announcementIndex]?.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.announcementDesc,
-                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {announcements[announcementIndex]?.description}
-                </Text>
-                <Text
-                  style={[
-                    styles.announcementReadMore,
-                    { color: isDark ? colors.primary[400] : colors.primary[500] },
-                  ]}
-                >
-                  Tap to view full details
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {announcements.length > 1 && (
-              <View style={styles.carouselNavRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.carouselNavButton,
-                    {
-                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
-                    },
-                  ]}
-                  onPress={() => goToAnnouncement((prev) => prev - 1)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={16}
-                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
-                  />
-                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Prev</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.carouselNavButton,
-                    {
-                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
-                    },
-                  ]}
-                  onPress={() => goToAnnouncement((prev) => prev + 1)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Next</Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={16}
-                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
-                  />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Dot indicators */}
-            {announcements.length > 1 && (
-              <View style={styles.dotRow}>
-                {announcements.map((item, i) => (
-                  <TouchableOpacity
-                    key={item.id ?? `${i}`}
-                    onPress={() => goToAnnouncement(i)}
-                    style={[
-                      styles.dot,
-                      {
-                        width: i === announcementIndex ? 18 : 7,
-                        backgroundColor:
-                          i === announcementIndex
-                            ? colors.primary[500]
-                            : isDark
-                              ? colors.neutral[700]
-                              : colors.neutral[300],
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Go to announcement ${i + 1}`}
-                  />
-                ))}
-              </View>
-            )}
           </View>
         )}
 
