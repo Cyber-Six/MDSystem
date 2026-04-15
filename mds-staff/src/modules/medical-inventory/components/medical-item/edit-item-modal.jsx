@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ALL_CATEGORIES } from '../../medical-inventory-service';
 
+const normalizeCategory = (category) => {
+  if (!category || typeof category !== 'string') return 'Medicine';
+  const normalized = category.trim().toLowerCase();
+  if (normalized === 'medicine') return 'Medicine';
+  if (normalized === 'supply') return 'Supply';
+  return 'Medicine';
+};
+
 /**
  * Edit Medical Item Modal — updates an existing MedicalItems record.
  * Item code cannot be changed (primary identifier).
@@ -19,7 +27,7 @@ const EditItemModal = ({ item, onClose, onSave }) => {
     if (item) {
       setForm({
         item_name: item.item_name || '',
-        category: item.category || 'Medicine',
+        category: normalizeCategory(item.category),
         description: item.description || '',
       });
     }
