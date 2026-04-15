@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DrawerActions } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useRecordStatus } from '../../context/RecordStatusContext';
 import { logout, axiosRequest } from '../../core';
 import { unregisterPushToken } from '../../services/notification-service';
 import { getPatientProfile } from '../../services/profile-service';
@@ -46,11 +47,41 @@ const menuItems: MenuItem[] = [
   { iconName: 'settings', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
 ];
 
+const nonDomainMenuItems: MenuItem[] = [
+  { iconName: 'person', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
+  { iconName: 'key', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
+  { iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
+  { iconName: 'megaphone', label: 'Announcements', screen: 'Announcements', description: 'Clinic news and announcements' },
+  { iconName: 'help-circle', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
+  { iconName: 'settings', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
+];
+
 export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) => {
   const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
+  const { recordStatus } = useRecordStatus();
   const [userName, setUserName] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
+
+  const isInactiveCredential = recordStatus?.credentialStatus === 'Inactive';
+  const isDomainAccessRestricted = Boolean(recordStatus?.needsInitialRecord) || isInactiveCredential;
+  const recordActionItem: MenuItem = isInactiveCredential
+    ? {
+        iconName: 'create',
+        label: 'Update Record',
+        screen: 'UpdateRecordChoice',
+        description: 'Update your medical and dental record',
+      }
+    : {
+        iconName: 'clipboard',
+        label: 'Medical Record',
+        screen: 'InitialRecordForm',
+        description: 'Complete or revise your initial record',
+      };
+
+  const visibleMenuItems = isDomainAccessRestricted
+    ? [recordActionItem, ...nonDomainMenuItems]
+    : menuItems;
 
   useEffect(() => {
     getPatientProfile()
@@ -152,12 +183,12 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
             { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
           ]}
         >
-          {menuItems.map((item, index) => (
+          {visibleMenuItems.map((item, index) => (
             <TouchableOpacity
               key={item.screen}
               style={[
                 styles.menuItem,
-                index < menuItems.length - 1 && {
+                index < visibleMenuItems.length - 1 && {
                   borderBottomWidth: 1,
                   borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100],
                 },

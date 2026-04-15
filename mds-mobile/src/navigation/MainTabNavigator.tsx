@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Platform, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,10 +15,11 @@ import { AppointmentScreen } from '../screens/appointment/AppointmentScreen';
 import { HealthChatScreen } from '../screens/health-chat/HealthChatScreen';
 import { MedicineRequestScreen } from '../screens/medicine/MedicineRequestScreen';
 import { MoreStackNavigator } from './MoreStackNavigator';
-import { MyDocumentsScreen } from '../screens/more/MyDocumentsScreen';
+import UpdateRecordChoiceScreen from '../screens/record-forms/UpdateRecordChoiceScreen';
 import { useTheme, colors } from '../context/ThemeContext';
 import PendingRecordGate from '../components/PendingRecordGate';
 import { useHealthChatBadge } from '../context/HealthChatNotificationProvider';
+import { useRecordStatus } from '../context/RecordStatusContext';
 
 // Wrap screens that should be gated behind initial-record approval
 const GatedAppointmentScreen = (props: any) => (
@@ -52,13 +53,33 @@ export const MainTabNavigator: React.FC = () => {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { badgeCount } = useHealthChatBadge();
+  const { recordStatus, isRecordLoading } = useRecordStatus();
+
+  const isDomainAccessRestricted =
+    Boolean(recordStatus?.needsInitialRecord) || recordStatus?.credentialStatus === 'Inactive';
+
+  if (isRecordLoading) {
+    return (
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary[500]} />
+        <Text style={{ marginTop: 10, color: isDark ? colors.neutral[400] : colors.neutral[600] }}>
+          Loading navigation...
+        </Text>
+      </View>
+    );
+  }
 
   // On Android, bottom insets can be 0 even with gesture nav. Ensure a minimum.
   const bottomPadding = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 10);
 
   return (
     <Tab.Navigator
-      initialRouteName="Home"
+      initialRouteName={isDomainAccessRestricted ? 'UpdateRecord' : 'Home'}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -97,12 +118,12 @@ export const MainTabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="MyDocuments"
-        component={MyDocumentsScreen}
+        name="UpdateRecord"
+        component={UpdateRecordChoiceScreen}
         options={{
-          tabBarLabel: 'Documents',
+          tabBarLabel: 'Update Record',
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon name={focused ? 'folder-open' : 'folder-open-outline'} focused={focused} color={color} />
+            <TabIcon name={focused ? 'create' : 'create-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -110,6 +131,9 @@ export const MainTabNavigator: React.FC = () => {
         name="Appointments"
         component={GatedAppointmentScreen}
         options={{
+          ...(isDomainAccessRestricted
+            ? { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }
+            : {}),
           tabBarLabel: 'Appointments',
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'calendar' : 'calendar-outline'} focused={focused} color={color} />
@@ -120,6 +144,9 @@ export const MainTabNavigator: React.FC = () => {
         name="HealthChat"
         component={GatedHealthChatScreen}
         options={{
+          ...(isDomainAccessRestricted
+            ? { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }
+            : {}),
           tabBarLabel: 'Health Chat',
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} focused={focused} color={color} />
@@ -132,6 +159,9 @@ export const MainTabNavigator: React.FC = () => {
         name="Medicine"
         component={GatedMedicineScreen}
         options={{
+          ...(isDomainAccessRestricted
+            ? { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }
+            : {}),
           tabBarLabel: 'Medicine',
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name="pill" lib="MCI" focused={focused} color={color} />
@@ -153,6 +183,11 @@ export const MainTabNavigator: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   iconContainer: {
     width: 32,
     height: 28,
