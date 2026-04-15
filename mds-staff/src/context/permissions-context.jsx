@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { axiosRequest } from '../packages-core-adapter';
+import {
+  MODULE_ENTANGLED_PERMISSION_MAP,
+  deriveEntangledPermissionsFromModules,
+  fetchEntangledPermissions,
+  isEntangledPermissionAllowed,
+  mergeEntangledPermissionMaps,
+} from '../services/entangled-permissions-service';
 
 const PermissionsContext = createContext(null);
 
@@ -26,6 +33,7 @@ const MODULE_ROUTE_MAP = {
  */
 export const PermissionsProvider = ({ children }) => {
   const [modules, setModules] = useState(null); // { moduleId: boolean }
+  const [entangledPermissions, setEntangledPermissions] = useState({}); // { code: { code, enabled, hardBlocked } }
   const [isAdmin, setIsAdmin] = useState(false);
   const [branch, setBranch] = useState(null); // 'Manila' | 'QuezonCity' | 'Both'
   const [isLoading, setIsLoading] = useState(true);
@@ -44,14 +52,27 @@ export const PermissionsProvider = ({ children }) => {
         flat[mod.moduleId] = mod.enabled;
       }
 
+      const nextIsAdmin = Boolean(data.isAdmin);
+      const derivedEntangled = deriveEntangledPermissionsFromModules(flat, { isAdmin: nextIsAdmin });
+
       setModules(flat);
-      setIsAdmin(data.isAdmin || false);
+      setIsAdmin(nextIsAdmin);
       setBranch(data.branch || 'Both');
+      setEntangledPermissions(derivedEntangled);
+
+      try {
+        const fetchedEntangled = await fetchEntangledPermissions();
+        setEntangledPermissions(mergeEntangledPermissionMaps(derivedEntangled, fetchedEntangled));
+      } catch (entangledError) {
+        // Keep derived entangled states so existing flows remain stable if GraphQL entangled fetch fails.
+        console.warn('Failed to fetch entangled permissions:', entangledError);
+      }
     } catch (err) {
       console.error('Failed to fetch permissions:', err);
       setError(err.message || 'Failed to load permissions');
       // Default to no permissions on error
       setModules({});
+      setEntangledPermissions({});
       setIsAdmin(false);
       setBranch('Both');
     } finally {
@@ -63,17 +84,41 @@ export const PermissionsProvider = ({ children }) => {
     fetchPermissions();
   }, [fetchPermissions]);
 
+  const getEntangledPermission = useCallback(
+    (code) => {
+      if (!code || typeof code !== 'string') return null;
+      return entangledPermissions?.[code] || null;
+    },
+    [entangledPermissions]
+  );
+
+  const hasEntangledPermission = useCallback(
+    (code) => {
+      const record = getEntangledPermission(code);
+      return isEntangledPermissionAllowed(record);
+    },
+    [getEntangledPermission]
+  );
+
   /**
    * Check if the user has access to a specific module.
    * Admins have access to everything.
    */
   const hasPermission = useCallback(
     (moduleId) => {
+      const entangledCode = MODULE_ENTANGLED_PERMISSION_MAP[moduleId];
+
+      if (entangledCode) {
+        if (!isAdmin && !modules?.[moduleId]) return false;
+        // Fail-safe: undefined/disabled/hardBlocked entangled state denies access.
+        return hasEntangledPermission(entangledCode);
+      }
+
       if (isAdmin) return true;
       if (!modules) return false;
-      return !!modules[moduleId];
+      return Boolean(modules[moduleId]);
     },
-    [modules, isAdmin]
+    [modules, isAdmin, hasEntangledPermission]
   );
 
   /**
@@ -82,25 +127,26 @@ export const PermissionsProvider = ({ children }) => {
    */
   const canAccessRoute = useCallback(
     (path) => {
-      if (isAdmin) return true;
-      if (!modules) return false;
+      if (!isAdmin && !modules) return false;
 
       // Dashboard is always accessible
       if (path === '/' || path === '') return true;
 
-      // Admin-only routes — only accessible via is_admin
-      if (path === '/settings/roles' || path.startsWith('/settings/roles/')) return false;
+      // Role management route is guarded by admin + entangled permission.
+      if (path === '/settings/roles' || path.startsWith('/settings/roles/')) {
+        return hasPermission('roleManagement');
+      }
 
       // Check if any module maps to this path
       for (const [moduleId, paths] of Object.entries(MODULE_ROUTE_MAP)) {
         if (paths.some((p) => path === p || path.startsWith(p + '/'))) {
-          if (!modules[moduleId]) return false;
+          if (!hasPermission(moduleId)) return false;
         }
       }
 
       return true;
     },
-    [modules, isAdmin]
+    [modules, isAdmin, hasPermission]
   );
 
   /**
@@ -132,9 +178,12 @@ export const PermissionsProvider = ({ children }) => {
     modules,
     isAdmin,
     branch,
+    entangledPermissions,
     isLoading,
     error,
     hasPermission,
+    getEntangledPermission,
+    hasEntangledPermission,
     canAccessRoute,
     canAccessBranch,
     allowedBranches,
