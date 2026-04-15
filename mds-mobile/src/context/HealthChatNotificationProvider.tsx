@@ -21,10 +21,8 @@ import {
   setupNotificationChannel,
   showHealthChatNotification,
   onNotificationResponse,
-  onPushTokenChanged,
   getExpoPushToken,
   registerPushToken,
-  DEFAULT_NOTIFICATION_CHANNEL_ID,
   HEALTH_CHAT_CHANNEL_ID,
 } from '../services/notification-service';
 
@@ -61,7 +59,6 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
   const appStateRef = useRef(AppState.currentState);
   const { settings } = useSettings();
   const settingsRef = useRef(settings);
-  const lastRegisteredPushTokenRef = useRef<string | null>(null);
   const lastHandledNotificationIdRef = useRef<string | null>(null);
   settingsRef.current = settings;
 
@@ -201,15 +198,12 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
     const cleanup = onNotificationResponse((response) => {
       const data = response.notification.request.content.data;
       try {
-        if (data?.type === 'health-chat') {
-          navigateToMainTab('HealthChat');
-        } else if (data?.type === 'appointment') {
-          navigateToMainTab('Appointments');
-        } else if (data?.type === 'medicine') {
-          navigateToMainTab('Medicine');
-        } else if (data?.type === 'record' || data?.type === 'staff') {
-          navigateToMainTab('More');
+        const notificationId = String(response.notification.request.identifier ?? '');
+        if (notificationId && lastHandledNotificationIdRef.current === notificationId) {
+          return;
         }
+        lastHandledNotificationIdRef.current = notificationId || null;
+        navigateFromNotificationData(data);
       } catch {
         // Navigation may not be ready
       }
