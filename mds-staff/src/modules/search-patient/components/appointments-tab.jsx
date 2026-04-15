@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  getPatientStatus,
+  getPatientAppointmentSnapshot,
   getPatientRecords,
   respondToAppointment,
   recordAttendance,
@@ -84,7 +84,8 @@ function RecordList({ records, startIndex, onSelect, emptyMessage }) {
 }
 
 export default function PatientAppointmentsTab({ patient }) {
-  const patientId = patient?.id;
+  const patientId = patient?.id !== undefined && patient?.id !== null ? String(patient.id) : null;
+  const patientIdentifier = patient?.identifier ? String(patient.identifier) : null;
 
   const [records,        setRecords]        = useState([]);
   const [currentStatus,  setCurrentStatus]  = useState(null);
@@ -95,8 +96,8 @@ export default function PatientAppointmentsTab({ patient }) {
   const [offset,         setOffset]         = useState(0);
   const [selectedRecord, setSelectedRecord] = useState(null);
 
-  const fetchRecords = useCallback(async (id, pageOffset, append = false) => {
-    const data = await getPatientRecords(id, pageOffset, PAGE_SIZE);
+  const fetchRecords = useCallback(async (id, pageOffset, append = false, identifier = null) => {
+    const data = await getPatientRecords(id, pageOffset, PAGE_SIZE, identifier);
     if (append) {
       setRecords((prev) => [...prev, ...(data || [])]);
     } else {
@@ -107,34 +108,35 @@ export default function PatientAppointmentsTab({ patient }) {
   }, []);
 
   useEffect(() => {
-    if (!patientId) return;
+    if (!patientId && !patientIdentifier) return;
     let cancelled = false;
     setLoading(true);
     setError('');
     setRecords([]);
     setOffset(0);
-    Promise.all([
-      getPatientStatus(patientId),
-      fetchRecords(patientId, 0),
-    ]).then(([status]) => {
-      if (!cancelled) setCurrentStatus(status);
+    const lookupUserId = patientId || null;
+    getPatientAppointmentSnapshot(lookupUserId, patientIdentifier, 0, PAGE_SIZE).then((snapshot) => {
+      if (cancelled) return;
+      setCurrentStatus(snapshot.status);
+      setRecords(snapshot.records);
+      setHasMore(snapshot.records.length === PAGE_SIZE);
     }).catch((err) => {
       if (!cancelled) setError(err.message || 'Failed to load appointments.');
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [patientId, fetchRecords]);
+  }, [patientId, patientIdentifier, fetchRecords]);
 
   const refreshRecords = useCallback(async () => {
-    if (!patientId) return;
-    const data = await getPatientRecords(patientId, 0, PAGE_SIZE);
-    setRecords(data || []);
+    if (!patientId && !patientIdentifier) return;
+    const lookupUserId = patientId || null;
+    const snapshot = await getPatientAppointmentSnapshot(lookupUserId, patientIdentifier, 0, PAGE_SIZE);
+    setRecords(snapshot.records);
     setOffset(0);
-    setHasMore((data?.length ?? 0) === PAGE_SIZE);
-    const status = await getPatientStatus(patientId);
-    setCurrentStatus(status);
-  }, [patientId]);
+    setHasMore(snapshot.records.length === PAGE_SIZE);
+    setCurrentStatus(snapshot.status);
+  }, [patientId, patientIdentifier]);
 
   const handleModalConfirm = async (pid, slotId) => {
     await respondToAppointment(pid, STATUS.SCHEDULED, undefined, slotId);
@@ -164,7 +166,7 @@ export default function PatientAppointmentsTab({ patient }) {
     const nextOffset = offset + PAGE_SIZE;
     setLoadingMore(true);
     try {
-      await fetchRecords(patientId, nextOffset, true);
+      await fetchRecords(patientId || null, nextOffset, true, patientIdentifier);
       setOffset(nextOffset);
     } catch (err) {
       setError(err.message);

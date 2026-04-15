@@ -62,8 +62,30 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
   const clearBadge = () => setBadgeCount(0);
   const incrementBadge = () => setBadgeCount((n) => n + 1);
 
+  const getDeepestRouteName = (state: any): string | null => {
+    if (!state?.routes?.length) return null;
+
+    let route = state.routes[state.index ?? 0];
+    while (route?.state?.routes?.length) {
+      route = route.state.routes[route.state.index ?? 0];
+    }
+
+    return route?.name ?? null;
+  };
+
+  const navigateToMainTab = (screen: string, params?: Record<string, unknown>) => {
+    const nav = getNavigationRef();
+    if (!nav) return;
+    nav.navigate('MainTabs', { screen, params });
+  };
+
   const isOnHealthChat = () => {
-    return getNavigationRef()?.getCurrentRoute()?.name === 'HealthChat';
+    const nav = getNavigationRef();
+    if (!nav) return false;
+
+    const rootState = nav.getRootState?.();
+    const currentName = getDeepestRouteName(rootState) ?? nav.getCurrentRoute?.()?.name;
+    return currentName === 'HealthChat';
   };
 
   /**
@@ -124,16 +146,14 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
     const cleanup = onNotificationResponse((response) => {
       const data = response.notification.request.content.data;
       try {
-        const nav = getNavigationRef();
-        if (!nav) return;
         if (data?.type === 'health-chat') {
-          nav.navigate('HealthChat');
+          navigateToMainTab('HealthChat');
         } else if (data?.type === 'appointment') {
-          nav.navigate('Appointments');
+          navigateToMainTab('Appointments');
         } else if (data?.type === 'medicine') {
-          nav.navigate('Medicine');
+          navigateToMainTab('Medicine');
         } else if (data?.type === 'record' || data?.type === 'staff') {
-          nav.navigate('More');
+          navigateToMainTab('More');
         }
       } catch {
         // Navigation may not be ready

@@ -18,6 +18,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DrawerActions } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
 import {
   getMyDocuments,
@@ -207,7 +208,7 @@ interface MyDocumentsScreenProps {
   navigation: any;
 }
 
-export const MyDocumentsScreen: React.FC<MyDocumentsScreenProps> = () => {
+export const MyDocumentsScreen: React.FC<MyDocumentsScreenProps> = ({ navigation }) => {
   const { isDark } = useTheme();
   const [documents, setDocuments] = useState<PatientDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -271,6 +272,25 @@ export const MyDocumentsScreen: React.FC<MyDocumentsScreenProps> = () => {
           />
         }
       >
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={[
+              styles.menuButton,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+            onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+            accessibilityRole="button"
+            accessibilityLabel="Open sidebar"
+          >
+            <Ionicons
+              name="menu"
+              size={22}
+              color={isDark ? colors.neutral[100] : colors.secondary[900]}
+            />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: textPrimary }]}>My Documents</Text>
+        </View>
+
         {/* Sub-header */}
         <Text style={[styles.subtitle, { color: textMuted }]}>
           Tap a document to open it on your device.
@@ -388,6 +408,23 @@ export const MyDocumentsScreen: React.FC<MyDocumentsScreenProps> = () => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { padding: 16, flexGrow: 1 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
   subtitle: { fontSize: 13, marginBottom: 12 },
 
   filterRow: { flexDirection: 'row', gap: 8, paddingRight: 16 },

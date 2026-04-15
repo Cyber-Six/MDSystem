@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -63,6 +64,7 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 
 export const MedicineRequestScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const navigation = useNavigation<any>();
   const { showBanner } = useBanner();
 
   // Views
@@ -344,6 +346,24 @@ export const MedicineRequestScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      <View style={styles.topMenuRow}>
+        <TouchableOpacity
+          style={[
+            styles.menuButton,
+            { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+          ]}
+          onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+          accessibilityRole="button"
+          accessibilityLabel="Open sidebar"
+        >
+          <Ionicons
+            name="menu"
+            size={22}
+            color={isDark ? colors.neutral[100] : colors.secondary[900]}
+          />
+        </TouchableOpacity>
+      </View>
 
       {/* ── Tab bar ─────────────────────────────────────────────────────── */}
       <View style={[styles.tabBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
@@ -710,6 +730,18 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
+  topMenuRow: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    marginBottom: 4,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Tab bar
   tabBar: {

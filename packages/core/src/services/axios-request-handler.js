@@ -26,6 +26,7 @@ import { createRequestLogger } from './console-request-logger.js';
  * @param {Function} dependencies.bannerConfig.getBannerType - Get banner type for status code
  * @param {Function} dependencies.bannerConfig.extractBannerData - Extract error/message from response
  * @param {Function} dependencies.onShowBanner - Callback to show banner notification
+ * @param {boolean} [dependencies.requestLoggerForceEnabled] - Optional override to force-enable/disable request logging
  * 
  * @returns {import('axios').AxiosInstance} Configured axios instance
  * 
@@ -63,16 +64,23 @@ export const createAxiosRequestHandler = ({
   getDevSubdomain,
   tokenService,
   bannerConfig,
-  onShowBanner
+  onShowBanner,
+  requestLoggerForceEnabled
 }) => {
   // ============================================
   // DEBUG LOGGING
   // Auto-enabled on localhost, auto-disabled in production
   // Set forceEnabled: true to enable logging in production
   // ============================================
+  const runtimeDevFlag = typeof __DEV__ !== 'undefined' ? __DEV__ : undefined;
+  const loggerForceEnabled =
+    typeof requestLoggerForceEnabled === 'boolean'
+      ? requestLoggerForceEnabled
+      : runtimeDevFlag;
+
   const computedBaseURL = getApiBaseUrl();
   const requestLogger = createRequestLogger({
-    forceEnabled: undefined, // Set to true to force enable in production, false to force disable
+    forceEnabled: loggerForceEnabled,
     computedBaseURL,
     getDevSubdomain,
   });

@@ -13,7 +13,12 @@ export type MainTabParamList = {
   Appointments: undefined;
   HealthChat: undefined;
   Medicine: undefined;
+  MyDocuments: undefined;
   More: undefined;
+};
+
+export type AppDrawerParamList = {
+  MainTabs: undefined;
 };
 
 export type MoreStackParamList = {

@@ -18,7 +18,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { DrawerActions, useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -81,6 +81,7 @@ function computeGrouping(messages: TicketMessage[]) {
 
 export const HealthChatScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const navigation = useNavigation<any>();
   const { clearBadge } = useHealthChatBadge();
 
   // Clear notification badge whenever this screen comes into focus
@@ -458,6 +459,24 @@ export const HealthChatScreen: React.FC = () => {
       ]}
       edges={['top']}
     >
+      <View style={styles.topMenuRow}>
+        <TouchableOpacity
+          style={[
+            styles.menuButton,
+            { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+          ]}
+          onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+          accessibilityRole="button"
+          accessibilityLabel="Open sidebar"
+        >
+          <Ionicons
+            name="menu"
+            size={22}
+            color={isDark ? colors.neutral[100] : colors.secondary[900]}
+          />
+        </TouchableOpacity>
+      </View>
+
       {/* Error Banner */}
       {error && (
         <View
@@ -711,6 +730,18 @@ export const HealthChatScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  topMenuRow: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    marginBottom: 8,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   flex1: {
     flex: 1,
