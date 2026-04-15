@@ -313,7 +313,7 @@ const Mutation = {
       const recordedBy = queryResult.rows[0].recordedBy;
 
       // Protect against submitting consultation without an outcome or invalid status
-      if (!["Created", "Completed", "Referred", "Monitored"].includes(currentStatus)) {
+      if (["Created", "Completed", "Referred", "Monitored"].includes(currentStatus)) {
         await client.query('ROLLBACK');
         throwGraphQLError(res).message("Consultation cannot be submitted in its current status").status(400).throw();
       }
