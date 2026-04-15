@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import type { Ticket, TicketMessage } from '../../services/health-chat-service';
@@ -12,6 +12,7 @@ import type { Ticket, TicketMessage } from '../../services/health-chat-service';
 interface NewChatCTAProps {
   ticket: Ticket | null;
   messages: TicketMessage[];
+  isHistoryLoading?: boolean;
   onStartNew: () => void;
   formatTime: (date?: string) => string;
 }
@@ -19,17 +20,19 @@ interface NewChatCTAProps {
 const NewChatCTA: React.FC<NewChatCTAProps> = ({
   ticket,
   messages,
+  isHistoryLoading = false,
   onStartNew,
   formatTime,
 }) => {
   const { isDark } = useTheme();
-  const hasPreviousConvo =
-    ticket && ['Closed', 'Expired'].includes(ticket.status) && messages.length > 0;
+  const hasPreviousTicket = !!(ticket && ['Closed', 'Expired'].includes(ticket.status));
+  const hasPreviousConvo = hasPreviousTicket && messages.length > 0;
+  const closedAt = ticket?.session_end ?? ticket?.archived_at ?? ticket?.expiresAt;
 
   return (
     <ScrollView style={styles.flex1} contentContainerStyle={styles.scrollContent}>
       {/* Previous conversation preview */}
-      {hasPreviousConvo && (
+      {hasPreviousTicket && (
         <View
           style={[
             styles.card,
@@ -55,60 +58,102 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
               },
             ]}
           >
-            {messages.slice(-5).map((msg) => (
-              <View key={msg.id} style={styles.previewMsgRow}>
-                {msg.promptType === 'system' ? (
-                  <View style={styles.systemPill}>
-                    <Text
-                      style={[
-                        styles.systemText,
-                        { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                      ]}
-                    >
-                      {msg.text}
-                    </Text>
-                  </View>
-                ) : (
-                  <View
-                    style={[
-                      styles.previewBubble,
-                      msg.userType === 'Patient'
-                        ? styles.patientBubble
-                        : [
-                            styles.staffBubble,
-                            {
-                              backgroundColor: isDark
-                                ? colors.neutral[700]
-                                : '#FFFFFF',
-                              borderColor: isDark
-                                ? colors.neutral[600]
-                                : colors.neutral[200],
-                            },
-                          ],
-                      msg.userType === 'Patient'
-                        ? { alignSelf: 'flex-end' }
-                        : { alignSelf: 'flex-start' },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.previewText,
-                        msg.userType === 'Patient'
-                          ? { color: colors.secondary[900] }
-                          : {
-                              color: isDark
-                                ? colors.neutral[100]
-                                : colors.secondary[800],
-                            },
-                      ]}
-                      numberOfLines={3}
-                    >
-                      {msg.text}
-                    </Text>
-                  </View>
-                )}
+            {isHistoryLoading ? (
+              <View style={styles.loadingHistoryBox}>
+                <ActivityIndicator size="small" color={colors.primary[500]} />
+                <Text
+                  style={[
+                    styles.loadingHistoryText,
+                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                  ]}
+                >
+                  Loading conversation history...
+                </Text>
               </View>
-            ))}
+            ) : hasPreviousConvo ? (
+              <ScrollView
+                nestedScrollEnabled
+                style={styles.previewScroll}
+                contentContainerStyle={styles.previewScrollContent}
+                showsVerticalScrollIndicator
+              >
+                {messages.map((msg) => (
+                  <View key={msg.id} style={styles.previewMsgRow}>
+                    {msg.promptType === 'system' ? (
+                      <View style={styles.systemPill}>
+                        <Text
+                          style={[
+                            styles.systemText,
+                            { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                          ]}
+                        >
+                          {msg.text || 'System message'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        <View
+                          style={[
+                            styles.previewBubble,
+                            msg.userType === 'Patient'
+                              ? styles.patientBubble
+                              : [
+                                  styles.staffBubble,
+                                  {
+                                    backgroundColor: isDark
+                                      ? colors.neutral[700]
+                                      : '#FFFFFF',
+                                    borderColor: isDark
+                                      ? colors.neutral[600]
+                                      : colors.neutral[200],
+                                  },
+                                ],
+                            msg.userType === 'Patient'
+                              ? { alignSelf: 'flex-end' }
+                              : { alignSelf: 'flex-start' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.previewText,
+                              msg.userType === 'Patient'
+                                ? { color: colors.secondary[900] }
+                                : {
+                                    color: isDark
+                                      ? colors.neutral[100]
+                                      : colors.secondary[800],
+                                  },
+                            ]}
+                          >
+                            {msg.text || (msg.filename ? 'Attachment sent' : 'Message')}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.previewTime,
+                            {
+                              color: isDark ? colors.neutral[500] : colors.neutral[400],
+                              alignSelf: msg.userType === 'Patient' ? 'flex-end' : 'flex-start',
+                            },
+                          ]}
+                        >
+                          {formatTime(msg.stamp)}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text
+                style={[
+                  styles.noHistoryText,
+                  { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                ]}
+              >
+                No previous message history for this consultation.
+              </Text>
+            )}
           </View>
 
           {/* Divider */}
@@ -130,7 +175,7 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
               ]}
             >
               {ticket!.status === 'Expired' ? 'Session expired' : 'Session closed'}
-              {ticket!.session_end && ` · ${formatTime(ticket!.session_end)}`}
+              {closedAt && ` · ${formatTime(closedAt)}`}
             </Text>
             <View
               style={[
@@ -163,7 +208,7 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
             { color: isDark ? colors.neutral[100] : colors.secondary[800] },
           ]}
         >
-          {hasPreviousConvo
+          {hasPreviousTicket
             ? 'Start a new consultation'
             : 'Need to talk to our medical team?'}
         </Text>
@@ -181,7 +226,7 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
           activeOpacity={0.8}
         >
           <Text style={styles.ctaButtonText}>
-            + {hasPreviousConvo ? 'New Consultation' : 'Start Health Chat'}
+            + {hasPreviousTicket ? 'New Consultation' : 'Start Health Chat'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -217,8 +262,12 @@ const styles = StyleSheet.create({
   previewBox: {
     borderRadius: 12,
     padding: 12,
-    gap: 6,
-    maxHeight: 200,
+  },
+  previewScroll: {
+    maxHeight: 260,
+  },
+  previewScrollContent: {
+    paddingBottom: 4,
   },
   previewMsgRow: {
     marginBottom: 4,
@@ -246,6 +295,25 @@ const styles = StyleSheet.create({
   previewText: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  previewTime: {
+    fontSize: 10,
+    marginTop: 3,
+  },
+  noHistoryText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 10,
+  },
+  loadingHistoryBox: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  loadingHistoryText: {
+    fontSize: 12,
   },
   divider: {
     flexDirection: 'row',
