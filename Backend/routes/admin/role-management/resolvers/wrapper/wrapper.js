@@ -1709,6 +1709,11 @@ const Query = {
     return await listPermissionTemplates();
   },
 
+  _roleTemplates: async (_, __, { user, res }) => {
+    const result = await listPermissionTemplates();
+    return result?.templates || [];
+  },
+
   _getPermissionTemplate: async (_, { templateId }, { user, res }) => {
     return await getPermissionTemplate(templateId);
   },

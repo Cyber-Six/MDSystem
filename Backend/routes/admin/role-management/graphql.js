@@ -17,10 +17,6 @@ const adminSchema = makeExecutableSchema({
   resolvers: {
     Query: adminResolver.Query,
     Mutation: adminResolver.Mutation,
-    BranchPermission: {
-      code: (source) => source?.code || source?.key || '',
-      hardBlocked: (source) => Boolean(source?.hardBlocked),
-    },
   },
 });
 

@@ -55,10 +55,8 @@ type MedicalPersonnel {
 # Used consistently across staff permissions, templates, and accounts
 type BranchPermission {
   key: String!           # Permission key (e.g., "emr_allow_view")
-  code: String!          # Entangled permission code alias (maps to key)
   label: String!         # Permission label (e.g., "ALLOW_TO_VIEW_EMR")
   enabled: Boolean!      # Whether permission is granted (true = exists in database, false = no record)
-  hardBlocked: Boolean!  # Reserved entangled state; false for current role-management permissions
   branch: Designation    # Branch for this permission (null if not granted)
 }
 
@@ -386,6 +384,7 @@ type Query {
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
 
   # Permission Templates
+  roleTemplates: [PermissionTemplate!]!
   listPermissionTemplates: PermissionTemplateList!
   getPermissionTemplate(templateId: ID!): PermissionTemplate
 }

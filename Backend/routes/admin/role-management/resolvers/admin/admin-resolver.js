@@ -109,6 +109,11 @@ const Query = {
     return await Wrapper.Query._listPermissionTemplates(_, args, context);
   },
 
+  roleTemplates: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._roleTemplates(_, args, context);
+  },
+
   getPermissionTemplate: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._getPermissionTemplate(_, args, context);
