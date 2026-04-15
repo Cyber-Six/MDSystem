@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { fetchAvailableMedicineWithQuantities } from '../../prescription-service';
 import { issuePrescription } from '../../prescription-service';
 import { searchPatientsForInventory } from '../../services/inventory-patient-search';
@@ -16,6 +16,8 @@ import BatchSelectionModal from './batch-selection-modal';
  */
 const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allRequests = [] }) => {
   const { profile, isLoading: isProfileLoading } = useStaffProfile();
+  const searchCacheRef = useRef(new Map());
+  const latestSearchTokenRef = useRef(0);
 
   // Patient search state
   const [searchInput, setSearchInput] = useState('');
@@ -57,8 +59,10 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
 
   // Patient search function — uses staff REST endpoints (no EMR permission needed)
   const handlePatientSearch = useCallback(async (query) => {
-    if (!query || query.length < 2) {
+    const normalizedQuery = (query || '').trim().toLowerCase();
+    if (normalizedQuery.length < 2) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
@@ -67,25 +71,72 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
     // will return 403 regardless of what we send.
     if (!profile?.branch) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
+    const cacheKey = `${profile.branch}:${normalizedQuery}`;
+    const cached = searchCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSearchResults(cached);
+      setIsSearching(false);
+      return;
+    }
+
+    const searchToken = ++latestSearchTokenRef.current;
+
     setIsSearching(true);
     try {
-      const patients = await searchPatientsForInventory(query, profile.branch);
+      const patients = await searchPatientsForInventory(normalizedQuery, profile.branch);
       const formatted = patients.map((p) => ({
         id: p.id,
         name: p.name,
         identifier: p.identifier,
         email: p.email,
       }));
-      setSearchResults(formatted);
+
+      // Keep a small in-memory cache to avoid repeating identical search requests.
+      searchCacheRef.current.set(cacheKey, formatted);
+      if (searchCacheRef.current.size > 30) {
+        const firstKey = searchCacheRef.current.keys().next().value;
+        searchCacheRef.current.delete(firstKey);
+      }
+
+      // Ignore stale responses from older requests.
+      if (searchToken === latestSearchTokenRef.current) {
+        setSearchResults(formatted);
+      }
     } catch (err) {
       console.error('Patient search error:', err);
-      setSearchResults([]);
+      if (searchToken === latestSearchTokenRef.current) {
+        setSearchResults([]);
+      }
     } finally {
-      setIsSearching(false);
+      if (searchToken === latestSearchTokenRef.current) {
+        setIsSearching(false);
+      }
     }
+  }, [profile?.branch]);
+
+  // Debounce search input to avoid one HTTP call per keystroke.
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      handlePatientSearch(trimmed);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput, handlePatientSearch]);
+
+  useEffect(() => {
+    // Branch context changed; clear old branch query cache.
+    searchCacheRef.current.clear();
   }, [profile?.branch]);
 
   // Load medicines for the current location
@@ -459,7 +510,6 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
                   value={searchInput}
                   onChange={(e) => {
                     setSearchInput(e.target.value);
-                    handlePatientSearch(e.target.value);
                   }}
                   className="w-full pl-9 pr-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
