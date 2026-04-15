@@ -1,7 +1,7 @@
 /**
  * Notification Service
- * Manages local push notifications via expo-notifications.
- * Used to alert users of health chat messages when not on the chat screen.
+ * Manages local + remote push notifications via expo-notifications.
+ * Used by the app-level notification provider for all patient modules.
  */
 
 import * as Notifications from 'expo-notifications';
@@ -9,6 +9,9 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import type { AxiosInstance } from 'axios';
+
+export const DEFAULT_NOTIFICATION_CHANNEL_ID = 'mds-notifications';
+export const HEALTH_CHAT_CHANNEL_ID = 'health-chat';
 
 // Configure how notifications display when app is in foreground
 Notifications.setNotificationHandler({
@@ -33,7 +36,13 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   if (existingStatus === 'granted') return true;
 
-  const { status } = await Notifications.requestPermissionsAsync();
+  const { status } = await Notifications.requestPermissionsAsync({
+    ios: {
+      allowAlert: true,
+      allowBadge: true,
+      allowSound: true,
+    },
+  });
   return status === 'granted';
 }
 
@@ -42,7 +51,15 @@ export async function requestNotificationPermissions(): Promise<boolean> {
  */
 export async function setupNotificationChannel(): Promise<void> {
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('health-chat', {
+    await Notifications.setNotificationChannelAsync(DEFAULT_NOTIFICATION_CHANNEL_ID, {
+      name: 'MDSystem Notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#F1C526',
+      sound: 'default',
+    });
+
+    await Notifications.setNotificationChannelAsync(HEALTH_CHAT_CHANNEL_ID, {
       name: 'Health Chat',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
@@ -53,23 +70,35 @@ export async function setupNotificationChannel(): Promise<void> {
 }
 
 /**
- * Show a local notification for a health chat message.
+ * Show a local notification in-app.
  */
-export async function showHealthChatNotification(
+export async function showLocalNotification(
   title: string,
   body: string,
   data?: Record<string, unknown>,
+  channelId: string = DEFAULT_NOTIFICATION_CHANNEL_ID,
 ): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
       title,
       body,
       sound: 'default',
-      data: { type: 'health-chat', ...data },
-      ...(Platform.OS === 'android' ? { channelId: 'health-chat' } : {}),
+      data,
+      ...(Platform.OS === 'android' ? { channelId } : {}),
     },
     trigger: null, // Show immediately
   });
+}
+
+/**
+ * Backwards-compatible helper for health chat notifications.
+ */
+export async function showHealthChatNotification(
+  title: string,
+  body: string,
+  data?: Record<string, unknown>,
+): Promise<void> {
+  await showLocalNotification(title, body, { type: 'health-chat', ...data }, HEALTH_CHAT_CHANNEL_ID);
 }
 
 /**
@@ -80,6 +109,17 @@ export function onNotificationResponse(
   handler: (response: Notifications.NotificationResponse) => void,
 ): () => void {
   const subscription = Notifications.addNotificationResponseReceivedListener(handler);
+  return () => subscription.remove();
+}
+
+/**
+ * Listen for Expo push token refreshes.
+ * Call this once when authenticated and register updated tokens with backend.
+ */
+export function onPushTokenChanged(handler: (token: string) => void): () => void {
+  const subscription = Notifications.addPushTokenListener((token) => {
+    if (token?.data) handler(token.data);
+  });
   return () => subscription.remove();
 }
 

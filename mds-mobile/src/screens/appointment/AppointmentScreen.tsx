@@ -18,10 +18,12 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerActions, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import {
   STATUS,
   SESSION,
@@ -39,6 +41,63 @@ import {
 } from '../../services/appointment-service';
 
 const STEP_LABELS = ['Select Type', 'Date & Session', 'Requirements', 'Review'];
+
+const BACKEND_ALLOWED_REQUIREMENT_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'video/mp4',
+  'video/quicktime',
+];
+
+const FILE_REQUIREMENT_MIME_TYPES = [
+  'application/pdf',
+  'video/mp4',
+  'video/quicktime',
+];
+
+const IMAGE_FILE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const VIDEO_FILE_EXTENSIONS = new Set(['mp4', 'mov']);
+
+type UploadedRequirement = {
+  scheduleRequirementId: string;
+  filename: string;
+  localUri: string;
+  fileName: string;
+  mimeType: string;
+};
+
+const getFileExtension = (name?: string) => {
+  if (!name) return '';
+  const parts = name.split('.');
+  return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
+};
+
+const resolveUploadedRequirementKind = (file: UploadedRequirement): 'image' | 'video' | 'pdf' | 'file' => {
+  const mime = (file.mimeType || '').toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime === 'application/pdf') return 'pdf';
+
+  const extension = getFileExtension(file.fileName);
+  if (IMAGE_FILE_EXTENSIONS.has(extension)) return 'image';
+  if (VIDEO_FILE_EXTENSIONS.has(extension)) return 'video';
+  if (extension === 'pdf') return 'pdf';
+
+  return 'file';
+};
+
+const mapUploadErrorMessage = (err: any) => {
+  const backendError = err?.response?.data?.error;
+  if (backendError === 'INVALID_FILE_TYPE') {
+    return 'Unsupported file type. Allowed: JPG, PNG, WEBP, PDF, MP4, MOV.';
+  }
+  if (backendError === 'MAX_FILES_STAGING_EXCEEDED') {
+    return 'You have uploaded too many files in staging. Please wait and try again.';
+  }
+  return err?.message || 'Failed to upload file. Please try again.';
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -168,9 +227,7 @@ export const AppointmentScreen: React.FC = () => {
 
   // Step 2 - requirements
   const [requirements, setRequirements] = useState<any[]>([]);
-  const [uploadedRequirements, setUploadedRequirements] = useState<
-    Array<{ scheduleRequirementId: string; filename: string; localUri: string }>
-  >([]);
+  const [uploadedRequirements, setUploadedRequirements] = useState<UploadedRequirement[]>([]);
   const [pickingForReq, setPickingForReq] = useState<string | null>(null);
   const [purpose, setPurpose] = useState('');
   const [showPurposeRequiredError, setShowPurposeRequiredError] = useState(false);
@@ -382,24 +439,12 @@ export const AppointmentScreen: React.FC = () => {
     }
   };
 
-  const handlePickRequirement = async (reqId: string) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      setError('Permission to access your photo library is required.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      allowsEditing: false,
-    });
-
-    if (result.canceled || result.assets.length === 0) return;
-
-    const asset = result.assets[0];
-    const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'image.jpg';
-    const type = asset.mimeType ?? 'image/jpeg';
+  const stageRequirementAsset = async (
+    reqId: string,
+    asset: { uri: string; name?: string | null; mimeType?: string | null },
+  ) => {
+    const name = asset.name || asset.uri.split('/').pop() || `requirement-${Date.now()}`;
+    const type = asset.mimeType || 'application/octet-stream';
 
     setPickingForReq(reqId);
     try {
@@ -413,13 +458,89 @@ export const AppointmentScreen: React.FC = () => {
 
       setUploadedRequirements((prev) => [
         ...prev.filter((r) => r.scheduleRequirementId !== reqId),
-        { scheduleRequirementId: reqId, filename: stagedFileId, localUri: asset.uri },
+        {
+          scheduleRequirementId: reqId,
+          filename: stagedFileId,
+          localUri: asset.uri,
+          fileName: name,
+          mimeType: type,
+        },
       ]);
     } catch (err: any) {
-      setError(err.message || 'Failed to upload file. Please try again.');
+      setError(mapUploadErrorMessage(err));
     } finally {
       setPickingForReq(null);
     }
+  };
+
+  const handlePickRequirementImage = async (reqId: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Permission to access your photo library is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9,
+      allowsEditing: false,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const imageAsset = result.assets[0];
+    await stageRequirementAsset(reqId, {
+      uri: imageAsset.uri,
+      name: imageAsset.fileName || imageAsset.uri.split('/').pop(),
+      mimeType: imageAsset.mimeType || 'image/jpeg',
+    });
+  };
+
+  const handlePickRequirementFile = async (reqId: string) => {
+    const result = await DocumentPicker.getDocumentAsync({
+      multiple: false,
+      copyToCacheDirectory: true,
+      type: FILE_REQUIREMENT_MIME_TYPES,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const fileAsset = result.assets[0];
+    await stageRequirementAsset(reqId, {
+      uri: fileAsset.uri,
+      name: fileAsset.name || fileAsset.uri.split('/').pop(),
+      mimeType: fileAsset.mimeType || 'application/octet-stream',
+    });
+  };
+
+  const handlePickRequirement = (reqId: string) => {
+    Alert.alert(
+      'Upload Requirement',
+      'Choose what you want to upload.',
+      [
+        {
+          text: 'Upload Image',
+          onPress: () => {
+            void handlePickRequirementImage(reqId);
+          },
+        },
+        {
+          text: 'Upload File',
+          onPress: () => {
+            void handlePickRequirementFile(reqId);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true },
+    );
   };
 
   const handleRemoveRequirement = async (reqId: string) => {
@@ -576,7 +697,7 @@ export const AppointmentScreen: React.FC = () => {
               styles.menuButton,
               { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
             ]}
-            onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+            onPress={() => toggleAppDrawer(navigation)}
             accessibilityRole="button"
             accessibilityLabel="Open sidebar"
           >
@@ -951,6 +1072,8 @@ export const AppointmentScreen: React.FC = () => {
                   const uploaded = uploadedRequirements.find(
                     (r) => r.scheduleRequirementId === req.id,
                   );
+                  const uploadedKind = uploaded ? resolveUploadedRequirementKind(uploaded) : null;
+                  const canPreviewImage = uploadedKind === 'image';
                   const isPickingThis = pickingForReq === req.id;
                   return (
                     <View
@@ -969,30 +1092,67 @@ export const AppointmentScreen: React.FC = () => {
                       {req.isDigital ? (
                         uploaded ? (
                           <View style={styles.reqThumbWrap}>
-                            <TouchableOpacity
-                              onPress={() => setLightboxUri(uploaded.localUri)}
-                              activeOpacity={0.85}
-                            >
-                              <Image
-                                source={{ uri: uploaded.localUri }}
-                                style={styles.reqThumb}
-                                resizeMode="cover"
-                              />
-                            </TouchableOpacity>
-                            <View style={styles.reqThumbActions}>
+                            {canPreviewImage ? (
                               <TouchableOpacity
-                                style={[styles.reqActionBtn, {
-                                  backgroundColor: isDark ? colors.neutral[600] : colors.neutral[100],
-                                }]}
                                 onPress={() => setLightboxUri(uploaded.localUri)}
+                                activeOpacity={0.85}
                               >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Ionicons name="eye" size={13} color={isDark ? colors.neutral[200] : colors.secondary[800]} />
-                                  <Text style={{ fontSize: 13, color: isDark ? colors.neutral[200] : colors.secondary[800] }}>
-                                    View
+                                <Image
+                                  source={{ uri: uploaded.localUri }}
+                                  style={styles.reqThumb}
+                                  resizeMode="cover"
+                                />
+                              </TouchableOpacity>
+                            ) : (
+                              <View
+                                style={[
+                                  styles.reqFilePreview,
+                                  {
+                                    borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+                                    backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+                                  },
+                                ]}
+                              >
+                                <Ionicons
+                                  name={
+                                    uploadedKind === 'pdf'
+                                      ? 'document-text'
+                                      : uploadedKind === 'video'
+                                        ? 'videocam'
+                                        : 'document'
+                                  }
+                                  size={20}
+                                  color={isDark ? colors.primary[300] : colors.primary[700]}
+                                />
+                                <View style={{ flex: 1 }}>
+                                  <Text
+                                    style={[styles.reqFileName, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}
+                                    numberOfLines={1}
+                                  >
+                                    {uploaded.fileName || 'Selected file'}
+                                  </Text>
+                                  <Text style={[styles.reqFileMeta, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
+                                    {uploaded.mimeType || 'Attached file'}
                                   </Text>
                                 </View>
-                              </TouchableOpacity>
+                              </View>
+                            )}
+                            <View style={styles.reqThumbActions}>
+                              {canPreviewImage && (
+                                <TouchableOpacity
+                                  style={[styles.reqActionBtn, {
+                                    backgroundColor: isDark ? colors.neutral[600] : colors.neutral[100],
+                                  }]}
+                                  onPress={() => setLightboxUri(uploaded.localUri)}
+                                >
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <Ionicons name="eye" size={13} color={isDark ? colors.neutral[200] : colors.secondary[800]} />
+                                    <Text style={{ fontSize: 13, color: isDark ? colors.neutral[200] : colors.secondary[800] }}>
+                                      View
+                                    </Text>
+                                  </View>
+                                </TouchableOpacity>
+                              )}
                               <TouchableOpacity
                                 style={[styles.reqActionBtn, {
                                   backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50],
@@ -1041,7 +1201,7 @@ export const AppointmentScreen: React.FC = () => {
                             <Text style={[styles.reqUploadBtnText, {
                               color: isDark ? colors.primary[300] : colors.primary[700],
                             }]}>
-                              {isPickingThis ? 'Uploading...' : 'Tap to upload image'}
+                              {isPickingThis ? 'Uploading...' : 'Tap to choose image or file'}
                             </Text>
                           </TouchableOpacity>
                         )
@@ -1474,6 +1634,17 @@ const styles = StyleSheet.create({
   reqUploadBtnText: { fontSize: 13, fontWeight: '500' },
   reqThumbWrap: { marginTop: 8 },
   reqThumb: { width: '100%', height: 140, borderRadius: 10 },
+  reqFilePreview: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  reqFileName: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  reqFileMeta: { fontSize: 11 },
   reqThumbActions: { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   reqActionBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
   reqPhysicalBadge: {

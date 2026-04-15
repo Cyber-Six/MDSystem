@@ -13,7 +13,7 @@ export type MainTabParamList = {
   Appointments: undefined;
   HealthChat: undefined;
   Medicine: undefined;
-  MyDocuments: undefined;
+  UpdateRecord: undefined;
   More: undefined;
 };
 

@@ -17,8 +17,9 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
-import { useSettings, NOTIFICATION_MODULE_KEYS, type MobileSettings } from '../../context/SettingsContext';
+import { useSettings, type MobileSettings } from '../../context/SettingsContext';
 import { Ionicons } from '@expo/vector-icons';
+import SecuritySettingsCard from '../../components/settings/SecuritySettingsCard';
 
 // ── Module labels shown in the per-module section ────────────────────────────
 // Patients don't interact with inventory or roleManagement, so those are excluded.
@@ -87,6 +88,7 @@ export const SettingsScreen: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
   const { settings, updateSettings } = useSettings();
   const [expandedModules, setExpandedModules] = useState(false);
+  const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || 'Not configured';
 
   // Generic updater for top-level boolean keys
   const setBool = useCallback((key: keyof MobileSettings, value: boolean) => {
@@ -269,6 +271,9 @@ export const SettingsScreen: React.FC = () => {
           })}
         </View>
 
+        {/* ── Security ──────────────────────────────────────────────── */}
+        <SecuritySettingsCard />
+
         {/* ── About ───────────────────────────────────────────────── */}
         <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
           <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -279,7 +284,7 @@ export const SettingsScreen: React.FC = () => {
               Version
             </Text>
             <Text style={[styles.aboutValue, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-              {process.env.EXPO_PUBLIC_APP_VERSION ?? '1.0.0'}
+              {appVersion}
             </Text>
           </View>
           <View style={styles.aboutRow}>

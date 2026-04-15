@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentComponentProps,
@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainTabNavigator } from './MainTabNavigator';
 import { AppDrawerParamList, MainTabParamList } from './types';
 import { useTheme, colors } from '../context/ThemeContext';
+import { useRecordStatus } from '../context/RecordStatusContext';
 
 const Drawer = createDrawerNavigator<AppDrawerParamList>();
 
@@ -41,9 +42,8 @@ const drawerItems: DrawerItem[] = [
     key: 'record-update',
     label: 'Record Update',
     iconName: 'create-outline',
-    targetTab: 'More',
-    params: { screen: 'UpdateRecordChoice' },
-    activeRoutes: ['UpdateRecordChoice', 'InitialRecordForm'],
+    targetTab: 'UpdateRecord',
+    activeRoutes: ['UpdateRecord', 'UpdateRecordChoice', 'InitialRecordForm'],
   },
   {
     key: 'appointments',
@@ -71,7 +71,8 @@ const drawerItems: DrawerItem[] = [
     key: 'my-documents',
     label: 'My Documents',
     iconName: 'folder-open-outline',
-    targetTab: 'MyDocuments',
+    targetTab: 'More',
+    params: { screen: 'MyDocuments' },
     activeRoutes: ['MyDocuments'],
   },
 ];
@@ -89,8 +90,27 @@ const getActiveRouteName = (state: any): string => {
 
 const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) => {
   const { isDark } = useTheme();
+  const { recordStatus } = useRecordStatus();
   const insets = useSafeAreaInsets();
+  const footerBottomInset = Platform.OS === 'ios'
+    ? Math.max(insets.bottom, 12)
+    : Math.max(insets.bottom, 14);
+  const currentYear = new Date().getFullYear();
   const activeRoute = getActiveRouteName(navigation.getState());
+  const isDomainAccessRestricted =
+    Boolean(recordStatus?.needsInitialRecord) || recordStatus?.credentialStatus === 'Inactive';
+  const shouldShowInitialRecordLabel =
+    Boolean(recordStatus?.needsInitialRecord) && recordStatus?.credentialStatus !== 'Inactive';
+
+  const visibleDrawerItems = isDomainAccessRestricted
+    ? [
+        {
+          ...drawerItems[1],
+          label: shouldShowInitialRecordLabel ? 'Complete Record' : 'Record Update',
+          iconName: shouldShowInitialRecordLabel ? 'clipboard-outline' : 'create-outline',
+        },
+      ]
+    : drawerItems;
 
   const handleNavigate = (item: DrawerItem) => {
     (navigation as any).navigate('MainTabs', {
@@ -112,15 +132,19 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
     >
       <View style={styles.logoSection}>
         <TouchableOpacity
-          onPress={() =>
+          onPress={() => {
+            if (isDomainAccessRestricted) {
+              handleNavigate(visibleDrawerItems[0]);
+              return;
+            }
             handleNavigate({
               key: 'logo',
               label: 'Dashboard',
               iconName: 'home-outline',
               targetTab: 'Home',
               activeRoutes: ['Home'],
-            })
-          }
+            });
+          }}
           style={styles.logoButton}
           accessibilityRole="button"
           accessibilityLabel="Go to Dashboard"
@@ -133,7 +157,7 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
         contentContainerStyle={styles.drawerScrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {drawerItems.map((item) => {
+        {visibleDrawerItems.map((item) => {
           const isActive = item.activeRoutes.includes(activeRoute);
 
           return (
@@ -196,8 +220,8 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
         })}
       </DrawerContentScrollView>
 
-      <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: isDark ? colors.neutral[500] : 'rgba(0,0,0,0.45)' }]}>© 2026 TIP</Text>
+      <View style={[styles.footer, { paddingBottom: footerBottomInset }]}>
+        <Text style={[styles.footerText, { color: isDark ? colors.neutral[500] : 'rgba(0,0,0,0.45)' }]}>© {currentYear} @ mdsystem</Text>
       </View>
     </View>
   );
@@ -269,7 +293,7 @@ const styles = StyleSheet.create({
   footer: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.14)',
-    paddingVertical: 12,
+    paddingTop: 12,
   },
   footerText: {
     fontSize: 10,

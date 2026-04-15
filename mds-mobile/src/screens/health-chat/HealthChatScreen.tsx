@@ -18,11 +18,13 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerActions, useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useHealthChatBadge } from '../../context/HealthChatNotificationProvider';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import {
   Ticket,
   TicketMessage,
@@ -100,7 +102,12 @@ export const HealthChatScreen: React.FC = () => {
   const [ticketPurpose, setTicketPurpose] = useState('');
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isStaffTyping, setIsStaffTyping] = useState(false);
-  const [pendingImage, setPendingImage] = useState<{ uri: string; name: string; type: string } | null>(null);
+  const [pendingAttachment, setPendingAttachment] = useState<{
+    uri: string;
+    name: string;
+    type: string;
+    kind: 'image' | 'file';
+  } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -274,25 +281,25 @@ export const HealthChatScreen: React.FC = () => {
   async function handleSendMessage() {
     const text = inputValue.trim();
     if (!ticket?.id) return;
-    if (!text && !pendingImage) return;
+    if (!text && !pendingAttachment) return;
 
     try {
       setIsLoading(true);
       setError(null);
       emitTyping(false);
 
-      if (pendingImage) {
+      if (pendingAttachment) {
         setIsUploading(true);
         let filename: string;
         try {
-          filename = await uploadFile(pendingImage.uri, pendingImage.name, pendingImage.type);
+          filename = await uploadFile(pendingAttachment.uri, pendingAttachment.name, pendingAttachment.type);
         } finally {
           setIsUploading(false);
         }
         const result = await sendMessage(ticket.id, text || null, filename, 'file');
         if (result.success && result.message) {
           setMessages((prev) => [...prev, result.message!]);
-          setPendingImage(null);
+          setPendingAttachment(null);
           setInputValue('');
           // Recalculate expiresAt client-side: sending resets the inactivity timer
           const newExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -337,7 +344,22 @@ export const HealthChatScreen: React.FC = () => {
       const asset = result.assets[0];
       const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'image.jpg';
       const type = asset.mimeType ?? 'image/jpeg';
-      setPendingImage({ uri: asset.uri, name, type });
+      setPendingAttachment({ uri: asset.uri, name, type, kind: 'image' });
+    }
+  }
+
+  async function handlePickFile() {
+    const result = await DocumentPicker.getDocumentAsync({
+      multiple: false,
+      copyToCacheDirectory: true,
+      type: ['application/pdf', 'video/mp4', 'video/quicktime'],
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      const asset = result.assets[0];
+      const name = asset.name ?? asset.uri.split('/').pop() ?? 'attachment.pdf';
+      const type = asset.mimeType ?? 'application/pdf';
+      setPendingAttachment({ uri: asset.uri, name, type, kind: 'file' });
     }
   }
 
@@ -465,7 +487,7 @@ export const HealthChatScreen: React.FC = () => {
             styles.menuButton,
             { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
           ]}
-          onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+          onPress={() => toggleAppDrawer(navigation)}
           accessibilityRole="button"
           accessibilityLabel="Open sidebar"
         >
@@ -476,7 +498,6 @@ export const HealthChatScreen: React.FC = () => {
           />
         </TouchableOpacity>
       </View>
-
       {/* Error Banner */}
       {error && (
         <View
@@ -703,8 +724,9 @@ export const HealthChatScreen: React.FC = () => {
             onChangeText={handleInputChange}
             onSend={handleSendMessage}
             onPickImage={handlePickImage}
-            pendingImage={pendingImage}
-            onClearPendingImage={() => setPendingImage(null)}
+            onPickFile={handlePickFile}
+            pendingAttachment={pendingAttachment}
+            onClearPendingAttachment={() => setPendingAttachment(null)}
             isUploading={isUploading}
           />
 
