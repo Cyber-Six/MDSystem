@@ -23,6 +23,33 @@ interface LoginRecord {
   timestamp: string;
 }
 
+const normalizeLoginRecords = (payload: any): LoginRecord[] => {
+  const source = Array.isArray(payload?.sessions)
+    ? payload.sessions
+    : Array.isArray(payload?.records)
+      ? payload.records
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : [];
+
+  return source
+    .map((item: any, index: number) => {
+      const timestamp = String(
+        item?.timestamp ?? item?.login_at ?? item?.attempted_at ?? item?.created_at ?? '',
+      );
+      if (!timestamp) return null;
+
+      return {
+        id: String(item?.id ?? item?.sessionId ?? `record-${index}`),
+        wasSuccessful: Boolean(
+          item?.wasSuccessful ?? item?.was_successful ?? item?.success ?? false,
+        ),
+        timestamp,
+      };
+    })
+    .filter(Boolean) as LoginRecord[];
+};
+
 export const LoginActivityScreen: React.FC = () => {
   const { isDark } = useTheme();
   const [records, setRecords] = useState<LoginRecord[]>([]);
@@ -35,7 +62,7 @@ export const LoginActivityScreen: React.FC = () => {
       setErrorMessage(null);
       const res = await axiosRequest.get('/auth/user/login-activity');
       if (res.data.ok) {
-        setRecords(res.data.sessions || []);
+        setRecords(normalizeLoginRecords(res.data));
       } else {
         setRecords([]);
         setErrorMessage('Unable to load login activity right now.');

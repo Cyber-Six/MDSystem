@@ -59,8 +59,8 @@ router.get('/login-activity', jwtProtect('patient'), async (req, res) => {
       : (availableColumns.has('created_at') ? 'created_at' : null);
 
     if (!timestampColumn) {
-      logger.error('[AUTH] Login activity error: UserLoginAttempt has no attempted_at/created_at column.');
-      return res.status(500).json({ ok: false, message: 'Internal server error.' });
+      logger.warn('[AUTH] Login activity: UserLoginAttempt missing attempted_at/created_at. Returning empty sessions.');
+      return res.json({ ok: true, sessions: [] });
     }
 
     const ipAddressSelect = availableColumns.has('ip_address')
@@ -91,6 +91,10 @@ router.get('/login-activity', jwtProtect('patient'), async (req, res) => {
 
     return res.json({ ok: true, sessions });
   } catch (err) {
+    if (err?.code === '42P01' || err?.code === '42703') {
+      logger.warn(`[AUTH] Login activity schema mismatch (${err.code}). Returning empty sessions.`);
+      return res.json({ ok: true, sessions: [] });
+    }
     logger.error('[AUTH] Login activity error:', err);
     return res.status(500).json({ ok: false, message: 'Internal server error.' });
   }
