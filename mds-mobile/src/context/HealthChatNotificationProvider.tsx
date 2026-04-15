@@ -138,9 +138,18 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
       return;
     }
 
+    if (type === 'inventory' || type === 'role-management' || event.startsWith('inventory:') || event.startsWith('role:')) {
+      navigateWhenReady(() => navigateToMainTab('More'));
+      return;
+    }
+
     if (type === 'staff' || type === 'general' || event === 'staff:notification' || event === 'admin:notification') {
       navigateWhenReady(() => navigateToMainTab('More'));
+      return;
     }
+
+    // Default fallback for unknown module/type notifications.
+    navigateWhenReady(() => navigateToMainTab('More'));
   };
 
   /**

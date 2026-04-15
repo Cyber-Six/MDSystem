@@ -20,6 +20,71 @@ const expo = new Expo();
 const DEFAULT_CHANNEL_ID = 'mds-notifications';
 const HEALTH_CHAT_CHANNEL_ID = 'health-chat';
 
+function toTitleCaseWords(input) {
+  return String(input || '')
+    .replace(/[:._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function resolveTypeAndChannelFromEvent(eventName) {
+  if (eventName.startsWith('healthchat:')) {
+    return { type: 'health-chat', channelId: HEALTH_CHAT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('appointment:')) {
+    return { type: 'appointment', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('medicine:')) {
+    return { type: 'medicine', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('document:')) {
+    return { type: 'document', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('updateTicket')) {
+    return { type: 'record', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('inventory:')) {
+    return { type: 'inventory', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('role:')) {
+    return { type: 'role-management', channelId: DEFAULT_CHANNEL_ID };
+  }
+  return { type: 'general', channelId: DEFAULT_CHANNEL_ID };
+}
+
+function buildRoutingData(data) {
+  const safeData = {};
+  if (!data || typeof data !== 'object') return safeData;
+
+  // Keep payload compact while still preserving navigation IDs.
+  const candidateKeys = [
+    'chatId', 'slotId', 'requestId', 'documentId', 'recordId',
+    'templateType', 'status', 'newStatus', 'id',
+  ];
+  for (const key of candidateKeys) {
+    if (data[key] !== undefined && data[key] !== null) {
+      safeData[key] = data[key];
+    }
+  }
+
+  if (!safeData.chatId && data.chat && typeof data.chat === 'object' && data.chat.id) {
+    safeData.chatId = data.chat.id;
+  }
+
+  return safeData;
+}
+
+function fallbackBodyForEvent(eventName, data) {
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message.trim();
+  }
+  if (typeof data?.notes === 'string' && data.notes.trim()) {
+    return data.notes.trim();
+  }
+  return `You have a new ${toTitleCaseWords(eventName)} notification.`;
+}
+
 function toPushPayload(title, body, type, eventName, data = {}, channelId = DEFAULT_CHANNEL_ID) {
   return {
     title,
@@ -53,6 +118,15 @@ function parseAnnouncementMessage(data, fallbackTitle) {
 
   if (!body) return null;
   return { title, body };
+}
+
+function buildGenericPushContent(eventName, data) {
+  const { type, channelId } = resolveTypeAndChannelFromEvent(eventName);
+  const title = toTitleCaseWords(eventName) || 'Notification';
+  const body = fallbackBodyForEvent(eventName, data);
+  const routingData = buildRoutingData(data);
+
+  return toPushPayload(title, body, type, eventName, routingData, channelId);
 }
 
 /**
@@ -179,7 +253,8 @@ function eventToPushContent(eventName, data) {
     }
 
     default:
-      return null; // No push for other events
+      // Fallback: keep push valid for any future module event routed through notifyUser().
+      return buildGenericPushContent(eventName, data);
   }
 }
 
