@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -56,10 +56,16 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
     fetchAnnouncementById(announcement.id)
       .then((fullAnnouncement) => {
         if (cancelled || !fullAnnouncement) return;
-        setAnnouncementDetail((prev) => ({
-          ...prev,
-          ...fullAnnouncement,
-        }));
+        setAnnouncementDetail((prev) => {
+          const previous = prev ?? announcement;
+          return {
+            ...previous,
+            ...fullAnnouncement,
+            // Preserve preview media/details when detail payload omits them.
+            pubmat: fullAnnouncement.pubmat ?? previous.pubmat,
+            description: fullAnnouncement.description ?? previous.description,
+          };
+        });
       })
       .catch(() => {
         // Keep currently available announcement data when detail fetch fails.
@@ -78,15 +84,12 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
   if (!announcement) return null;
 
   const activeAnnouncement = announcementDetail ?? announcement;
-  const computedCardStyle = useMemo(
-    () => ({
-      backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
-      borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
-      maxHeight: windowHeight * 0.88,
-      minHeight: Math.min(windowHeight * 0.55, 380),
-    }),
-    [isDark, windowHeight]
-  );
+  const computedCardStyle = {
+    backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+    borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+    maxHeight: windowHeight * 0.88,
+    minHeight: Math.min(windowHeight * 0.55, 380),
+  };
 
   const titleColor = isDark ? colors.neutral[100] : colors.secondary[900];
   const textColor = isDark ? colors.neutral[300] : colors.neutral[700];

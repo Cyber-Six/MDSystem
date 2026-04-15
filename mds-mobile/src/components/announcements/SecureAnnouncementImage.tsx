@@ -18,6 +18,8 @@ interface SecureAnnouncementImageProps {
   resizeMode?: ImageProps['resizeMode'];
 }
 
+const announcementImageSourceCache = new Map<string, ImageSourcePropType>();
+
 const getMimeTypeFromHeaders = (headers: unknown): string => {
   if (!headers || typeof headers !== 'object') return 'image/jpeg';
 
@@ -87,7 +89,9 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
 
     if (!isMountedRef.current) return;
 
-    setSource(token ? { uri, headers: { Authorization: `Bearer ${token}` } } : { uri });
+    const fallbackSource = token ? { uri, headers: { Authorization: `Bearer ${token}` } } : { uri };
+    announcementImageSourceCache.set(pubmat, fallbackSource);
+    setSource(fallbackSource);
     setHasError(false);
   }, [pubmat]);
 
@@ -95,6 +99,14 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
     let cancelled = false;
 
     const loadImage = async () => {
+      const cachedSource = announcementImageSourceCache.get(pubmat);
+      if (cachedSource) {
+        setSource(cachedSource);
+        setHasError(false);
+        setDidTryRemoteFallback(false);
+        return;
+      }
+
       setSource(null);
       setHasError(false);
       setDidTryRemoteFallback(false);
@@ -108,7 +120,9 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
 
         const mimeType = getMimeTypeFromHeaders(response.headers);
         const base64 = payloadToBase64(response.data);
-        setSource({ uri: `data:${mimeType};base64,${base64}` });
+        const secureSource = { uri: `data:${mimeType};base64,${base64}` };
+        announcementImageSourceCache.set(pubmat, secureSource);
+        setSource(secureSource);
       } catch {
         try {
           setDidTryRemoteFallback(true);
@@ -127,7 +141,7 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
     return () => {
       cancelled = true;
     };
-  }, [pubmat]);
+  }, [pubmat, applyRemoteFallbackSource]);
 
   if (!source && !hasError) {
     return (
@@ -172,6 +186,7 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
           return;
         }
 
+        announcementImageSourceCache.delete(pubmat);
         setHasError(true);
         setSource(null);
       }}
