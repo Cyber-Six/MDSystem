@@ -56,6 +56,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 }) => {
   const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
+  const isIOS = Platform.OS === 'ios';
   
   // Form state
   const [email, setEmail] = useState('');
@@ -377,6 +378,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
+        autoComplete={isIOS ? 'off' : 'email'}
+        textContentType={isIOS ? 'none' : 'emailAddress'}
+        importantForAutofill={isIOS ? 'no' : 'auto'}
         autoCapitalize="none"
         autoCorrect={false}
         editable={!isLoading}
@@ -388,6 +392,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoComplete={isIOS ? 'off' : 'password'}
+        textContentType={isIOS ? 'none' : 'password'}
+        importantForAutofill={isIOS ? 'no' : 'auto'}
+        autoCorrect={false}
         editable={!isLoading}
       />
 
