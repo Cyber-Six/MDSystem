@@ -39,14 +39,6 @@ const drawerItems: DrawerItem[] = [
     activeRoutes: ['Home'],
   },
   {
-    key: 'announcements',
-    label: 'Announcements',
-    iconName: 'megaphone-outline',
-    targetTab: 'More',
-    params: { screen: 'Announcements' },
-    activeRoutes: ['Announcements'],
-  },
-  {
     key: 'record-update',
     label: 'Record Update',
     iconName: 'create-outline',
@@ -74,6 +66,14 @@ const drawerItems: DrawerItem[] = [
     iconName: 'chatbubbles-outline',
     targetTab: 'HealthChat',
     activeRoutes: ['HealthChat'],
+  },
+  {
+    key: 'announcements',
+    label: 'Announcements',
+    iconName: 'megaphone-outline',
+    targetTab: 'More',
+    params: { screen: 'Announcements' },
+    activeRoutes: ['Announcements'],
   },
   {
     key: 'my-documents',
