@@ -422,3 +422,12 @@ VALUES
   ('Bachelor of Secondary Education Major in Sciences'),
   ('Bachelor of Special Needs Education'),
   ('Teaching Certificate Program');
+
+
+CREATE INDEX ON "UsersPersonal"(identifier text_pattern_ops);
+
+CREATE INDEX ON "UsersPersonal"(identifier);
+
+CREATE INDEX ON "UsersPersonalLog"(user_id, created_at DESC);
+
+CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);

@@ -991,7 +991,7 @@ const Query = {
     return result.rows[0] || null;
   },
 
-  _searchPatients: async (_, { searchTerm, branch, identities, offset, limit }, { user, res }) => {
+  _searchPatients: async (_, { searchTerm, branch, identities, offset, limit, includeLatestTicket = false }, { user, res }) => {
     if (!searchTerm || searchTerm.trim().length < 2) return [];
 
     const term = searchTerm.trim();
@@ -1002,27 +1002,49 @@ const Query = {
     const token1Any = hasTwoTokens ? `%${tokens[0]}%` : null;
     const token2Any = hasTwoTokens ? `%${tokens[1]}%` : null;
     const identitiesFilter = Array.isArray(identities) && identities.length > 0 ? identities : null;
+    const includeLatestTicketFields = includeLatestTicket === true;
+
+    const selectedColumns = [
+      'up.id',
+      'up.identifier',
+      'up.branch',
+      'up.sex',
+      'upl.first_name',
+      'upl.last_name',
+      'upl.middle_name',
+      'upl.suffix',
+      'p.profile::"patientIdentity" AS profile_type',
+      'spd.label as program',
+      'sp.year',
+      'ep.department',
+      'ep.role',
+      'uc.credentials_status'
+    ];
+
+    if (includeLatestTicketFields) {
+      selectedColumns.push(
+        'latest.id           AS latest_ticket_id',
+        'latest.status       AS latest_status',
+        'latest.scope        AS latest_scope',
+        'latest.created_at   AS latest_updated_at'
+      );
+    }
+
+    const latestTicketJoin = includeLatestTicketFields
+      ? `
+      -- latest update ticket
+      LEFT JOIN LATERAL (
+        SELECT pul.id, pul.status, pul.scope, pul.created_at
+        FROM "patientUpdateLog" pul
+        WHERE pul."patientId" = up.id
+        ORDER BY pul.created_at DESC
+        LIMIT 1
+      ) latest ON true`
+      : '';
 
     const query = `
       SELECT
-        up.id,
-        up.identifier,
-        up.branch,
-        up.sex,
-        upl.first_name,
-        upl.last_name,
-        upl.middle_name,
-        upl.suffix,
-        p.profile::"patientIdentity" AS profile_type,
-        spd.label as program,
-        sp.year,
-        ep.department,
-        ep.role,
-        uc.credentials_status,
-        latest.id           AS latest_ticket_id,
-        latest.status       AS latest_status,
-        latest.scope        AS latest_scope,
-        latest.created_at   AS latest_updated_at
+        ${selectedColumns.join(',\n        ')}
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
       JOIN "UserCredentials" uc ON uc.id = up.id
@@ -1034,14 +1056,7 @@ const Query = {
         ORDER BY l.created_at DESC
         LIMIT 1
       ) upl ON true
-      -- latest update ticket
-      LEFT JOIN LATERAL (
-        SELECT pul.id, pul.status, pul.scope, pul.created_at
-        FROM "patientUpdateLog" pul
-        WHERE pul."patientId" = up.id
-        ORDER BY pul.created_at DESC
-        LIMIT 1
-      ) latest ON true
+      ${latestTicketJoin}
       -- latest profile record
       LEFT JOIN LATERAL (
         SELECT pr2.id, pr2.profile_type
@@ -1097,7 +1112,9 @@ const Query = {
       offset || 0,
     ]);
 
-    logger.debug(`Patient search for "${term}" returned ${result.rows.length} results`);
+    logger.debug(
+      `Patient search for "${term}" returned ${result.rows.length} results (includeLatestTicket=${includeLatestTicketFields})`
+    );
     return result.rows;
   },
 };
