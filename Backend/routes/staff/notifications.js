@@ -156,6 +156,7 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
       });
     }
 
+    
     const { message, recipientIds } = req.body;
 
     if (!message || typeof message !== 'string') {
@@ -218,7 +219,7 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check permission with resolved branch
-    const isPermitted = await permit.isMedicalPermittedBranchBased(staffUserId, permit.permissions.notification_allow_send_to_patients, checkBranch);
+    const isPermitted = await permit.isMedicalPermittedLocationBased(staffUserId, permit.permissions.notification_allow_send_to_patients, checkBranch);
     if (!isPermitted) {
       logger.warn(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} attempted to send patient notifications without permission for branch: ${checkBranch}`);
       return res.status(403).json({
