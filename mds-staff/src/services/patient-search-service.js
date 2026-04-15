@@ -2,8 +2,20 @@ import { axiosRequest } from '../packages-core-adapter';
 
 // ── GraphQL ─────────────────────────────────────────────────────────────────────
 const SEARCH_PATIENTS_QUERY = `
-  query SearchPatients($searchTerm: String!, $branch: DesignationBranch, $identities: [PATIENT_IDENTITY!], $limit: Int) {
-    searchPatients(searchTerm: $searchTerm, branch: $branch, identities: $identities, limit: $limit) {
+  query SearchPatients(
+    $searchTerm: String!
+    $branch: DesignationBranch
+    $identities: [PATIENT_IDENTITY!]
+    $limit: Int
+    $includeLatestTicket: Boolean = false
+  ) {
+    searchPatients(
+      searchTerm: $searchTerm
+      branch: $branch
+      identities: $identities
+      limit: $limit
+      includeLatestTicket: $includeLatestTicket
+    ) {
       id
       identifier
       branch
@@ -33,12 +45,19 @@ const SEARCH_PATIENTS_QUERY = `
  * @param {number} [limit=15] - Maximum results to return.
  * @param {string} [branch] - Staff branch to scope results ('Manila'|'QuezonCity'|'Both').
  * @param {string[]|null} [identities] - Optional PATIENT_IDENTITY filter array.
+ * @param {boolean} [includeLatestTicket=false] - Include latest EMR ticket fields when true.
  * @returns {Promise<Array>} Array of patient result objects.
  */
-export async function searchPatients(searchTerm, limit = 15, branch = null, identities = null) {
+export async function searchPatients(
+  searchTerm,
+  limit = 15,
+  branch = null,
+  identities = null,
+  includeLatestTicket = false,
+) {
   const response = await axiosRequest.post('/emr/medical', {
     query: SEARCH_PATIENTS_QUERY,
-    variables: { searchTerm, limit, branch, identities },
+    variables: { searchTerm, limit, branch, identities, includeLatestTicket },
   });
   if (response.data.errors) {
     throw new Error(response.data.errors[0]?.message || 'Search failed');

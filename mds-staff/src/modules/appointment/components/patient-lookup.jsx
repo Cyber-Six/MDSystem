@@ -61,7 +61,7 @@ const PatientLookup = () => {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed, 15, profile?.branch || null);
+        const data = await searchPatients(trimmed, 15, profile?.branch || null, null, false);
         setSearchResults(data);
       } catch (err) {
         setSearchError(err.message || 'Search failed');

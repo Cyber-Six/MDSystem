@@ -111,7 +111,7 @@ const SendNotificationView = () => {
     setIsSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const results = await searchPatients(searchTerm, 20, profile?.branch || null);
+        const results = await searchPatients(searchTerm, 20, profile?.branch || null, null, false);
         setSearchResults(results);
       } catch {
         setSearchResults([]);

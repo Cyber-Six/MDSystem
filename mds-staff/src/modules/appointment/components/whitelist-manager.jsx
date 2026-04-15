@@ -80,7 +80,7 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
     // Debounce search by 1000ms (1 second) to save backend resources
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const results = await searchPatients(value.trim(), 10, profile?.branch || null);
+        const results = await searchPatients(value.trim(), 10, profile?.branch || null, null, false);
 
         // Filter out patients already in whitelist
         const filteredResults = results.filter(

@@ -111,7 +111,7 @@ export default function SearchPatientView() {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed, 15, enforcedBranch, selectedIdentities);
+        const data = await searchPatients(trimmed, 15, enforcedBranch, selectedIdentities, true);
         setResults(data);
       } catch (err) {
         setError(err.message || 'Search failed');
