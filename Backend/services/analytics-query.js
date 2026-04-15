@@ -62,14 +62,15 @@ function branchFilter(branch, alias = 'up', paramIndex = 3) {
 
 /**
  * Normalize sex input to supported analytics filter values.
- * Returns empty string when the value is not a supported filter option.
+ * Returns null when the value is not a supported filter option.
  */
 function normalizeSexFilterValue(value) {
-  if (typeof value !== 'string') return '';
+  if (typeof value !== 'string') return null;
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'male' || normalized === 'm') return 'Male';
-  if (normalized === 'female' || normalized === 'f') return 'Female';
-  return '';
+  if (!normalized || normalized === 'all') return null;
+  if (normalized === 'male') return 'male';
+  if (normalized === 'female') return 'female';
+  return null;
 }
 
 /**
@@ -106,9 +107,7 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
   if (cleanedSex) {
     const normalizedSex = normalizeSexFilterValue(cleanedSex);
     if (normalizedSex) {
-      clause += ` AND LOWER(COALESCE((
-        SELECT up_sex.sex FROM "UsersPersonal" up_sex WHERE up_sex.id = ${patientIdExpr}
-      ), '')) = LOWER($${startIdx})`;
+      clause += ` AND LOWER(up.sex::text) = LOWER($${startIdx})`;
       params.push(normalizedSex);
       startIdx++;
     }
@@ -156,6 +155,16 @@ async function consultationsByType(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const baseParams = [startDate, endDate, ...bf.params];
   const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+  logger.error(`
+    SELECT c.type, COUNT(*) as count
+    FROM "Consultation" c
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
+    GROUP BY c.type ORDER BY count DESC`);
+
+  logger.error('Query params:', [...baseParams, ...pf.params]);
+  
   const result = await db.query(`
     SELECT c.type, COUNT(*) as count
     FROM "Consultation" c
@@ -536,11 +545,11 @@ const AGE_BRACKET_EXPR = `
 
 const AGE_BRACKET_ORDER = `
   CASE
-    WHEN DATE_PART('year', AGE(up.date_of_birth)) < 17  THEN 1
-    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 20 THEN 2
-    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 25 THEN 3
-    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 30 THEN 4
-    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 40 THEN 5
+    WHEN MIN(DATE_PART('year', AGE(up.date_of_birth))) < 17  THEN 1
+    WHEN MIN(DATE_PART('year', AGE(up.date_of_birth))) <= 20 THEN 2
+    WHEN MIN(DATE_PART('year', AGE(up.date_of_birth))) <= 25 THEN 3
+    WHEN MIN(DATE_PART('year', AGE(up.date_of_birth))) <= 30 THEN 4
+    WHEN MIN(DATE_PART('year', AGE(up.date_of_birth))) <= 40 THEN 5
     ELSE 6
   END
 `;
@@ -810,9 +819,10 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
   // Trim and validate sex input
   const cleanedSex = options.sex ? String(options.sex).trim() : '';
   const normalizedSex = normalizeSexFilterValue(cleanedSex);
-  const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
+  const sexFilter = normalizedSex ? `AND LOWER(up.sex::text) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
+    paramIndex++;
   }
 
   const result = await db.query(`
@@ -848,7 +858,7 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
 
   // Trim and validate department input
   const cleanedDept = options.department ? String(options.department).trim() : '';
-  const programCteFilter = cleanedDept ? `AND sp.program = $${paramIndex}` : '';
+  const programCteFilter = cleanedDept ? `AND spg.label = $${paramIndex}` : '';
   if (cleanedDept) {
     params.push(cleanedDept);
     paramIndex++;
@@ -861,18 +871,20 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
   // Trim and validate sex input
   const cleanedSex = options.sex ? String(options.sex).trim() : '';
   const normalizedSex = normalizeSexFilterValue(cleanedSex);
-  const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
+  const sexFilter = normalizedSex ? `AND LOWER(up.sex::text) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
+    paramIndex++;
   }
 
   const result = await db.query(`
     WITH patient_prog AS (
-      SELECT DISTINCT ON (pul."patientId") pul."patientId", sp.program
+      SELECT DISTINCT ON (pul."patientId") pul."patientId", spg.label as program
       FROM "patientUpdateLog" pul
       INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Student'
       INNER JOIN "student_profile" sp ON sp."profileId" = pr.id
-      WHERE pul.status = 'Approved' AND sp.program IS NOT NULL ${programCteFilter}
+      INNER JOIN "student_programs" spg ON spg.id = sp."programId"
+      WHERE pul.status = 'Approved' AND spg.label IS NOT NULL ${programCteFilter}
       ORDER BY pul."patientId", pul.created_at DESC
     )
     SELECT pp.program, COUNT(*) as count
@@ -913,9 +925,10 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
   // Trim and validate sex input
   const cleanedSex = options.sex ? String(options.sex).trim() : '';
   const normalizedSex = normalizeSexFilterValue(cleanedSex);
-  const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
+  const sexFilter = normalizedSex ? `AND LOWER(up.sex::text) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
+    paramIndex++;
   }
 
   const result = await db.query(`

@@ -13,11 +13,12 @@
  *   2. scope === 'Both' + credentials_status = 'Unverified'
  *      → always INITIAL — patient has never been approved, no ambiguity.
  *
- *   3. scope === 'Both' + credentials_status = 'Active' + ticket.status ≠ 'Approved'
- *      → always UPDATE — the initial record was already approved (that is what made
- *      them Active). Any new pending/revision ticket from an Active patient is an update.
+ *   3. scope === 'Both' + credentials_status != 'Unverified' + ticket.status ≠ 'Approved'
+ *      → always UPDATE — backend validation treats any non-Unverified status as
+ *      already validated. Any new pending/revision ticket from a validated patient
+ *      is an update request.
  *
- *   4. scope === 'Both' + credentials_status = 'Active' + ticket.status === 'Approved'
+ *   4. scope === 'Both' + credentials_status != 'Unverified' + ticket.status === 'Approved'
  *      → check count of Approved personal-record-log entries:
  *          count = 1  →  INITIAL  (their initial is the only thing ever approved)
  *          count ≥ 2  →  UPDATE   (at least one update was also approved)
@@ -129,6 +130,17 @@ const _logStore  = new Map(); // userId → { val: any, ts: number }
 const _CRED_TTL  = 5 * 60_000; // 5 min
 const _LOG_TTL   = 2 * 60_000; // 2 min
 
+const normalizeCredentialStatus = (status) => (
+  typeof status === 'string' ? status.trim().toLowerCase() : null
+);
+
+const isUnverifiedCredential = (status) => normalizeCredentialStatus(status) === 'unverified';
+
+const isValidatedCredential = (status) => {
+  const normalized = normalizeCredentialStatus(status);
+  return normalized !== null && normalized !== 'unverified';
+};
+
 // Converts a userId (UUID with hyphens, numeric id, etc.) into a valid
 // GraphQL field alias: letters/digits/underscores only, must start with a letter.
 const _toAlias = (userId) => 'u_' + String(userId).replace(/[^a-zA-Z0-9]/g, '_');
@@ -190,7 +202,7 @@ const _batchGetPersonalRecordLogs = async (userIds) => {
  *  1. Collect all unique patientIds that need enrichment (scope = 'Both').
  *  2. Check module-level cache; batch-fetch only the stale/missing entries in
  *     ONE network request for credential statuses.
- *  3. Identify which patients additionally need log data (Active + Approved).
+ *  3. Identify which patients additionally need log data (validated + Approved).
  *  4. Batch-fetch those logs in ONE additional network request.
  *  5. Classify every ticket synchronously from the pre-fetched data.
  *
@@ -233,10 +245,10 @@ export const enrichWithInitialFlag = async (tickets) => {
     uniqueIds.map((id) => [id, _credStore.get(id)?.val ?? null]),
   );
 
-  // ── Phase 2: Personal-record logs (only for Active + Approved patients) ───
+  // ── Phase 2: Personal-record logs (only for validated + Approved patients) ─
   const needsLog = uniqueIds.filter((id) => {
     const cred = credStatuses[id];
-    if (!cred || cred.toLowerCase() !== 'active') return false;
+    if (!isValidatedCredential(cred)) return false;
     // Only needed when a ticket for this patient is in Approved status (Step 4),
     // OR when cred is unavailable and we fall back to timestamp comparison (Step 5).
     return bothScopeTickets.some((t) => t.patientId === id && t.status === 'Approved');
@@ -269,17 +281,17 @@ export const enrichWithInitialFlag = async (tickets) => {
     const credStatus = credStatuses[ticket.patientId];
 
     // Step 2: Unverified → INITIAL
-    if (credStatus !== null && credStatus !== undefined && credStatus.toLowerCase() !== 'active') {
+    if (isUnverifiedCredential(credStatus)) {
       return { ...ticket, is_initial: true };
     }
 
-    if (credStatus !== null && credStatus !== undefined) {
-      // Step 3: Active + non-Approved → UPDATE
+    if (isValidatedCredential(credStatus)) {
+      // Step 3: Validated + non-Approved → UPDATE
       if (ticket.status !== 'Approved') {
         return { ...ticket, is_initial: false };
       }
 
-      // Step 4: Active + Approved → count Approved log entries
+      // Step 4: Validated + Approved → count Approved log entries
       const logs = _logStore.get(ticket.patientId)?.val ?? null;
       if (logs !== null) {
         const approvedCount = logs.filter((l) => l.status === 'Approved').length;
@@ -295,7 +307,7 @@ export const enrichWithInitialFlag = async (tickets) => {
     }
 
     if (credStatus !== null && credStatus !== undefined) {
-      return { ...ticket, is_initial: credStatus.toLowerCase() !== 'active' };
+      return { ...ticket, is_initial: isUnverifiedCredential(credStatus) };
     }
 
     return { ...ticket, is_initial: false };

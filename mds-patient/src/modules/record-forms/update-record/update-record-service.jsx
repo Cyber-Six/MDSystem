@@ -306,8 +306,41 @@ async function mapRevisionDataToFormData(backendData) {
 
   // School/Employee Profile
   if (backendData.emrProfile?.program) {
-    formData.program = backendData.emrProfile.program || '';
+    const rawProgramLabel = backendData.emrProfile.program || '';
+    formData.program = rawProgramLabel;
     formData.schoolYear = backendData.emrProfile.year || '';
+
+    if (rawProgramLabel) {
+      try {
+        const searchResult = await sendGraphQLRequest(
+          `
+            query SearchStudentProgram($label: String, $offset: Int, $limit: Int) {
+              searchStudentProgram(label: $label, offset: $offset, limit: $limit) {
+                id
+                label
+              }
+            }
+          `,
+          { label: rawProgramLabel, offset: 0, limit: 20 }
+        );
+
+        const programs = Array.isArray(searchResult?.searchStudentProgram)
+          ? searchResult.searchStudentProgram
+          : [];
+
+        const normalizedProgramLabel = String(rawProgramLabel).trim().toLowerCase();
+        const matchedProgram =
+          programs.find((item) => String(item?.label || '').trim().toLowerCase() === normalizedProgramLabel) ||
+          (programs.length === 1 ? programs[0] : null);
+
+        if (matchedProgram?.id) {
+          formData.programId = matchedProgram.id;
+          formData.program = matchedProgram.label || rawProgramLabel;
+        }
+      } catch (error) {
+        console.warn('[MapRevisionData] Could not resolve program ID from label:', error.message);
+      }
+    }
   }
   if (backendData.emrProfile?.department) {
     formData.employeeDepartment = backendData.emrProfile.department || '';
