@@ -247,6 +247,34 @@ const GQL_PREVIEW_SEMESTRAL_INACTIVATION = `
   }
 `;
 
+const GQL_SEARCH_PATIENT_DELETION_CANDIDATES = `
+  query SearchPatientDeletionCandidates($search: String, $offset: Int, $limit: Int) {
+    searchPatientDeletionCandidates(search: $search, offset: $offset, limit: $limit) {
+      patients {
+        id
+        name
+        email
+        branch
+        type
+        status
+        updatedAt
+        eligibleAfter
+        eligible
+      }
+      totalCount
+    }
+  }
+`;
+
+const GQL_DELETE_PATIENTS = `
+  mutation DeletePatients($ids: [UUID!]!) {
+    deletePatients(ids: $ids) {
+      ok
+      message
+    }
+  }
+`;
+
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
 
 const GQL_UPDATE_STAFF_ACCOUNT = `
@@ -585,6 +613,36 @@ export const previewSemestralInactivation = async ({ branch = null, department =
     scopedCount: 0,
     willUpdateCount: 0,
   };
+};
+
+export const searchPatientDeletionCandidates = async ({ search = '', offset = 0, limit = 50 }) => {
+  const normalizedSearch = typeof search === 'string' ? search.trim() : '';
+  const normalizedOffset = Math.max(0, Number(offset) || 0);
+  const normalizedLimit = Math.max(1, Number(limit) || 50);
+
+  const data = await sendGraphQL(GQL_SEARCH_PATIENT_DELETION_CANDIDATES, {
+    search: normalizedSearch || null,
+    offset: normalizedOffset,
+    limit: normalizedLimit,
+  });
+
+  return data.searchPatientDeletionCandidates || { patients: [], totalCount: 0 };
+};
+
+export const deletePatients = async (ids) => {
+  const normalizedIds = Array.isArray(ids)
+    ? [...new Set(ids.map((value) => String(value || '').trim()).filter(Boolean))]
+    : [];
+
+  if (normalizedIds.length === 0) {
+    throw new Error('Select at least one patient account to delete.');
+  }
+
+  const data = await sendGraphQL(GQL_DELETE_PATIENTS, {
+    ids: normalizedIds,
+  });
+
+  return data.deletePatients || { ok: false, message: 'Failed to delete selected patient accounts.' };
 };
 
 // ─── TEMPLATE OPERATIONS ──────────────────────────────────────────────────────

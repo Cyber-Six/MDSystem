@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  deletePatients,
   fetchActiveRefreshTokenCount,
   fetchMaxActiveUsersInHours,
   applySemestralInactivation,
   previewSemestralInactivation,
+  searchPatientDeletionCandidates,
   fetchAllSessions,
   fetchUserLoginAttempts,
   fetchUserSessions,
@@ -17,10 +19,13 @@ import {
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50];
 const LOGIN_HISTORY_LIMIT_OPTIONS = [10, 20, 50];
 const SESSION_LIMIT_OPTIONS = [10, 20, 50];
+const PATIENT_DELETION_PAGE_SIZE_OPTIONS = [10, 20, 50];
+const PATIENT_DELETION_DROPDOWN_LIMIT = 200;
 const ACTIVE_USER_WINDOW_OPTIONS = [6, 12, 24, 48, 72];
 const USER_INITIAL_PAGE_SIZE = 10;
 const LOGIN_HISTORY_INITIAL_LIMIT = 10;
 const SESSION_INITIAL_LIMIT = 10;
+const PATIENT_DELETION_INITIAL_PAGE_SIZE = 10;
 const ACTIVE_USERS_DEFAULT_HOURS = 24;
 const ADMIN_REFETCH_MIN_WAIT_MS = 15000;
 
@@ -230,16 +235,33 @@ const UserManagement = () => {
   const [semestralNotice, setSemestralNotice] = useState(null);
   const [semestralReviewModal, setSemestralReviewModal] = useState(null);
 
+  const [deletionSearch, setDeletionSearch] = useState('');
+  const [deletionRows, setDeletionRows] = useState([]);
+  const [deletionTotal, setDeletionTotal] = useState(0);
+  const [deletionLoading, setDeletionLoading] = useState(false);
+  const [eligibleDropdownLoading, setEligibleDropdownLoading] = useState(false);
+  const [eligibleDropdownRows, setEligibleDropdownRows] = useState([]);
+  const [deletionError, setDeletionError] = useState(null);
+  const [deletionPage, setDeletionPage] = useState(1);
+  const [deletionPageSize, setDeletionPageSize] = useState(PATIENT_DELETION_INITIAL_PAGE_SIZE);
+  const [selectedDeletionIds, setSelectedDeletionIds] = useState([]);
+  const [deletionSelectionMeta, setDeletionSelectionMeta] = useState({});
+  const [deletionToast, setDeletionToast] = useState(null);
+  const [deletionConfirmModalOpen, setDeletionConfirmModalOpen] = useState(false);
+  const [deletionConfirmCountdown, setDeletionConfirmCountdown] = useState(5);
+  const [deletionSubmitting, setDeletionSubmitting] = useState(false);
+
   const [banner, setBanner] = useState(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const rateLimitedRef = useRef(false);
 
   const patientsTabRef = useRef(activeTab);
   const sessionsTabRef = useRef(activeTab);
+  const accountActionsTabRef = useRef(activeTab);
   const tabRefetchAtRef = useRef({
     'patients-list': 0,
     'active-sessions': 0,
-    'semestral-action': 0,
+    'account-actions': 0,
   });
 
   const markRateLimited = useCallback(() => {
@@ -523,6 +545,114 @@ const UserManagement = () => {
     }
   }, [markNetworkError, markRateLimited]);
 
+  const loadEligibleDropdownCandidates = useCallback(async () => {
+    if (rateLimitedRef.current) return;
+
+    setEligibleDropdownLoading(true);
+
+    try {
+      const page = await searchPatientDeletionCandidates({
+        search: '',
+        offset: 0,
+        limit: PATIENT_DELETION_DROPDOWN_LIMIT,
+      });
+
+      const patients = Array.isArray(page.patients) ? page.patients : [];
+      const normalizedRows = patients
+        .map((row) => ({
+          id: String(row.id || ''),
+          name: row.name || 'Unverified User',
+          email: row.email || '--',
+          branch: normalizeBranchLabel(row.branch),
+          type: normalizeTypeLabel(row.type),
+          status: row.status || 'Unknown',
+          updatedAt: row.updatedAt || null,
+          eligibleAfter: row.eligibleAfter || null,
+          eligible: Boolean(row.eligible),
+        }))
+        .filter((row) => normalizeText(row.status) === 'inactive');
+
+      setEligibleDropdownRows(normalizedRows);
+      setDeletionSelectionMeta((prev) => {
+        const next = { ...prev };
+        for (const row of normalizedRows) {
+          next[row.id] = row;
+        }
+        return next;
+      });
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setEligibleDropdownRows([]);
+      setDeletionError(error?.message || 'Failed to load auto-eligible inactive accounts.');
+    } finally {
+      setEligibleDropdownLoading(false);
+    }
+  }, [markNetworkError, markRateLimited]);
+
+  const loadDeletionCandidates = useCallback(async () => {
+    if (rateLimitedRef.current) return;
+
+    setDeletionLoading(true);
+    setDeletionError(null);
+
+    try {
+      setBanner(null);
+
+      const offset = Math.max(0, (deletionPage - 1) * deletionPageSize);
+      const page = await searchPatientDeletionCandidates({
+        search: deletionSearch,
+        offset,
+        limit: deletionPageSize,
+      });
+
+      const patients = Array.isArray(page.patients) ? page.patients : [];
+      const normalizedRows = patients.map((row) => ({
+        id: String(row.id || ''),
+        name: row.name || 'Unverified User',
+        email: row.email || '--',
+        branch: normalizeBranchLabel(row.branch),
+        type: normalizeTypeLabel(row.type),
+        status: row.status || 'Unknown',
+        updatedAt: row.updatedAt || null,
+        eligibleAfter: row.eligibleAfter || null,
+        eligible: Boolean(row.eligible),
+      }));
+
+      setDeletionRows(normalizedRows);
+      setDeletionTotal(Number(page.totalCount) || 0);
+      setDeletionSelectionMeta((prev) => {
+        const next = { ...prev };
+        for (const row of normalizedRows) {
+          next[row.id] = row;
+        }
+        return next;
+      });
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setDeletionError(error?.message || 'Failed to load patient deletion candidates.');
+      setDeletionRows([]);
+      setDeletionTotal(0);
+    } finally {
+      setDeletionLoading(false);
+    }
+  }, [deletionPage, deletionPageSize, deletionSearch, markNetworkError, markRateLimited]);
+
   useEffect(() => {
     const switchedTabs = patientsTabRef.current !== activeTab;
     patientsTabRef.current = activeTab;
@@ -583,6 +713,35 @@ const UserManagement = () => {
   ]);
 
   useEffect(() => {
+    const switchedTabs = accountActionsTabRef.current !== activeTab;
+    accountActionsTabRef.current = activeTab;
+
+    if (activeTab !== 'account-actions') return;
+    if (rateLimitedRef.current) return;
+
+    if (switchedTabs) {
+      const remainingMs = getTabRefetchRemainingMs('account-actions');
+      if (remainingMs > 0) {
+        showRefetchCooldown(remainingMs);
+        return;
+      }
+      markTabRefetch('account-actions');
+    }
+
+    void Promise.allSettled([
+      loadEligibleDropdownCandidates(),
+      loadDeletionCandidates(),
+    ]);
+  }, [
+    activeTab,
+    getTabRefetchRemainingMs,
+    loadDeletionCandidates,
+    loadEligibleDropdownCandidates,
+    markTabRefetch,
+    showRefetchCooldown,
+  ]);
+
+  useEffect(() => {
     if (!sessionToastMessage) return;
 
     const timeoutId = setTimeout(() => {
@@ -603,6 +762,31 @@ const UserManagement = () => {
   }, [semestralNotice]);
 
   useEffect(() => {
+    if (!deletionToast) return;
+
+    const timeoutId = setTimeout(() => {
+      setDeletionToast(null);
+    }, 3500);
+
+    return () => clearTimeout(timeoutId);
+  }, [deletionToast]);
+
+  useEffect(() => {
+    if (!deletionConfirmModalOpen) {
+      setDeletionConfirmCountdown(5);
+      return;
+    }
+
+    setDeletionConfirmCountdown(5);
+
+    const intervalId = setInterval(() => {
+      setDeletionConfirmCountdown((current) => (current > 0 ? current - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [deletionConfirmModalOpen]);
+
+  useEffect(() => {
     if (semestralScopeType === 'branch') {
       setSemestralScopeValue(SEMESTRAL_BRANCH_OPTIONS[0].value);
       return;
@@ -620,6 +804,10 @@ const UserManagement = () => {
     setUserPage(1);
   }, [userSearch, userBranchFilter, userStatusFilter, userShowUnverified, userPageSize]);
 
+  useEffect(() => {
+    setDeletionPage(1);
+  }, [deletionSearch, deletionPageSize]);
+
   const branchOptions = USER_BRANCH_FILTER_OPTIONS;
   const statusOptions = USER_STATUS_FILTER_OPTIONS;
 
@@ -628,11 +816,22 @@ const UserManagement = () => {
     [userPageSize, userTotal]
   );
 
+  const deletionTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(deletionTotal / deletionPageSize)),
+    [deletionPageSize, deletionTotal]
+  );
+
   useEffect(() => {
     if (userPage > userTotalPages) {
       setUserPage(userTotalPages);
     }
   }, [userPage, userTotalPages]);
+
+  useEffect(() => {
+    if (deletionPage > deletionTotalPages) {
+      setDeletionPage(deletionTotalPages);
+    }
+  }, [deletionPage, deletionTotalPages]);
 
   const userPageRows = users;
 
@@ -650,6 +849,16 @@ const UserManagement = () => {
     const end = Math.min(start + userPageRows.length - 1, userTotal);
     return `Showing ${start}-${end} of ${userTotal}`;
   }, [userPage, userPageRows.length, userPageSize, userTotal]);
+
+  const deletionRangeLabel = useMemo(() => {
+    if (deletionTotal === 0 || deletionRows.length === 0) {
+      return 'Showing 0 of 0';
+    }
+
+    const start = (deletionPage - 1) * deletionPageSize + 1;
+    const end = Math.min(start + deletionRows.length - 1, deletionTotal);
+    return `Showing ${start}-${end} of ${deletionTotal}`;
+  }, [deletionPage, deletionPageSize, deletionRows.length, deletionTotal]);
 
   const canSessionPrev = sessionOffset > 0;
   const canSessionNext = sessionOffset + sessionLimit < sessionTotal;
@@ -690,6 +899,148 @@ const UserManagement = () => {
     return `Showing ${start}-${end}${userSessionHasMore ? '+' : ''}`;
   }, [userSessionHasMore, userSessionOffset, userSessionRows.length]);
 
+  const selectedDeletionIdSet = useMemo(
+    () => new Set(selectedDeletionIds),
+    [selectedDeletionIds]
+  );
+
+  const eligibleDropdownIdSet = useMemo(
+    () => new Set(eligibleDropdownRows.map((row) => row.id)),
+    [eligibleDropdownRows]
+  );
+
+  const selectedEligibleDropdownIds = useMemo(
+    () => selectedDeletionIds.filter((id) => eligibleDropdownIdSet.has(id)),
+    [eligibleDropdownIdSet, selectedDeletionIds]
+  );
+
+  const visibleEligibleIds = useMemo(
+    () => deletionRows.filter((row) => row.eligible).map((row) => row.id),
+    [deletionRows]
+  );
+
+  const allVisibleEligibleSelected = useMemo(
+    () => visibleEligibleIds.length > 0 && visibleEligibleIds.every((id) => selectedDeletionIdSet.has(id)),
+    [selectedDeletionIdSet, visibleEligibleIds]
+  );
+
+  const selectedDeletionRows = useMemo(
+    () => selectedDeletionIds.map((id) => deletionSelectionMeta[id]).filter(Boolean),
+    [deletionSelectionMeta, selectedDeletionIds]
+  );
+
+  const selectedEligibleDeletionCount = useMemo(
+    () => selectedDeletionRows.filter((row) => row.eligible).length,
+    [selectedDeletionRows]
+  );
+
+  const handleEligibleDropdownSelection = useCallback((event) => {
+    const selectedIds = Array.from(event.target.selectedOptions || [])
+      .map((option) => String(option.value || '').trim())
+      .filter(Boolean);
+
+    setSelectedDeletionIds((current) => {
+      const preservedManualSelections = current.filter((id) => !eligibleDropdownIdSet.has(id));
+      return [...new Set([...preservedManualSelections, ...selectedIds])];
+    });
+  }, [eligibleDropdownIdSet]);
+
+  const handleToggleDeletionSelection = useCallback((id, eligible) => {
+    if (!eligible) return;
+
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+
+    setSelectedDeletionIds((current) => {
+      if (current.includes(normalizedId)) {
+        return current.filter((value) => value !== normalizedId);
+      }
+      return [...current, normalizedId];
+    });
+  }, []);
+
+  const handleToggleSelectAllVisible = useCallback(() => {
+    if (visibleEligibleIds.length === 0) return;
+
+    setSelectedDeletionIds((current) => {
+      const currentSet = new Set(current);
+      const shouldSelectAll = visibleEligibleIds.some((id) => !currentSet.has(id));
+
+      if (shouldSelectAll) {
+        for (const id of visibleEligibleIds) currentSet.add(id);
+      } else {
+        for (const id of visibleEligibleIds) currentSet.delete(id);
+      }
+
+      return Array.from(currentSet);
+    });
+  }, [visibleEligibleIds]);
+
+  const openDeletionConfirmModal = useCallback(() => {
+    if (selectedDeletionIds.length === 0) {
+      setDeletionToast({ type: 'error', message: 'Select at least one eligible patient account first.' });
+      return;
+    }
+
+    if (selectedEligibleDeletionCount !== selectedDeletionIds.length) {
+      setDeletionToast({
+        type: 'error',
+        message: 'Some selected accounts are no longer eligible. Refresh the list and select eligible rows only.',
+      });
+      return;
+    }
+
+    setDeletionConfirmCountdown(5);
+    setDeletionConfirmModalOpen(true);
+  }, [selectedDeletionIds.length, selectedEligibleDeletionCount]);
+
+  const handleConfirmDeletePatients = useCallback(async () => {
+    if (rateLimitedRef.current) return;
+    if (selectedDeletionIds.length === 0) return;
+
+    setDeletionSubmitting(true);
+    try {
+      const result = await deletePatients(selectedDeletionIds);
+      setDeletionToast({
+        type: 'success',
+        message: result?.message || 'Selected patient accounts deleted successfully.',
+      });
+      setSelectedDeletionIds([]);
+      setDeletionSelectionMeta({});
+      setDeletionConfirmModalOpen(false);
+
+      await Promise.allSettled([
+        loadEligibleDropdownCandidates(),
+        loadDeletionCandidates(),
+        loadUsers(),
+      ]);
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setDeletionToast({
+        type: 'error',
+        message: error?.message || 'Deletion failed and transaction was rolled back.',
+      });
+      setDeletionConfirmModalOpen(false);
+    } finally {
+      setDeletionSubmitting(false);
+    }
+  }, [
+    loadDeletionCandidates,
+    loadEligibleDropdownCandidates,
+    loadUsers,
+    markNetworkError,
+    markRateLimited,
+    selectedDeletionIds,
+  ]);
+
   const refreshActiveTab = useCallback(() => {
     if (rateLimitedRef.current) return;
 
@@ -706,44 +1057,11 @@ const UserManagement = () => {
       return;
     }
 
-    if (activeTab === 'semestral-action') {
-      const identities = resolveSemestralTargetIdentities(semestralTarget);
-      const payload = semestralScopeType === 'branch'
-        ? { branch: semestralScopeValue, department: null, identities }
-        : { branch: null, department: semestralScopeValue, identities };
-
-      const normalizedBranch = typeof payload.branch === 'string' ? payload.branch.trim() : '';
-      const normalizedDepartment = typeof payload.department === 'string' ? payload.department.trim() : '';
-
-      if (!normalizedBranch && !normalizedDepartment) {
-        setSemestralNotice({ type: 'error', message: 'Please select a branch or provide a department first.' });
-        return;
-      }
-
-      void (async () => {
-        setSemestralPreviewLoading(true);
-        try {
-          const preview = await previewSemestralInactivation(payload);
-          setSemestralPreview(preview);
-          setSemestralNotice({
-            type: Number(preview?.scopedCount) > 0 ? 'success' : 'warning',
-            message: preview?.message || 'Semestral impact refreshed.',
-          });
-        } catch (error) {
-          if (isRateLimitedError(error)) {
-            markRateLimited();
-            return;
-          }
-
-          if (isConnectivityError(error)) {
-            markNetworkError();
-          }
-
-          setSemestralNotice({ type: 'error', message: error?.message || 'Failed to refresh semestral impact.' });
-        } finally {
-          setSemestralPreviewLoading(false);
-        }
-      })();
+    if (activeTab === 'account-actions') {
+      void Promise.allSettled([
+        loadEligibleDropdownCandidates(),
+        loadDeletionCandidates(),
+      ]);
       return;
     }
 
@@ -757,16 +1075,12 @@ const UserManagement = () => {
     activeUsersWindowHours,
     getTabRefetchRemainingMs,
     loadActiveUsersInHours,
+    loadDeletionCandidates,
+    loadEligibleDropdownCandidates,
     loadSessionsPage,
     loadTokenCount,
     loadUsers,
-    markNetworkError,
-    markRateLimited,
     markTabRefetch,
-    previewSemestralInactivation,
-    semestralScopeType,
-    semestralScopeValue,
-    semestralTarget,
     sessionLimit,
     sessionOffset,
     showRefetchCooldown,
@@ -1092,7 +1406,6 @@ const UserManagement = () => {
   }, [
     markNetworkError,
     markRateLimited,
-    previewSemestralInactivation,
     semestralScopeType,
     semestralScopeValue,
     semestralTarget,
@@ -1124,7 +1437,6 @@ const UserManagement = () => {
       setSemestralApplying(false);
     }
   }, [
-    applySemestralInactivation,
     loadUsers,
     markNetworkError,
     markRateLimited,
@@ -1173,15 +1485,15 @@ const UserManagement = () => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('semestral-action')}
-            aria-pressed={activeTab === 'semestral-action'}
+            onClick={() => setActiveTab('account-actions')}
+            aria-pressed={activeTab === 'account-actions'}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              activeTab === 'semestral-action'
+              activeTab === 'account-actions'
                 ? 'bg-primary-500 text-white shadow-sm'
                 : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
             }`}
           >
-            Semestral Action
+            Account Actions
           </button>
         </div>
 
@@ -1193,7 +1505,9 @@ const UserManagement = () => {
           aria-label={`Refresh ${
             activeTab === 'patients-list'
               ? 'patients list'
-              : (activeTab === 'active-sessions' ? 'active sessions' : 'semestral action')
+              : activeTab === 'active-sessions'
+                ? 'active sessions'
+                : 'account actions'
           }`}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1222,6 +1536,19 @@ const UserManagement = () => {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {deletionToast && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-lg px-3 py-2" role="status" aria-live="polite">
+          <p className={`text-xs ${
+            deletionToast.type === 'error'
+              ? 'text-error-700 dark:text-error-300'
+              : 'text-success-700 dark:text-success-300'
+          }`}
+          >
+            {deletionToast.message}
+          </p>
         </div>
       )}
 
@@ -1606,106 +1933,308 @@ const UserManagement = () => {
         </div>
       )}
 
-      {activeTab === 'semestral-action' && (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-4 space-y-3">
-            <div>
-              <p className="text-xs font-semibold text-secondary-900 dark:text-white">Semestral Credential Action</p>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                Set all Student and Employee accounts in a selected scope to Inactive.
-              </p>
-            </div>
+      {activeTab === 'account-actions' && (
+        <div className="space-y-4">
+          <div className="space-y-3">
+              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-secondary-900 dark:text-white">Semestral Credential Action</p>
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                    Set all Student and Employee accounts in a selected scope to Inactive.
+                  </p>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-              <select
-                value={semestralScopeType}
-                onChange={(event) => setSemestralScopeType(event.target.value)}
-                disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
-                className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="branch">Branch Scope</option>
-                <option value="department">Department Scope</option>
-              </select>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                  <select
+                    value={semestralScopeType}
+                    onChange={(event) => setSemestralScopeType(event.target.value)}
+                    disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                    className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="branch">Branch Scope</option>
+                    <option value="department">Department Scope</option>
+                  </select>
 
-              {semestralScopeType === 'branch' ? (
-                <select
-                  value={semestralScopeValue}
-                  onChange={(event) => setSemestralScopeValue(event.target.value)}
-                  disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
-                  className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {SEMESTRAL_BRANCH_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={semestralScopeValue}
-                  onChange={(event) => setSemestralScopeValue(event.target.value)}
-                  placeholder="Enter employee department"
-                  disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
-                  className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 placeholder:text-secondary-400 dark:placeholder:text-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                />
+                  {semestralScopeType === 'branch' ? (
+                    <select
+                      value={semestralScopeValue}
+                      onChange={(event) => setSemestralScopeValue(event.target.value)}
+                      disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                      className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {SEMESTRAL_BRANCH_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={semestralScopeValue}
+                      onChange={(event) => setSemestralScopeValue(event.target.value)}
+                      placeholder="Enter employee department"
+                      disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                      className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 placeholder:text-secondary-400 dark:placeholder:text-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  )}
+
+                  <select
+                    value={semestralTarget}
+                    onChange={(event) => setSemestralTarget(event.target.value)}
+                    disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                    className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {SEMESTRAL_TARGET_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleApplySemestralInactivation();
+                    }}
+                    disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
+                    className="px-3 py-2 text-xs font-medium rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {semestralApplying ? 'Applying...' : (semestralPreviewLoading ? 'Reviewing...' : 'Set Accounts to Inactive')}
+                  </button>
+                </div>
+              </div>
+
+              {semestralPreview && (
+                <div className="rounded-lg border border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20 px-3 py-2">
+                  <p className="text-xs font-medium text-warning-700 dark:text-warning-300">Impact Preview</p>
+                  <p className="text-xs text-warning-700 dark:text-warning-300 mt-1">
+                    {Number(semestralPreview.willUpdateCount) || 0} of {Number(semestralPreview.scopedCount) || 0} scoped account(s) will be updated to Inactive.
+                  </p>
+                </div>
               )}
 
-              <select
-                value={semestralTarget}
-                onChange={(event) => setSemestralTarget(event.target.value)}
-                disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
-                className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {SEMESTRAL_TARGET_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                onClick={() => {
-                  void handleApplySemestralInactivation();
-                }}
-                disabled={semestralApplying || semestralPreviewLoading || isRateLimited}
-                className="px-3 py-2 text-xs font-medium rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {semestralApplying ? 'Applying...' : (semestralPreviewLoading ? 'Reviewing...' : 'Set Accounts to Inactive')}
-              </button>
-            </div>
+              {semestralNotice && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`rounded-lg border px-3 py-2 ${
+                    semestralNotice.type === 'error'
+                      ? 'border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20'
+                      : semestralNotice.type === 'warning'
+                        ? 'border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20'
+                      : 'border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/20'
+                  }`}
+                >
+                  <p className={`text-xs ${
+                    semestralNotice.type === 'error'
+                      ? 'text-error-700 dark:text-error-300'
+                      : semestralNotice.type === 'warning'
+                        ? 'text-warning-700 dark:text-warning-300'
+                      : 'text-success-700 dark:text-success-300'
+                  }`}
+                  >
+                    {semestralNotice.message}
+                  </p>
+                </div>
+              )}
           </div>
 
-          {semestralPreview && (
-            <div className="rounded-lg border border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20 px-3 py-2">
-              <p className="text-xs font-medium text-warning-700 dark:text-warning-300">Impact Preview</p>
-              <p className="text-xs text-warning-700 dark:text-warning-300 mt-1">
-                {Number(semestralPreview.willUpdateCount) || 0} of {Number(semestralPreview.scopedCount) || 0} scoped account(s) will be updated to Inactive.
-              </p>
-            </div>
-          )}
+          <div className="space-y-3">
+              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-secondary-900 dark:text-white">Account Delete Action</p>
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                    Inactive patient accounts older than 1 year are auto-listed below. Locked accounts must be searched manually using the search bar.
+                  </p>
+                </div>
 
-          {semestralNotice && (
-            <div
-              role="status"
-              aria-live="polite"
-              className={`rounded-lg border px-3 py-2 ${
-                semestralNotice.type === 'error'
-                  ? 'border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20'
-                  : semestralNotice.type === 'warning'
-                    ? 'border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20'
-                  : 'border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/20'
-              }`}
-            >
-              <p className={`text-xs ${
-                semestralNotice.type === 'error'
-                  ? 'text-error-700 dark:text-error-300'
-                  : semestralNotice.type === 'warning'
-                    ? 'text-warning-700 dark:text-warning-300'
-                  : 'text-success-700 dark:text-success-300'
-              }`}
-              >
-                {semestralNotice.message}
-              </p>
-            </div>
-          )}
+                <div className="flex flex-wrap items-stretch gap-2">
+                  <input
+                    type="text"
+                    value={deletionSearch}
+                    onChange={(event) => setDeletionSearch(event.target.value)}
+                    placeholder="Search locked/inactive by name, email, or user ID"
+                    disabled={deletionLoading || deletionSubmitting || isRateLimited}
+                    className="flex-1 min-w-[240px] px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 placeholder:text-secondary-400 dark:placeholder:text-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void loadDeletionCandidates();
+                    }}
+                    disabled={deletionLoading || deletionSubmitting || isRateLimited}
+                    className="px-3 py-2 text-xs font-medium whitespace-nowrap rounded border border-neutral-300 dark:border-neutral-600 text-secondary-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deletionLoading ? 'Searching...' : 'Search Candidates'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAllVisible}
+                    disabled={visibleEligibleIds.length === 0 || deletionLoading || deletionSubmitting || isRateLimited}
+                    className="px-3 py-2 text-xs whitespace-nowrap rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {allVisibleEligibleSelected ? 'Unselect Visible Eligible' : 'Select Visible Eligible'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={openDeletionConfirmModal}
+                    disabled={deletionSubmitting || selectedEligibleDeletionCount === 0 || isRateLimited}
+                    className="px-3 py-2 text-xs font-medium whitespace-nowrap rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deletionSubmitting
+                      ? 'Deleting...'
+                      : `Delete Selected Accounts (${selectedEligibleDeletionCount})`}
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="auto-eligible-patient-dropdown" className="text-xs font-medium text-secondary-700 dark:text-neutral-200">
+                    Eligible Inactive Accounts (Auto-listed)
+                  </label>
+                  <select
+                    id="auto-eligible-patient-dropdown"
+                    multiple
+                    value={selectedEligibleDropdownIds}
+                    onChange={handleEligibleDropdownSelection}
+                    disabled={eligibleDropdownLoading || deletionSubmitting || isRateLimited}
+                    className="w-full min-h-[112px] max-h-48 px-2 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {eligibleDropdownRows.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {`${row.name} (${row.email}) - ${formatDateTime(row.updatedAt)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-secondary-500 dark:text-neutral-400">
+                    Hold Ctrl (Windows/Linux) or Command (macOS) to select multiple accounts.
+                  </p>
+                </div>
+
+                <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                  Deletion rules: Inactive accounts are eligible when updated_at + 1 year &lt; now. Locked accounts can be deleted once manually searched and selected.
+                </p>
+              </div>
+
+              {deletionError && (
+                <div className="rounded-lg border border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20 px-3 py-2">
+                  <p className="text-xs text-error-700 dark:text-error-300">{deletionError}</p>
+                </div>
+              )}
+
+              {deletionLoading ? (
+                <div className="py-12 text-center">
+                  <div className="w-6 h-6 mx-auto border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-2" />
+                  <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading deletion candidates...</p>
+                </div>
+              ) : deletionRows.length === 0 ? (
+                <div className="py-12 text-center border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">No matching deletion candidates found for the current search.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+                    <div className="max-h-[420px] overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 z-10">
+                          <tr className="bg-neutral-50 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Select</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Name</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Email</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Branch</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Updated At</th>
+                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Eligibility</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {deletionRows.map((row) => {
+                            const statusKey = getStatusKey(row.status);
+                            const isLocked = statusKey === 'locked';
+
+                            return (
+                              <tr
+                                key={row.id}
+                                className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                              >
+                                <td className="py-2.5 px-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDeletionIdSet.has(row.id)}
+                                    disabled={!row.eligible || deletionSubmitting || isRateLimited}
+                                    onChange={() => handleToggleDeletionSelection(row.id, row.eligible)}
+                                    className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+                                    aria-label={`Select patient ${row.name}`}
+                                  />
+                                </td>
+                                <td className="py-2.5 px-3 text-xs font-medium text-secondary-900 dark:text-white">{row.name}</td>
+                                <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{row.email}</td>
+                                <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.branch}</td>
+                                <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.type}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className="inline-flex items-center gap-1 text-xs text-secondary-700 dark:text-neutral-200">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
+                                    {formatStatusLabel(row.status)}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.updatedAt)}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                    isLocked
+                                      ? 'border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 bg-warning-50 dark:bg-warning-900/20'
+                                      : 'border border-success-300 dark:border-success-700 text-success-700 dark:text-success-300 bg-success-50 dark:bg-success-900/20'
+                                  }`}
+                                  >
+                                    {isLocked ? 'Locked (manual search)' : 'Inactive > 1 year'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400">{deletionRangeLabel}</p>
+
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="patient-deletion-page-size" className="text-xs text-secondary-500 dark:text-neutral-400">Rows</label>
+                      <select
+                        id="patient-deletion-page-size"
+                        value={deletionPageSize}
+                        onChange={(event) => setDeletionPageSize(Number(event.target.value))}
+                        disabled={deletionLoading || deletionSubmitting || isRateLimited}
+                        className="px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {PATIENT_DELETION_PAGE_SIZE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeletionPage((currentPage) => Math.max(1, currentPage - 1))}
+                        disabled={deletionPage <= 1 || deletionLoading || deletionSubmitting || isRateLimited}
+                        className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeletionPage((currentPage) => Math.min(deletionTotalPages, currentPage + 1))}
+                        disabled={deletionPage >= deletionTotalPages || deletionLoading || deletionSubmitting || isRateLimited}
+                        className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+          </div>
         </div>
       )}
 
@@ -1761,6 +2290,71 @@ const UserManagement = () => {
                 className="px-3 py-1.5 text-xs rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {semestralApplying ? 'Applying...' : 'Confirm and Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletionConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="patient-delete-confirm-title">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => {
+              if (!deletionSubmitting) {
+                setDeletionConfirmModalOpen(false);
+              }
+            }}
+            aria-hidden="true"
+          />
+
+          <div className="relative w-full max-w-lg rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
+              <h3 id="patient-delete-confirm-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Confirm Patient Account Deletion</h3>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                This action permanently deletes selected patient accounts and all related records.
+              </p>
+            </div>
+
+            <div className="px-4 py-3 space-y-2">
+              <p className="text-xs text-secondary-700 dark:text-neutral-200">
+                <span className="font-medium">Selected accounts:</span> {selectedDeletionIds.length}
+              </p>
+              <p className="text-xs text-secondary-700 dark:text-neutral-200">
+                <span className="font-medium">Eligibility rule:</span> status = Locked OR (status = Inactive and updated_at + 1 year &lt; now)
+              </p>
+              <p className="text-xs text-warning-700 dark:text-warning-300">
+                Safety timer: confirm button unlocks in {deletionConfirmCountdown}s.
+              </p>
+              <div className="rounded border border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20 px-3 py-2">
+                <p className="text-xs text-error-700 dark:text-error-300">
+                  If any selected account fails validation, the transaction is rolled back and no account will be deleted.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletionConfirmModalOpen(false)}
+                disabled={deletionSubmitting}
+                className="px-3 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleConfirmDeletePatients();
+                }}
+                disabled={deletionSubmitting || deletionConfirmCountdown > 0}
+                className="px-3 py-1.5 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deletionSubmitting
+                  ? 'Deleting...'
+                  : deletionConfirmCountdown > 0
+                    ? `Confirm in ${deletionConfirmCountdown}s`
+                    : 'Delete Selected Accounts'}
               </button>
             </div>
           </div>
