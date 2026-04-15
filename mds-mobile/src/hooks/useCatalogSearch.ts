@@ -6,7 +6,7 @@
  * for "Others" fields in medical record forms.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 
 interface CatalogSearchOptions<T> {
   /** Pre-loaded catalog items (from fetchAllCatalogs) */
@@ -58,10 +58,13 @@ export function useCatalogSearch<T extends { id: string }>({
   const [focused, setFocused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const existingIds = new Set([
-    ...catalog.map(c => c.id),
-    ...dynamicItems.map(c => c.id),
-  ]);
+  const existingIds = useMemo(
+    () => new Set([
+      ...catalog.map(c => c.id),
+      ...dynamicItems.map(c => c.id),
+    ]),
+    [catalog, dynamicItems],
+  );
 
   const handleInputChange = useCallback((value: string) => {
     setInput(value);
@@ -84,6 +87,15 @@ export function useCatalogSearch<T extends { id: string }>({
       setSearching(false);
     }, 300);
   }, [searchFn, existingIds]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
 
   const selectItem = useCallback((item: T) => {
     setDynamicItems(prev => {
