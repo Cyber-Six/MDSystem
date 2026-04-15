@@ -11,7 +11,7 @@
  * Branches: Casal, Arlegui, Quezon City (LocationDesignation enum)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -62,6 +62,9 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   Revision: { bg: colors.primary[100], text: colors.primary[700] },
 };
 
+const normalizeStatus = (status?: string | null) => (status || '').trim().toLowerCase();
+const isPendingStatus = (status?: string | null) => normalizeStatus(status) === 'pending';
+
 export const MedicineRequestScreen: React.FC = () => {
   const { isDark } = useTheme();
   const navigation = useNavigation<any>();
@@ -98,6 +101,16 @@ export const MedicineRequestScreen: React.FC = () => {
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+
+  const pendingRequests = useMemo(
+    () =>
+      requests
+        .filter((r) => isPendingStatus(r.status))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [requests]
+  );
+  const latestPendingRequest = pendingRequests[0] ?? null;
+  const hasPendingRequest = pendingRequests.length > 0;
 
   // ── Load profile & detect location access ──────────────────────────────
   useEffect(() => {
@@ -233,8 +246,7 @@ export const MedicineRequestScreen: React.FC = () => {
     }
 
     // If there's a pending request, offer cancel-and-resubmit (mirrors web)
-    const hasPending = requests.some((r) => r.status?.toLowerCase() === 'pending');
-    if (hasPending) {
+    if (hasPendingRequest) {
       setPendingItems(items);
       setShowCancelConfirm(true);
       return;
@@ -268,11 +280,7 @@ export const MedicineRequestScreen: React.FC = () => {
     try {
       await cancelMedicineRequest();
       // Update local state immediately
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.status?.toLowerCase() === 'pending' ? { ...r, status: 'Cancelled' } : r
-        )
-      );
+      setRequests((prev) => prev.map((r) => (isPendingStatus(r.status) ? { ...r, status: 'Cancelled' } : r)));
       await doSubmit(pendingItems);
     } catch (err: any) {
       setError(
@@ -371,17 +379,56 @@ export const MedicineRequestScreen: React.FC = () => {
           style={[styles.tab, view === 'form' && styles.activeTab, view === 'form' && { borderBottomColor: colors.primary[500] }]}
           onPress={() => setView('form')}
         >
-          <Text style={[styles.tabText, { color: view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-            New Request
-          </Text>
+          <View style={styles.tabInner}>
+            <Ionicons
+              name="create-outline"
+              size={14}
+              color={view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
+            />
+            <Text style={[styles.tabText, { color: view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
+              New Request
+            </Text>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, view === 'status' && styles.activeTab, view === 'status' && { borderBottomColor: colors.primary[500] }]}
           onPress={() => setView('status')}
         >
-          <Text style={[styles.tabText, { color: view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-            Request Status
-          </Text>
+          <View style={styles.tabInner}>
+            <Ionicons
+              name="list-outline"
+              size={14}
+              color={view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
+            />
+            <Text style={[styles.tabText, { color: view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
+              Request Status
+            </Text>
+            {hasPendingRequest && (
+              <View
+                style={[
+                  styles.tabCountBadge,
+                  {
+                    backgroundColor: view === 'status'
+                      ? colors.primary[500]
+                      : (isDark ? colors.neutral[700] : colors.neutral[200]),
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabCountText,
+                    {
+                      color: view === 'status'
+                        ? '#FFFFFF'
+                        : (isDark ? colors.primary[200] : colors.primary[700]),
+                    },
+                  ]}
+                >
+                  {pendingRequests.length}
+                </Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -423,6 +470,41 @@ export const MedicineRequestScreen: React.FC = () => {
               <Text style={styles.headerSubtitle}>Request medicines from the clinic</Text>
             </View>
           </View>
+
+          {hasPendingRequest && latestPendingRequest && (
+            <View
+              style={[
+                styles.pendingSummaryCard,
+                {
+                  backgroundColor: isDark ? 'rgba(241,197,38,0.12)' : colors.primary[50],
+                  borderColor: isDark ? 'rgba(241,197,38,0.35)' : colors.primary[200],
+                },
+              ]}
+            >
+              <View style={[styles.pendingSummaryIconWrap, { backgroundColor: isDark ? 'rgba(241,197,38,0.2)' : '#FFFFFF' }]}>
+                <Ionicons name="time-outline" size={16} color={colors.primary[500]} />
+              </View>
+              <View style={styles.pendingSummaryBody}>
+                <Text style={[styles.pendingSummaryTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                  {pendingRequests.length === 1
+                    ? 'You have 1 pending medicine request.'
+                    : `You have ${pendingRequests.length} pending medicine requests.`}
+                </Text>
+                <Text style={[styles.pendingSummaryMeta, { color: isDark ? colors.neutral[300] : colors.neutral[700] }]}>
+                  Latest: Request #{latestPendingRequest.id} · {new Date(latestPendingRequest.created_at).toLocaleDateString()} · {latestPendingRequest.items?.length || 0} item{(latestPendingRequest.items?.length || 0) !== 1 ? 's' : ''}
+                </Text>
+                <Text style={[styles.pendingSummaryHint, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+                  Submitting a new request will prompt you to cancel your pending one first.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.pendingSummaryAction, { backgroundColor: isDark ? colors.neutral[700] : '#FFFFFF' }]}
+                onPress={() => setView('status')}
+              >
+                <Text style={[styles.pendingSummaryActionText, { color: isDark ? colors.primary[300] : colors.primary[700] }]}>View</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Error */}
           {error && (
@@ -701,7 +783,7 @@ export const MedicineRequestScreen: React.FC = () => {
                     </View>
                   )}
 
-                  {req.status === 'Pending' && (
+                  {isPendingStatus(req.status) && (
                     <TouchableOpacity
                       style={[styles.cancelButton, { opacity: cancelling ? 0.5 : 1 }]}
                       onPress={handleCancel}
@@ -755,8 +837,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
+  tabInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   activeTab: {},
   tabText: { fontWeight: '600', fontSize: 14 },
+  tabCountBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  tabCountText: { fontSize: 11, fontWeight: '700' },
 
   // Header
   headerBanner: {
@@ -770,6 +862,35 @@ const styles = StyleSheet.create({
   headerIcon: { marginTop: 1 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  pendingSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+    marginBottom: 14,
+  },
+  pendingSummaryIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  pendingSummaryBody: { flex: 1 },
+  pendingSummaryTitle: { fontSize: 13, fontWeight: '700' },
+  pendingSummaryMeta: { fontSize: 12, marginTop: 3 },
+  pendingSummaryHint: { fontSize: 12, marginTop: 4 },
+  pendingSummaryAction: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  pendingSummaryActionText: { fontSize: 12, fontWeight: '700' },
 
   alertBox: {
     flexDirection: 'row',
