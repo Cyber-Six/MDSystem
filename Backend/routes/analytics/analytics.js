@@ -9,6 +9,51 @@ const { getStaffBranch, isMedicalPermitted, permissions: permKeys } = require('.
 
 const router = express.Router();
 
+// Backward-compatible aliases for analytics dataType keys.
+const DATA_TYPE_ALIASES = Object.freeze({
+  'appointments-accomodated-trends': 'appointments-accommodated-trends',
+  'appointments-accommodated-trend': 'appointments-accommodated-trends',
+  'accommodated-trends': 'appointments-accommodated-trends',
+  'accommodated-trend': 'appointments-accommodated-trends',
+  'accommodated-appointments-trends': 'appointments-accommodated-trends',
+  'vital-signs-boxplot': 'vital-signs-box-plot',
+  'vital-sign-box-plot': 'vital-signs-box-plot',
+  'oral-finding-percentages': 'oral-findings-percentages',
+  'oral-findings-percentage': 'oral-findings-percentages',
+  'lifestyle-statistic': 'lifestyle-statistics',
+  'patient-credentials-status': 'patient-credential-status',
+  'patient-population-manila-vs-qc': 'patient-population-by-branch',
+  'inventory-consumption-trend': 'inventory-consumption-trends',
+  'most-consumed-medicines': 'most-consumed-medicine',
+  'most-consumed-supplies': 'most-consumed-supply',
+  // Category labels used as query keys by older clients / cached bundles.
+  emr: 'female-reproductive-health',
+  lifestyle: 'lifestyle-statistics',
+  general: 'patient-credential-status',
+  inventory: 'inventory-report-summary',
+});
+
+function normalizeDataTypeKey(value) {
+  if (typeof value !== 'string') return '';
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return DATA_TYPE_ALIASES[normalized] || normalized;
+}
+
+function buildDataTypeMappings(values = []) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .map((requested) => ({ requested, normalized: normalizeDataTypeKey(requested) }))
+    .filter((entry) => entry.normalized);
+}
+
 /**
  * GET /analytics/queries
  * List available query types
@@ -64,6 +109,8 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
   try {
     const { dataType } = req.params;
     const { branch, startDate, endDate, groupBy, sex, department } = req.query;
+    const requestedDataType = String(dataType || '').trim();
+    const normalizedDataType = normalizeDataTypeKey(requestedDataType);
 
     // Validate required params
     if (!branch) {
@@ -90,8 +137,11 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check query type exists
-    if (!analytics.hasQuery(dataType)) {
-      return res.status(404).json({ error: 'QUERY_NOT_FOUND' });
+    if (!normalizedDataType || !analytics.hasQuery(normalizedDataType)) {
+      return res.status(404).json({
+        error: 'QUERY_NOT_FOUND',
+        dataType: requestedDataType || dataType,
+      });
     }
 
     // Check user branch access
@@ -101,22 +151,28 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
     }
 
     logger.info('Analytics query requested', {
-      dataType,
+      dataType: requestedDataType,
+      canonicalDataType: normalizedDataType,
       branch,
       startDate,
       endDate,
       userId: req.user.id,
     });
 
-    const data = await analytics.executeQuery(dataType, branch, startDate, endDate, { groupBy, sex, department });
+    const data = await analytics.executeQuery(normalizedDataType, branch, startDate, endDate, { groupBy, sex, department });
 
-    res.json({
+    const response = {
       success: true,
-      dataType,
+      dataType: requestedDataType || normalizedDataType,
       branch,
       dateRange: { startDate, endDate },
       data,
-    });
+    };
+    if ((requestedDataType || normalizedDataType) !== normalizedDataType) {
+      response.canonicalDataType = normalizedDataType;
+    }
+
+    res.json(response);
   } catch (err) {
     logger.error('Analytics query failed', { error: err.message });
     res.status(500).json({ error: 'QUERY_FAILED', message: err.message });
@@ -133,12 +189,13 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
 router.post('/batch', jwtProtect('medical'), async (req, res) => {
   try {
     const { dataTypes, branch, startDate, endDate, groupBy, department, sex } = req.body;
+    const dataTypeMappings = buildDataTypeMappings(dataTypes);
 
-    if (!Array.isArray(dataTypes) || dataTypes.length === 0) {
+    if (!Array.isArray(dataTypes) || dataTypes.length === 0 || dataTypeMappings.length === 0) {
       return res.status(400).json({ error: 'DATA_TYPES_REQUIRED' });
     }
-    if (dataTypes.length > 30) {
-      return res.status(400).json({ error: 'TOO_MANY_QUERIES', message: 'Maximum 30 queries per batch' });
+    if (dataTypeMappings.length > 80) {
+      return res.status(400).json({ error: 'TOO_MANY_QUERIES', message: 'Maximum 80 queries per batch' });
     }
     if (!branch || !startDate || !endDate) {
       return res.status(400).json({ error: 'MISSING_PARAMS' });
@@ -156,10 +213,14 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
     }
 
     // Validate all query types exist
-    const invalidTypes = dataTypes.filter(dt => !analytics.hasQuery(dt));
+    const invalidTypes = dataTypeMappings
+      .filter((entry) => !analytics.hasQuery(entry.normalized))
+      .map((entry) => entry.requested);
     if (invalidTypes.length > 0) {
       return res.status(400).json({ error: 'INVALID_QUERY_TYPES', invalidTypes });
     }
+
+    const normalizedDataTypes = Array.from(new Set(dataTypeMappings.map((entry) => entry.normalized)));
 
     // Check user branch access
     const userBranch = await getStaffBranch(req.user.id);
@@ -168,14 +229,26 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
     }
 
     logger.info('Analytics batch query requested', {
-      count: dataTypes.length,
+      count: dataTypeMappings.length,
+      normalizedCount: normalizedDataTypes.length,
       branch,
       startDate,
       endDate,
       userId: req.user.id,
     });
 
-    const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate, { groupBy, department, sex });
+    const normalizedResults = await analytics.executeBatchQueries(
+      normalizedDataTypes,
+      branch,
+      startDate,
+      endDate,
+      { groupBy, department, sex }
+    );
+
+    const results = {};
+    for (const entry of dataTypeMappings) {
+      results[entry.requested] = normalizedResults[entry.normalized] || { success: false, error: 'QUERY_NOT_FOUND' };
+    }
 
     res.json({
       success: true,
@@ -357,9 +430,14 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
 
     const { format, branch, startDate, endDate } = params;
     const { dataTypes: rawDataTypes, preset, groupBy, sex, department } = req.body;
+    const normalizedRawDataTypes = Array.isArray(rawDataTypes)
+      ? rawDataTypes
+        .map((value) => normalizeDataTypeKey(String(value ?? '').trim()))
+        .filter(Boolean)
+      : rawDataTypes;
 
     // Resolve which queries to include
-    const dataTypes = analyticsExport.resolveDataTypes(rawDataTypes, preset);
+    const dataTypes = analyticsExport.resolveDataTypes(normalizedRawDataTypes, preset);
     if (dataTypes.length === 0) {
       return res.status(400).json({ error: 'NO_VALID_DATA_TYPES' });
     }
@@ -460,8 +538,10 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
 router.post('/export/single', jwtProtect('medical'), async (req, res) => {
   try {
     const { dataType, branch, startDate, endDate, groupBy, sex, department } = req.body;
+    const requestedDataType = String(dataType || '').trim();
+    const normalizedDataType = normalizeDataTypeKey(requestedDataType);
 
-    if (!dataType || !analyticsExport.EXPORT_META[dataType]) {
+    if (!normalizedDataType || !analyticsExport.EXPORT_META[normalizedDataType]) {
       return res.status(400).json({ error: 'INVALID_DATA_TYPE' });
     }
     if (!branch || !['Manila', 'QuezonCity', 'Both'].includes(branch)) {
@@ -483,7 +563,8 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     }
 
     logger.info('Single metric export requested', {
-      dataType,
+      dataType: requestedDataType,
+      canonicalDataType: normalizedDataType,
       branch,
       startDate,
       endDate,
@@ -491,8 +572,8 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     });
 
     // Fetch data for single metric
-    const fetchResult = await analyticsExport.fetchExportData([dataType], branch, startDate, endDate, { groupBy, sex, department });
-    const result = fetchResult[dataType];
+    const fetchResult = await analyticsExport.fetchExportData([normalizedDataType], branch, startDate, endDate, { groupBy, sex, department });
+    const result = fetchResult[normalizedDataType];
 
     if (!result) {
       return res.status(404).json({ error: 'NO_DATA' });
@@ -521,7 +602,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
       },
     };
 
-    const { buffer, filename } = await analyticsExport.generateSingleMetricPDF(dataType, result, meta);
+    const { buffer, filename } = await analyticsExport.generateSingleMetricPDF(normalizedDataType, result, meta);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(buffer);
