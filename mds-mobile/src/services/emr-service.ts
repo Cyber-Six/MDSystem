@@ -1205,6 +1205,18 @@ const reverseMapYearLevel = (v: string): string => {
   return m[v] || '';
 };
 
+const formatGraphQLErrorList = (errors: any[] = []): string => {
+  return errors
+    .map((gqlError, index) => {
+      const message = gqlError?.message || 'Unknown GraphQL error';
+      const path = Array.isArray(gqlError?.path) && gqlError.path.length > 0
+        ? ` @ ${gqlError.path.join('.')}`
+        : '';
+      return `${index + 1}. ${message}${path}`;
+    })
+    .join(' | ');
+};
+
 export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   const [profileResult, emrResult] = await Promise.allSettled([
     sendGraphQLRequest(
@@ -1218,7 +1230,7 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
           branch
           identifier
         }
-      }`, {}, { endpoint: '/profile/patient' }
+      }`, {}, { endpoint: '/profile/patient', allowPartialData: true }
     ),
     sendGraphQLRequest(
       `query GetRevisionEMRData {
@@ -1240,12 +1252,32 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
         dentalPhotoRecord: getDentalPhotoRecord { upperTeeth lowerTeeth }
         oralAppliance: getOralApplianceProfile { appliances { tagId arch } }
         obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }
-      }`, {}
+      }`, {}, { allowPartialData: true }
     ),
   ]);
 
-  const profileData = profileResult.status === 'fulfilled' ? profileResult.value : {};
-  const emrData = emrResult.status === 'fulfilled' ? emrResult.value : {};
+  if (profileResult.status === 'rejected') {
+    const profileError = profileResult.reason;
+    console.warn('[EMR Service] Profile prefill fetch failed:', profileError?.message || 'Unknown error');
+    if (Array.isArray(profileError?.graphQLErrors) && profileError.graphQLErrors.length > 0) {
+      console.warn('[EMR Service] Profile prefill GraphQL errors:', formatGraphQLErrorList(profileError.graphQLErrors));
+    }
+  }
+
+  if (emrResult.status === 'rejected') {
+    const emrError = emrResult.reason;
+    console.warn('[EMR Service] EMR prefill fetch failed:', emrError?.message || 'Unknown error');
+    if (Array.isArray(emrError?.graphQLErrors) && emrError.graphQLErrors.length > 0) {
+      console.warn('[EMR Service] EMR prefill GraphQL errors:', formatGraphQLErrorList(emrError.graphQLErrors));
+    }
+  }
+
+  const profileData = profileResult.status === 'fulfilled'
+    ? profileResult.value
+    : ((profileResult as PromiseRejectedResult).reason?.data || {});
+  const emrData = emrResult.status === 'fulfilled'
+    ? emrResult.value
+    : ((emrResult as PromiseRejectedResult).reason?.data || {});
 
   if (!(profileData as any)?.personalLog && Object.keys(emrData).length === 0) return null;
 
