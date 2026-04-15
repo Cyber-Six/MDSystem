@@ -384,6 +384,7 @@ type Query {
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
 
   # Permission Templates
+  roleTemplates: [PermissionTemplate!]!
   listPermissionTemplates: PermissionTemplateList!
   getPermissionTemplate(templateId: ID!): PermissionTemplate
 }

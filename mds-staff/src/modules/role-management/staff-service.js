@@ -297,15 +297,6 @@ const GQL_LIST_TEMPLATES = `
         createdBy
         createdAt
         permissions { key enabled branch }
-        permissionGroups {
-          id
-          label
-          enabled
-          fullyEnabled
-          childCount
-          enabledChildCount
-          children { key enabled branch }
-        }
         permissionCount
       }
       count
@@ -324,15 +315,6 @@ const GQL_CREATE_TEMPLATE = `
         createdBy
         createdAt
         permissions { key enabled branch }
-        permissionGroups {
-          id
-          label
-          enabled
-          fullyEnabled
-          childCount
-          enabledChildCount
-          children { key enabled branch }
-        }
         permissionCount
       }
     }
@@ -350,15 +332,6 @@ const GQL_UPDATE_TEMPLATE = `
         createdBy
         createdAt
         permissions { key enabled branch }
-        permissionGroups {
-          id
-          label
-          enabled
-          fullyEnabled
-          childCount
-          enabledChildCount
-          children { key enabled branch }
-        }
         permissionCount
       }
     }
