@@ -87,6 +87,7 @@ export const SettingsScreen: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
   const { settings, updateSettings } = useSettings();
   const [expandedModules, setExpandedModules] = useState(false);
+  const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || 'Not configured';
 
   // Generic updater for top-level boolean keys
   const setBool = useCallback((key: keyof MobileSettings, value: boolean) => {
@@ -279,7 +280,7 @@ export const SettingsScreen: React.FC = () => {
               Version
             </Text>
             <Text style={[styles.aboutValue, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-              {process.env.EXPO_PUBLIC_APP_VERSION ?? '1.0.0'}
+              {appVersion}
             </Text>
           </View>
           <View style={styles.aboutRow}>

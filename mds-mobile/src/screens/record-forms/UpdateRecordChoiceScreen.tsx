@@ -117,7 +117,7 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
     disabledChoiceIds.add('medical');
     disabledChoiceIds.add('dental');
   }
-  if (isPending || requiresInitialRecord) {
+  if (requiresInitialRecord) {
     disabledChoiceIds.add('medical');
     disabledChoiceIds.add('dental');
     disabledChoiceIds.add('both');
@@ -278,7 +278,7 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
                 <View style={{ flex: 1 }}>
                   <Text style={styles.bannerTitle}>Update Pending Review</Text>
                   <Text style={styles.bannerBody}>
-                    Your {ticket?.scope || 'record'} update is under review. You cannot submit another one yet.
+                    Your {ticket?.scope || 'record'} update is under review. You can still submit a new update, and your previous pending request will be replaced.
                   </Text>
                 </View>
               </View>

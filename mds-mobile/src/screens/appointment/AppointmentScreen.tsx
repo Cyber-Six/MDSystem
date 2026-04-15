@@ -18,10 +18,11 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerActions, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import {
   STATUS,
   SESSION,
@@ -576,7 +577,7 @@ export const AppointmentScreen: React.FC = () => {
               styles.menuButton,
               { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
             ]}
-            onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+            onPress={() => toggleAppDrawer(navigation)}
             accessibilityRole="button"
             accessibilityLabel="Open sidebar"
           >

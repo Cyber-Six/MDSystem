@@ -11,8 +11,9 @@
  * Branches: Casal, Arlegui, Quezon City (LocationDesignation enum)
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  Animated,
   View,
   Text,
   TextInput,
@@ -22,14 +23,16 @@ import {
   StyleSheet,
   RefreshControl,
   Modal,
+  Easing,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerActions, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useBanner } from '../../context/BannerContext';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import { getPatientProfile } from '../../services/profile-service';
 import {
   BRANCHES,
@@ -43,6 +46,8 @@ import {
 } from '../../services/medicine-service';
 
 const DISMISSED_KEY = 'dismissedMedicalNotifications';
+const ERROR_AUTO_DISMISS_MS = 4500;
+const ERROR_ANIMATION_MS = 220;
 
 interface GroupedMedicine {
   item_code: string;
@@ -87,6 +92,10 @@ export const MedicineRequestScreen: React.FC = () => {
   const [loadingMeds, setLoadingMeds] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorVersion, setErrorVersion] = useState(0);
+  const errorAnim = useRef(new Animated.Value(0)).current;
+  const errorDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorVersionRef = useRef(0);
 
   // Cancel-and-resubmit flow
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -111,6 +120,88 @@ export const MedicineRequestScreen: React.FC = () => {
   );
   const latestPendingRequest = pendingRequests[0] ?? null;
   const hasPendingRequest = pendingRequests.length > 0;
+
+  const clearErrorTimer = useCallback(() => {
+    if (!errorDismissTimerRef.current) return;
+    clearTimeout(errorDismissTimerRef.current);
+    errorDismissTimerRef.current = null;
+  }, []);
+
+  const dismissError = useCallback((animated = true, expectedVersion = errorVersionRef.current) => {
+    clearErrorTimer();
+
+    if (!animated) {
+      if (errorVersionRef.current === expectedVersion) {
+        errorAnim.stopAnimation();
+        errorAnim.setValue(0);
+        setError(null);
+      }
+      return;
+    }
+
+    Animated.timing(errorAnim, {
+      toValue: 0,
+      duration: ERROR_ANIMATION_MS,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      if (errorVersionRef.current !== expectedVersion) return;
+      setError(null);
+      errorAnim.setValue(0);
+    });
+  }, [clearErrorTimer, errorAnim]);
+
+  const showError = useCallback((message: string) => {
+    clearErrorTimer();
+    setError(message);
+    setErrorVersion((prev) => {
+      const next = prev + 1;
+      errorVersionRef.current = next;
+      return next;
+    });
+  }, [clearErrorTimer]);
+
+  const errorAnimatedStyle = useMemo(
+    () => ({
+      opacity: errorAnim,
+      transform: [
+        {
+          translateY: errorAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [-10, 0],
+          }),
+        },
+        {
+          scale: errorAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.98, 1],
+          }),
+        },
+      ],
+    }),
+    [errorAnim]
+  );
+
+  useEffect(() => {
+    if (!error) return;
+
+    const versionAtStart = errorVersionRef.current;
+    errorAnim.stopAnimation();
+    errorAnim.setValue(0);
+
+    Animated.timing(errorAnim, {
+      toValue: 1,
+      duration: ERROR_ANIMATION_MS + 60,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    errorDismissTimerRef.current = setTimeout(() => {
+      dismissError(true, versionAtStart);
+    }, ERROR_AUTO_DISMISS_MS);
+
+    return clearErrorTimer;
+  }, [error, errorVersion, dismissError, clearErrorTimer, errorAnim]);
 
   // ── Load profile & detect location access ──────────────────────────────
   useEffect(() => {
@@ -177,7 +268,7 @@ export const MedicineRequestScreen: React.FC = () => {
     }
     const load = async () => {
       setLoadingMeds(true);
-      setError(null);
+      dismissError(false);
       try {
         const meds = await getAvailableMedicine(location);
         setMedicines(meds);
@@ -196,13 +287,13 @@ export const MedicineRequestScreen: React.FC = () => {
         });
         setGrouped(Object.values(groupMap));
       } catch (err: any) {
-        setError('Failed to load medicines: ' + err.message);
+        showError('Failed to load medicines: ' + err.message);
       } finally {
         setLoadingMeds(false);
       }
     };
     load();
-  }, [location]);
+  }, [location, dismissError, showError]);
 
   // ── Load request history ───────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
@@ -229,17 +320,17 @@ export const MedicineRequestScreen: React.FC = () => {
 
   // ── Submit (with cancel-and-resubmit gate) ────────────────────────────
   const handleSubmit = async () => {
-    setError(null);
-    if (!purpose.trim()) { setError('Please enter the purpose of your request.'); return; }
-    if (!location) { setError('Please select a branch.'); return; }
-    if (selectedCodes.size === 0) { setError('Please select at least one medicine.'); return; }
+    dismissError(false);
+    if (!purpose.trim()) { showError('Please enter the purpose of your request.'); return; }
+    if (!location) { showError('Please select a branch.'); return; }
+    if (selectedCodes.size === 0) { showError('Please select at least one medicine.'); return; }
 
     // Build items from first batch of each selected code (like the web app)
     const items: Array<{ batchId: number; quantity: number }> = [];
     for (const code of selectedCodes) {
       const group = grouped.find((g) => g.item_code === code);
       if (!group || group.batches.length === 0) {
-        setError(`No available batch for ${group?.item_name || code}`);
+        showError(`No available batch for ${group?.item_name || code}`);
         return;
       }
       items.push({ batchId: parseInt(group.batches[0].id, 10), quantity: 1 });
@@ -267,7 +358,7 @@ export const MedicineRequestScreen: React.FC = () => {
       setMedicines([]);
       setGrouped([]);
     } catch (err: any) {
-      setError(err.message || 'Failed to submit request.');
+      showError(err.message || 'Failed to submit request.');
     } finally {
       setSubmitting(false);
     }
@@ -276,14 +367,14 @@ export const MedicineRequestScreen: React.FC = () => {
   const cancelPendingAndResubmit = async () => {
     setShowCancelConfirm(false);
     setSubmitting(true);
-    setError(null);
+    dismissError(false);
     try {
       await cancelMedicineRequest();
       // Update local state immediately
       setRequests((prev) => prev.map((r) => (isPendingStatus(r.status) ? { ...r, status: 'Cancelled' } : r)));
       await doSubmit(pendingItems);
     } catch (err: any) {
-      setError(
+      showError(
         err.message ||
           'Unable to cancel your existing request. Please contact clinic staff.',
       );
@@ -299,7 +390,7 @@ export const MedicineRequestScreen: React.FC = () => {
         next.delete(code);
       } else {
         if (next.size >= 2) {
-          setError('You can select a maximum of 2 medicines per request.');
+          showError('You can select a maximum of 2 medicines per request.');
           return prev;
         }
         next.add(code);
@@ -316,7 +407,7 @@ export const MedicineRequestScreen: React.FC = () => {
       showBanner({ type: 'success', message: 'Medicine request cancelled.' });
       await loadHistory();
     } catch (err: any) {
-      setError(err.message || 'Failed to cancel request.');
+      showError(err.message || 'Failed to cancel request.');
     } finally {
       setCancelling(false);
     }
@@ -361,7 +452,7 @@ export const MedicineRequestScreen: React.FC = () => {
             styles.menuButton,
             { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
           ]}
-          onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+          onPress={() => toggleAppDrawer(navigation)}
           accessibilityRole="button"
           accessibilityLabel="Open sidebar"
         >
@@ -508,12 +599,21 @@ export const MedicineRequestScreen: React.FC = () => {
 
           {/* Error */}
           {error && (
-            <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50], borderColor: colors.error[400] }]}>
+            <Animated.View
+              style={[
+                styles.alertBox,
+                {
+                  backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50],
+                  borderColor: colors.error[400],
+                },
+                errorAnimatedStyle,
+              ]}
+            >
               <Text style={{ color: colors.error[500], flex: 1 }}>{error}</Text>
-              <TouchableOpacity onPress={() => setError(null)}>
+              <TouchableOpacity onPress={() => dismissError()}>
                 <Ionicons name="close" size={18} color={colors.error[500]} />
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           )}
 
           {/* Purpose (Chief Complaint) */}

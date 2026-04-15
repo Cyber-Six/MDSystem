@@ -12,13 +12,13 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerActions } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import { logout, axiosRequest } from '../../core';
 import { unregisterPushToken } from '../../services/notification-service';
 import { getPatientProfile } from '../../services/profile-service';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -37,7 +37,6 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { iconName: 'person', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
   { iconName: 'pill', iconLib: 'MCI', label: 'Medicine Request', screen: 'MedicineRequest', description: 'Request medicines from the clinic' },
-  { iconName: 'clipboard', label: 'Medical Record', screen: 'InitialRecordForm', description: 'View or fill your record' },
   { iconName: 'create', label: 'Update Record', screen: 'UpdateRecordChoice', description: 'Update your medical or dental record' },
   { iconName: 'folder-open', label: 'My Documents', screen: 'MyDocuments', description: 'View your prescriptions & certificates' },
   { iconName: 'key', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
@@ -74,7 +73,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
       }
     : {
         iconName: 'clipboard',
-        label: 'Medical Record',
+        label: 'Complete Record',
         screen: 'InitialRecordForm',
         description: 'Complete or revise your initial record',
       };
@@ -119,7 +118,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
               styles.menuButton,
               { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
             ]}
-            onPress={() => navigation.getParent()?.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+            onPress={() => toggleAppDrawer(navigation)}
             accessibilityRole="button"
             accessibilityLabel="Open sidebar"
           >

@@ -17,7 +17,6 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -28,6 +27,7 @@ import { getCurrentActiveTicket } from '../../services/health-chat-service';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import type { RecordStatus } from '../../services/emr-service';
 import PendingRecordGate from '../../components/PendingRecordGate';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 
 interface DashboardHomeScreenProps {
   navigation: any;
@@ -196,7 +196,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               styles.menuButton,
               { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
             ]}
-            onPress={() => navigation.getParent()?.dispatch(DrawerActions.toggleDrawer())}
+            onPress={() => toggleAppDrawer(navigation)}
             accessibilityRole="button"
             accessibilityLabel="Open sidebar"
           >

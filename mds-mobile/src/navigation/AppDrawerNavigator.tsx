@@ -92,6 +92,7 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
   const { isDark } = useTheme();
   const { recordStatus } = useRecordStatus();
   const insets = useSafeAreaInsets();
+  const currentYear = new Date().getFullYear();
   const activeRoute = getActiveRouteName(navigation.getState());
   const isDomainAccessRestricted =
     Boolean(recordStatus?.needsInitialRecord) || recordStatus?.credentialStatus === 'Inactive';
@@ -102,7 +103,7 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
     ? [
         {
           ...drawerItems[1],
-          label: shouldShowInitialRecordLabel ? 'Medical Record' : 'Record Update',
+          label: shouldShowInitialRecordLabel ? 'Complete Record' : 'Record Update',
           iconName: shouldShowInitialRecordLabel ? 'clipboard-outline' : 'create-outline',
         },
       ]
@@ -217,7 +218,7 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
       </DrawerContentScrollView>
 
       <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: isDark ? colors.neutral[500] : 'rgba(0,0,0,0.45)' }]}>© 2026 TIP</Text>
+        <Text style={[styles.footerText, { color: isDark ? colors.neutral[500] : 'rgba(0,0,0,0.45)' }]}>© {currentYear} @ mdsystem</Text>
       </View>
     </View>
   );

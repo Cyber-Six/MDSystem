@@ -15,7 +15,7 @@ import { AppointmentScreen } from '../screens/appointment/AppointmentScreen';
 import { HealthChatScreen } from '../screens/health-chat/HealthChatScreen';
 import { MedicineRequestScreen } from '../screens/medicine/MedicineRequestScreen';
 import { MoreStackNavigator } from './MoreStackNavigator';
-import UpdateRecordChoiceScreen from '../screens/record-forms/UpdateRecordChoiceScreen';
+import { UpdateRecordStackNavigator } from './UpdateRecordStackNavigator';
 import { useTheme, colors } from '../context/ThemeContext';
 import PendingRecordGate from '../components/PendingRecordGate';
 import { useHealthChatBadge } from '../context/HealthChatNotificationProvider';
@@ -119,7 +119,7 @@ export const MainTabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="UpdateRecord"
-        component={UpdateRecordChoiceScreen}
+        component={UpdateRecordStackNavigator}
         options={{
           tabBarLabel: 'Update Record',
           tabBarIcon: ({ focused, color }) => (
