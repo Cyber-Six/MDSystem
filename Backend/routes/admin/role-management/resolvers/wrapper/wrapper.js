@@ -2750,11 +2750,14 @@ const Mutation = {
            COALESCE(uc.credentials_status::text, 'Unknown') AS status,
            COALESCE(uc.updated_at, NOW()) AS updated_at,
            COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' AS inactive_eligible_after,
-           CASE WHEN p.id IS NOT NULL THEN true ELSE false END AS is_patient
+           EXISTS (
+             SELECT 1
+             FROM "Patients" p
+             WHERE p.id = uc.id
+           ) AS is_patient
          FROM "UserCredentials" uc
-         LEFT JOIN "Patients" p ON p.id = uc.id
          WHERE uc.id::text = ANY($1::text[])
-         FOR UPDATE`,
+         FOR UPDATE OF uc`,
         [normalizedIds]
       );
 
