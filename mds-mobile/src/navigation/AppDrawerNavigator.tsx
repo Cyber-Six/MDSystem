@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentComponentProps,
@@ -92,6 +92,9 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
   const { isDark } = useTheme();
   const { recordStatus } = useRecordStatus();
   const insets = useSafeAreaInsets();
+  const footerBottomInset = Platform.OS === 'ios'
+    ? Math.max(insets.bottom, 12)
+    : Math.max(insets.bottom, 14);
   const currentYear = new Date().getFullYear();
   const activeRoute = getActiveRouteName(navigation.getState());
   const isDomainAccessRestricted =
@@ -217,7 +220,7 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
         })}
       </DrawerContentScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: footerBottomInset }]}>
         <Text style={[styles.footerText, { color: isDark ? colors.neutral[500] : 'rgba(0,0,0,0.45)' }]}>© {currentYear} @ mdsystem</Text>
       </View>
     </View>
@@ -290,7 +293,7 @@ const styles = StyleSheet.create({
   footer: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.14)',
-    paddingVertical: 12,
+    paddingTop: 12,
   },
   footerText: {
     fontSize: 10,

@@ -17,8 +17,9 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
-import { useSettings, NOTIFICATION_MODULE_KEYS, type MobileSettings } from '../../context/SettingsContext';
+import { useSettings, type MobileSettings } from '../../context/SettingsContext';
 import { Ionicons } from '@expo/vector-icons';
+import SecuritySettingsCard from '../../components/settings/SecuritySettingsCard';
 
 // ── Module labels shown in the per-module section ────────────────────────────
 // Patients don't interact with inventory or roleManagement, so those are excluded.
@@ -269,6 +270,9 @@ export const SettingsScreen: React.FC = () => {
             );
           })}
         </View>
+
+        {/* ── Security ──────────────────────────────────────────────── */}
+        <SecuritySettingsCard />
 
         {/* ── About ───────────────────────────────────────────────── */}
         <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
