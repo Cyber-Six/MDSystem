@@ -4,6 +4,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { TokenStorage, registerSessionExpiredCallback } from '../core';
+import { clearProfileCache } from '../services/profile-service';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -36,11 +37,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Force logout when token service detects an expired/invalid refresh session
   useEffect(() => {
     registerSessionExpiredCallback(() => {
+      clearProfileCache();
       setIsAuthenticated(false);
     });
   }, []);
 
   const setAuthenticated = (value: boolean) => {
+    if (!value) {
+      clearProfileCache();
+    }
     setIsAuthenticated(value);
   };
 

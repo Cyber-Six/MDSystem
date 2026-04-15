@@ -201,3 +201,29 @@ export const TabGroup = ({ tabs, activeTab, onTabChange }) => (
     ))}
   </div>
 );
+
+// Radio Button Component
+export const RadioButton = ({ label, name, value, checked, onChange, ...props }) => (
+  <label className="flex items-center gap-2 cursor-pointer group">
+    <div className="relative flex-shrink-0">
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+        className="sr-only peer"
+        {...props}
+      />
+      <div className="w-4 h-4 rounded-full border-2 border-neutral-400 dark:border-neutral-500 bg-white dark:bg-neutral-800
+                     peer-checked:border-primary-500 transition-all duration-200
+                     group-hover:border-primary-400 dark:group-hover:border-primary-400" />
+      <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-primary-500 opacity-0 peer-checked:opacity-100 transition-opacity" />
+    </div>
+    {label && (
+      <span className="text-sm text-secondary-700 dark:text-neutral-300 group-hover:text-secondary-900 dark:group-hover:text-white">
+        {label}
+      </span>
+    )}
+  </label>
+);

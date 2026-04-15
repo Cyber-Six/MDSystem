@@ -2,8 +2,13 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
 
-const Sidebar = ({ isOpen, onClose }) => {
+const Sidebar = ({ isOpen, onClose, isInactive = false, allowInactiveRecordUpdate = true }) => {
   const location = useLocation();
+
+  const handleLogoClick = () => {
+    if (typeof onClose === 'function') onClose();
+    window.location.assign('/');
+  };
 
   const navItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard' },
@@ -32,7 +37,8 @@ const Sidebar = ({ isOpen, onClose }) => {
     ),
     medication: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.5 20.5l10-10a4.95 4.95 0 10-7-7l-10 10a4.95 4.95 0 107 7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.5 8.5l7 7" />
       </svg>
     ),
     chat: (
@@ -66,7 +72,14 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className="flex flex-col h-full">
           {/* Logo Section */}
           <div className="flex items-center justify-center border-b border-neutral-800/10 dark:border-white/10 bg-primary-500 dark:bg-neutral-900" style={{height: '60px'}}>
-            <img src={logo} alt="MDSystem" className="h-12 w-12" />
+            <button
+              type="button"
+              onClick={handleLogoClick}
+              aria-label="Go to Dashboard"
+              className="flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer"
+            >
+              <img src={logo} alt="MDSystem" className="h-12 w-12" />
+            </button>
           </div>
 
           {/* Navigation Items */}
@@ -74,31 +87,46 @@ const Sidebar = ({ isOpen, onClose }) => {
             {navItems.map((item) => {
               // Exact match for all paths
               const isActive = location.pathname === item.path;
+              // When account is inactive, only Record Update is accessible
+              const isDisabled = isInactive && (!allowInactiveRecordUpdate || item.path !== '/record-update');
+
+              const itemClassName = `flex items-center transition-all duration-200 ${
+                isOpen
+                  ? 'flex-row space-x-4 py-4 px-6'
+                  : 'flex-col justify-center space-y-1.5 py-4'
+              } ${
+                isDisabled
+                  ? 'opacity-40 cursor-not-allowed text-white dark:text-white/70'
+                  : isActive
+                    ? 'bg-white dark:bg-neutral-800 text-primary-500 dark:text-yellow-400 border-l-4 border-primary-500 dark:border-yellow-400 font-semibold'
+                    : 'text-white dark:text-white/70 hover:bg-white/10 dark:hover:bg-neutral-800 hover:text-white dark:hover:text-white'
+              }`;
+
+              const itemContent = (
+                <>
+                  <span>{icons[item.icon]}</span>
+                  <span className={`font-medium leading-tight ${isOpen ? 'text-base' : 'text-[11px] text-center'}`}>
+                    {item.label}
+                  </span>
+                </>
+              );
+
               return (
                 <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    onClick={() => onClose()}
-                    title={item.label}
-                    className={`flex items-center transition-all duration-200 ${
-                      isOpen 
-                        ? 'flex-row space-x-4 py-4 px-6' 
-                        : 'flex-col justify-center space-y-1.5 py-4'
-                    } ${
-                      isActive
-                        ? 'bg-white dark:bg-neutral-800 text-primary-500 dark:text-yellow-400 border-l-4 border-primary-500 dark:border-yellow-400 font-semibold'
-                        : 'text-white dark:text-white/70 hover:bg-white/10 dark:hover:bg-neutral-800 hover:text-white dark:hover:text-white'
-                    }`}
-                  >
-                    <span>
-                      {icons[item.icon]}
+                  {isDisabled ? (
+                    <span title={item.label} className={itemClassName}>
+                      {itemContent}
                     </span>
-                    <span className={`font-medium leading-tight ${
-                      isOpen ? 'text-base' : 'text-[11px] text-center'
-                    }`}>
-                      {item.label}
-                    </span>
-                  </Link>
+                  ) : (
+                    <Link
+                      to={item.path}
+                      onClick={() => onClose()}
+                      title={item.label}
+                      className={itemClassName}
+                    >
+                      {itemContent}
+                    </Link>
+                  )}
                 </li>
               );
             })}

@@ -192,16 +192,16 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
     <ModalBackdrop onClose={isLoading ? undefined : onCancel}>
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+        <div className="px-6 py-3 border-b border-neutral-100 dark:border-neutral-700/50">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30">
+            <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30 flex-shrink-0">
               <svg className="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
               </svg>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">{stepTitle}</h3>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">{stepDesc}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <h3 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-semibold text-secondary-800 dark:text-white">{stepTitle}</h3>
+              <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">{stepDesc}</p>
             </div>
           </div>
         </div>
@@ -248,7 +248,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 
             {error && (
               <div className="p-3 bg-error-50 dark:bg-error-900/20 rounded-lg border border-error-200 dark:border-error-700">
-                <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+                <p className="text-sm text-error-600 dark:text-error-400 mb-0">{error}</p>
               </div>
             )}
 
@@ -284,7 +284,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
         {step === 'verify-totp' && (
           <form onSubmit={handleVerifyAndSubmit} className="px-6 py-5 space-y-4">
             <div className="p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-700">
-              <p className="text-xs text-warning-700 dark:text-warning-300">
+              <p className="text-xs text-warning-700 dark:text-warning-300 mb-0">
                 Enter the 6-digit code from your authenticator app to authorize this change.
               </p>
             </div>
@@ -310,7 +310,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 
             {error && (
               <div className="p-3 bg-error-50 dark:bg-error-900/20 rounded-lg border border-error-200 dark:border-error-700">
-                <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+                <p className="text-sm text-error-600 dark:text-error-400 mb-0">{error}</p>
               </div>
             )}
 
@@ -354,7 +354,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
         {step === 'verify-email' && (
           <form onSubmit={handleVerifyAndSubmit} className="px-6 py-5 space-y-4">
             <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-700">
-              <p className="text-xs text-primary-700 dark:text-primary-300">
+              <p className="text-xs text-primary-700 dark:text-primary-300 mb-0">
                 A 6-digit verification code has been sent to your email address.
               </p>
             </div>
@@ -380,7 +380,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 
             {error && (
               <div className="p-3 bg-error-50 dark:bg-error-900/20 rounded-lg border border-error-200 dark:border-error-700">
-                <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+                <p className="text-sm text-error-600 dark:text-error-400 mb-0">{error}</p>
               </div>
             )}
 
@@ -389,8 +389,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
                 type="button"
                 onClick={() => {
                   setStep(totpEnabled ? 'verify-totp' : 'passwords');
-                  setError('');
-                  setEmailOtp('');
+                  setError('');                  setEmailOtp('');
                 }}
                 disabled={isLoading}
                 className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50"
@@ -424,15 +423,15 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 const SuccessModal = ({ message, onClose }) => (
   <ModalBackdrop onClose={onClose}>
     <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 p-6 text-center">
-      <div className="mx-auto w-12 h-12 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center mb-4">
+      <div className="mx-auto w-12 h-12 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center" style={{ marginBottom: '12px' }}>
         <svg className="w-6 h-6 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       </div>
-      <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-1">{message}</h3>
+      <h3 style={{ lineHeight: 1.2, margin: 0, marginBottom: '16px' }} className="text-sm font-semibold text-secondary-800 dark:text-white">{message}</h3>
       <button
         onClick={onClose}
-        className="mt-4 px-6 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+        className="px-6 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
       >
         Done
       </button>

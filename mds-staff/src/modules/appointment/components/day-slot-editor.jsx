@@ -37,6 +37,13 @@ const DaySlotEditor = ({
   onResetDate,
 }) => {
   const selectedDate = normalizeDate(rawSelectedDate);
+
+  // Compute whether the selected date is strictly before today (local date)
+  const todayStr = (() => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  })();
+  const isPastDate = !!selectedDate && selectedDate < todayStr;
   const [morningSlots, setMorningSlots] = useState(0);
   const [afternoonSlots, setAfternoonSlots] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -212,21 +219,25 @@ const DaySlotEditor = ({
                 </span>
               </div>
               <p className="text-xs text-secondary-400 dark:text-neutral-500 ml-5">
-                {getDayOfWeek(selectedDate)} is not in the regular schedule. Add it as a custom date to accept appointments.
+                {isPastDate
+                  ? 'Past date — cannot add, create, or change past dates.'
+                  : `${getDayOfWeek(selectedDate)} is not in the regular schedule. Add it as a custom date to accept appointments.`}
               </p>
             </div>
-            <button
-              onClick={handleAddAsCustomDate}
-              disabled={saving}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm flex-shrink-0 ml-2"
-            >
-              {saving ? (
-                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Plus className="w-3 h-3" />
-              )}
-              Add Custom Date
-            </button>
+            {!isPastDate && (
+              <button
+                onClick={handleAddAsCustomDate}
+                disabled={saving}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm flex-shrink-0 ml-2"
+              >
+                {saving ? (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Plus className="w-3 h-3" />
+                )}
+                Add Custom Date
+              </button>
+            )}
           </div>
         </div>
       ) : isExplicitlyDisabled ? (
@@ -247,22 +258,26 @@ const DaySlotEditor = ({
                 )}
               </div>
               <p className="text-xs text-secondary-400 dark:text-neutral-500 ml-5">
-                This date is disabled. Patients cannot book appointments on this day.
+                {isPastDate
+                  ? 'Past date — cannot add, create, or change past dates.'
+                  : 'This date is disabled. Patients cannot book appointments on this day.'}
               </p>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-              <button
-                onClick={handleResetDate}
-                disabled={saving}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm"
-              >
-                {saving ? (
-                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <RotateCcw className="w-3 h-3" />
-                )}
-                Re-enable
-              </button>
+              {!isPastDate && (
+                <button
+                  onClick={handleResetDate}
+                  disabled={saving}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  {saving ? (
+                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-3 h-3" />
+                  )}
+                  Re-enable
+                </button>
+              )}
               {isCustomDate && (
                 <button
                   onClick={handleRemoveAsCustomDate}
@@ -284,6 +299,11 @@ const DaySlotEditor = ({
             <div className="flex items-center gap-1.5 min-w-0">
               <Calendar className="w-3.5 h-3.5 text-primary-500 flex-shrink-0" />
               <span className="text-sm font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
+              {isPastDate && (
+                <span className="px-1.5 py-px text-xs font-semibold bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 rounded-full flex-shrink-0">
+                  Past
+                </span>
+              )}
               {isCustomDate && (
                 <span className="px-1.5 py-px text-xs font-semibold bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-full flex-shrink-0">
                   Custom
@@ -296,7 +316,7 @@ const DaySlotEditor = ({
               )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              {hasSlotChanges && (
+              {hasSlotChanges && !isPastDate && (
                 <button
                   onClick={handleSave}
                   disabled={saving}
@@ -310,14 +330,16 @@ const DaySlotEditor = ({
                   Save
                 </button>
               )}
-              <button
-                onClick={handleDisableDate}
-                disabled={saving}
-                className="p-1 text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded transition-colors disabled:opacity-50"
-                title="Disable this date"
-              >
-                <Ban className="w-3.5 h-3.5" />
-              </button>
+              {!isPastDate && (
+                <button
+                  onClick={handleDisableDate}
+                  disabled={saving}
+                  className="p-1 text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded transition-colors disabled:opacity-50"
+                  title="Disable this date"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                </button>
+              )}
               {isCustomDate && (
                 <button
                   onClick={handleRemoveAsCustomDate}
@@ -342,8 +364,9 @@ const DaySlotEditor = ({
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button
-                    onClick={() => setMorningSlots(Math.max(0, morningSlots - 1))}
-                    className="p-0.5 hover:bg-accent-100 dark:hover:bg-accent-900/30 rounded text-secondary-400 transition-colors"
+                    onClick={() => !isPastDate && setMorningSlots(Math.max(0, morningSlots - 1))}
+                    disabled={isPastDate}
+                    className="p-0.5 hover:bg-accent-100 dark:hover:bg-accent-900/30 rounded text-secondary-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Minus className="w-3 h-3" />
                   </button>
@@ -351,12 +374,14 @@ const DaySlotEditor = ({
                     type="text"
                     inputMode="numeric"
                     value={morningSlots}
-                    onChange={handleSlotChange(setMorningSlots)}
-                    className="w-10 text-center px-1 py-0.5 text-sm font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    readOnly={isPastDate}
+                    onChange={isPastDate ? undefined : handleSlotChange(setMorningSlots)}
+                    className={`w-10 text-center px-1 py-0.5 text-sm font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 ${isPastDate ? 'opacity-60 cursor-not-allowed' : ''}`}
                   />
                   <button
-                    onClick={() => setMorningSlots(morningSlots + 1)}
-                    className="p-0.5 hover:bg-accent-100 dark:hover:bg-accent-900/30 rounded text-secondary-400 transition-colors"
+                    onClick={() => !isPastDate && setMorningSlots(morningSlots + 1)}
+                    disabled={isPastDate}
+                    className="p-0.5 hover:bg-accent-100 dark:hover:bg-accent-900/30 rounded text-secondary-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -381,8 +406,9 @@ const DaySlotEditor = ({
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button
-                    onClick={() => setAfternoonSlots(Math.max(0, afternoonSlots - 1))}
-                    className="p-0.5 hover:bg-warning-100 dark:hover:bg-warning-900/30 rounded text-secondary-400 transition-colors"
+                    onClick={() => !isPastDate && setAfternoonSlots(Math.max(0, afternoonSlots - 1))}
+                    disabled={isPastDate}
+                    className="p-0.5 hover:bg-warning-100 dark:hover:bg-warning-900/30 rounded text-secondary-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Minus className="w-3 h-3" />
                   </button>
@@ -390,12 +416,14 @@ const DaySlotEditor = ({
                     type="text"
                     inputMode="numeric"
                     value={afternoonSlots}
-                    onChange={handleSlotChange(setAfternoonSlots)}
-                    className="w-10 text-center px-1 py-0.5 text-sm font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    readOnly={isPastDate}
+                    onChange={isPastDate ? undefined : handleSlotChange(setAfternoonSlots)}
+                    className={`w-10 text-center px-1 py-0.5 text-sm font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 ${isPastDate ? 'opacity-60 cursor-not-allowed' : ''}`}
                   />
                   <button
-                    onClick={() => setAfternoonSlots(afternoonSlots + 1)}
-                    className="p-0.5 hover:bg-warning-100 dark:hover:bg-warning-900/30 rounded text-secondary-400 transition-colors"
+                    onClick={() => !isPastDate && setAfternoonSlots(afternoonSlots + 1)}
+                    disabled={isPastDate}
+                    className="p-0.5 hover:bg-warning-100 dark:hover:bg-warning-900/30 rounded text-secondary-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-3 h-3" />
                   </button>

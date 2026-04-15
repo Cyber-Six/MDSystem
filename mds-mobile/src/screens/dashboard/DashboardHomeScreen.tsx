@@ -27,6 +27,7 @@ import { getCurrentActiveTicket } from '../../services/health-chat-service';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import type { RecordStatus } from '../../services/emr-service';
 import PendingRecordGate from '../../components/PendingRecordGate';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 
 interface DashboardHomeScreenProps {
   navigation: any;
@@ -190,6 +191,21 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
       >
         {/* Header */}
         <View style={styles.header}>
+          <TouchableOpacity
+            style={[
+              styles.menuButton,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+            onPress={() => toggleAppDrawer(navigation)}
+            accessibilityRole="button"
+            accessibilityLabel="Open sidebar"
+          >
+            <Ionicons
+              name="menu"
+              size={22}
+              color={isDark ? colors.neutral[100] : colors.secondary[900]}
+            />
+          </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text
               style={[
@@ -249,17 +265,17 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
             ]}
             onPress={() => navigation.navigate('More', {
               screen: 'InitialRecordForm',
-              params: { isRevision: recordStatus?.status === 'revision_requested' },
+              params: { isRevision: recordStatus?.status === 'Revision' },
             })}
             activeOpacity={0.7}
           >
             <Ionicons name="clipboard" size={22} color={colors.primary[500]} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.recordBannerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                {recordStatus?.status === 'revision_requested' ? 'Revision Requested' : 'Medical Record Required'}
+                {recordStatus?.status === 'Revision' ? 'Revision Requested' : 'Medical Record Required'}
               </Text>
               <Text style={[styles.recordBannerDesc, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
-                {recordStatus?.status === 'revision_requested'
+                {recordStatus?.status === 'Revision'
                   ? (recordStatus?.notes || 'Please revise your medical record.')
                   : 'Complete your initial medical record to access all features.'}
               </Text>
@@ -627,9 +643,16 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20, paddingBottom: 40 },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 24,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   greeting: { fontSize: 14 },
   userName: { fontSize: 24, fontWeight: 'bold', marginTop: 2 },

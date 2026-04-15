@@ -5,6 +5,9 @@
 
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { TouchableOpacity, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { MoreStackParamList } from './types';
 import { MoreMenuScreen } from '../screens/more/MoreMenuScreen';
 import { ProfileScreen } from '../screens/more/ProfileScreen';
@@ -19,8 +22,32 @@ import UpdateRecordChoiceScreen from '../screens/record-forms/UpdateRecordChoice
 import { AnnouncementsScreen } from '../screens/more/AnnouncementsScreen';
 
 import { useTheme, colors } from '../context/ThemeContext';
+import { toggleAppDrawer } from './drawer-utils';
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
+
+const HeaderMenuButton: React.FC<{ isDark: boolean }> = ({ isDark }) => {
+  const navigation = useNavigation<any>();
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.headerMenuButton,
+        { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+      ]}
+      onPress={() => toggleAppDrawer(navigation)}
+      accessibilityRole="button"
+      accessibilityLabel="Open sidebar"
+      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+    >
+      <Ionicons
+        name="menu"
+        size={22}
+        color={isDark ? colors.neutral[100] : colors.secondary[900]}
+      />
+    </TouchableOpacity>
+  );
+};
 
 export const MoreStackNavigator: React.FC = () => {
   const { isDark } = useTheme();
@@ -33,6 +60,7 @@ export const MoreStackNavigator: React.FC = () => {
     },
     headerTintColor: isDark ? colors.neutral[100] : colors.secondary[900],
     headerShadowVisible: false,
+    headerRight: () => <HeaderMenuButton isDark={isDark} />,
   };
 
   return (
@@ -44,12 +72,23 @@ export const MoreStackNavigator: React.FC = () => {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ ...subScreenOptions, title: 'Change Password' }} />
       <Stack.Screen name="LoginActivity" component={LoginActivityScreen} options={{ ...subScreenOptions, title: 'Login Activity' }} />
       <Stack.Screen name="FAQs" component={FAQsScreen} options={{ ...subScreenOptions, title: 'FAQs' }} />
-      <Stack.Screen name="InitialRecordForm" component={InitialRecordFormScreen} options={{ ...subScreenOptions, title: 'Medical Record' }} />
+      <Stack.Screen name="InitialRecordForm" component={InitialRecordFormScreen} options={{ ...subScreenOptions, title: 'Record Form' }} />
       <Stack.Screen name="UpdateRecordChoice" component={UpdateRecordChoiceScreen} options={{ ...subScreenOptions, title: 'Update Record' }} />
       <Stack.Screen name="Announcements" component={AnnouncementsScreen} options={{ ...subScreenOptions, title: 'Announcements' }} />
       <Stack.Screen name="MyDocuments" component={MyDocumentsScreen} options={{ ...subScreenOptions, title: 'My Documents' }} />
     </Stack.Navigator>
   );
 };
+
+const styles = StyleSheet.create({
+  headerMenuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+});
 
 export default MoreStackNavigator;

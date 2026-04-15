@@ -29,12 +29,89 @@ export const LOCATION_DISPLAY = {
 export const ALL_CATEGORIES = Object.values(ITEM_CATEGORY);
 export const ALL_LOCATIONS = Object.values(LOCATION);
 
+// Map legacy/lowercase category values to GraphQL enum casing.
+const normalizeItemCategory = (category) => {
+  if (!category || typeof category !== 'string') return undefined;
+  const normalized = category.trim().toLowerCase();
+  if (normalized === 'medicine') return ITEM_CATEGORY.MEDICINE;
+  if (normalized === 'supply') return ITEM_CATEGORY.SUPPLY;
+  return undefined;
+};
+
 // Helper to display location name
 export const getDisplayLocation = (location) => {
   return LOCATION_DISPLAY[location] || location;
 };
 
-// ── Internal helper ──────────────────────────────────────────────────────────
+// ── Batch Display Utilities ──────────────────────────────────────────────────
+
+/**
+ * Format date for display (remove time portion)
+ * @param {string|number|Date|null} dateValue
+ * @returns {string} Formatted date (e.g., "May 2026") or "N/A"
+ */
+export const formatDateDisplay = (dateValue) => {
+  if (!dateValue && dateValue !== 0) return 'N/A';
+  try {
+    let date;
+    if (typeof dateValue === 'string') {
+      date = new Date(dateValue);
+      if (isNaN(date.getTime())) return 'N/A';
+    } else if (typeof dateValue === 'number') {
+      date = dateValue > 10000000000 ? new Date(dateValue) : new Date(dateValue * 1000);
+      if (isNaN(date.getTime())) return 'N/A';
+    } else if (dateValue instanceof Date) {
+      if (isNaN(dateValue.getTime())) return 'N/A';
+      date = dateValue;
+    } else {
+      return 'N/A';
+    }
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch (err) {
+    return 'N/A';
+  }
+};
+
+/**
+ * Format batch information in consistent format.
+ * Format: "Batch #123 — 47 available — Expires: May 2026"
+ * @param {Object} batch - Batch object with batchNumber, availableQuantity|currentQuantity, expiryDate
+ * @param {Object} options - { compact?: boolean, showUnit?: boolean }
+ * @returns {string} Formatted batch display string
+ */
+export const formatBatchDisplay = (batch, options = {}) => {
+  if (!batch) return 'N/A';
+  
+  const { compact = false, showUnit = true } = options;
+  const batchNum = batch.batchNumber || batch.id || 'Unknown';
+  const quantity = batch.availableQuantity ?? batch.currentQuantity ?? 0;
+  const unit = showUnit ? ' units' : '';
+  const expiryStr = formatDateDisplay(batch.expiryDate);
+  
+  if (compact) {
+    // Compact: "Batch #123 (47 units, Exp: May 2026)"
+    return `Batch #${batchNum} (${quantity}${unit}, Exp: ${expiryStr})`;
+  }
+  
+  // Full format: "Batch #123 — 47 available — Expires: May 2026"
+  return `Batch #${batchNum} — ${quantity} available — Expires: ${expiryStr}`;
+};
+
+/**
+ * Get batch summary for dropdowns/selects
+ * Format: "#123 (Exp: May 2026) — 47 avail"
+ * @param {Object} batch
+ * @returns {string}
+ */
+export const getBatchDropdownText = (batch) => {
+  if (!batch) return 'No batch';
+  const batchNum = batch.batchNumber || batch.id || '?';
+  const expiry = formatDateDisplay(batch.expiryDate);
+  const qty = batch.availableQuantity ?? batch.currentQuantity ?? 0;
+  return `#${batchNum} (Exp: ${expiry}) — ${qty} avail`;
+};
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
 
 const sendGraphQL = async (query, variables = {}) => {
   const response = await axiosRequest.post('/medical-inventory/medical', {
@@ -47,6 +124,22 @@ const sendGraphQL = async (query, variables = {}) => {
   }
 
   return response.data.data;
+};
+
+/**
+ * Like sendGraphQL but tolerates partial field errors — returns whatever data
+ * the server resolved, only logs any field-level errors rather than throwing.
+ * Used for batched alias queries where one item failing shouldn't abort the rest.
+ */
+const sendGraphQLPartial = async (query, variables = {}) => {
+  const response = await axiosRequest.post('/medical-inventory/medical', {
+    query,
+    variables,
+  });
+  if (response.data.errors) {
+    console.warn('[Inventory] Partial GraphQL errors in batched batch fetch:', response.data.errors.map((e) => e.message));
+  }
+  return response.data.data ?? {};
 };
 
 // ── Queries ──────────────────────────────────────────────────────────────────
@@ -119,12 +212,17 @@ const MEDICAL_ITEM_FIELDS = `
  * @returns {Promise<Object>} Created MedicalItem
  */
 export const createMedicalItem = async (input) => {
+  const payload = {
+    ...input,
+    category: normalizeItemCategory(input?.category),
+  };
+
   const data = await sendGraphQL(
     `mutation CreateMedicalItem($input: MedicalItemInput!) {
       createMedicalItems(input: $input) {${MEDICAL_ITEM_FIELDS}
       }
     }`,
-    { input },
+    { input: payload },
   );
   return data.createMedicalItems;
 };
@@ -136,12 +234,22 @@ export const createMedicalItem = async (input) => {
  * @returns {Promise<Object>} Updated MedicalItem
  */
 export const updateMedicalItem = async (id, input) => {
+  const payload = { ...input };
+  if (Object.prototype.hasOwnProperty.call(payload, 'category')) {
+    const normalizedCategory = normalizeItemCategory(payload.category);
+    if (normalizedCategory) {
+      payload.category = normalizedCategory;
+    } else {
+      delete payload.category;
+    }
+  }
+
   const data = await sendGraphQL(
     `mutation UpdateMedicalItem($id: ID!, $input: MedicalItemUpdateInput!) {
       updateMedicalItems(id: $id, input: $input) {${MEDICAL_ITEM_FIELDS}
       }
     }`,
-    { id, input },
+    { id, input: payload },
   );
   return data.updateMedicalItems;
 };
@@ -276,6 +384,95 @@ export const fetchSupplyBatches = async (supplyItemId, location = null, availabl
     variables,
   );
   return data.getSupplyBatches ?? [];
+};
+
+// ── Batched Batch Fetcher ─────────────────────────────────────────────────────
+
+/**
+ * Fetch batches for ALL items at ALL locations in ONE GraphQL request using
+ * field aliases.  Replaces the previous N×M individual fetch loop.
+ *
+ * Each alias is named:
+ *   `med_{itemId}_{location}` → getMedicalSupply (medicine items)
+ *   `sup_{itemId}_{location}` → getSupplyBatches  (supply items)
+ *
+ * Returns normalised batch objects ready for state (same shape as the old
+ * per-item fetch loop produced).
+ *
+ * @param {Array<{id: string|number, category: string}>} items
+ * @param {string[]} locations  — subset of LocationDesignation enum values
+ * @returns {Promise<Array>} Normalised batch objects
+ */
+export const fetchAllBatchesForItems = async (items, locations) => {
+  if (items.length === 0 || locations.length === 0) return [];
+
+  // Inline field lists (no variables needed — all values are inlined as literals)
+  const medF = `id medicalItemId supplierName batchNumber dosageUnit dosageValue availableQuantity expiryDate location receivedBy notes created_at`;
+  const supF = `id supplyItemId batchNumber currentQuantity unit expiryDate location receivedBy supplierName notes created_at`;
+
+  const aliasParts = [];
+  for (const item of items) {
+    const isMedicine = item.category?.toLowerCase() === 'medicine';
+    const numId = Number(item.id);
+    for (const loc of locations) {
+      if (isMedicine) {
+        aliasParts.push(
+          `med_${numId}_${loc}: getMedicalSupply(medicalItemId: ${numId}, location: ${loc}) { ${medF} }`,
+        );
+      } else {
+        aliasParts.push(
+          `sup_${numId}_${loc}: getSupplyBatches(supplyItemId: ${numId}, location: ${loc}) { ${supF} }`,
+        );
+      }
+    }
+  }
+
+  const query = `{ ${aliasParts.join('\n')} }`;
+  const data = await sendGraphQLPartial(query);
+
+  // Collect and normalise results
+  const result = [];
+  for (const item of items) {
+    const isMedicine = item.category?.toLowerCase() === 'medicine';
+    const numId = Number(item.id);
+    for (const loc of locations) {
+      const alias = isMedicine ? `med_${numId}_${loc}` : `sup_${numId}_${loc}`;
+      const raw = data[alias];
+      if (!Array.isArray(raw)) continue;
+      for (const b of raw) {
+        if (isMedicine) {
+          result.push({
+            id: b.id,
+            medicalItemId: Number(b.medicalItemId),
+            batchNumber: b.batchNumber,
+            currentQuantity: Number(b.availableQuantity ?? 0),
+            availableQuantity: Number(b.availableQuantity ?? 0),
+            initialQuantity: Number(b.availableQuantity ?? 0),
+            dosageValue: Number(b.dosageValue ?? 0),
+            dosageUnit: b.dosageUnit,
+            expiryDate: b.expiryDate,
+            location: b.location,
+            supplierName: b.supplierName,
+            notes: b.notes,
+          });
+        } else {
+          result.push({
+            id: b.id,
+            medicalItemId: Number(b.supplyItemId),
+            batchNumber: b.batchNumber,
+            currentQuantity: Number(b.currentQuantity ?? 0),
+            availableQuantity: Number(b.currentQuantity ?? 0),
+            unit: b.unit,
+            expiryDate: b.expiryDate,
+            location: b.location,
+            supplierName: b.supplierName,
+            notes: b.notes,
+          });
+        }
+      }
+    }
+  }
+  return result;
 };
 
 // ── Split Mutations ──────────────────────────────────────────────────────────

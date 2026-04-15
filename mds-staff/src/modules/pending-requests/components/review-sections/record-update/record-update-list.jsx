@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePermissions } from '../../../../../context/permissions-context';
 import {
   BRANCH,
   TICKET_STATUS,
@@ -77,11 +78,17 @@ const RecordUpdateList = ({
   externalStatusFilter = null,
   showStatusFilter = true,
 }) => {
+  const { branch: permBranch, allowedBranches } = usePermissions();
   // ── Filter state ──────────────────────────────────────────────────────────
-  // Default to Manila since testing environment is in Manila branch.
-  const [branch, setBranch] = useState(BRANCH.MANILA);
+  // Default to the staff member's permission branch; fall back to Manila.
+  const [branch, setBranch] = useState(() => permBranch || BRANCH.MANILA);
   const [scopeFilter, setScopeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
+
+  // Sync branch when permissions load
+  useEffect(() => {
+    if (permBranch) setBranch(permBranch);
+  }, [permBranch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -204,11 +211,16 @@ const RecordUpdateList = ({
             <select
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
-              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+              disabled={allowedBranches().length === 1}
+              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value={BRANCH.MANILA}>Manila</option>
-              <option value={BRANCH.QUEZON_CITY}>Quezon City</option>
-              <option value={BRANCH.BOTH}>Both</option>
+              {allowedBranches().includes(BRANCH.QUEZON_CITY) && (
+                <option value={BRANCH.QUEZON_CITY}>Quezon City</option>
+              )}
+              {allowedBranches().includes(BRANCH.BOTH) && (
+                <option value={BRANCH.BOTH}>Both</option>
+              )}
             </select>
           </div>
 
@@ -282,7 +294,7 @@ const RecordUpdateList = ({
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-sm text-error-700 dark:text-error-400">{error}</p>
+          <p className="text-sm text-error-700 dark:text-error-400 mb-0">{error}</p>
         </div>
       )}
 

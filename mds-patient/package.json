@@ -4,9 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/setup-env.js",
     "dev": "vite",
-    "prebuild": "node scripts/setup-env.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -14,6 +12,7 @@
   "dependencies": {
     "@mdsystem/core": "*",
     "axios": "^1.13.4",
+    "dompurify": "^3.3.3",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

@@ -17,6 +17,13 @@ enum USER_CIVILSTATUS {
 
 }
 
+
+enum PATIENT_IDENTITY {
+  Student
+  Employee
+  Superior
+}
+
 enum CredentialStatus {
   Unverified
   Active
@@ -38,6 +45,8 @@ enum STUDENT_YEAR {
     Senior
     Masteral
     Doctorate
+    Transferee
+    Returnee
 }
 
 
@@ -68,7 +77,7 @@ type EmployeeProfile implements UserProfile {
 }
 
 input StudentProfileInput{
-  program: String!
+  programId: ID!
   year: STUDENT_YEAR!
 }
 
@@ -79,7 +88,7 @@ input EmployeeProfileInput {
 }
 
 input StudentProfileUpdateInput{
-  program: String 
+  programId: ID
   year: STUDENT_YEAR
 }
 
@@ -260,6 +269,11 @@ type OralApplianceTag{
   archable: Boolean!
   isActive: Boolean!
   created_at: Date
+}
+
+type StudentProgram {
+  id: ID!
+  label: String!
 }
 
 input OralApplianceTagInput{
@@ -750,6 +764,12 @@ type PatientSearchResult {
   latest_status: UpdateStatus
   latest_scope: UpdateScope
   latest_updated_at: Date
+  medical_status: String
+  appointment_status: String
+  medicine_status: String
+  healthchat_status: String
+  document_status: String
+  access_denied: Boolean
 }
 
 
@@ -780,7 +800,14 @@ type Query {
   getUserIdViaEmail(email: String!, branch: DesignationBranch!): [UserProfile!]
 
   # Patient Search (real-time, medical staff only)
-  searchPatients(searchTerm: String!, branch: DesignationBranch, offset: Int, limit: Int): [PatientSearchResult!]!
+  searchPatients(
+    searchTerm: String!
+    branch: DesignationBranch
+    identities: [PATIENT_IDENTITY!]
+    offset: Int
+    limit: Int
+    includeLatestTicket: Boolean = false
+  ): [PatientSearchResult!]!
   getPatientBasicInfo(userId: ID!): PatientSearchResult
 
 
@@ -860,6 +887,7 @@ type Query {
   searchDomainCatalogs(domain: String, filterIsValid: Boolean, names: [String!]!): [DomainCatalog!]
   searchAllergenCatalogs(allergens: [String!]!, filterIsValid: Boolean): [AllergenCatalog!]
   searchOralApplianceCatalogs(names: [String!]!, filterIsValid: Boolean): [OralApplianceTag!]
+  searchStudentProgram(label: String, offset: Int, limit: Int): [StudentProgram!]
 }
 
 # Mutations

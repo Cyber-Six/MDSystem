@@ -53,12 +53,14 @@ const Query = {
     
     const query = `
       SELECT pr.id, pr.profile_type,
-             sp.program, sp.year,
+             sp."programId", sp.year,
+             spd.label as program_label,
              ep.department, ep.role, ep.position,
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
       JOIN "patientUpdateLog" pul ON pul.id = pr.id
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
@@ -83,7 +85,7 @@ const Query = {
           __typename: "StudentProfile",
           id: row.id,
           profile_type: row.profile_type,
-          program: row.program,
+          program: row.program_label,
           year: row.year,
           created_at: row.created_at,
           status: row.status,
@@ -710,12 +712,16 @@ const Query = {
 
   _searchDomainCatalogs: async (_, { domain, filterIsValid, names }, { user, res }) => {
     const query = `
-      SELECT *
-      FROM "DomainTypeCatalog"
-      WHERE domain = COALESCE($1, domain)
-        AND name = ANY($2)
-        AND "isValid" = COALESCE($3, "isValid")
-      ORDER BY created_at ASC;
+    SELECT *
+    FROM "DomainTypeCatalog"
+    WHERE domain = COALESCE($1, domain)
+      AND EXISTS (
+        SELECT 1
+        FROM unnest($2::text[]) AS search_term
+        WHERE name ILIKE '%' || search_term || '%'
+      )
+      AND "isValid" = COALESCE($3, "isValid")
+    ORDER BY created_at ASC;
     `;
 
     const result = await db.query(query, [
@@ -732,7 +738,11 @@ const Query = {
     const query = `
       SELECT *
       FROM "AllergenCatalog"
-      WHERE name = ANY($1)
+      WHERE EXISTS (
+        SELECT 1
+        FROM unnest($1::text[]) AS search_term
+        WHERE allergen ILIKE '%' || search_term || '%'
+      )
         AND "isValid" = COALESCE($2, "isValid")
       ORDER BY created_at ASC;
     `;
@@ -761,6 +771,25 @@ const Query = {
     ]);
 
     logger.debug("Searched Oral Appliance Catalogs Query Result:", result.rows);
+    return result.rows;
+  },
+
+  _searchStudentProgram: async (_, { label, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT id, label
+      FROM "student_programs"
+      WHERE label ILIKE COALESCE($1, '%')
+      ORDER BY created_at ASC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      label ? '%' + label + '%' : null,
+      limit || 10,
+      offset || 0
+    ]);
+
+    logger.debug("Searched Student Program Query Result:", result.rows);
     return result.rows;
   },
 
@@ -852,8 +881,8 @@ const Query = {
         upl.last_name,
         upl.middle_name,
         upl.suffix,
-        pr.profile_type,
-        sp.program,
+        p.profile::"patientIdentity" AS profile_type,
+        spd.label as program,
         sp.year,
         ep.department,
         ep.role,
@@ -861,7 +890,35 @@ const Query = {
         latest.id           AS latest_ticket_id,
         latest.status       AS latest_status,
         latest.scope        AS latest_scope,
-        latest.created_at   AS latest_updated_at
+        latest.created_at   AS latest_updated_at,
+        CASE
+          WHEN latest.status IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted') THEN 'pending'
+          WHEN latest.status = 'Approved' THEN 'approved'
+          WHEN latest_consult.status IN ('Completed', 'Referred', 'Monitored') THEN 'completed'
+          ELSE NULL
+        END AS medical_status,
+        CASE
+          WHEN latest_appt.status IN ('Scheduled', 'InProgress') THEN 'scheduled'
+          WHEN latest_appt.status = 'Pending' THEN 'pending'
+          WHEN latest_appt.status = 'Completed' THEN 'completed'
+          ELSE NULL
+        END AS appointment_status,
+        CASE
+          WHEN latest_med.status = 'Pending' THEN 'pending'
+          WHEN latest_med.status = 'Approved' THEN 'approved'
+          WHEN latest_med.status = 'Completed' AND latest_med.updated_at + INTERVAL '1 day' > NOW() THEN 'dispensed'
+          ELSE NULL
+        END AS medicine_status,
+        CASE
+          WHEN latest_chat.status IN ('Open', 'Ongoing') THEN 'active'
+          WHEN latest_chat.archived_at + INTERVAL '1 day' > NOW() THEN 'inactive'
+        END AS healthchat_status,
+        CASE
+          WHEN latest_doc.status = 'Pending' THEN 'submitted'
+          WHEN latest_doc.status = 'Requested' THEN 'pending'
+          WHEN latest_doc.status = 'Recorded' THEN 'approved'
+          ELSE NULL
+        END AS document_status
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
       LEFT JOIN "UserCredentials" uc ON uc.id = up.id
@@ -880,6 +937,42 @@ const Query = {
         LIMIT 1
       ) latest ON true
       LEFT JOIN LATERAL (
+        SELECT c.status
+        FROM "Consultation" c
+        WHERE c."patientId" = up.id
+        ORDER BY c."updatedAt" DESC
+        LIMIT 1
+      ) latest_consult ON true
+      LEFT JOIN LATERAL (
+        SELECT ps.status
+        FROM "patientSlot" ps
+        WHERE ps."patientId" = up.id
+        ORDER BY ps.id DESC
+        LIMIT 1
+      ) latest_appt ON true
+      LEFT JOIN LATERAL (
+        SELECT mrl.status, mrl.updated_at
+        FROM "MedicineRequestLog" mrl
+        WHERE mrl."patientId" = up.id
+        ORDER BY mrl.created_at DESC
+        LIMIT 1
+      ) latest_med ON true
+      LEFT JOIN LATERAL (
+        SELECT hc.status, hc.archived_at
+        FROM "HealthChat" hc
+        WHERE hc."patientId" = up.id
+        ORDER BY hc.id DESC
+        LIMIT 1
+      ) latest_chat ON true
+      LEFT JOIN LATERAL (
+        SELECT prd.status
+        FROM "patientRawDocument" prd
+        WHERE prd."patientId" = up.id
+          AND prd.status <> 'Archived'
+        ORDER BY prd."created_at" DESC
+        LIMIT 1
+      ) latest_doc ON true
+      LEFT JOIN LATERAL (
         SELECT pr2.id, pr2.profile_type
         FROM "profileRecord" pr2
         JOIN "patientUpdateLog" pul2 ON pul2.id = pr2.id
@@ -888,6 +981,7 @@ const Query = {
         LIMIT 1
       ) pr ON true
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE up.id = $1
       LIMIT 1;
@@ -897,33 +991,60 @@ const Query = {
     return result.rows[0] || null;
   },
 
-  _searchPatients: async (_, { searchTerm, branch, offset, limit }, { user, res }) => {
+  _searchPatients: async (_, { searchTerm, branch, identities, offset, limit, includeLatestTicket = false }, { user, res }) => {
     if (!searchTerm || searchTerm.trim().length < 2) return [];
 
     const term = searchTerm.trim();
     const prefixTerm = term + '%';          // for identifier prefix match
     const anyTerm   = '%' + term + '%';     // for name contains match
+    const tokens = term.split(/\s+/).filter(Boolean);
+    const hasTwoTokens = tokens.length >= 2;
+    const token1Any = hasTwoTokens ? `%${tokens[0]}%` : null;
+    const token2Any = hasTwoTokens ? `%${tokens[1]}%` : null;
+    const identitiesFilter = Array.isArray(identities) && identities.length > 0 ? identities : null;
+    const includeLatestTicketFields = includeLatestTicket === true;
+
+    const selectedColumns = [
+      'up.id',
+      'up.identifier',
+      'up.branch',
+      'up.sex',
+      'upl.first_name',
+      'upl.last_name',
+      'upl.middle_name',
+      'upl.suffix',
+      'p.profile::"patientIdentity" AS profile_type',
+      'spd.label as program',
+      'sp.year',
+      'ep.department',
+      'ep.role',
+      'uc.credentials_status'
+    ];
+
+    if (includeLatestTicketFields) {
+      selectedColumns.push(
+        'latest.id           AS latest_ticket_id',
+        'latest.status       AS latest_status',
+        'latest.scope        AS latest_scope',
+        'latest.created_at   AS latest_updated_at'
+      );
+    }
+
+    const latestTicketJoin = includeLatestTicketFields
+      ? `
+      -- latest update ticket
+      LEFT JOIN LATERAL (
+        SELECT pul.id, pul.status, pul.scope, pul.created_at
+        FROM "patientUpdateLog" pul
+        WHERE pul."patientId" = up.id
+        ORDER BY pul.created_at DESC
+        LIMIT 1
+      ) latest ON true`
+      : '';
 
     const query = `
       SELECT
-        up.id,
-        up.identifier,
-        up.branch,
-        up.sex,
-        upl.first_name,
-        upl.last_name,
-        upl.middle_name,
-        upl.suffix,
-        pr.profile_type,
-        sp.program,
-        sp.year,
-        ep.department,
-        ep.role,
-        uc.credentials_status,
-        latest.id           AS latest_ticket_id,
-        latest.status       AS latest_status,
-        latest.scope        AS latest_scope,
-        latest.created_at   AS latest_updated_at
+        ${selectedColumns.join(',\n        ')}
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
       JOIN "UserCredentials" uc ON uc.id = up.id
@@ -935,14 +1056,7 @@ const Query = {
         ORDER BY l.created_at DESC
         LIMIT 1
       ) upl ON true
-      -- latest update ticket
-      LEFT JOIN LATERAL (
-        SELECT pul.id, pul.status, pul.scope, pul.created_at
-        FROM "patientUpdateLog" pul
-        WHERE pul."patientId" = up.id
-        ORDER BY pul.created_at DESC
-        LIMIT 1
-      ) latest ON true
+      ${latestTicketJoin}
       -- latest profile record
       LEFT JOIN LATERAL (
         SELECT pr2.id, pr2.profile_type
@@ -953,9 +1067,18 @@ const Query = {
         LIMIT 1
       ) pr ON true
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE
-        ($1::text IS NULL OR up.branch::text = $1::text)
+        (
+          $1::"UserDesignation" IS NULL
+          OR $1::"UserDesignation" = 'Both'::"UserDesignation"
+          OR up.branch::"UserDesignation" = $1::"UserDesignation"
+        )
+        AND (
+          COALESCE(array_length($7::text[], 1), 0) = 0
+          OR p.profile::"patientIdentity" = ANY($7::"patientIdentity"[])
+        )
         AND (
           up.identifier::text ILIKE $2
           OR (COALESCE(upl.first_name, '') || ' ' || COALESCE(upl.last_name, '')) ILIKE $3
@@ -963,22 +1086,35 @@ const Query = {
           OR COALESCE(upl.first_name, '') ILIKE $3
           OR COALESCE(upl.last_name, '') ILIKE $3
           OR uc.email ILIKE $3
+          OR (
+            $6::boolean = true AND (
+              (COALESCE(upl.first_name, '') ILIKE $4 AND COALESCE(upl.last_name, '') ILIKE $5)
+              OR
+              (COALESCE(upl.last_name, '') ILIKE $4 AND COALESCE(upl.first_name, '') ILIKE $5)
+            )
+          )
         )
       ORDER BY
         CASE WHEN up.identifier::text ILIKE $2 THEN 0 ELSE 1 END,
         upl.last_name, upl.first_name
-      LIMIT $4 OFFSET $5;
+      LIMIT $8 OFFSET $9;
     `;
 
     const result = await db.query(query, [
       branch || null,
       prefixTerm,
       anyTerm,
+      token1Any,
+      token2Any,
+      hasTwoTokens,
+      identitiesFilter,
       limit || 15,
       offset || 0,
     ]);
 
-    logger.debug(`Patient search for "${term}" returned ${result.rows.length} results`);
+    logger.debug(
+      `Patient search for "${term}" returned ${result.rows.length} results (includeLatestTicket=${includeLatestTicketFields})`
+    );
     return result.rows;
   },
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
-import { fetchPatientRecordForReview, fetchCatalogsForReview, submitStaffEdits } from '../patient-record-service';
+import { fetchPatientRecordForReview, submitStaffEdits } from '../patient-record-service';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -69,13 +69,11 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
       setFetchError('');
       try {
         const sex = ticket.sex ?? null; // may not be available from ticket list
-        const [data, cats] = await Promise.all([
-          fetchPatientRecordForReview(ticket.patientId, scope, sex),
-          fetchCatalogsForReview(),
-        ]);
+        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex);
         if (!cancelled) {
-          setRecordData(data);
-          setCatalogs(cats);
+          const { catalogs: cats, ...recordFields } = data;
+          setRecordData(recordFields);
+          setCatalogs(cats ?? {});
         }
       } catch (err) {
         if (!cancelled) setFetchError(err.message || 'Failed to load patient record.');
@@ -88,11 +86,15 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     return () => { cancelled = true; };
   }, [ticket?.patientId, scope]);
 
-  // After basic info loads & we now know the sex, lazy-load OB-GYNE if female
+  // OB-GYNE is now included in the initial batched fetch for all medical-scope
+  // records, so a lazy-load is only needed if recordData was set before the
+  // batch approach existed (i.e. obgynHistory key is completely absent).
   useEffect(() => {
     const sex = recordData?.basicInfo?.sex;
     if (!sex || !includeMedical || obgynFetchedRef.current) return;
     if (sex.toLowerCase() !== 'female') return;
+    // Skip if already populated by the batched fetch.
+    if ('obgynHistory' in (recordData ?? {})) return;
 
     obgynFetchedRef.current = true; // mark attempted — prevents infinite loop
     import('../patient-record-service').then(({ getUserObgynHistory }) => {
@@ -208,10 +210,10 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] flex flex-col">
 
         {/* ── Header ── */}
-        <div className="sticky top-0 z-10 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between rounded-t-xl">
+        <div className="sticky top-0 z-10 bg-white dark:bg-neutral-800 px-6 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between rounded-t-xl">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-xl font-bold text-secondary-900 dark:text-white truncate">
+            <div className="flex items-center gap-2" style={{ marginBottom: '8px' }}>
+              <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-xl font-bold text-secondary-900 dark:text-white truncate">
                 Record Review
               </h2>
               <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded whitespace-nowrap ${badgeClass}`}>
@@ -219,14 +221,14 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               </span>
             </div>
             <div className="flex items-center gap-3 text-sm text-secondary-600 dark:text-neutral-400">
-              <span className="font-semibold text-secondary-900 dark:text-white">
+              <span className="font-semibold text-secondary-800 dark:text-neutral-200">
                 {ticket.first_name || ticket.last_name
                   ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
                   : `Patient #${ticket.patientId}`}
               </span>
-              <span>&middot;</span>
+              <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
               <span>Scope: {scope}</span>
-              <span>&middot;</span>
+              <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
               <span>{ticket.branch === 'QuezonCity' ? 'Quezon City' : ticket.branch}</span>
             </div>
           </div>
@@ -250,7 +252,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-error-700 dark:text-error-400">{fetchError}</p>
+              <p className="text-sm text-error-700 dark:text-error-400 mb-0">{fetchError}</p>
             </div>
           )}
 
@@ -366,7 +368,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                       <h4 className="text-sm font-semibold text-warning-900 dark:text-warning-400">
                         Staff Edits Pending
                       </h4>
-                      <p className="text-xs text-warning-700 dark:text-warning-500 mt-1">
+                      <p className="text-xs text-warning-700 dark:text-warning-500 mt-1 mb-0">
                         You have modified patient data. These changes will be logged per the Data Privacy Act.
                         Ensure all edit reasons are provided before approving.
                       </p>
@@ -397,7 +399,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                       <h4 className="text-sm font-bold text-primary-900 dark:text-primary-300">
                         Confirm Staff Changes
                       </h4>
-                      <p className="text-xs text-primary-700 dark:text-primary-400 mt-1">
+                      <p className="text-xs text-primary-700 dark:text-primary-400 mt-1 mb-0">
                         You are about to approve this record with staff-modified fields.
                         By proceeding, you confirm that all edits are corrections of genuine
                         errors and that you are authorized to make these changes.
@@ -459,7 +461,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-error-700 dark:text-error-400">{actionError}</p>
+              <p className="text-sm text-error-700 dark:text-error-400 mb-0">{actionError}</p>
             </div>
           )}
         </div>

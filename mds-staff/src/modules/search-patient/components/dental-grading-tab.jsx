@@ -56,7 +56,7 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
   }
   return (
     <div className="overflow-x-auto -mx-3 -mb-3">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[420px] text-sm border-separate border-spacing-0">
         <thead>
           <tr className="bg-neutral-100 dark:bg-neutral-700/50">
             <th className="px-3 py-2 text-left text-[11px] font-semibold text-secondary-600 dark:text-neutral-300 uppercase tracking-wide border-b border-neutral-200 dark:border-neutral-600">
@@ -73,6 +73,8 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
         <tbody>
           {catalogs.map((catalog, idx) => {
             const value = findings[catalog.id];
+            const isYes = value === true || value === 'true' || value === 'yes';
+            const isNo = value === false || value === 'false' || value === 'no';
             return (
               <tr
                 key={catalog.id}
@@ -84,8 +86,14 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
                   {readOnly ? (
                     <div className="flex justify-center items-center">
-                      <span className={`inline-flex w-4 h-4 rounded-full border-2 items-center justify-center ${value === true || value === 'true' || value === 'yes' ? 'border-green-500 bg-green-500 dark:border-green-400 dark:bg-green-400' : 'border-neutral-300 dark:border-neutral-500 bg-transparent'}`}>
-                        {(value === true || value === 'true' || value === 'yes') && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                      <span className={`inline-flex w-5 h-5 rounded-full border-2 items-center justify-center transition-colors ${isYes ? 'border-green-500 bg-green-100 text-green-700 dark:border-green-400 dark:bg-green-900/40 dark:text-green-300' : 'border-neutral-300 dark:border-neutral-500 bg-white dark:bg-neutral-800 text-transparent'}`}>
+                        {isYes ? (
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <span className="w-3 h-3" />
+                        )}
                       </span>
                     </div>
                   ) : (
@@ -94,15 +102,21 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
                       name={`grading-finding-${catalog.id}`}
                       checked={value === true}
                       onChange={() => onFindingChange(catalog.id, true)}
-                      className="w-4 h-4 text-green-600 border-neutral-300 dark:border-neutral-500 focus:ring-green-500 dark:bg-neutral-700 cursor-pointer"
+                      className="w-4 h-4 accent-green-600 dark:accent-green-400 border-neutral-300 dark:border-neutral-500 focus:ring-green-500 dark:bg-neutral-700 cursor-pointer"
                     />
                   )}
                 </td>
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
                   {readOnly ? (
                     <div className="flex justify-center items-center">
-                      <span className={`inline-flex w-4 h-4 rounded-full border-2 items-center justify-center ${value === false || value === 'false' || value === 'no' ? 'border-red-500 bg-red-500 dark:border-red-400 dark:bg-red-400' : 'border-neutral-300 dark:border-neutral-500 bg-transparent'}`}>
-                        {(value === false || value === 'false' || value === 'no') && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                      <span className={`inline-flex w-5 h-5 rounded-full border-2 items-center justify-center transition-colors ${isNo ? 'border-red-500 bg-red-100 text-red-700 dark:border-red-400 dark:bg-red-900/40 dark:text-red-300' : 'border-neutral-300 dark:border-neutral-500 bg-white dark:bg-neutral-800 text-transparent'}`}>
+                        {isNo ? (
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        ) : (
+                          <span className="w-3 h-3" />
+                        )}
                       </span>
                     </div>
                   ) : (
@@ -111,7 +125,7 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
                       name={`grading-finding-${catalog.id}`}
                       checked={value === false}
                       onChange={() => onFindingChange(catalog.id, false)}
-                      className="w-4 h-4 text-red-600 border-neutral-300 dark:border-neutral-500 focus:ring-red-500 dark:bg-neutral-700 cursor-pointer"
+                      className="w-4 h-4 accent-red-600 dark:accent-red-400 border-neutral-300 dark:border-neutral-500 focus:ring-red-500 dark:bg-neutral-700 cursor-pointer"
                     />
                   )}
                 </td>
@@ -232,6 +246,7 @@ export default function DentalGradingTab({ patient }) {
 
   // Grading mode state (mirrors dental-record-tab pattern)
   const [isGrading, setIsGrading] = useState(false);
+  const [showGradingForm, setShowGradingForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [gradeError, setGradeError] = useState(null);
   const [gradeSuccess, setGradeSuccess] = useState(false);
@@ -286,6 +301,7 @@ export default function DentalGradingTab({ patient }) {
     setToothStates({});
     setFindings(buildInitialFindings(catalogs));
     setNotes('');
+    setShowGradingForm(true);
     setIsGrading(true);
   };
 
@@ -294,6 +310,7 @@ export default function DentalGradingTab({ patient }) {
     setToothStates({});
     setFindings(buildInitialFindings(catalogs));
     setNotes('');
+    setShowGradingForm(false);
     setIsGrading(false);
     setGradeError(null);
   };
@@ -330,6 +347,7 @@ export default function DentalGradingTab({ patient }) {
       });
 
       setGradeSuccess(true);
+      setShowGradingForm(false);
       setIsGrading(false);
       setChartKey((k) => k + 1);
       setToothStates({});
@@ -349,12 +367,12 @@ export default function DentalGradingTab({ patient }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Tooth Chart with Grade button ── */}
+      {/* ── Dental Grading Form (collapsible) ── */}
       <PatientSectionCard
-        title="Tooth Chart"
+        title="Dental Grading Form"
         right={
           <div className="flex items-center gap-2">
-            {conditionsCount > 0 && !isGrading && (
+            {showGradingForm && conditionsCount > 0 && !isGrading && (
               <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
                 {conditionsCount} condition{conditionsCount !== 1 ? 's' : ''} marked
               </span>
@@ -400,59 +418,71 @@ export default function DentalGradingTab({ patient }) {
           </div>
         }
       >
+        {!showGradingForm && (
+          <p className="text-xs text-secondary-500 dark:text-neutral-400">
+            Click Grade to open the dental grading form.
+          </p>
+        )}
+
         {gradeError && (
           <div className="mb-3 px-3 py-2 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-xs text-error-700 dark:text-error-400">
             {gradeError}
           </div>
         )}
-        {gradeSuccess && (
+
+        {!showGradingForm && gradeSuccess && (
           <div className="mb-3 px-3 py-2 rounded-md bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 text-xs text-success-700 dark:text-success-400">
             Dental grading recorded successfully.
           </div>
         )}
-        <ToothChart
-          key={chartKey}
-          initialStates={emptyToothStates}
-          isEditing={isGrading}
-          onStateChange={handleToothStateChange}
-        />
+
+        {showGradingForm && (
+          <div className="space-y-4">
+            <PatientSectionCard title="Tooth Chart">
+              <ToothChart
+                key={chartKey}
+                initialStates={emptyToothStates}
+                isEditing={isGrading}
+                onStateChange={handleToothStateChange}
+              />
+            </PatientSectionCard>
+
+            {catalogs.length > 0 && (
+              <PatientSectionCard
+                title="Oral Findings"
+                right={
+                  positiveCount > 0 && !isGrading ? (
+                    <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
+                      {positiveCount} positive finding{positiveCount !== 1 ? 's' : ''}
+                    </span>
+                  ) : isGrading ? (
+                    <span className="text-[10px] text-primary-600 dark:text-primary-400 font-medium">Grading mode</span>
+                  ) : null
+                }
+              >
+                <OralFindingsTable
+                  catalogs={catalogs}
+                  findings={findings}
+                  onFindingChange={isGrading ? handleFindingChange : undefined}
+                  readOnly={!isGrading}
+                />
+              </PatientSectionCard>
+            )}
+
+            {isGrading && (
+              <PatientSectionCard title="Notes">
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Optional clinical notes…"
+                  className="w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                />
+              </PatientSectionCard>
+            )}
+          </div>
+        )}
       </PatientSectionCard>
-
-      {/* ── Oral Findings ── */}
-      {catalogs.length > 0 && (
-        <PatientSectionCard
-          title="Oral Findings"
-          right={
-            positiveCount > 0 && !isGrading ? (
-              <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
-                {positiveCount} positive finding{positiveCount !== 1 ? 's' : ''}
-              </span>
-            ) : isGrading ? (
-              <span className="text-[10px] text-primary-600 dark:text-primary-400 font-medium">Grading mode</span>
-            ) : null
-          }
-        >
-          <OralFindingsTable
-            catalogs={catalogs}
-            findings={findings}
-            onFindingChange={isGrading ? handleFindingChange : undefined}
-            readOnly={!isGrading}
-          />
-        </PatientSectionCard>
-      )}
-
-      {/* ── Notes (visible only while grading) ── */}
-      {isGrading && (
-        <PatientSectionCard title="Notes">
-          <textarea
-            rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional clinical notes…"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
-          />
-        </PatientSectionCard>
-      )}
 
       {/* ── Dental Grading History ── */}
       <PatientSectionCard title="Dental Grading History">

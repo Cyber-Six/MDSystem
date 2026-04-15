@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { logout, axiosRequest } from '../../core';
 import { unregisterPushToken } from '../../services/notification-service';
 import { getPatientProfile } from '../../services/profile-service';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -34,13 +35,8 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { iconName: 'person', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
-  { iconName: 'pill', iconLib: 'MCI', label: 'Medicine Request', screen: 'MedicineRequest', description: 'Request medicines from the clinic' },
-  { iconName: 'clipboard', label: 'Medical Record', screen: 'InitialRecordForm', description: 'View or fill your record' },
-  { iconName: 'create', label: 'Update Record', screen: 'UpdateRecordChoice', description: 'Update your medical or dental record' },
-  { iconName: 'folder-open', label: 'My Documents', screen: 'MyDocuments', description: 'View your prescriptions & certificates' },
-  { iconName: 'key', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
-  { iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
   { iconName: 'megaphone', label: 'Announcements', screen: 'Announcements', description: 'Clinic news and announcements' },
+  { iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
   { iconName: 'help-circle', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
   { iconName: 'settings', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
 ];
@@ -82,6 +78,21 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={[
+              styles.menuButton,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+            onPress={() => toggleAppDrawer(navigation)}
+            accessibilityRole="button"
+            accessibilityLabel="Open sidebar"
+          >
+            <Ionicons
+              name="menu"
+              size={22}
+              color={isDark ? colors.neutral[100] : colors.secondary[900]}
+            />
+          </TouchableOpacity>
           <Text
             style={[
               styles.headerTitle,
@@ -227,9 +238,16 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, paddingBottom: 40 },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 20,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: { fontSize: 24, fontWeight: 'bold' },
   themeToggle: {

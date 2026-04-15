@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { searchByStatus, getStatusCounts, listAllSchedulers, loadInitialQueueData } from '../staff-appointment-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
+import { getLocationsByBranch } from '../../../utils/branch-utils';
 
 /* ── constants ─────────────────────────────────────── */
 
 const PAGE_SIZE = 15;
-const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_DEBOUNCE_MS = 500;
 
 const STATUS_STYLES = {
   Pending:             'bg-warning-100 dark:bg-warning-900/40 text-warning-800 dark:text-warning-300',
@@ -43,6 +45,9 @@ const formatCount = (count) => {
 
 /* ── component ─────────────────────────────────────── */
 const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
+  const { profile } = useStaffProfile();
+  const allowedLocations = useMemo(() => getLocationsByBranch(profile?.branch), [profile?.branch]);
+
   const [activeTab,   setActiveTab]   = useState('Pending');
   const [search,      setSearch]      = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -147,18 +152,23 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   /* Load scheduler list once on mount — independent of the batched query so a
      permission hiccup on one doesn't block the other. */
   useEffect(() => {
+    if (!allowedLocations.length) return;
     let cancelled = false;
     const load = async () => {
       try {
         const list = await listAllSchedulers(0, 200);
-        if (!cancelled) setSchedulers(list || []);
+        if (!cancelled) {
+          // Filter schedulers to only those in this staff member's allowed locations
+          const filtered = (list || []).filter(s => allowedLocations.includes(s.location));
+          setSchedulers(filtered);
+        }
       } catch (err) {
         console.error('Failed to load schedulers:', err);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [allowedLocations]);
 
   /* Initial load — combines counts + first-page appointments into a single
      HTTP request to minimise round-trips on a low-power server.
@@ -293,12 +303,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
 
       {/* ─── Tabs ─── */}
-      <div className="flex border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto overflow-y-hidden min-h-[56px]">
+      <div className="flex border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto overflow-y-hidden min-h-[48px]">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => handleTabChange(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
               activeTab === tab.key
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                 : 'border-transparent text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
@@ -309,7 +319,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             </svg>
             {tab.label}
             {loadingCounts ? (
-              <span className={`ml-0.5 px-2 py-0.5 text-sm rounded-full font-semibold animate-pulse ${
+              <span className={`ml-0.5 px-1.5 py-0.5 text-xs rounded-full font-semibold animate-pulse ${
                 activeTab === tab.key
                   ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                   : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
@@ -318,7 +328,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               </span>
             ) : (
               tabCounts[tab.key] !== undefined && (
-                <span className={`ml-0.5 px-2 py-0.5 text-sm rounded-full font-semibold ${
+                <span className={`ml-0.5 px-1.5 py-0.5 text-xs rounded-full font-semibold ${
                   activeTab === tab.key
                     ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                     : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
@@ -332,7 +342,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       </div>
 
       {/* ─── Inline Filters ─── */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-700/60">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 px-3 py-2 border-b border-neutral-100 dark:border-neutral-700/60">
         {/* Search */}
         <div className="relative flex-1">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-secondary-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -343,7 +353,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             placeholder="Search by name, ID, or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+            className="w-full pl-8 pr-3 py-1 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
 
@@ -357,7 +367,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               type="date"
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              className="pl-8 pr-3 py-1 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
           {filterDate && (
@@ -381,7 +391,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           <select
             value={filterSchedulerId}
             onChange={(e) => setFilterSchedulerId(e.target.value)}
-            className="pl-8 pr-6 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none max-w-[180px]"
+            className="pl-8 pr-6 py-1 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none max-w-[180px]"
           >
             <option value="">All Schedulers</option>
             {schedulers.map((s) => (
@@ -399,12 +409,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           <select
             value={filterLocation}
             onChange={(e) => setFilterLocation(e.target.value)}
-            className="pl-8 pr-6 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none"
+            className="pl-8 pr-6 py-1 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none"
           >
-            <option value="">All Locations</option>
-            <option value="Arlegui">Arlegui</option>
-            <option value="Casal">Casal</option>
-            <option value="QuezonCity">Quezon City</option>
+            {allowedLocations.length > 1 && <option value="">All Locations</option>}
+            {allowedLocations.includes('Arlegui') && <option value="Arlegui">Arlegui</option>}
+            {allowedLocations.includes('Casal') && <option value="Casal">Casal</option>}
+            {allowedLocations.includes('QuezonCity') && <option value="QuezonCity">Quezon City</option>}
           </select>
         </div>
 
@@ -412,7 +422,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         {(filterDate || filterSchedulerId || filterLocation) && (
           <button
             onClick={() => { setFilterDate(''); setFilterSchedulerId(''); setFilterLocation(''); }}
-            className="px-2.5 py-1.5 text-sm bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-md text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/40 transition-colors whitespace-nowrap"
+            className="px-2 py-1 text-xs bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-md text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/40 transition-colors whitespace-nowrap"
           >
             Clear Filters
           </button>
@@ -421,7 +431,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         {/* Result count + refresh */}
         <button
           onClick={() => { fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation); refreshCounts(filterDate, filterSchedulerId, filterLocation); }}
-          className="px-2.5 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
+          className="px-2 py-1 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
         >
           Refresh
         </button>
@@ -435,82 +445,106 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         {loading ? (
           <div className="px-4 py-12 text-center">
             <div className="animate-spin mx-auto w-6 h-6 rounded-full border-2 border-current/20 border-t-current text-primary-500 mb-2" />
-            <p className="text-sm text-secondary-400 dark:text-neutral-500">Loading appointments...</p>
+            <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading appointments...</p>
           </div>
         ) : (
           <>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
-                {['Patient', 'Scheduled', 'Session', 'Status', 'Purpose'].map((h) => (
-                  <th key={h} className="text-left px-4 py-2.5 text-sm font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider whitespace-nowrap" style={{ width: '20%' }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-700/40">
-              {rows.length > 0 ? rows.map((apt) => (
-                <tr
+          <div className="space-y-px">
+            {/* Headers */}
+            {/* Column alignment: Patient (text-left) | Scheduled (text-left) | Session (text-center) | Status (text-center) | Purpose (text-right) */}
+            {/* To change positions: edit className text-left/text-center/text-right in each header div */}
+            <div className="sticky top-0 z-10 bg-neutral-50/60 dark:bg-neutral-700/30 grid grid-cols-[180px_1fr_110px_140px_1fr] gap-4 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="text-left text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Patient</div>
+              <div className="text-left text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Scheduled</div>
+              <div className="text-center text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Session</div>
+              <div className="text-center text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Status</div>
+              <div className="text-center text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Purpose</div>
+            </div>
+
+            {/* Rows */}
+            {rows.length > 0 ? rows.map((apt) => {
+              const initials = (apt.patientName || '')
+                .split(' ')
+                .map((n) => n[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2) || '—';
+              
+              return (
+                <div
                   key={apt.id}
                   onClick={() => onViewDetails?.(apt)}
-                  className="hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors"
+                  className="hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors grid grid-cols-[180px_1fr_110px_140px_1fr] gap-4 items-center px-4 py-2 border-b border-neutral-100 dark:border-neutral-700/40"
                 >
-                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
-                    <p className="text-base font-semibold text-secondary-900 dark:text-neutral-100">
-                      {apt.patientIdentifier ?? apt.patientId}
-                    </p>
-                    {apt.patientName && (
-                      <p className="text-sm text-secondary-700 dark:text-neutral-300 mt-0.5">{apt.patientName}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
+                  {/* Avatar + Patient Info */}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-primary-500 dark:bg-primary-600 flex-shrink-0 flex items-center justify-center">
+                      <span className="text-xs font-bold text-white">{initials}</span>
+                    </div>
+                    <div className="flex-1 min-w-0" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                      <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs font-semibold text-secondary-900 dark:text-neutral-100 font-mono">
+                        {apt.patientIdentifier ?? apt.patientId}
+                      </p>
+                      {apt.patientName && (
+                        <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs text-secondary-700 dark:text-neutral-300">
+                          {apt.patientName}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Scheduled */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                     {apt.scheduledDate ? (
-                      <div>
-                        <p className="text-base font-semibold text-secondary-900 dark:text-neutral-100">
+                      <>
+                        <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs font-semibold text-secondary-900 dark:text-neutral-100">
                           {new Date(apt.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
                         </p>
                         {apt.schedulerLabel && (
-                          <p className="text-sm text-secondary-700 dark:text-neutral-300 mt-0.5 truncate max-w-[160px]">{apt.schedulerLabel}</p>
+                          <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs text-secondary-700 dark:text-neutral-300">{apt.schedulerLabel}</p>
                         )}
-                      </div>
+                      </>
                     ) : (
-                      <span className="text-base text-secondary-600 dark:text-neutral-400">—</span>
+                      <span style={{ margin: 0, lineHeight: 1.2 }} className="text-xs text-secondary-600 dark:text-neutral-400">—</span>
                     )}
-                  </td>
-                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
-                    <span className={`inline-block px-2.5 py-1 text-sm font-semibold rounded ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200'}`}>
+                  </div>
+
+                  {/* Session - Change position: flex justify-center → flex justify-start (left) / justify-end (right) */}
+                  <div className="flex justify-center">
+                    <span className={`inline-block px-3 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200'}`}>
                       {apt.session}
                     </span>
-                  </td>
-                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
-                    <span className={`inline-block px-2.5 py-1 text-sm font-semibold rounded ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-700'}`}>
+                  </div>
+
+                  {/* Status - Change position: flex justify-center → flex justify-start (left) / justify-end (right) */}
+                  <div className="flex justify-center">
+                    <span className={`inline-block px-3 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-700'}`}>
                       {apt.status}
                     </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-base text-secondary-800 dark:text-neutral-200 truncate" style={{ width: '20%' }}>
+                  </div>
+
+                  {/* Purpose - Change position: text-center (center) → text-left (left) / text-right (right) */}
+                  <div className="text-xs text-secondary-800 dark:text-neutral-200 truncate text-center">
                     {apt.purpose ? (
                       <span title={apt.purpose}>{apt.purpose.length > 40 ? apt.purpose.slice(0, 40) + '…' : apt.purpose}</span>
                     ) : '—'}
-                  </td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center">
-                    <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    <p className="text-base font-medium text-secondary-500 dark:text-neutral-400">No appointments found</p>
-                    <p className="text-sm text-secondary-400 dark:text-neutral-500 mt-0.5">
-                      {filterDate || filterSchedulerId || filterLocation
-                        ? 'Try adjusting or clearing the active filters'
-                        : `No ${activeTab} appointments at the moment`}
-                    </p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="px-4 py-12 text-center">
+                <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <p className="text-sm font-medium text-secondary-500 dark:text-neutral-400">No appointments found</p>
+                <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">
+                  {filterDate || filterSchedulerId || filterLocation
+                    ? 'Try adjusting or clearing the active filters'
+                    : `No ${activeTab} appointments at the moment`}
+                </p>
+              </div>
+            )}
+          </div>
 
           </>
         )}

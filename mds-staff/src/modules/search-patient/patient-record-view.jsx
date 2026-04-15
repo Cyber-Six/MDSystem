@@ -1,9 +1,36 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../../packages-core-adapter';
 import { GQL_FULL_RECORD, GQL_PERSONAL_PROFILE, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
 import * as consultationService from './consultation-service';
 import { ENUM_TO_CODE } from './components/tooth-chart-constants';
+import { fetchPatientMedicineRequests } from '../medical-inventory/medicine-request-service';
+import PatientInitialBadge from './components/patient-initial-badge';
+import { SUPERIOR_DETAILS_DENIED_CUE } from './superior-access';
+
+const GQL_PATIENT_ACCESS_PROBE = `
+  query GetPatientAccessProbe($userId: ID!) {
+    getPatientBasicInfo(userId: $userId) {
+      id
+      identifier
+      branch
+      first_name
+      last_name
+      middle_name
+      suffix
+      profile_type
+      access_denied
+    }
+  }
+`;
+
+const GQL_CREATE_DENTAL_RECORD = `
+  mutation CreateDentalRecord($patientId: ID!, $input: DentalRecordInput!) {
+    createDentalRecord(patientId: $patientId, input: $input) {
+      id
+    }
+  }
+`;
 
 const GQL_BASIC_RECORD_FALLBACK = `
   query GetPatientBasicRecordFallback($userId: ID!) {
@@ -25,6 +52,12 @@ const GQL_BASIC_RECORD_FALLBACK = `
       latest_status
       latest_scope
       latest_updated_at
+      medical_status
+      appointment_status
+      medicine_status
+      healthchat_status
+      document_status
+      access_denied
     }
     getUserUpdateTicket(userId: $userId) {
       id
@@ -36,6 +69,7 @@ const GQL_BASIC_RECORD_FALLBACK = `
 `;
 
 const PatientPersonalInfoTab = lazy(() => import('./components/personal-info-tab'));
+const PatientPersonalRecordHistoryTab = lazy(() => import('./components/personal-record-history-tab'));
 const PatientMedicalRecordTab = lazy(() => import('./components/medical-record-tab'));
 const PatientDentalRecordTab = lazy(() => import('./components/dental-record-tab'));
 const PatientConsultationTab = lazy(() => import('./components/consultation-tab'));
@@ -62,7 +96,12 @@ function LoadingBlock({ label }) {
 }
 
 function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData) {
-  if (mockPatient) return mockPatient;
+  if (mockPatient) {
+    return {
+      ...mockPatient,
+      moduleStatuses: mockPatient.moduleStatuses || {},
+    };
+  }
 
   const basicInfo = data?.getPatientBasicInfo;
   const updateTicket = data?.getUserUpdateTicket || null;
@@ -170,6 +209,13 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
     status: updateTicket?.status || basicInfo?.latest_status || '',
     credentialStatus: basicInfo?.credentials_status || '',
     type: basicInfo?.profile_type || 'Student',
+    moduleStatuses: {
+      medical_status: basicInfo?.medical_status || null,
+      appointment_status: basicInfo?.appointment_status || null,
+      medicine_status: basicInfo?.medicine_status || null,
+      healthchat_status: basicInfo?.healthchat_status || null,
+      document_status: basicInfo?.document_status || null,
+    },
     avatar: null,
     personal: {
       firstName: basicInfo?.first_name || '',
@@ -328,23 +374,181 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
   };
 }
 
+const normalizeMedicineRequestStatus = (status) => {
+  if (status === 'Completed' || status === 'Dispensed') return 'Dispensed';
+  if (status === 'Rejected') return 'Rejected';
+  if (status === 'Cancelled' || status === 'Expired') return 'Cancelled';
+  return 'Pending';
+};
+
+const formatMedicineRequestDate = (dateValue) => {
+  if (!dateValue) return '';
+  try {
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '';
+  }
+};
+
+const mapMedicineRequestsForDisplay = (requests = []) => {
+  return requests.map((req) => {
+    const items = Array.isArray(req?.items) ? req.items : [];
+    const medicineNames = items
+      .map((item) => item?.itemName || item?.item_name || (item?.medicineId ? `Medicine #${item.medicineId}` : null))
+      .filter(Boolean);
+
+    const totalQuantity = items.reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+    const normalizedStatus = normalizeMedicineRequestStatus(req?.status);
+
+    return {
+      id: req?.id ? `#${req.id}` : '',
+      requestId: req?.id,
+      medicine: medicineNames.length > 0 ? medicineNames.join(', ') : 'Medicine request',
+      quantity: totalQuantity || 0,
+      reason: req?.purpose || '',
+      notes: req?.notes || '',
+      prescribedBy: req?.approved_by ? `Staff #${req.approved_by}` : '',
+      date: formatMedicineRequestDate(req?.created_at),
+      dispensedDate: '',
+      status: normalizedStatus,
+      backendStatus: req?.status || 'Pending',
+      location: req?.location || '',
+    };
+  });
+};
+
+const MODULE_STATUS_BADGE_CONFIG = Object.freeze({
+  medical_status: {
+    pending: { label: 'Pending Medical', cls: 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400' },
+    approved: { label: 'Medical Approved', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+    completed: { label: 'Medical Completed', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+  appointment_status: {
+    scheduled: { label: 'Appointment Scheduled', cls: 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400' },
+    pending: { label: 'Appointment Pending', cls: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400' },
+    completed: { label: 'Appointment Completed', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+  medicine_status: {
+    pending: { label: 'Medicine Request Pending', cls: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400' },
+    approved: { label: 'Medicine Request Approved', cls: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400' },
+    dispensed: { label: 'Medicine Dispensed', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+  healthchat_status: {
+    active: { label: 'HealthChat Active', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+    inactive: { label: 'HealthChat Inactive', cls: 'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400' },
+  },
+  document_status: {
+    submitted: { label: 'Document Submitted', cls: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
+    pending: { label: 'Document Pending', cls: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400' },
+    approved: { label: 'Document Approved', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+});
+
+const MODULE_STATUS_ORDER = ['medical_status', 'appointment_status', 'medicine_status', 'healthchat_status', 'document_status'];
+
+function buildModuleStatusTags(moduleStatuses) {
+  return MODULE_STATUS_ORDER
+    .map((statusKey) => {
+      const rawValue = moduleStatuses?.[statusKey];
+      const normalizedValue = typeof rawValue === 'string' ? rawValue.toLowerCase() : '';
+      const config = MODULE_STATUS_BADGE_CONFIG[statusKey]?.[normalizedValue];
+      return config ? { id: statusKey, ...config } : null;
+    })
+    .filter(Boolean);
+}
+
+// ── Helper: Get icon and color for each tab category ──────────────────────────
+const TAB_CONFIG = {
+  personal: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Profile' },
+  medical: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Medical' },
+  dental: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Dental' },
+  consultation: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Consultation' },
+  obgyne: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'OB-GYN' },
+  appointments: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Schedule' },
+  medicines: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Medicines' },
+  documents: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Documents' },
+};
+
+// ── Helper: Get active sub-tab label ──────────────────────────────────────────
+const getActiveSubTabLabel = (mainTab, subTabState) => {
+  const subTabMap = {
+    personal: { 'personal-info': 'Personal Record', 'personal-record-history': 'History' },
+    medical: { 'medical-record': 'Medical Record', 'medical-record-history': 'History', 'vital-signs': 'Vital Signs' },
+    dental: { 'dental-record': 'Dental Record', 'dental-grade-history': 'History', 'dental-grading': 'Grading' },
+    consultation: { 'consultation-form': 'New Form', 'consultation-history': 'History' },
+  };
+  return subTabMap[mainTab]?.[subTabState] || '';
+};
+
 export default function PatientRecordView({ patientId, initialTab: initialTabProp, embedded = false, onBack }) {
   const [searchParams] = useSearchParams();
   const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [dentalSubTab, setDentalSubTab] = useState('dental-grade-history');
+  const [personalSubTab, setPersonalSubTab] = useState('personal-info');
+  const [medicalSubTab, setMedicalSubTab] = useState('medical-record');
+  const [dentalSubTab, setDentalSubTab] = useState('dental-record');
+  const [consultationSubTab, setConsultationSubTab] = useState('consultation-form');
   const [isLoading, setIsLoading] = useState(true);
+  const tabsRef = useRef(null);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [vitalsData, setVitalsData] = useState(null);
   const [consultations, setConsultations] = useState([]);
+  const [medicineRequests, setMedicineRequests] = useState(() => []);
+  const [isLoadingMedicineRequests, setIsLoadingMedicineRequests] = useState(false);
+  const [medicineRequestsError, setMedicineRequestsError] = useState('');
+  const medicineRequestsFetchIdRef = useRef(0);
+
+  // ── Keyboard navigation for tabs (Arrow keys) ────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(e.key) || !tabsRef.current) return;
+      e.preventDefault();
+      const buttons = Array.from(tabsRef.current.querySelectorAll('button[data-tab-id]'));
+      const currentIdx = buttons.findIndex(b => b.getAttribute('data-tab-id') === activeTab);
+      if (currentIdx === -1) return;
+      const nextIdx = e.key === 'ArrowRight' ? (currentIdx + 1) % buttons.length : (currentIdx - 1 + buttons.length) % buttons.length;
+      const nextTabId = buttons[nextIdx].getAttribute('data-tab-id');
+      setActiveTab(nextTabId);
+      buttons[nextIdx].focus();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab]);
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
   const mockPatient = isMockPatient ? MOCK_PATIENT_RECORDS[String(patientId)] : null;
+  const isAccessDenied = !isMockPatient && Boolean(recordData?.getPatientBasicInfo?.access_denied);
 
   useEffect(() => {
-    setActiveTab(initialTab || 'personal');
+    const requestedTab = initialTab || 'personal';
+
+    // Keep backward compatibility for old links/tabs that still use `history`.
+    if (requestedTab === 'history') {
+      setActiveTab('consultation');
+      setConsultationSubTab('consultation-history');
+      return;
+    }
+
+    // Keep backward compatibility for old links/tabs that still use `vital-signs`.
+    if (requestedTab === 'vital-signs') {
+      setActiveTab('medical');
+      setMedicalSubTab('vital-signs');
+      return;
+    }
+
+    setActiveTab(requestedTab);
+
+    if (requestedTab === 'medical') {
+      setMedicalSubTab('medical-record');
+    }
+
+    if (requestedTab === 'consultation') {
+      setConsultationSubTab('consultation-form');
+    }
   }, [initialTab]);
 
   useEffect(() => {
@@ -365,6 +569,27 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const loadRecord = async () => {
       try {
+        // Preflight access check: do not expand restricted Superior records.
+        const { data: accessProbeResp } = await axiosRequest.post('/emr/medical', {
+          query: GQL_PATIENT_ACCESS_PROBE,
+          variables: { userId: patientId },
+        });
+
+        if (cancelled) return;
+
+        const accessProbe = accessProbeResp?.data?.getPatientBasicInfo;
+        if (!accessProbe) {
+          throw new Error(accessProbeResp?.errors?.[0]?.message || 'Patient not found');
+        }
+
+        if (accessProbe.access_denied) {
+          setRecordData({ getPatientBasicInfo: accessProbe, getUserUpdateTicket: null });
+          setProfileData(null);
+          setVitalsData(null);
+          setLoadError(SUPERIOR_DETAILS_DENIED_CUE);
+          return;
+        }
+
         // Fetch EMR data, personal profile, VitalSigns, and dental data in parallel
         const [emrResult, profileResult, vitalsResult, staffDentalResult] = await Promise.allSettled([
           axiosRequest.post('/emr/medical', {
@@ -455,11 +680,12 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           }
 
           setRecordData(fallbackPayload);
-          setLoadError(null);
+          setLoadError(fallbackPayload.getPatientBasicInfo?.access_denied ? SUPERIOR_DETAILS_DENIED_CUE : null);
         } catch (fallbackErr) {
           const fallbackPartial = fallbackErr?.response?.data?.data;
           if (fallbackPartial?.getPatientBasicInfo) {
             setRecordData(fallbackPartial);
+            setLoadError(fallbackPartial.getPatientBasicInfo?.access_denied ? SUPERIOR_DETAILS_DENIED_CUE : null);
             return;
           }
           if (!cancelled) {
@@ -478,12 +704,78 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     };
   }, [patientId, isMockPatient, mockPatient]);
 
-  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient, profileData, vitalsData), [patientId, recordData, mockPatient, profileData, vitalsData]);
+  const loadMedicineRequests = useCallback(async () => {
+    const fetchId = ++medicineRequestsFetchIdRef.current;
+
+    if (isLoading) {
+      return;
+    }
+
+    if (!patientId) {
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      return;
+    }
+
+    if (isAccessDenied) {
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setIsLoadingMedicineRequests(false);
+      return;
+    }
+
+    if (isMockPatient) {
+      setMedicineRequests(mockPatient?.history?.medicineRequests || []);
+      setMedicineRequestsError('');
+      setIsLoadingMedicineRequests(false);
+      return;
+    }
+
+    setIsLoadingMedicineRequests(true);
+    setMedicineRequestsError('');
+    try {
+      const data = await fetchPatientMedicineRequests(String(patientId), 0, 100);
+      if (fetchId !== medicineRequestsFetchIdRef.current) return;
+      setMedicineRequests(mapMedicineRequestsForDisplay(data));
+    } catch (err) {
+      if (fetchId !== medicineRequestsFetchIdRef.current) return;
+      setMedicineRequests([]);
+      setMedicineRequestsError(err.message || 'Failed to load medicine requests.');
+    } finally {
+      if (fetchId === medicineRequestsFetchIdRef.current) {
+        setIsLoadingMedicineRequests(false);
+      }
+    }
+  }, [patientId, isMockPatient, mockPatient, isAccessDenied, isLoading]);
+
+  useEffect(() => {
+    loadMedicineRequests();
+  }, [loadMedicineRequests]);
+
+  useEffect(() => {
+    if (activeTab === 'medicines') {
+      loadMedicineRequests();
+    }
+  }, [activeTab, loadMedicineRequests]);
+
+  const patient = useMemo(() => {
+    const basePatient = toDisplayPatient(patientId, recordData, mockPatient, profileData, vitalsData);
+    const baseHistory = basePatient?.history || {};
+    return {
+      ...basePatient,
+      history: {
+        ...baseHistory,
+        medicineRequests,
+      },
+    };
+  }, [patientId, recordData, mockPatient, profileData, vitalsData, medicineRequests]);
 
   // Fetch consultations from backend on page load
   useEffect(() => {
-    if (!patientId || isMockPatient) {
-      setConsultations(patient?.history?.consultations || []);
+    if (isLoading) return;
+
+    if (!patientId || isMockPatient || isAccessDenied) {
+      setConsultations(mockPatient?.history?.consultations || []);
       return;
     }
 
@@ -509,11 +801,11 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     return () => {
       cancelled = true;
     };
-  }, [patientId, isMockPatient, patient]);
+  }, [patientId, isMockPatient, mockPatient, isAccessDenied, isLoading]);
 
   const handleRefreshConsultations = async () => {
     try {
-      if (isMockPatient) {
+      if (isMockPatient || isAccessDenied) {
         // For mock patients, no need to refresh from backend
         return;
       }
@@ -556,7 +848,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return;
       }
 
-      const { consultationInput, consultationOutcomeInput, vitalSignsData, patientId: vsPatientId } = entry.backendPayload;
+      const { consultationInput, consultationOutcomeInput, vitalSignsData, dentalGradingData, patientId: vsPatientId } = entry.backendPayload;
 
       // If vital signs data was provided and all required fields are valid, create them first
       let vitalSignsId = null;
@@ -580,6 +872,21 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         finalOutcomeInput,
         'Completed'
       );
+
+      // If dental grading data was provided, save the dental record (non-blocking)
+      if (dentalGradingData) {
+        try {
+          await axiosRequest.post('/staff/emr', {
+            query: GQL_CREATE_DENTAL_RECORD,
+            variables: {
+              patientId: String(vsPatientId || patientId),
+              input: dentalGradingData,
+            },
+          });
+        } catch (dentalErr) {
+          console.error('Failed to create dental record during consultation (non-blocking):', dentalErr);
+        }
+      }
 
       // Fetch updated consultations from backend using the service
       consultationService.clearConsultationCache(patientId); // Clear cache for fresh data
@@ -617,14 +924,10 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
   const tabs = [
     { id: 'personal', label: 'Personal Info' },
-    { id: 'medical', label: 'Medical Record' },
-    { id: 'medical-history', label: 'Medical Record History' },
-    { id: 'vital-signs', label: 'Vital Signs' },
-    { id: 'dental', label: 'Dental Record' },
-    { id: 'dental-grade-history', label: 'Dental Record History' },
+    { id: 'medical', label: 'Medical Info' },
+    { id: 'dental', label: 'Dental Info' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
-    { id: 'history', label: 'Consultation History' },
     { id: 'appointments', label: 'Appointments' },
     { id: 'medicines', label: 'Medicine Requests' },
     { id: 'documents', label: 'Documents' },
@@ -637,60 +940,53 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     .slice(0, 2)
     .toUpperCase();
 
+  // Keep header tags deterministic by relying on API-provided status flags only.
+  const moduleStatusTags = buildModuleStatusTags(patient.moduleStatuses);
+
   const renderTab = () => {
     switch (activeTab) {
       case 'personal':
-        return <PatientPersonalInfoTab patient={patient} />;
+        return personalSubTab === 'personal-info'
+          ? <PatientPersonalInfoTab patient={patient} />
+          : <PatientPersonalRecordHistoryTab patient={patient} />;
       case 'medical':
-        return <PatientMedicalRecordTab patient={patient} />;
-      case 'medical-history':
-        return <PatientMedicalRecordHistoryTab patient={patient} />;
-      case 'vital-signs':
-        return <VitalSignsTab patient={patient} />;
+        return medicalSubTab === 'medical-record'
+          ? <PatientMedicalRecordTab patient={patient} />
+          : medicalSubTab === 'medical-record-history'
+            ? <PatientMedicalRecordHistoryTab patient={patient} />
+            : <VitalSignsTab patient={patient} />;
       case 'dental':
-        return <PatientDentalRecordTab patient={patient} />;
-      case 'dental-grade-history':
-        return (
-          <div>
-            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
-              {[
-                { id: 'dental-grade-history', label: 'Dental Record History' },
-                { id: 'dental-grading', label: 'Dental Grading' },
-              ].map((sub) => (
-                <button
-                  key={sub.id}
-                  onClick={() => setDentalSubTab(sub.id)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    dentalSubTab === sub.id
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  {sub.label}
-                </button>
-              ))}
-            </div>
-            <Suspense fallback={<LoadingBlock label="Loading..." />}>
-              {dentalSubTab === 'dental-grade-history'
-                ? <PatientDentalGradeHistoryTab patient={patient} />
-                : <DentalGradingTab patient={patient} />}
-            </Suspense>
-          </div>
-        );
+        return dentalSubTab === 'dental-record'
+          ? <PatientDentalRecordTab patient={patient} />
+          : dentalSubTab === 'dental-grade-history'
+            ? <PatientDentalGradeHistoryTab patient={patient} />
+            : <DentalGradingTab patient={patient} />;
       case 'consultation':
-        return (
+        return consultationSubTab === 'consultation-form' ? (
           <PatientConsultationTab
             patient={patient}
             consultations={consultations}
             onSaveConsultation={handleSaveConsultation}
           />
+        ) : (
+          <PatientConsultationHistoryTab
+            patient={patient}
+            consultations={consultations}
+            onRefreshConsultations={handleRefreshConsultations}
+          />
         );
-      case 'history':
-        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} onRefreshConsultations={handleRefreshConsultations} />;
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
       case 'medicines':
-        return <PatientMedicineRequestsTab patient={patient} />;
+        return (
+          <PatientMedicineRequestsTab
+            patient={patient}
+            requests={medicineRequests}
+            isLoading={isLoadingMedicineRequests}
+            error={medicineRequestsError}
+            onRefresh={loadMedicineRequests}
+          />
+        );
       case 'documents':
         return <PatientDocumentsTab patient={patient} />;
       case 'obgyne':
@@ -732,14 +1028,19 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-12 h-12 rounded-full text-white font-semibold flex items-center justify-center shrink-0"
-              style={{ background: '#C9A01E' }}
-            >
-              {initials}
-            </div>
+            <PatientInitialBadge initials={initials} size="lg" />
             <div className="min-w-0 flex flex-col gap-0.5">
-              <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
+                {moduleStatusTags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${tag.cls}`}
+                  >
+                    {tag.label}
+                  </span>
+                ))}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id ? (
                   <span className="text-xs font-mono text-secondary-500 dark:text-neutral-400">
@@ -772,25 +1073,143 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       </section>
 
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-        <div className="px-2 py-2.5 border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
-          <div className="flex gap-1.5 min-w-max">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+        {/* ── Main Tab Bar ──────────────────────────────────────────────────────── */}
+        <div className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto">
+          <div className="flex gap-1.5 min-w-max" role="tablist" ref={tabsRef}>
+            {tabs.map((tab) => {
+              return (
+                <button
+                  key={tab.id}
+                  data-tab-id={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`tabpanel-${tab.id}`}
+                  className={`px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 shadow-sm'
+                      : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="p-3">
+        {/* ── Breadcrumb Navigation ─────────────────────────────────────────────── */}
+        {['personal', 'medical', 'dental', 'consultation'].includes(activeTab) && (
+          <div className="px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex items-center gap-2 text-sm text-neutral-800 dark:text-white">
+              <span className="font-semibold">{TAB_CONFIG[activeTab]?.category}</span>
+              <span className="text-neutral-300 dark:text-neutral-600">›</span>
+              <span className="text-neutral-700 dark:text-neutral-100">{getActiveSubTabLabel(activeTab, 
+                activeTab === 'personal' ? personalSubTab : 
+                activeTab === 'medical' ? medicalSubTab : 
+                activeTab === 'dental' ? dentalSubTab : 
+                consultationSubTab)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Sub-Tabs (Nested View) ────────────────────────────────────────────── */}
+        {activeTab === 'personal' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'personal-info', label: 'Personal Record' },
+                { id: 'personal-record-history', label: 'History' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setPersonalSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    personalSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'medical' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'medical-record', label: 'Medical Record' },
+                { id: 'medical-record-history', label: 'History' },
+                { id: 'vital-signs', label: 'Vital Signs' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setMedicalSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    medicalSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'dental' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'dental-record', label: 'Dental Record' },
+                { id: 'dental-grade-history', label: 'History' },
+                { id: 'dental-grading', label: 'Grading' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setDentalSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    dentalSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'consultation' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'consultation-form', label: 'New Consultation' },
+                { id: 'consultation-history', label: 'History' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setConsultationSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    consultationSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab Content ───────────────────────────────────────────────────────── */}
+        <div className="p-4" id={`tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
           <Suspense fallback={<LoadingBlock label="Loading tab content..." />}>
             {renderTab()}
           </Suspense>

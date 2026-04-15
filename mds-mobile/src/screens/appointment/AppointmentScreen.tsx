@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   ScrollView,
   RefreshControl,
   TouchableOpacity,
@@ -17,9 +18,12 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import {
   STATUS,
   SESSION,
@@ -29,6 +33,7 @@ import {
   listRequirements,
   listCustomDates,
   getScheduleAvailability,
+  getMonthAvailability,
   submitAppointment,
   cancelAppointment,
   stageFile,
@@ -36,6 +41,63 @@ import {
 } from '../../services/appointment-service';
 
 const STEP_LABELS = ['Select Type', 'Date & Session', 'Requirements', 'Review'];
+
+const BACKEND_ALLOWED_REQUIREMENT_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'video/mp4',
+  'video/quicktime',
+];
+
+const FILE_REQUIREMENT_MIME_TYPES = [
+  'application/pdf',
+  'video/mp4',
+  'video/quicktime',
+];
+
+const IMAGE_FILE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const VIDEO_FILE_EXTENSIONS = new Set(['mp4', 'mov']);
+
+type UploadedRequirement = {
+  scheduleRequirementId: string;
+  filename: string;
+  localUri: string;
+  fileName: string;
+  mimeType: string;
+};
+
+const getFileExtension = (name?: string) => {
+  if (!name) return '';
+  const parts = name.split('.');
+  return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
+};
+
+const resolveUploadedRequirementKind = (file: UploadedRequirement): 'image' | 'video' | 'pdf' | 'file' => {
+  const mime = (file.mimeType || '').toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime === 'application/pdf') return 'pdf';
+
+  const extension = getFileExtension(file.fileName);
+  if (IMAGE_FILE_EXTENSIONS.has(extension)) return 'image';
+  if (VIDEO_FILE_EXTENSIONS.has(extension)) return 'video';
+  if (extension === 'pdf') return 'pdf';
+
+  return 'file';
+};
+
+const mapUploadErrorMessage = (err: any) => {
+  const backendError = err?.response?.data?.error;
+  if (backendError === 'INVALID_FILE_TYPE') {
+    return 'Unsupported file type. Allowed: JPG, PNG, WEBP, PDF, MP4, MOV.';
+  }
+  if (backendError === 'MAX_FILES_STAGING_EXCEEDED') {
+    return 'You have uploaded too many files in staging. Please wait and try again.';
+  }
+  return err?.message || 'Failed to upload file. Please try again.';
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -142,6 +204,7 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
 
 export const AppointmentScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const navigation = useNavigation<any>();
 
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,18 +218,19 @@ export const AppointmentScreen: React.FC = () => {
   const [selectedScheduler, setSelectedScheduler] = useState<any>(null);
 
   // Step 1 - date/session
-  const [customDates, setCustomDates] = useState<string[]>([]);
+  const [customDates, setCustomDates] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [availability, setAvailability] = useState<any>(null);
   const [selectedSession, setSelectedSession] = useState('');
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [monthAvailability, setMonthAvailability] = useState<Record<string, any>>({});
 
   // Step 2 - requirements
   const [requirements, setRequirements] = useState<any[]>([]);
-  const [uploadedRequirements, setUploadedRequirements] = useState<
-    Array<{ scheduleRequirementId: string; filename: string; localUri: string }>
-  >([]);
+  const [uploadedRequirements, setUploadedRequirements] = useState<UploadedRequirement[]>([]);
   const [pickingForReq, setPickingForReq] = useState<string | null>(null);
+  const [purpose, setPurpose] = useState('');
+  const [showPurposeRequiredError, setShowPurposeRequiredError] = useState(false);
 
   // Submission
   const [submitting, setSubmitting] = useState(false);
@@ -191,6 +255,15 @@ export const AppointmentScreen: React.FC = () => {
   })();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
+
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const maxDateObj = new Date(maxDate + 'T00:00:00');
+  const maxMonth = maxDateObj.getMonth();
+  const maxYear = maxDateObj.getFullYear();
+  const spansNextMonth = maxYear > currentYear || maxMonth > currentMonth;
+  const canGoPrev = viewYear > currentYear || viewMonth > currentMonth;
+  const canGoNext = spansNextMonth && (viewYear < maxYear || viewMonth < maxMonth);
 
   // ── Load status ────────────────────────────────────────────────────────────
 
@@ -237,11 +310,16 @@ export const AppointmentScreen: React.FC = () => {
     setSelectedDate('');
     setSelectedSession('');
     setAvailability(null);
+    setMonthAvailability({});
+    setShowPurposeRequiredError(false);
+    setViewYear(currentYear);
+    setViewMonth(currentMonth);
     // Clear any previously staged requirement files when changing scheduler
     for (const r of uploadedRequirements) {
       unstageFile(r.filename).catch(() => {});
     }
     setUploadedRequirements([]);
+    setPurpose('');
 
     if (scheduler.containsCustomDates) {
       try {
@@ -255,6 +333,38 @@ export const AppointmentScreen: React.FC = () => {
     }
     setStep(1);
   };
+
+  const handleMonthChange = useCallback(async (startDate: string, endDate: string) => {
+    if (!selectedScheduler?.id) return;
+    try {
+      const data = await getMonthAvailability(selectedScheduler.id, startDate, endDate);
+      const lookup: Record<string, any> = {};
+      for (const entry of data || []) {
+        let dateStr;
+        const s = String(entry.scheduledDate || '');
+        if (!s) continue;
+        if (!s.includes('T') && !s.endsWith('Z')) {
+          dateStr = s;
+        } else {
+          const d = new Date(s);
+          dateStr = isNaN(d.getTime())
+            ? s.split('T')[0]
+            : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        lookup[dateStr] = entry;
+      }
+      setMonthAvailability(lookup);
+    } catch {
+      setMonthAvailability({});
+    }
+  }, [selectedScheduler?.id]);
+
+  useEffect(() => {
+    if (!selectedScheduler?.id) return;
+    const startDate = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`;
+    const endDate = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(new Date(viewYear, viewMonth + 1, 0).getDate()).padStart(2, '0')}`;
+    handleMonthChange(startDate, endDate);
+  }, [selectedScheduler?.id, viewYear, viewMonth, handleMonthChange]);
 
   const handleDateChange = async (dateStr: string) => {
     setSelectedDate(dateStr);
@@ -284,6 +394,16 @@ export const AppointmentScreen: React.FC = () => {
   };
 
   const handleSubmit = async () => {
+    const purposeRequired = selectedScheduler?.purposeRequired ?? false;
+    const normalizedPurpose = purpose.trim();
+
+    if (purposeRequired && !normalizedPurpose) {
+      setShowPurposeRequiredError(true);
+      setError('Purpose / reason for visit is required for this appointment type.');
+      return;
+    }
+
+    setShowPurposeRequiredError(false);
     setSubmitting(true);
     setError(null);
     try {
@@ -291,9 +411,18 @@ export const AppointmentScreen: React.FC = () => {
         scheduleRequirementId: r.scheduleRequirementId,
         filename: r.filename,
       }));
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqs);
+      await submitAppointment(
+        selectedScheduler.id,
+        selectedDate,
+        selectedSession,
+        reqs,
+        normalizedPurpose,
+        purposeRequired
+      );
       setSuccessMessage('Your appointment has been submitted successfully!');
       setUploadedRequirements([]);
+      setPurpose('');
+      setShowPurposeRequiredError(false);
       await loadStatus();
       setStep(0);
     } catch (err: any) {
@@ -303,24 +432,19 @@ export const AppointmentScreen: React.FC = () => {
     }
   };
 
-  const handlePickRequirement = async (reqId: string) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      setError('Permission to access your photo library is required.');
-      return;
+  const handlePurposeChange = (value: string) => {
+    setPurpose(value);
+    if (showPurposeRequiredError && value.trim()) {
+      setShowPurposeRequiredError(false);
     }
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      allowsEditing: false,
-    });
-
-    if (result.canceled || result.assets.length === 0) return;
-
-    const asset = result.assets[0];
-    const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'image.jpg';
-    const type = asset.mimeType ?? 'image/jpeg';
+  const stageRequirementAsset = async (
+    reqId: string,
+    asset: { uri: string; name?: string | null; mimeType?: string | null },
+  ) => {
+    const name = asset.name || asset.uri.split('/').pop() || `requirement-${Date.now()}`;
+    const type = asset.mimeType || 'application/octet-stream';
 
     setPickingForReq(reqId);
     try {
@@ -334,13 +458,89 @@ export const AppointmentScreen: React.FC = () => {
 
       setUploadedRequirements((prev) => [
         ...prev.filter((r) => r.scheduleRequirementId !== reqId),
-        { scheduleRequirementId: reqId, filename: stagedFileId, localUri: asset.uri },
+        {
+          scheduleRequirementId: reqId,
+          filename: stagedFileId,
+          localUri: asset.uri,
+          fileName: name,
+          mimeType: type,
+        },
       ]);
     } catch (err: any) {
-      setError(err.message || 'Failed to upload file. Please try again.');
+      setError(mapUploadErrorMessage(err));
     } finally {
       setPickingForReq(null);
     }
+  };
+
+  const handlePickRequirementImage = async (reqId: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Permission to access your photo library is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9,
+      allowsEditing: false,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const imageAsset = result.assets[0];
+    await stageRequirementAsset(reqId, {
+      uri: imageAsset.uri,
+      name: imageAsset.fileName || imageAsset.uri.split('/').pop(),
+      mimeType: imageAsset.mimeType || 'image/jpeg',
+    });
+  };
+
+  const handlePickRequirementFile = async (reqId: string) => {
+    const result = await DocumentPicker.getDocumentAsync({
+      multiple: false,
+      copyToCacheDirectory: true,
+      type: FILE_REQUIREMENT_MIME_TYPES,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const fileAsset = result.assets[0];
+    await stageRequirementAsset(reqId, {
+      uri: fileAsset.uri,
+      name: fileAsset.name || fileAsset.uri.split('/').pop(),
+      mimeType: fileAsset.mimeType || 'application/octet-stream',
+    });
+  };
+
+  const handlePickRequirement = (reqId: string) => {
+    Alert.alert(
+      'Upload Requirement',
+      'Choose what you want to upload.',
+      [
+        {
+          text: 'Upload Image',
+          onPress: () => {
+            void handlePickRequirementImage(reqId);
+          },
+        },
+        {
+          text: 'Upload File',
+          onPress: () => {
+            void handlePickRequirementFile(reqId);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true },
+    );
   };
 
   const handleRemoveRequirement = async (reqId: string) => {
@@ -370,16 +570,54 @@ export const AppointmentScreen: React.FC = () => {
 
   const isScheduleMatch = (dateStr: string) => {
     if (!selectedScheduler) return false;
+
+    // Check for Exclude custom date first — blocks even regular schedule days
+    const toLocal = (s: string) => {
+      if (!s) return '';
+      if (!s.includes('T') && !s.endsWith('Z')) return s;
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s.split('T')[0];
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const customEntry = customDates.find((cd: any) => {
+      if (typeof cd === 'string') return cd === dateStr || cd?.split('T')[0] === dateStr;
+      return cd?.scheduledDate && toLocal(String(cd.scheduledDate)) === dateStr;
+    });
+    const cdType = typeof customEntry === 'object' ? customEntry?.type : undefined;
+    if (cdType === 'Exclude') return false;
+
     const d = new Date(dateStr + 'T00:00:00');
     const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
     if (selectedScheduler.schedulePerWeek?.includes(dayName)) return true;
-    if (customDates.some((cd: string) => cd === dateStr || cd?.split('T')[0] === dateStr)) return true;
+
+    // Include custom date opens the day
+    if (customEntry) return true;
     return false;
   };
 
   const isDateAllowed = (dateStr: string) => {
     if (dateStr < today || dateStr > maxDate) return false;
     return isScheduleMatch(dateStr);
+  };
+
+  const getDayStatus = (dateStr: string): 'available' | 'partial' | 'full' | 'unavailable' => {
+    if (!isDateAllowed(dateStr)) return 'unavailable';
+
+    const apiData = monthAvailability[dateStr];
+    if (!apiData) return 'available';
+
+    const totalAllowed = (apiData.morningAllowed || 0) + (apiData.afternoonAllowed || 0);
+    if (totalAllowed === 0) return 'unavailable';
+
+    const totalBooked =
+      (apiData.morningRegistered || 0) +
+      (apiData.morningPending || 0) +
+      (apiData.afternoonRegistered || 0) +
+      (apiData.afternoonPending || 0);
+
+    if (totalBooked >= totalAllowed) return 'full';
+    if (totalBooked / totalAllowed >= 0.7) return 'partial';
+    return 'available';
   };
 
   const fmtDate = (y: number, m: number, d: number) =>
@@ -412,6 +650,10 @@ export const AppointmentScreen: React.FC = () => {
     requirements
       .filter((r) => r.isDigital)
       .every((r) => uploadedRequirements.some((u) => u.scheduleRequirementId === r.id));
+
+  const purposeRequired = selectedScheduler?.purposeRequired ?? false;
+  const trimmedPurpose = purpose.trim();
+  const selectedDayStatus = selectedDate ? getDayStatus(selectedDate) : 'unavailable';
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -449,6 +691,24 @@ export const AppointmentScreen: React.FC = () => {
           />
         }
       >
+        <View style={styles.topMenuRow}>
+          <TouchableOpacity
+            style={[
+              styles.menuButton,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+            onPress={() => toggleAppDrawer(navigation)}
+            accessibilityRole="button"
+            accessibilityLabel="Open sidebar"
+          >
+            <Ionicons
+              name="menu"
+              size={22}
+              color={isDark ? colors.neutral[100] : colors.secondary[900]}
+            />
+          </TouchableOpacity>
+        </View>
+
         {/* Header Banner */}
         <View style={[styles.headerBanner, { backgroundColor: colors.primary[500] }]}>
           <Ionicons name="calendar" size={28} color="#FFFFFF" style={styles.headerIcon} />
@@ -614,19 +874,27 @@ export const AppointmentScreen: React.FC = () => {
                 {/* Calendar */}
                 <View style={[styles.calendar, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
                   <View style={[styles.calendarHeader, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-                    <TouchableOpacity onPress={() => {
-                      if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11); }
-                      else setViewMonth(viewMonth - 1);
-                    }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!canGoPrev) return;
+                        if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11); }
+                        else setViewMonth(viewMonth - 1);
+                      }}
+                      disabled={!canGoPrev}
+                    >
                       <Text style={[styles.calendarNav, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>‹</Text>
                     </TouchableOpacity>
                     <Text style={[styles.calendarTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
                       {MONTH_NAMES[viewMonth]} {viewYear}
                     </Text>
-                    <TouchableOpacity onPress={() => {
-                      if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0); }
-                      else setViewMonth(viewMonth + 1);
-                    }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!canGoNext) return;
+                        if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0); }
+                        else setViewMonth(viewMonth + 1);
+                      }}
+                      disabled={!canGoNext}
+                    >
                       <Text style={[styles.calendarNav, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>›</Text>
                     </TouchableOpacity>
                   </View>
@@ -643,7 +911,10 @@ export const AppointmentScreen: React.FC = () => {
                   {/* Calendar grid */}
                   <View style={styles.calendarGrid}>
                     {calendarCells.map((cell, idx) => {
-                      const isAllowed = !cell.isOtherMonth && cell.dateStr ? isDateAllowed(cell.dateStr) : false;
+                      const dayStatus = !cell.isOtherMonth && cell.dateStr
+                        ? getDayStatus(cell.dateStr)
+                        : 'unavailable';
+                      const isClickable = dayStatus === 'available' || dayStatus === 'partial';
                       const isSelected = cell.dateStr === selectedDate;
                       const isToday = cell.dateStr === today;
 
@@ -653,25 +924,35 @@ export const AppointmentScreen: React.FC = () => {
                           style={[
                             styles.calendarCell,
                             isSelected && { backgroundColor: isDark ? 'rgba(241,197,38,0.2)' : colors.primary[50] },
-                            isAllowed && !isSelected && { backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : colors.success[50] },
+                            dayStatus === 'available' && !isSelected && { backgroundColor: isDark ? 'rgba(34,197,94,0.1)' : colors.success[50] },
+                            dayStatus === 'partial' && !isSelected && { backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : '#FEF3C7' },
+                            dayStatus === 'full' && !isSelected && { backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#FEE2E2' },
                           ]}
-                          disabled={!isAllowed}
-                          onPress={() => cell.dateStr && handleDateChange(cell.dateStr)}
+                          disabled={!isClickable}
+                          onPress={() => cell.dateStr && isClickable && handleDateChange(cell.dateStr)}
                         >
                           <Text
                             style={[
                               styles.calendarDayText,
                               cell.isOtherMonth && { color: isDark ? colors.neutral[700] : colors.neutral[300] },
-                              !cell.isOtherMonth && !isAllowed && { color: isDark ? colors.neutral[600] : colors.neutral[300] },
-                              isAllowed && { color: isDark ? colors.success[300] : colors.success[700] },
+                              !cell.isOtherMonth && dayStatus === 'unavailable' && { color: isDark ? colors.neutral[600] : colors.neutral[300] },
+                              dayStatus === 'available' && { color: isDark ? colors.success[300] : colors.success[700] },
+                              dayStatus === 'partial' && { color: isDark ? '#FBBF24' : '#B45309' },
+                              dayStatus === 'full' && { color: isDark ? '#FCA5A5' : colors.error[600] },
                               isSelected && { color: isDark ? colors.primary[300] : colors.primary[700], fontWeight: 'bold' },
                               isToday && !isSelected && { color: colors.primary[500], fontWeight: 'bold' },
                             ]}
                           >
                             {cell.day}
                           </Text>
-                          {isAllowed && !isSelected && (
+                          {dayStatus === 'available' && !isSelected && (
                             <View style={[styles.availableDot, { backgroundColor: colors.success[500] }]} />
+                          )}
+                          {dayStatus === 'partial' && !isSelected && (
+                            <View style={[styles.availableDot, { backgroundColor: '#F59E0B' }]} />
+                          )}
+                          {dayStatus === 'full' && !isSelected && (
+                            <View style={[styles.availableDot, { backgroundColor: colors.error[500] }]} />
                           )}
                         </TouchableOpacity>
                       );
@@ -690,7 +971,7 @@ export const AppointmentScreen: React.FC = () => {
                 )}
 
                 {/* Session picker */}
-                {availability && selectedDate && isDateAllowed(selectedDate) && (
+                {availability && selectedDate && selectedDayStatus !== 'unavailable' && selectedDayStatus !== 'full' && (
                   <View style={styles.sessionSection}>
                     <Text style={[styles.sessionTitle, { color: isDark ? colors.neutral[300] : colors.neutral[700] }]}>
                       Select session for{' '}
@@ -768,8 +1049,8 @@ export const AppointmentScreen: React.FC = () => {
                     <Text style={[styles.backButtonText, { color: isDark ? colors.neutral[200] : colors.secondary[700] }]}>‹ Back</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.primaryButton, { opacity: !selectedDate || !selectedSession ? 0.5 : 1 }]}
-                    disabled={!selectedDate || !selectedSession}
+                    style={[styles.primaryButton, { opacity: !selectedDate || !selectedSession || selectedDayStatus === 'full' ? 0.5 : 1 }]}
+                    disabled={!selectedDate || !selectedSession || selectedDayStatus === 'full'}
                     onPress={handleAdvanceToRequirements}
                   >
                     <Text style={styles.primaryButtonText}>Next ›</Text>
@@ -791,6 +1072,8 @@ export const AppointmentScreen: React.FC = () => {
                   const uploaded = uploadedRequirements.find(
                     (r) => r.scheduleRequirementId === req.id,
                   );
+                  const uploadedKind = uploaded ? resolveUploadedRequirementKind(uploaded) : null;
+                  const canPreviewImage = uploadedKind === 'image';
                   const isPickingThis = pickingForReq === req.id;
                   return (
                     <View
@@ -809,30 +1092,67 @@ export const AppointmentScreen: React.FC = () => {
                       {req.isDigital ? (
                         uploaded ? (
                           <View style={styles.reqThumbWrap}>
-                            <TouchableOpacity
-                              onPress={() => setLightboxUri(uploaded.localUri)}
-                              activeOpacity={0.85}
-                            >
-                              <Image
-                                source={{ uri: uploaded.localUri }}
-                                style={styles.reqThumb}
-                                resizeMode="cover"
-                              />
-                            </TouchableOpacity>
-                            <View style={styles.reqThumbActions}>
+                            {canPreviewImage ? (
                               <TouchableOpacity
-                                style={[styles.reqActionBtn, {
-                                  backgroundColor: isDark ? colors.neutral[600] : colors.neutral[100],
-                                }]}
                                 onPress={() => setLightboxUri(uploaded.localUri)}
+                                activeOpacity={0.85}
                               >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Ionicons name="eye" size={13} color={isDark ? colors.neutral[200] : colors.secondary[800]} />
-                                  <Text style={{ fontSize: 13, color: isDark ? colors.neutral[200] : colors.secondary[800] }}>
-                                    View
+                                <Image
+                                  source={{ uri: uploaded.localUri }}
+                                  style={styles.reqThumb}
+                                  resizeMode="cover"
+                                />
+                              </TouchableOpacity>
+                            ) : (
+                              <View
+                                style={[
+                                  styles.reqFilePreview,
+                                  {
+                                    borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+                                    backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+                                  },
+                                ]}
+                              >
+                                <Ionicons
+                                  name={
+                                    uploadedKind === 'pdf'
+                                      ? 'document-text'
+                                      : uploadedKind === 'video'
+                                        ? 'videocam'
+                                        : 'document'
+                                  }
+                                  size={20}
+                                  color={isDark ? colors.primary[300] : colors.primary[700]}
+                                />
+                                <View style={{ flex: 1 }}>
+                                  <Text
+                                    style={[styles.reqFileName, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}
+                                    numberOfLines={1}
+                                  >
+                                    {uploaded.fileName || 'Selected file'}
+                                  </Text>
+                                  <Text style={[styles.reqFileMeta, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
+                                    {uploaded.mimeType || 'Attached file'}
                                   </Text>
                                 </View>
-                              </TouchableOpacity>
+                              </View>
+                            )}
+                            <View style={styles.reqThumbActions}>
+                              {canPreviewImage && (
+                                <TouchableOpacity
+                                  style={[styles.reqActionBtn, {
+                                    backgroundColor: isDark ? colors.neutral[600] : colors.neutral[100],
+                                  }]}
+                                  onPress={() => setLightboxUri(uploaded.localUri)}
+                                >
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <Ionicons name="eye" size={13} color={isDark ? colors.neutral[200] : colors.secondary[800]} />
+                                    <Text style={{ fontSize: 13, color: isDark ? colors.neutral[200] : colors.secondary[800] }}>
+                                      View
+                                    </Text>
+                                  </View>
+                                </TouchableOpacity>
+                              )}
                               <TouchableOpacity
                                 style={[styles.reqActionBtn, {
                                   backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50],
@@ -881,7 +1201,7 @@ export const AppointmentScreen: React.FC = () => {
                             <Text style={[styles.reqUploadBtnText, {
                               color: isDark ? colors.primary[300] : colors.primary[700],
                             }]}>
-                              {isPickingThis ? 'Uploading...' : 'Tap to upload image'}
+                              {isPickingThis ? 'Uploading...' : 'Tap to choose image or file'}
                             </Text>
                           </TouchableOpacity>
                         )
@@ -955,10 +1275,50 @@ export const AppointmentScreen: React.FC = () => {
                   )}
                 </View>
 
+                <View style={[styles.purposeSection, { borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+                  <Text style={[styles.purposeLabel, { color: isDark ? colors.neutral[300] : colors.neutral[700] }]}>
+                    Purpose / Reason for Visit
+                    {purposeRequired ? ' *' : ''}
+                  </Text>
+                  <Text style={[styles.purposeMeta, { color: isDark ? colors.neutral[500] : colors.neutral[500] }]}>
+                    {purposeRequired ? 'Required' : 'Optional'} · {purpose.length}/250
+                  </Text>
+                  <TextInput
+                    value={purpose}
+                    onChangeText={(text) => handlePurposeChange(text.slice(0, 250))}
+                    multiline
+                    numberOfLines={4}
+                    maxLength={250}
+                    textAlignVertical="top"
+                    placeholder={
+                      purposeRequired
+                        ? 'Briefly describe the reason for your appointment (Required)'
+                        : 'Briefly describe the reason for your appointment (optional)'
+                    }
+                    placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                    style={[
+                      styles.purposeInput,
+                      {
+                        backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+                        borderColor:
+                          showPurposeRequiredError && purposeRequired && !trimmedPurpose
+                            ? colors.error[400]
+                            : isDark
+                            ? colors.neutral[600]
+                            : colors.neutral[200],
+                        color: isDark ? colors.neutral[100] : colors.secondary[900],
+                      },
+                    ]}
+                  />
+                </View>
+
                 <View style={styles.navRow}>
                   <TouchableOpacity
                     style={[styles.backButton, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
-                    onPress={() => setStep(requirements.length > 0 ? 2 : 1)}
+                    onPress={() => {
+                      setShowPurposeRequiredError(false);
+                      setStep(requirements.length > 0 ? 2 : 1);
+                    }}
                   >
                     <Text style={[styles.backButtonText, { color: isDark ? colors.neutral[200] : colors.secondary[700] }]}>‹ Back</Text>
                   </TouchableOpacity>
@@ -1052,6 +1412,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
+  topMenuRow: { marginBottom: 12 },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, fontSize: 14 },
 
@@ -1225,6 +1593,29 @@ const styles = StyleSheet.create({
   reviewLabel: { fontSize: 14 },
   reviewValue: { fontSize: 14, fontWeight: '500', flexShrink: 1, textAlign: 'right' },
 
+  purposeSection: {
+    marginBottom: 2,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  purposeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  purposeMeta: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  purposeInput: {
+    minHeight: 96,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+
   // Requirements
   reqItem: { padding: 14, borderWidth: 1, borderRadius: 12, marginBottom: 10 },
   reqLabel: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
@@ -1243,6 +1634,17 @@ const styles = StyleSheet.create({
   reqUploadBtnText: { fontSize: 13, fontWeight: '500' },
   reqThumbWrap: { marginTop: 8 },
   reqThumb: { width: '100%', height: 140, borderRadius: 10 },
+  reqFilePreview: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  reqFileName: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  reqFileMeta: { fontSize: 11 },
   reqThumbActions: { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   reqActionBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
   reqPhysicalBadge: {

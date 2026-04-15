@@ -3,7 +3,7 @@
  * Handles text input, typing indicators, and send button
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -17,8 +17,9 @@ interface ChatInputProps {
   onSend: () => void;
   // Media attachment
   onPickImage?: () => void;
-  pendingImage?: { uri: string } | null;
-  onClearPendingImage?: () => void;
+  onPickFile?: () => void;
+  pendingAttachment?: { uri: string; name: string; type: string; kind: 'image' | 'file' } | null;
+  onClearPendingAttachment?: () => void;
   isUploading?: boolean;
 }
 
@@ -30,16 +31,26 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onChangeText,
   onSend,
   onPickImage,
-  pendingImage,
-  onClearPendingImage,
+  onPickFile,
+  pendingAttachment,
+  onClearPendingAttachment,
   isUploading = false,
 }) => {
   const { isDark } = useTheme();
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
   const isActive = ticketStatus === 'Ongoing';
   const canSend = isActive && !isLoading && !isUploading;
-  const hasPendingContent = Boolean(inputValue.trim()) || Boolean(pendingImage);
+  const hasPendingContent = Boolean(inputValue.trim()) || Boolean(pendingAttachment);
+  const isPendingImage = pendingAttachment?.kind === 'image';
+  const isPendingVideo = pendingAttachment?.type?.startsWith('video/');
+
+  useEffect(() => {
+    if (!canSend) {
+      setShowAttachMenu(false);
+    }
+  }, [canSend]);
 
   // Frozen state
   if (isFrozen) {
@@ -124,8 +135,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         },
       ]}
     >
-      {/* Pending image preview strip */}
-      {pendingImage && (
+      {/* Pending attachment preview strip */}
+      {pendingAttachment && (
         <View
           style={[
             styles.previewStrip,
@@ -135,14 +146,30 @@ const ChatInput: React.FC<ChatInputProps> = ({
             },
           ]}
         >
-          <Image source={{ uri: pendingImage.uri }} style={styles.previewThumb} resizeMode="cover" />
+          {isPendingImage ? (
+            <Image source={{ uri: pendingAttachment.uri }} style={styles.previewThumb} resizeMode="cover" />
+          ) : (
+            <View
+              style={[
+                styles.filePreviewIcon,
+                { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[200] },
+              ]}
+            >
+              <Ionicons
+                name={isPendingVideo ? 'videocam' : 'document-text'}
+                size={18}
+                color={isDark ? colors.primary[300] : colors.primary[700]}
+              />
+            </View>
+          )}
           <Text
             style={[styles.previewLabel, { color: isDark ? colors.neutral[300] : colors.secondary[700] }]}
+            numberOfLines={1}
           >
-            Image ready to send
+            {isPendingImage ? 'Image ready to send' : `File ready: ${pendingAttachment.name}`}
           </Text>
           <TouchableOpacity
-            onPress={onClearPendingImage}
+            onPress={onClearPendingAttachment}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
             <Ionicons
@@ -155,32 +182,102 @@ const ChatInput: React.FC<ChatInputProps> = ({
       )}
 
       <View style={styles.inputRow}>
-        {/* Attachment button */}
-        {onPickImage && (
-          <TouchableOpacity
-            style={[
-              styles.attachButton,
-              {
-                backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
-                borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
-              },
-            ]}
-            onPress={onPickImage}
-            disabled={!canSend}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="attach"
-              size={18}
-              color={isDark ? colors.neutral[300] : colors.neutral[500]}
-            />
-          </TouchableOpacity>
+        {/* Attachment menu */}
+        {(onPickImage || onPickFile) && (
+          <View style={styles.attachMenuWrap}>
+            {showAttachMenu && (
+              <View
+                style={[
+                  styles.attachMenu,
+                  {
+                    backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+                    borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+                  },
+                ]}
+              >
+                {onPickImage && (
+                  <TouchableOpacity
+                    style={styles.attachMenuItem}
+                    onPress={() => {
+                      setShowAttachMenu(false);
+                      onPickImage();
+                    }}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel="Attach image"
+                  >
+                    <Ionicons
+                      name="image"
+                      size={16}
+                      color={isDark ? colors.primary[300] : colors.primary[700]}
+                    />
+                    <Text style={[styles.attachMenuLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                      Attach Image
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {onPickImage && onPickFile && (
+                  <View
+                    style={[
+                      styles.attachMenuDivider,
+                      { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[200] },
+                    ]}
+                  />
+                )}
+
+                {onPickFile && (
+                  <TouchableOpacity
+                    style={styles.attachMenuItem}
+                    onPress={() => {
+                      setShowAttachMenu(false);
+                      onPickFile();
+                    }}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel="Attach file"
+                  >
+                    <Ionicons
+                      name="document-attach"
+                      size={16}
+                      color={isDark ? colors.primary[300] : colors.primary[700]}
+                    />
+                    <Text style={[styles.attachMenuLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                      Attach File
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.attachButton,
+                {
+                  backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
+                  borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+                },
+              ]}
+              onPress={() => setShowAttachMenu((prev) => !prev)}
+              disabled={!canSend}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Open attachment options"
+            >
+              <Ionicons
+                name="add"
+                size={20}
+                color={isDark ? colors.neutral[300] : colors.neutral[500]}
+              />
+            </TouchableOpacity>
+          </View>
         )}
 
         <TextInput
           value={inputValue}
           onChangeText={onChangeText}
-          placeholder={pendingImage ? 'Add a caption (optional)...' : 'Type a message...'}
+          onFocus={() => setShowAttachMenu(false)}
+          placeholder={pendingAttachment ? 'Add a caption (optional)...' : 'Type a message...'}
           placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
           multiline
           style={[
@@ -288,10 +385,20 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 8,
   },
+  filePreviewIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   previewLabel: {
     flex: 1,
     fontSize: 12,
     fontWeight: '500',
+  },
+  attachMenuWrap: {
+    position: 'relative',
   },
   attachButton: {
     width: 40,
@@ -300,6 +407,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+  },
+  attachMenu: {
+    position: 'absolute',
+    left: 0,
+    bottom: 48,
+    width: 156,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 6,
+    zIndex: 20,
+    elevation: 8,
+  },
+  attachMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  attachMenuLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  attachMenuDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 10,
   },
   inputRow: {
     flexDirection: 'row',

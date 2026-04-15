@@ -64,7 +64,7 @@ export const updateStudentProfile = async (schoolData) => {
   console.log('[Personal Info Service] Creating/updating student profile:', schoolData);
   
   // Validation
-  if (!schoolData.program) {
+  if (!schoolData.programId) {
     throw new Error('Program is required');
   }
   if (!schoolData.schoolYear) {
@@ -84,7 +84,7 @@ export const updateStudentProfile = async (schoolData) => {
 
   const variables = {
     input: {
-      program: schoolData.program,
+      programId: schoolData.programId,
       year: mapYearToEnum(schoolData.schoolYear)
     }
   };
@@ -142,12 +142,14 @@ export const updateEmergencyContact = async (emergencyData) => {
         contactName: emergencyData.emergencyContact1Name,
         relationship: emergencyData.emergencyContact1Relationship,
         contactNumber: emergencyData.emergencyContact1Number,
+        address: emergencyData.emergencyContact1Address || null,
         isVerified: false
       },
       secondContact: {
         contactName: emergencyData.emergencyContact2Name,
         relationship: emergencyData.emergencyContact2Relationship,
         contactNumber: emergencyData.emergencyContact2Number,
+        address: emergencyData.emergencyContact2Address || null,
         isVerified: false
       }
     }

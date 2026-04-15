@@ -2,7 +2,8 @@ const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
 const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
-const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
+const { isMedicalPermitted, permissions: medPermissions } = require("../../../../services/permit.js");
+const logger = require("../../../../utils/logger.js");
 const {
   calculateExpiryDate,
   isChatExpired,
@@ -604,8 +605,8 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
-    // Notify all medical staff about new ticket
-    emitToRole('medical', 'healthchat:ticket-created', { chat });
+    // Notify only health-chat permitted staff about new ticket
+    emitToRoom('notif:healthchat', 'healthchat:ticket-created', { chat });
 
     return {
       success: true,
@@ -691,7 +692,7 @@ const Mutation = {
         chatId,
         message,
         senderType: 'Patient'
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -745,9 +746,9 @@ const Mutation = {
       chat
     });
 
-    // Also notify all medical staff so their conversation list updates
+    // Also notify health-chat permitted staff so their conversation list updates
     // (staff may not be in the chat room if viewing a different patient)
-    emitToRole('medical', 'healthchat:ticket-closed', {
+    emitToRoom('notif:healthchat', 'healthchat:ticket-closed', {
       chatId,
       closedBy: 'Patient',
       chat
@@ -818,11 +819,12 @@ const Mutation = {
 
     // Notify patient about ticket approval
     if (chat.patientId) {
-      notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat });
+      notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat })
+        .catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
-    // Notify all medical staff about ticket status change (so other staff can update their UI)
-    emitToRole('medical', 'healthchat:ticket-status-changed', {
+    // Notify health-chat permitted staff about ticket status change (so other staff can update their UI)
+    emitToRoom('notif:healthchat', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
       patientId: chat.patientId,
       status: 'Ongoing',
@@ -892,11 +894,11 @@ const Mutation = {
       notifyUser(chat.patientId, 'healthchat:ticket-rejected', {
         chat,
         reason: reason || 'Not specified'
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
-    // Notify all medical staff about ticket status change (so other staff can update their UI)
-    emitToRole('medical', 'healthchat:ticket-status-changed', {
+    // Notify health-chat permitted staff about ticket status change (so other staff can update their UI)
+    emitToRoom('notif:healthchat', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
       patientId: chat.patientId,
       status: 'Closed',
@@ -989,7 +991,7 @@ const Mutation = {
         chatId,
         message,
         senderType: 'Medical'
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1046,7 +1048,7 @@ const Mutation = {
         chatId,
         closedBy: 'Medical',
         chat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1096,6 +1098,10 @@ const Mutation = {
       `DELETE FROM "HealthChat" WHERE id = $1 RETURNING *`,
       [chatId]
     );
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to delete ticket").status(500).throw();
+    }
 
     return {
       success: true,
@@ -1153,7 +1159,7 @@ const Mutation = {
         chatId,
         toMedicalId,
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1208,7 +1214,7 @@ const Mutation = {
         chatId,
         toMedicalId: user.id,
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1293,14 +1299,14 @@ const Mutation = {
         expiresAt: updatedChat.expiresAt,
         extendedBy: 'Patient',
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     } else if (!isPatient && updatedChat.patientId) {
       notifyUser(String(updatedChat.patientId), 'healthchat:session-extended', {
         chatId,
         expiresAt: updatedChat.expiresAt,
         extendedBy: 'Medical',
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {

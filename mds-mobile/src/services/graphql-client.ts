@@ -15,10 +15,14 @@ export const sendGraphQLRequest = async (
   try {
     const response = await axiosRequest.post(endpoint, { query, variables });
 
-    if (response.data.errors) {
-      const firstError = response.data.errors[0];
+    const responseErrors = Array.isArray(response.data?.errors)
+      ? response.data.errors.filter(Boolean)
+      : [];
+
+    if (responseErrors.length > 0) {
+      const firstError = responseErrors[0];
       const error: any = new Error(firstError?.message || 'GraphQL error occurred');
-      error.graphQLErrors = response.data.errors;
+      error.graphQLErrors = responseErrors;
       if (response.data.data) {
         error.data = response.data.data;
       }
@@ -29,10 +33,14 @@ export const sendGraphQLRequest = async (
   } catch (error: any) {
     if (error.graphQLErrors) throw error;
 
-    if (error.response?.data?.errors) {
-      const firstError = error.response.data.errors[0];
+    const backendErrors = Array.isArray(error.response?.data?.errors)
+      ? error.response.data.errors.filter(Boolean)
+      : [];
+
+    if (backendErrors.length > 0) {
+      const firstError = backendErrors[0];
       const wrappedError: any = new Error(firstError?.message || 'GraphQL request failed');
-      wrappedError.graphQLErrors = error.response.data.errors;
+      wrappedError.graphQLErrors = backendErrors;
       wrappedError.status = error.response.status;
       throw wrappedError;
     }

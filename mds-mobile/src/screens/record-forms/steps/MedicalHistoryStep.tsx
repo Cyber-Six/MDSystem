@@ -6,6 +6,9 @@ import React from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
+import { CatalogSearchField } from '../../../components/ui/CatalogSearchField';
+import { useCatalogSearch } from '../../../hooks/useCatalogSearch';
+import { searchDomainCatalog, createDomainCatalog } from '../../../services/emr-service';
 import type { FormData, CatalogItem } from '../../../services/emr-service';
 
 interface Props {
@@ -21,6 +24,13 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
   const mh = formData.medicalHistory;
   const conditions = catalogs.medicalConditionCatalog || [];
   const [tab, setTab] = React.useState<Tab>('self');
+
+  const conditionOthers = useCatalogSearch({
+    catalog: conditions,
+    searchFn: (q: string) => searchDomainCatalog('MedicalCondition', q),
+    createFn: (name: string) => createDomainCatalog('MedicalCondition', name),
+    nameKey: 'name',
+  });
 
   const toggleCondition = (id: string) => {
     if (tab === 'self') {
@@ -90,21 +100,56 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
         );
       })}
 
-      {/* Other */}
+      {/* Dynamic (searched/created) conditions */}
+      {conditionOthers.dynamicItems.map((cond: any) => {
+        const isChecked = !!checkedMap[cond.id];
+        return (
+          <View key={cond.id}>
+            <TouchableOpacity
+              style={[styles.checkRow, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}
+              onPress={() => toggleCondition(cond.id)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+              </View>
+              <Text style={[styles.conditionName, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>
+                {cond.name}
+              </Text>
+              <Text style={{ fontSize: 10, color: colors.primary[400], fontWeight: '600' }}>NEW</Text>
+            </TouchableOpacity>
+            {tab === 'family' && isChecked && (
+              <TextInput
+                style={[styles.whoInput, { backgroundColor: inputBg, color: inputColor, borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
+                value={mh.familyWhoHasIt[cond.id] || ''}
+                onChangeText={v => updateFamilyWho(cond.id, v)}
+                placeholder="Who has it? (e.g. Mother)"
+                placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+              />
+            )}
+          </View>
+        );
+      })}
+
+      {/* Search/create for other conditions */}
       <View style={styles.otherSection}>
-        <Text style={[styles.otherLabel, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-          Other (specify):
-        </Text>
-        <TextInput
-          style={[styles.otherInput, { backgroundColor: inputBg, color: inputColor, borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
-          value={tab === 'self' ? mh.selfOther || '' : mh.familyOther || ''}
-          onChangeText={v => {
-            if (tab === 'self') onUpdate('medicalHistory', { selfOther: v });
-            else onUpdate('medicalHistory', { familyOther: v });
+        <CatalogSearchField
+          label="Other Conditions"
+          input={conditionOthers.input}
+          onInputChange={conditionOthers.handleInputChange}
+          suggestions={conditionOthers.suggestions}
+          displayKey="name"
+          searching={conditionOthers.searching}
+          creating={conditionOthers.creating}
+          focused={conditionOthers.focused}
+          onFocusChange={conditionOthers.setFocused}
+          onSelect={(item) => {
+            conditionOthers.selectItem(item);
+            toggleCondition(item.id);
           }}
-          placeholder="Enter other conditions..."
-          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-          multiline
+          onCreate={() => conditionOthers.createItem(conditionOthers.input.trim())}
+          isDark={isDark}
+          placeholder="Search or add conditions..."
         />
       </View>
     </View>

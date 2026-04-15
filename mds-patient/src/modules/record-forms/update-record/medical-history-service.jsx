@@ -76,7 +76,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    hospitalizations: getDomainCatalogs(domain: Hospitalization, filterIsValid: true) {
+    hospitalizations: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) {
       id
       domain
       name
@@ -84,7 +84,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    operations: getDomainCatalogs(domain: Operation, filterIsValid: true) {
+    operations: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) {
       id
       domain
       name
@@ -92,7 +92,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    immunizations: getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+    immunizations: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) {
       id
       domain
       name
@@ -100,7 +100,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    visualAcuity: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true) {
+    visualAcuity: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true, limit: 200) {
       id
       domain
       name
@@ -108,7 +108,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    medications: getDomainCatalogs(domain: Medication, filterIsValid: true) {
+    medications: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) {
       id
       domain
       name
@@ -116,7 +116,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    allergens: getAllergenCatalogs(filterIsValid: true, limit: 100) {
+    allergens: getAllergenCatalogs(filterIsValid: true, limit: 200) {
       id
       allergen
       type

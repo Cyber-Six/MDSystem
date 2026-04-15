@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { AnnouncementCarousel } from '../anouncement';
 import { fetchDashboardStats } from './dashboard-service';
+import { usePermissions } from '../../context/permissions-context';
 
 const DEFAULT_STATS = {
   pendingRequests: null,
@@ -32,11 +33,18 @@ const normalizeStats = (incoming) => {
   };
 };
 
+const formatShortDate = (value) => {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
+};
+
 /**
  * Staff Dashboard Home Page
  * Dynamically fetches and displays key metrics, recent patients, and pending requests.
  */
 const StaffDashboard = () => {
+  const { hasPermission, isAdmin, modules, isLoading: permLoading } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -47,6 +55,12 @@ const StaffDashboard = () => {
   const [canViewPatients, setCanViewPatients] = useState(false);
   const [canViewRequests, setCanViewRequests] = useState(false);
   const [canViewAvailability, setCanViewAvailability] = useState(false);
+
+  // ── Permission-gated section flags (sourced from usePermissions / module map) ─
+  const showAnnouncements    = isAdmin || hasPermission('announcements');
+  const canSearchPatient     = isAdmin || hasPermission('patientSearch')  || hasPermission('medicalRecords') || hasPermission('dentalRecords');
+  const canViewPendingModule = isAdmin || hasPermission('pendingRequests');
+  const canStartConsult      = isAdmin || hasPermission('medicalRecords');
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -98,6 +112,21 @@ const StaffDashboard = () => {
     stats.activeConsultations !== null && { label: 'Active Consultations', value: stats.activeConsultations, change: stats.activeConsultations > 0 ? 'In progress' : '—', color: 'success', icon: 'chat' },
     stats.lowStockItems !== null && { label: 'Low Stock Items', value: stats.lowStockItems, change: stats.lowStockItems > 0 ? 'Needs attention' : '—', color: 'error', icon: 'alert', link: '/inventory' },
   ].filter(Boolean); // Remove false values from cards user doesn't have permission for
+
+  // Quick Actions — only include actions the user is permitted to use
+  const quickActions = [
+    canSearchPatient     && { key: 'search',  label: 'Search Patient',   to: '/search',  colorClass: 'bg-primary-500 hover:bg-primary-600',   icon: 'search'  },
+    canViewPendingModule && { key: 'pending', label: 'View Pending',     to: '/pending', colorClass: 'bg-secondary-600 hover:bg-secondary-700', icon: 'pending' },
+    canStartConsult      && { key: 'consult', label: 'New Consultation',                 colorClass: 'bg-accent-500 hover:bg-accent-600',       icon: 'add'     },
+  ].filter(Boolean);
+
+  // Show empty state only after both loading phases complete and nothing is visible
+  // Distinguish: zero permissions assigned vs. has permissions but none show dashboard widgets
+  const hasNoPermissionsAtAll = !isAdmin && modules !== null && Object.values(modules).every(v => !v);
+
+  const hasAnyContent = statCards.length > 0 || showAnnouncements || quickActions.length > 0
+    || canViewPatients || canViewRequests || canViewAvailability;
+  const showEmpty = !loading && !permLoading && !hasAnyContent;
 
   const icons = {
     pending: (
@@ -161,39 +190,39 @@ const StaffDashboard = () => {
         })}
       </div>
 
-      {/* Announcements Section */}
-      <AnnouncementCarousel />
+      {/* Announcements Section — gated by announcements module permission */}
+      {showAnnouncements && <AnnouncementCarousel />}
 
-      {/* Quick Actions */}
-      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
-        <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">Quick Actions</h3>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/search"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-md transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            Search Patient
-          </Link>
-          <Link
-            to="/pending"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary-600 hover:bg-secondary-700 text-white text-sm font-medium rounded-md transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            View Pending
-          </Link>
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent-500 hover:bg-accent-600 text-white text-sm font-medium rounded-md transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            New Consultation
-          </button>
+      {/* Quick Actions — only rendered when the user has at least one permitted action */}
+      {quickActions.length > 0 && (
+        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
+          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">Quick Actions</h3>
+          <div className="flex flex-wrap gap-2">
+            {quickActions.map((action) => {
+              const actionIcons = {
+                search:  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />,
+                pending: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />,
+                add:     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />,
+              };
+              const cls = `inline-flex items-center gap-1.5 px-3 py-1.5 ${action.colorClass} text-white text-sm font-medium rounded-md transition-colors`;
+              const iconEl = (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {actionIcons[action.icon]}
+                </svg>
+              );
+              return action.to ? (
+                <Link key={action.key} to={action.to} className={cls}>
+                  {iconEl}{action.label}
+                </Link>
+              ) : (
+                <button key={action.key} type="button" className={cls}>
+                  {iconEl}{action.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Appointment & Availability Widgets */}
       <div className="grid sm:grid-cols-2 gap-3">
@@ -250,11 +279,11 @@ const StaffDashboard = () => {
       </div>
 
       {/* Two Column Layout */}
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid lg:grid-cols-2 gap-3 items-start">
         {/* Recent Patients - Show if user has permission */}
         {canViewPatients && (
           <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-            <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Recent Patients</h3>
               <Link to="/search" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
                 View all
@@ -262,27 +291,27 @@ const StaffDashboard = () => {
             </div>
             <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
               {loading ? (
-                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
+                <div className="p-3 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
               ) : recentPatients.length === 0 ? (
-                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No recent patients</div>
+                <div className="p-3 text-center text-xs text-secondary-400 dark:text-neutral-500">No recent patients</div>
               ) : (
                 recentPatients.map((patient) => (
                   <Link
                     key={patient.id}
                     to={`/patient/${patient.id}`}
-                    className="flex items-center justify-between p-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                    className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-xs font-medium text-secondary-600 dark:text-neutral-300">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 flex-shrink-0 bg-neutral-200 dark:bg-neutral-600 rounded-xl flex items-center justify-center text-[10px] font-semibold text-secondary-600 dark:text-neutral-300">
                         {patient.name?.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2)}
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-secondary-800 dark:text-white">{patient.name}</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400">{patient.identifier || '—'} • {patient.program}</p>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <p className="text-xs font-semibold leading-tight text-secondary-800 dark:text-white truncate">{patient.name}</p>
+                        <p className="text-[10px] leading-tight text-secondary-500 dark:text-neutral-400 truncate">{patient.identifier || '—'} • {patient.program}</p>
                       </div>
                     </div>
-                    <span className="text-xs text-secondary-400 dark:text-neutral-500">
-                      {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString() : '—'}
+                    <span className="text-[10px] leading-tight whitespace-nowrap text-secondary-400 dark:text-neutral-500">
+                      {formatShortDate(patient.lastVisit)}
                     </span>
                   </Link>
                 ))
@@ -294,7 +323,7 @@ const StaffDashboard = () => {
         {/* Pending Requests - Show if user has permission */}
         {canViewRequests && (
           <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-            <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Pending Requests</h3>
               <Link to="/pending" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
                 View all
@@ -302,27 +331,27 @@ const StaffDashboard = () => {
             </div>
             <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
               {loading ? (
-                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
+                <div className="p-3 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
               ) : pendingRequests.length === 0 ? (
-                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No pending requests</div>
+                <div className="p-3 text-center text-xs text-secondary-400 dark:text-neutral-500">No pending requests</div>
               ) : (
                 pendingRequests.map((request) => (
-                  <div key={request.id} className="flex items-center justify-between p-3">
-                    <div>
-                      <p className="text-sm font-medium text-secondary-800 dark:text-white">{request.name}</p>
-                      <p className="text-xs text-secondary-500 dark:text-neutral-400">
-                        {request.type} • {request.submitted ? new Date(request.submitted).toLocaleDateString() : '—'}
+                  <div key={request.id} className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700/40 transition-colors">
+                    <div className="min-w-0 flex flex-col gap-0.5">
+                      <p className="text-xs font-semibold leading-tight text-secondary-800 dark:text-white truncate">{request.name}</p>
+                      <p className="text-[10px] leading-tight text-secondary-500 dark:text-neutral-400 truncate">
+                        {request.type} • {formatShortDate(request.submitted)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-xs font-medium rounded">
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-[10px] leading-tight font-semibold rounded-md whitespace-nowrap">
                         {request.status}
                       </span>
                       <Link
                         to={request.type === 'Appointment' ? '/appointments' : '/pending'}
-                        className="p-1 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+                        className="p-0 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </Link>
@@ -334,6 +363,33 @@ const StaffDashboard = () => {
           </div>
         )}
       </div>
+      {/* Empty dashboard — shown when the user has no dashboard-visible module permissions */}
+      {showEmpty && (
+        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-12 flex flex-col items-center justify-center text-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center">
+            <svg className="w-8 h-8 text-neutral-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div>
+            {hasNoPermissionsAtAll ? (
+              <>
+                <h3 className="text-base font-semibold text-secondary-800 dark:text-white mb-1">No Permissions Assigned</h3>
+                <p className="text-sm text-secondary-500 dark:text-neutral-400 max-w-sm">
+                  Your account has no module permissions yet. Please contact your administrator to be assigned the appropriate permissions.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-semibold text-secondary-800 dark:text-white mb-1">No Dashboard Widgets</h3>
+                <p className="text-sm text-secondary-500 dark:text-neutral-400 max-w-sm">
+                  Your assigned modules don't include any dashboard overview panels. Use the sidebar to navigate to the modules you have access to.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

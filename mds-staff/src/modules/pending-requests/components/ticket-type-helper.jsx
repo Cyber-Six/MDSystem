@@ -13,11 +13,12 @@
  *   2. scope === 'Both' + credentials_status = 'Unverified'
  *      → always INITIAL — patient has never been approved, no ambiguity.
  *
- *   3. scope === 'Both' + credentials_status = 'Active' + ticket.status ≠ 'Approved'
- *      → always UPDATE — the initial record was already approved (that is what made
- *      them Active). Any new pending/revision ticket from an Active patient is an update.
+ *   3. scope === 'Both' + credentials_status != 'Unverified' + ticket.status ≠ 'Approved'
+ *      → always UPDATE — backend validation treats any non-Unverified status as
+ *      already validated. Any new pending/revision ticket from a validated patient
+ *      is an update request.
  *
- *   4. scope === 'Both' + credentials_status = 'Active' + ticket.status === 'Approved'
+ *   4. scope === 'Both' + credentials_status != 'Unverified' + ticket.status === 'Approved'
  *      → check count of Approved personal-record-log entries:
  *          count = 1  →  INITIAL  (their initial is the only thing ever approved)
  *          count ≥ 2  →  UPDATE   (at least one update was also approved)
@@ -123,85 +124,192 @@ const isNearSameTimestamp = (a, b) => {
   return Math.abs(aMs - bMs) <= INITIAL_MATCH_WINDOW_MS;
 };
 
+// ── Module-level per-user caches ─────────────────────────────────────────────
+const _credStore = new Map(); // userId → { val: any, ts: number }
+const _logStore  = new Map(); // userId → { val: any, ts: number }
+const _CRED_TTL  = 5 * 60_000; // 5 min
+const _LOG_TTL   = 2 * 60_000; // 2 min
+
+const normalizeCredentialStatus = (status) => (
+  typeof status === 'string' ? status.trim().toLowerCase() : null
+);
+
+const isUnverifiedCredential = (status) => normalizeCredentialStatus(status) === 'unverified';
+
+const isValidatedCredential = (status) => {
+  const normalized = normalizeCredentialStatus(status);
+  return normalized !== null && normalized !== 'unverified';
+};
+
+// Converts a userId (UUID with hyphens, numeric id, etc.) into a valid
+// GraphQL field alias: letters/digits/underscores only, must start with a letter.
+const _toAlias = (userId) => 'u_' + String(userId).replace(/[^a-zA-Z0-9]/g, '_');
+
+/**
+ * Sends ONE batched GraphQL request that fetches credential statuses for
+ * every supplied userId using field aliases.  Reduces N round-trips to 1.
+ *
+ * @param {string[]} userIds
+ * @returns {Promise<Record<string, string|null>>}
+ */
+const _batchGetCredentialStatuses = async (userIds) => {
+  if (userIds.length === 0) return {};
+  const fields = userIds
+    .map((id) => `${_toAlias(id)}: getUserCredentialStatus(userId: "${id}")`)
+    .join('\n  ');
+  try {
+    const response = await axiosRequest.post('/profile/medical', {
+      query: `{ ${fields} }`,
+    });
+    const data = response.data?.data ?? {};
+    return Object.fromEntries(userIds.map((id) => [id, data[_toAlias(id)] ?? null]));
+  } catch (err) {
+    console.error('[MDSystem] _batchGetCredentialStatuses error:', err?.message ?? err);
+    return Object.fromEntries(userIds.map((id) => [id, null]));
+  }
+};
+
+/**
+ * Sends ONE batched GraphQL request that fetches personal-record logs for
+ * every supplied userId using field aliases.  Reduces M round-trips to 1.
+ *
+ * @param {string[]} userIds
+ * @returns {Promise<Record<string, Array|null>>}
+ */
+const _batchGetPersonalRecordLogs = async (userIds) => {
+  if (userIds.length === 0) return {};
+  const fields = userIds
+    .map((id) => `${_toAlias(id)}: getUserPersonalRecordLog(userId: "${id}", limit: 50) { id status created_at }`)
+    .join('\n  ');
+  try {
+    const response = await axiosRequest.post('/profile/medical', {
+      query: `{ ${fields} }`,
+    });
+    const data = response.data?.data ?? {};
+    return Object.fromEntries(
+      userIds.map((id) => [id, Array.isArray(data[_toAlias(id)]) ? data[_toAlias(id)] : null]),
+    );
+  } catch (err) {
+    console.error('[MDSystem] _batchGetPersonalRecordLogs error:', err?.message ?? err);
+    return Object.fromEntries(userIds.map((id) => [id, null]));
+  }
+};
+
 /**
  * Adds `is_initial: boolean` to every ticket in the list.
- * All look-ups are cached per-user and run in parallel.
  *
- * Primary classification is purely status-based (no time needed for cases 1–4).
- * Timestamp comparison is only used as a last-resort fallback when both the
- * credential-status API and the personal-record-log API are unavailable.
+ * Optimisation strategy (replaces per-ticket individual HTTP calls):
+ *  1. Collect all unique patientIds that need enrichment (scope = 'Both').
+ *  2. Check module-level cache; batch-fetch only the stale/missing entries in
+ *     ONE network request for credential statuses.
+ *  3. Identify which patients additionally need log data (validated + Approved).
+ *  4. Batch-fetch those logs in ONE additional network request.
+ *  5. Classify every ticket synchronously from the pre-fetched data.
+ *
+ * Worst-case: 2 HTTP requests regardless of list length (down from N×2).
+ * Cache hits: 0 HTTP requests.
  *
  * @param {Array<{patientId: string, scope: string, status: string, created_at?: string}>} tickets
  * @returns {Promise<Array<{...ticket, is_initial: boolean}>>}
  */
 export const enrichWithInitialFlag = async (tickets) => {
-  const credentialCache = new Map();
-  const logCache = new Map();
+  if (tickets.length === 0) return [];
 
-  const getCachedCredentialStatus = async (userId) => {
-    if (!credentialCache.has(userId)) {
-      credentialCache.set(userId, await getUserCredentialStatus(userId));
+  // Tickets whose scope already determines the answer need no API calls.
+  const bothScopeTickets = tickets.filter(
+    (t) => t.scope !== 'Medical' && t.scope !== 'Dental',
+  );
+
+  if (bothScopeTickets.length === 0) {
+    return tickets.map((t) => ({ ...t, is_initial: false }));
+  }
+
+  const now = Date.now();
+  const uniqueIds = [...new Set(bothScopeTickets.map((t) => t.patientId))];
+
+  // ── Phase 1: Credential statuses ──────────────────────────────────────────
+  const staleCreds = uniqueIds.filter((id) => {
+    const e = _credStore.get(id);
+    return !e || now - e.ts >= _CRED_TTL;
+  });
+
+  if (staleCreds.length > 0) {
+    const fetched = await _batchGetCredentialStatuses(staleCreds);
+    const fetchTs = Date.now();
+    for (const [id, val] of Object.entries(fetched)) {
+      _credStore.set(id, { val, ts: fetchTs });
     }
-    return credentialCache.get(userId);
-  };
+  }
 
-  const getCachedLogs = async (userId) => {
-    if (!logCache.has(userId)) {
-      logCache.set(userId, await _getPersonalRecordLogs(userId));
+  const credStatuses = Object.fromEntries(
+    uniqueIds.map((id) => [id, _credStore.get(id)?.val ?? null]),
+  );
+
+  // ── Phase 2: Personal-record logs (only for validated + Approved patients) ─
+  const needsLog = uniqueIds.filter((id) => {
+    const cred = credStatuses[id];
+    if (!isValidatedCredential(cred)) return false;
+    // Only needed when a ticket for this patient is in Approved status (Step 4),
+    // OR when cred is unavailable and we fall back to timestamp comparison (Step 5).
+    return bothScopeTickets.some((t) => t.patientId === id && t.status === 'Approved');
+  });
+
+  // Also prefetch logs for patients whose credential status is null (Step 5 fallback).
+  const needsFallbackLog = uniqueIds.filter((id) => credStatuses[id] === null);
+
+  const allLogIds = [...new Set([...needsLog, ...needsFallbackLog])];
+  const staleLogs = allLogIds.filter((id) => {
+    const e = _logStore.get(id);
+    return !e || now - e.ts >= _LOG_TTL;
+  });
+
+  if (staleLogs.length > 0) {
+    const fetched = await _batchGetPersonalRecordLogs(staleLogs);
+    const fetchTs = Date.now();
+    for (const [id, val] of Object.entries(fetched)) {
+      _logStore.set(id, { val, ts: fetchTs });
     }
-    return logCache.get(userId);
-  };
+  }
 
-  return Promise.all(
-    tickets.map(async (ticket) => {
-      // ── Step 1 ──────────────────────────────────────────────────────────────
-      // Partial-scope tickets are only submitted by verified patients → always UPDATE
-      if (ticket.scope === 'Medical' || ticket.scope === 'Dental') {
+  // ── Phase 3: Synchronous classification ───────────────────────────────────
+  return tickets.map((ticket) => {
+    // Step 1: partial scope → always UPDATE
+    if (ticket.scope === 'Medical' || ticket.scope === 'Dental') {
+      return { ...ticket, is_initial: false };
+    }
+
+    const credStatus = credStatuses[ticket.patientId];
+
+    // Step 2: Unverified → INITIAL
+    if (isUnverifiedCredential(credStatus)) {
+      return { ...ticket, is_initial: true };
+    }
+
+    if (isValidatedCredential(credStatus)) {
+      // Step 3: Validated + non-Approved → UPDATE
+      if (ticket.status !== 'Approved') {
         return { ...ticket, is_initial: false };
       }
 
-      const credStatus = await getCachedCredentialStatus(ticket.patientId);
-
-      // ── Step 2 ──────────────────────────────────────────────────────────────
-      // Unverified → patient has never been approved → definitely INITIAL.
-      if (credStatus !== null && credStatus.toLowerCase() !== 'active') {
-        return { ...ticket, is_initial: true };
+      // Step 4: Validated + Approved → count Approved log entries
+      const logs = _logStore.get(ticket.patientId)?.val ?? null;
+      if (logs !== null) {
+        const approvedCount = logs.filter((l) => l.status === 'Approved').length;
+        return { ...ticket, is_initial: approvedCount === 1 };
       }
+    }
 
-      if (credStatus !== null) {
-        // ── Step 3 ────────────────────────────────────────────────────────────
-        // Active + non-Approved ticket → UPDATE.
-        // The initial was already approved before this patient became Active.
-        // Any new pending/revision submission from them is an update.
-        if (ticket.status !== 'Approved') {
-          return { ...ticket, is_initial: false };
-        }
+    // Step 5: fallback — timestamp comparison
+    const logs = _logStore.get(ticket.patientId)?.val ?? null;
+    const latestLog = Array.isArray(logs) ? logs[0] : null;
+    if (latestLog?.created_at) {
+      return { ...ticket, is_initial: isNearSameTimestamp(ticket.created_at, latestLog.created_at) };
+    }
 
-        // ── Step 4 ────────────────────────────────────────────────────────────
-        // Active + Approved ticket → count Approved log entries.
-        // Exactly 1 Approved entry = only the initial was ever approved → INITIAL.
-        // 2 or more = at least one update was also approved → UPDATE.
-        const logs = await getCachedLogs(ticket.patientId);
-        if (logs !== null) {
-          const approvedCount = logs.filter((l) => l.status === 'Approved').length;
-          return { ...ticket, is_initial: approvedCount === 1 };
-        }
-      }
+    if (credStatus !== null && credStatus !== undefined) {
+      return { ...ticket, is_initial: isUnverifiedCredential(credStatus) };
+    }
 
-      // ── Step 5 (fallback) ────────────────────────────────────────────────────
-      // Both APIs unavailable — fall back to timestamp comparison as last resort.
-      const logs = await getCachedLogs(ticket.patientId);
-      const latestLog = Array.isArray(logs) ? logs[0] : null;
-      if (latestLog?.created_at) {
-        return { ...ticket, is_initial: isNearSameTimestamp(ticket.created_at, latestLog.created_at) };
-      }
-
-      // Absolute last resort: credential status alone (Unverified=initial, else update).
-      if (credStatus !== null) {
-        return { ...ticket, is_initial: credStatus.toLowerCase() !== 'active' };
-      }
-
-      return { ...ticket, is_initial: false };
-    }),
-  );
+    return { ...ticket, is_initial: false };
+  });
 };

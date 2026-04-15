@@ -19,11 +19,11 @@ export const QUERY_CATEGORIES = {
   },
   vitals: {
     label: 'Vital Signs',
-    queries: ['bmi-trends', 'blood-pressure-trends'],
+    queries: ['bmi-trends', 'blood-pressure-trends', 'vital-signs-box-plot'],
   },
   appointments: {
     label: 'Appointments',
-    queries: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session'],
+    queries: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session', 'appointments-accommodated-trends'],
   },
   clinical: {
     label: 'Clinical Data',
@@ -31,7 +31,28 @@ export const QUERY_CATEGORIES = {
   },
   lifestyle: {
     label: 'Lifestyle & Allergies',
-    queries: ['lifestyle-risks', 'allergy-by-type', 'allergy-by-severity'],
+    queries: ['lifestyle-risks', 'lifestyle-statistics', 'allergy-by-type', 'allergy-by-severity'],
+  },
+  emr: {
+    label: 'EMR',
+    queries: ['female-reproductive-health', 'oral-findings-percentages', 'vital-signs-box-plot', 'lifestyle-statistics'],
+  },
+  general: {
+    label: 'General',
+    queries: ['patient-credential-status', 'patient-population-by-branch'],
+  },
+  inventory: {
+    label: 'Inventory',
+    queries: ['most-consumed-medicine', 'most-consumed-supply', 'inventory-consumption-trends', 'inventory-report-summary'],
+  },
+  demographics: {
+    label: 'Demographics',
+    queries: [
+      'patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex',
+      'patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group',
+      'consultations-by-department', 'consultations-by-program', 'lifestyle-risks-by-department',
+      'sex-age-group-matrix', 'diagnoses-sex-age',
+    ],
   },
 };
 
@@ -53,6 +74,31 @@ export const CHART_TYPE_MAP = {
   'appointments-by-category': 'pie',
   'appointments-by-status': 'doughnut',
   'appointments-by-session': 'pie',
+  'appointments-accommodated-trends': 'stacked-area',
+  // EMR / General / Inventory
+  'female-reproductive-health': 'doughnut',
+  'lifestyle-statistics': 'grouped-bar',
+  'oral-findings-percentages': 'bar',
+  'vital-signs-box-plot': 'box-plot',
+  'patient-credential-status': 'pie',
+  'patient-population-by-branch': 'bar',
+  'most-consumed-medicine': 'bar',
+  'most-consumed-supply': 'bar',
+  'inventory-consumption-trends': 'stacked-area',
+  'inventory-report-summary': 'bar',
+  // Demographics
+  'patients-by-sex': 'bar',
+  'consultations-by-sex': 'bar',
+  'top-diagnoses-by-sex': 'grouped-bar',
+  'patients-by-age-group': 'bar',
+  'consultations-by-age-group': 'bar',
+  'bmi-by-age-group': 'bar',
+  'diagnoses-by-age-group': 'heatmap',
+  'consultations-by-department': 'bar',
+  'consultations-by-program': 'bar',
+  'lifestyle-risks-by-department': 'grouped-bar',
+  'sex-age-group-matrix': 'heatmap',
+  'diagnoses-sex-age': 'heatmap',
 };
 
 // ── Period Preset Options ────────────────────────────────────────────────────
@@ -106,6 +152,47 @@ export const BRANCHES = [
   { value: 'QuezonCity', label: 'Quezon City' },
 ];
 
+export const SEX_FILTER_OPTIONS = ['Male', 'Female'];
+
+// Canonical program list required in department/program analytics filter.
+export const ACADEMIC_PROGRAM_FILTER_OPTIONS = [
+  'BS Architecture',
+  'BS Chemical Engineering',
+  'BS Civil Engineering',
+  'BS Computer Engineering',
+  'BS Electrical Engineering',
+  'BS Electronics Engineering',
+  'BS Industrial Engineering',
+  'BS Mechanical Engineering',
+  'BS Environmental and Sanitary Engineering',
+  'BS Computer Science',
+  'BS Data Science and Analytics',
+  'BS Entertainment and Multimedia Computing',
+  'BS Information Technology',
+  'BS Information Systems',
+  'BS Accountancy',
+  'BS Accounting Information Systems',
+  'BSBA Financial Management',
+  'BSBA Human Resource Management',
+  'BSBA Logistics and Supply Chain Management',
+  'BSBA Marketing Management',
+  'Bachelor of Arts in English Language',
+  'Bachelor of Arts in Political Science',
+  'Bachelor of Secondary Education Major in English',
+  'Bachelor of Secondary Education Major in Mathematics',
+  'Bachelor of Secondary Education Major in Sciences',
+  'Bachelor of Special Needs Education',
+  'Teaching Certificate Program',
+];
+
+function normalizeSexOption(value) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'male' || normalized === 'm') return 'Male';
+  if (normalized === 'female' || normalized === 'f') return 'Female';
+  return '';
+}
+
 // ── API Functions ────────────────────────────────────────────────────────────
 
 /**
@@ -117,18 +204,60 @@ export async function fetchAvailableQueries() {
 }
 
 /**
+ * Fetch distinct departments and sex values for demographic filter dropdowns
+ */
+export async function fetchFilterOptions() {
+  try {
+    const response = await axiosRequest.get('/analytics/filter-options');
+    const backendDepartmentOptions = Array.isArray(response.data.departments) ? response.data.departments : [];
+    const mergedDepartmentOptions = Array.from(
+      new Set(
+        [...backendDepartmentOptions, ...ACADEMIC_PROGRAM_FILTER_OPTIONS]
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    const backendSexOptions = Array.isArray(response.data.sexes) ? response.data.sexes : [];
+    const mergedSexOptions = Array.from(
+      new Set(
+        [...backendSexOptions, ...SEX_FILTER_OPTIONS]
+          .map(normalizeSexOption)
+          .filter(Boolean)
+      )
+    );
+    const orderedSexOptions = SEX_FILTER_OPTIONS.filter((sex) => mergedSexOptions.includes(sex));
+
+    return {
+      departments: mergedDepartmentOptions,
+      sexes: orderedSexOptions.length > 0 ? orderedSexOptions : [...SEX_FILTER_OPTIONS],
+    };
+  } catch (error) {
+    console.error('Error fetching filter options:', error);
+    // Keep required program options available even if backend filter API fails.
+    return {
+      departments: [...ACADEMIC_PROGRAM_FILTER_OPTIONS],
+      sexes: [...SEX_FILTER_OPTIONS],
+    };
+  }
+}
+
+/**
  * Fetch analytics data for a specific query type
  * @param {string} dataType - Query type key (e.g. 'consultations-by-type')
  * @param {string} branch - 'Manila' | 'QuezonCity' | 'Both'
  * @param {string} startDate - ISO date string (YYYY-MM-DD)
  * @param {string} endDate - ISO date string (YYYY-MM-DD)
  * @param {string} [groupBy] - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+ * @param {object} [filters] - Optional { department, sex } filters
  * @returns {Promise<{labels: string[], values: number[], total: number}>}
  */
-export async function fetchQueryData(dataType, branch, startDate, endDate, groupBy) {
-  const response = await axiosRequest.get(`/analytics/query/${encodeURIComponent(dataType)}`, {
-    params: { branch, startDate, endDate, groupBy },
-  });
+export async function fetchQueryData(dataType, branch, startDate, endDate, groupBy, filters = {}) {
+  const params = { branch, startDate, endDate, groupBy };
+  if (filters.department) params.department = filters.department;
+  if (filters.sex) params.sex = filters.sex;
+
+  const response = await axiosRequest.get(`/analytics/query/${encodeURIComponent(dataType)}`, { params });
   return response.data;
 }
 
@@ -139,19 +268,24 @@ export async function fetchQueryData(dataType, branch, startDate, endDate, group
  * @param {string} startDate
  * @param {string} endDate
  * @param {string} [groupBy] - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+ * @param {object} [filters] - Optional { department, sex } filters
  * @returns {Promise<Map<string, object>>} Map of dataType -> response data
  */
-export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate, groupBy) {
+export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate, groupBy, filters = {}) {
   const results = new Map();
 
   try {
-    const response = await axiosRequest.post('/analytics/batch', {
+    const body = {
       dataTypes,
       branch,
       startDate,
       endDate,
       groupBy,
-    });
+    };
+    if (filters.department) body.department = filters.department;
+    if (filters.sex) body.sex = filters.sex;
+
+    const response = await axiosRequest.post('/analytics/batch', body);
 
     if (response.data.success && response.data.results) {
       for (const [dataType, result] of Object.entries(response.data.results)) {
@@ -172,7 +306,7 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
     // Fallback: if batch endpoint fails, fetch individually
     const promises = dataTypes.map(async (dataType) => {
       try {
-        const data = await fetchQueryData(dataType, branch, startDate, endDate, groupBy);
+        const data = await fetchQueryData(dataType, branch, startDate, endDate, groupBy, filters);
         // Guard: if the backend returned HTML instead of JSON (e.g. not yet deployed),
         // treat it as an error so charts show an empty/error state instead of crashing.
         if (typeof data !== 'object' || data === null) {
@@ -194,13 +328,17 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
 
 /** Export presets mirror – used to populate presets in the UI without an API call */
 export const EXPORT_PRESETS = {
-  'full-report':    { label: 'Full Analytics Report',       description: 'All 15 analytics metrics combined' },
+  'full-report':    { label: 'Full Analytics Report',       description: 'All analytics metrics combined' },
   'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: type, status, trends' },
   'diagnoses':      { label: 'Diagnoses Report',            description: 'Diagnosis metrics: top ICD-10, type distribution' },
-  'vitals':         { label: 'Vital Signs Report',          description: 'BMI and blood pressure trend analysis' },
-  'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and session data' },
+  'vitals':         { label: 'Vital Signs Report',          description: 'BMI, blood pressure, and distribution analysis' },
+  'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and accommodated trends' },
   'clinical':       { label: 'Clinical Data Report',        description: 'Immunization coverage and dental procedures' },
-  'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors and allergy data' },
+  'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors, statistics, and allergy data' },
+  'emr':            { label: 'EMR Report',                  description: 'Reproductive health, oral findings, and vital-sign analytics' },
+  'general':        { label: 'General Population Report',   description: 'Credential status and branch population comparison' },
+  'inventory':      { label: 'Inventory Report',            description: 'Most consumed items, trends, and stock summary' },
+  'demographics':   { label: 'Demographics Report',         description: 'Sex, age group, department, and program analytics' },
 };
 
 /**
@@ -208,32 +346,44 @@ export const EXPORT_PRESETS = {
  * The response is a Blob (binary file) that gets saved by the browser.
  *
  * @param {'csv'|'excel'|'pdf'} format
- * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset?, groupBy? }
+ * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset?, groupBy?, department?, sex? }
  */
 export async function exportAnalytics(format, opts) {
-  const { branch, startDate, endDate, dataTypes, preset, groupBy } = opts;
-  const response = await axiosRequest.post(
-    '/analytics/export',
-    { format, branch, startDate, endDate, dataTypes, preset, groupBy },
-    { responseType: 'blob' },
-  );
+  const { branch, startDate, endDate, dataTypes, preset, groupBy, department, sex } = opts;
+  const body = {
+    format,
+    branch,
+    startDate,
+    endDate,
+    dataTypes,
+    preset,
+    groupBy
+  };
+  if (department) body.department = department;
+  if (sex) body.sex = sex;
 
+  const response = await axiosRequest.post('/analytics/export', body, { responseType: 'blob' });
   triggerDownload(response);
 }
 
 /**
  * Download a focused single-metric PDF report.
  * @param {string} dataType
- * @param {Object} opts - { branch, startDate, endDate, groupBy? }
+ * @param {Object} opts - { branch, startDate, endDate, groupBy?, department?, sex? }
  */
 export async function exportSingleMetric(dataType, opts) {
-  const { branch, startDate, endDate, groupBy } = opts;
-  const response = await axiosRequest.post(
-    '/analytics/export/single',
-    { dataType, branch, startDate, endDate, groupBy },
-    { responseType: 'blob' },
-  );
+  const { branch, startDate, endDate, groupBy, department, sex } = opts;
+  const body = {
+    dataType,
+    branch,
+    startDate,
+    endDate,
+    groupBy,
+  };
+  if (department) body.department = department;
+  if (sex) body.sex = sex;
 
+  const response = await axiosRequest.post('/analytics/export/single', body, { responseType: 'blob' });
   triggerDownload(response);
 }
 

@@ -9,7 +9,7 @@ import OBGYNEForm from './obygyne';
 import ReviewForm from './review-form';
 import { Button } from './form-elements';
 import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
-import { createInitialMedicalRecord, fetchAllCatalogs } from '@core/services/emr-service';
+import { createInitialMedicalRecord, fetchAllCatalogs, ensureUpdateTicket } from '@core/services/emr-service';
 import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer';
 
 /**
@@ -54,6 +54,16 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       });
   }, []);
 
+  // Create the update ticket early so mid-form actions (e.g. adding a custom vaccine)
+  // that require an active ticket don't fail. For revisions, a ticket already exists.
+  useEffect(() => {
+    if (!isRevision) {
+      ensureUpdateTicket('Both').then((id) => {
+        if (id) console.log('[Initial Record Form] Early update ticket ready:', id);
+      });
+    }
+  }, [isRevision]);
+
   // When revision pre-fill data arrives, merge it into the form state
   useEffect(() => {
     if (!revisionData) return;
@@ -89,7 +99,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       provinceAddress: '',
       contactNumber: '',
       program: '',
-      programOther: '',
+      programId: '',
       studentNumber: '',
       studentCategory: '',
       lastSchoolAttended: '',
@@ -227,8 +237,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number must be a valid Philippine number (e.g. 09171234567 or +639171234567)' });
     if (!pi.address?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Present address is required' });
     if (!pi.provinceAddress?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Province address is required' });
-    if (!pi.program) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program is required' });
-    if (pi.program === 'Other' && !pi.programOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your program' });
+    if (!pi.programId) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program is required — please select one from the search results' });
     if (!pi.studentNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number is required' });
     else if (!/^[a-zA-Z0-9\-]+$/.test(pi.studentNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number must contain only letters, numbers, and dashes' });
     if (!pi.studentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student category is required' });
@@ -376,8 +385,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
         if (msg.includes('contact number') && !msg.includes('emergency')) errors.contactNumber = err.message;
         if (msg.includes('present address')) errors.address = err.message;
         if (msg.includes('province address')) errors.provinceAddress = err.message;
-        if (msg.includes('program') && !msg.includes('specify')) errors.program = err.message;
-        if (msg.includes('specify your program')) errors.programOther = err.message;
+        if (msg.includes('program')) errors.program = err.message;
         if (msg.includes('student number')) errors.studentNumber = err.message;
         if (msg.includes('student category')) errors.studentCategory = err.message;
         if (msg.includes('first emergency contact name')) errors.emergencyContact1Name = err.message;

@@ -46,16 +46,16 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
     <ModalBackdrop onClose={onCancel}>
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+        <div className="px-6 py-3 border-b border-neutral-100 dark:border-neutral-700/50">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30">
+            <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30 flex-shrink-0">
               <svg className="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Set Up Authenticator 2FA</h3>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">Scan with Google Authenticator, Authy, or similar app</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <h3 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-semibold text-secondary-800 dark:text-white">Set Up Authenticator 2FA</h3>
+              <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">Scan with Google Authenticator, Authy, or similar app</p>
             </div>
           </div>
         </div>
@@ -162,16 +162,16 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
     <ModalBackdrop onClose={onCancel}>
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+        <div className="px-6 py-3 border-b border-neutral-100 dark:border-neutral-700/50">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-full bg-error-100 dark:bg-error-900/30">
+            <div className="p-2 rounded-full bg-error-100 dark:bg-error-900/30 flex-shrink-0">
               <svg className="w-5 h-5 text-error-600 dark:text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Disable Authenticator 2FA</h3>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">This will reduce your account security</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <h3 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-semibold text-secondary-800 dark:text-white">Disable Authenticator 2FA</h3>
+              <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">This will reduce your account security</p>
             </div>
           </div>
         </div>
@@ -179,7 +179,7 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
         {/* Body */}
         <div className="px-6 py-5">
           <div className="mb-4 p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-700">
-            <p className="text-xs text-warning-700 dark:text-warning-300">
+            <p className="text-xs text-warning-700 dark:text-warning-300 mb-0">
               Enter the current code from your authenticator app to confirm disabling 2FA.
               You will need to set it up again if you want to re-enable it.
             </p>

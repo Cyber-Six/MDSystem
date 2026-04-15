@@ -5,6 +5,7 @@ import ErrorBoundary from '../components/error-boundary.jsx';
 import { PatientTabsProvider } from '../context/patient-tabs-context.jsx';
 import { PermissionsProvider } from '../context/permissions-context.jsx';
 import PermissionRoute from '../components/guards/permission-route.jsx';
+import { StaffNotificationProvider } from '../modules/notification/notification-context.jsx';
 
 // Lazy-loaded route modules for code splitting
 const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
@@ -35,6 +36,7 @@ const Dashboard = () => {
   return (
     <PatientTabsProvider>
       <PermissionsProvider>
+        <StaffNotificationProvider>
         <StaffLayout>
           <ErrorBoundary>
             <Suspense fallback={<RouteLoader />}>
@@ -47,8 +49,8 @@ const Dashboard = () => {
                 <Route path="/inventory" element={<PermissionRoute moduleId="inventory"><MedicalInventory /></PermissionRoute>} />
                 <Route path="/health-chat" element={<PermissionRoute moduleId="healthChat"><HealthChatView /></PermissionRoute>} />
                 <Route path="/analytics" element={<PermissionRoute moduleId="analytics"><StaffAnalytics /></PermissionRoute>} />
-                <Route path="/announcements" element={<AnnouncementManagement />} />
-                <Route path="/notifications" element={<SendNotificationView />} />
+                <Route path="/announcements" element={<PermissionRoute moduleId="announcements"><AnnouncementManagement /></PermissionRoute>} />
+                <Route path="/notifications" element={<PermissionRoute moduleId="sendNotification"><SendNotificationView /></PermissionRoute>} />
                 <Route path="/settings/roles" element={<PermissionRoute adminOnly><RoleManagementPage /></PermissionRoute>} />
                 <Route path="/settings" element={<StaffSettings />} />
                 <Route path="*" element={<NotFound />} />
@@ -56,6 +58,7 @@ const Dashboard = () => {
             </Suspense>
           </ErrorBoundary>
         </StaffLayout>
+        </StaffNotificationProvider>
       </PermissionsProvider>
     </PatientTabsProvider>
   );

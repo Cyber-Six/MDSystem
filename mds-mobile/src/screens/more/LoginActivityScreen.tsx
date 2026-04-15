@@ -23,20 +23,53 @@ interface LoginRecord {
   timestamp: string;
 }
 
+const normalizeLoginRecords = (payload: any): LoginRecord[] => {
+  const source = Array.isArray(payload?.sessions)
+    ? payload.sessions
+    : Array.isArray(payload?.records)
+      ? payload.records
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : [];
+
+  return source
+    .map((item: any, index: number) => {
+      const timestamp = String(
+        item?.timestamp ?? item?.login_at ?? item?.attempted_at ?? item?.created_at ?? '',
+      );
+      if (!timestamp) return null;
+
+      return {
+        id: String(item?.id ?? item?.sessionId ?? `record-${index}`),
+        wasSuccessful: Boolean(
+          item?.wasSuccessful ?? item?.was_successful ?? item?.success ?? false,
+        ),
+        timestamp,
+      };
+    })
+    .filter(Boolean) as LoginRecord[];
+};
+
 export const LoginActivityScreen: React.FC = () => {
   const { isDark } = useTheme();
   const [records, setRecords] = useState<LoginRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadActivity = async () => {
     try {
+      setErrorMessage(null);
       const res = await axiosRequest.get('/auth/user/login-activity');
       if (res.data.ok) {
-        setRecords(res.data.sessions || []);
+        setRecords(normalizeLoginRecords(res.data));
+      } else {
+        setRecords([]);
+        setErrorMessage('Unable to load login activity right now.');
       }
-    } catch {
-      // Use empty if not available
+    } catch (error: any) {
+      setRecords([]);
+      setErrorMessage(error?.response?.data?.message || 'Unable to load login activity right now.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -82,11 +115,24 @@ export const LoginActivityScreen: React.FC = () => {
       >
         {/* Info banner */}
         <View style={[styles.infoBanner, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : colors.accent[50] }]}>
-          <Text style={{ color: colors.accent[500], fontSize: 14 }}>
-          <Ionicons name="information-circle" size={16} color={colors.accent[500]} style={{ marginRight: 6 }} />
-            Review your recent login sessions. If you see unfamiliar activity, change your password immediately.
-          </Text>
+          <View style={styles.bannerRow}>
+            <Ionicons name="information-circle" size={16} color={colors.accent[500]} style={{ marginTop: 1 }} />
+            <Text style={{ color: colors.accent[500], fontSize: 14, flex: 1 }}>
+              Review your recent login sessions. If you see unfamiliar activity, change your password immediately.
+            </Text>
+          </View>
         </View>
+
+        {errorMessage ? (
+          <View style={[styles.errorBanner, { backgroundColor: isDark ? 'rgba(239,68,68,0.2)' : '#FEE2E2' }]}>
+            <View style={styles.bannerRow}>
+              <Ionicons name="alert-circle" size={16} color={colors.error[500]} style={{ marginTop: 1 }} />
+              <Text style={{ color: colors.error[500], fontSize: 13, flex: 1 }}>
+                {errorMessage}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {records.length === 0 ? (
           <View style={[styles.emptyState, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
@@ -139,6 +185,8 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { padding: 16, paddingBottom: 40 },
   infoBanner: { padding: 14, borderRadius: 12, marginBottom: 16 },
+  errorBanner: { padding: 12, borderRadius: 12, marginBottom: 12 },
+  bannerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   emptyState: { padding: 40, borderRadius: 16, alignItems: 'center' },
   emptyIcon: { fontSize: 36, marginBottom: 12 },
   emptyText: { fontSize: 14 },

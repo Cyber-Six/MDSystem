@@ -26,13 +26,13 @@ async function batchIdToBranch(batch, batchId) {
   }
 
   const result = await db.query(
-    `SELECT branch FROM "${batch}" WHERE id = $1 LIMIT 1`,
+    `SELECT location FROM "${batch}" WHERE id = $1 LIMIT 1`,
     [batchId]
   );
   if (result.rows.length === 0) {
     return null;
   }
-  return result.rows[0].branch;
+  return result.rows[0].location;
 }
 
 module.exports = { validateItemExists, validateItemActive, batchIdToBranch };

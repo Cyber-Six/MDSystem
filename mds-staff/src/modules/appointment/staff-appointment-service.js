@@ -64,6 +64,19 @@ const sendGraphQL = async (query, variables = {}) => {
   return response.data.data;
 };
 
+const normalizePatientIdentifier = (patientIdentifier) => {
+  if (patientIdentifier === undefined || patientIdentifier === null) return null;
+  const value = String(patientIdentifier).trim();
+  return value.length > 0 ? value : null;
+};
+
+const buildPatientLookupVariables = (userId = null, patientIdentifier = null, offset = 0, limit = 20) => ({
+  userId: userId || null,
+  patientIdentifier: normalizePatientIdentifier(patientIdentifier),
+  offset,
+  limit,
+});
+
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 /**
@@ -190,29 +203,32 @@ export const loadInitialQueueData = async (status, limit = 15, { date, scheduler
 
 /**
  * Get a specific patient's current appointment status.
- * @param {string} userId
+ * @param {string|null} [userId]
+ * @param {string|number|null} [patientIdentifier]
  * @returns {Promise<string|null>}
  */
-export const getPatientStatus = async (userId) => {
+export const getPatientStatus = async (userId = null, patientIdentifier = null) => {
   const data = await sendGraphQL(`
-    query GetUserAppointmentStatus($userId: ID!) {
-      getUserAppointmentStatus(userId: $userId)
+    query GetUserAppointmentStatus($userId: ID, $patientIdentifier: String) {
+      getUserAppointmentStatus(userId: $userId, patientIdentifier: $patientIdentifier)
     }
-  `, { userId });
+  `, { userId: userId || null, patientIdentifier: normalizePatientIdentifier(patientIdentifier) });
   return data.getUserAppointmentStatus;
 };
 
 /**
  * Get all appointment records for a patient.
- * @param {string} userId
+ * @param {string|null} userId
  * @param {number} [offset=0]
  * @param {number} [limit=20]
+ * @param {string|number|null} [patientIdentifier]
  * @returns {Promise<Array>} patientSlot[]
  */
-export const getPatientRecords = async (userId, offset = 0, limit = 20) => {
+export const getPatientRecords = async (userId, offset = 0, limit = 20, patientIdentifier = null) => {
+  const variables = buildPatientLookupVariables(userId, patientIdentifier, offset, limit);
   const data = await sendGraphQL(`
-    query GetUserAppointmentRecords($userId: ID!, $offset: Int, $limit: Int) {
-      getUserAppointmentRecords(userId: $userId, offset: $offset, limit: $limit) {
+    query GetUserAppointmentRecords($userId: ID, $patientIdentifier: String, $offset: Int, $limit: Int) {
+      getUserAppointmentRecords(userId: $userId, patientIdentifier: $patientIdentifier, offset: $offset, limit: $limit) {
         id
         patientId
         patientIdentifier
@@ -233,8 +249,50 @@ export const getPatientRecords = async (userId, offset = 0, limit = 20) => {
         }
       }
     }
-  `, { userId, offset, limit });
+  `, variables);
   return data.getUserAppointmentRecords;
+};
+
+/**
+ * Load patient appointment status and records in one request.
+ * @param {string|null} [userId]
+ * @param {string|number|null} [patientIdentifier]
+ * @param {number} [offset=0]
+ * @param {number} [limit=20]
+ * @returns {Promise<{status: string|null, records: Array}>}
+ */
+export const getPatientAppointmentSnapshot = async (userId = null, patientIdentifier = null, offset = 0, limit = 20) => {
+  const variables = buildPatientLookupVariables(userId, patientIdentifier, offset, limit);
+  const data = await sendGraphQL(`
+    query GetPatientAppointmentSnapshot($userId: ID, $patientIdentifier: String, $offset: Int, $limit: Int) {
+      status: getUserAppointmentStatus(userId: $userId, patientIdentifier: $patientIdentifier)
+      records: getUserAppointmentRecords(userId: $userId, patientIdentifier: $patientIdentifier, offset: $offset, limit: $limit) {
+        id
+        patientId
+        patientIdentifier
+        patientName
+        slotEntityId
+        status
+        session
+        approvedBy
+        purpose
+        notes
+        arrived_at
+        created_at
+        requirements {
+          id
+          scheduleRequirementId
+          filename
+          created_at
+        }
+      }
+    }
+  `, variables);
+
+  return {
+    status: data.status || null,
+    records: data.records || [],
+  };
 };
 
 /**
@@ -255,6 +313,7 @@ export const listAllSchedulers = async (offset = 0, limit = 50) => {
         morningAllowed
         afternoonAllowed
         notes
+        purposeRequired
         isActive
         containsCustomDates
         whitelistOnly
@@ -355,6 +414,7 @@ export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
         id
         slotScheduleId
         scheduledDate
+        type
         morningAllowed
         afternoonAllowed
         created_at
@@ -368,16 +428,17 @@ export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
 
 /**
  * Approve or reject a pending appointment.
- * @param {string} userId
+ * @param {string|null} userId
  * @param {'Scheduled'|'Rejected'|'CancelledByMedical'|'Completed'} status
  * @param {string} [notes]
  * @param {string} [slotId] - Preferred: pass the slot ID directly to avoid stale-lookup bugs
+ * @param {string|number|null} [patientIdentifier]
  * @returns {Promise<object>} patientSlot
  */
-export const respondToAppointment = async (userId, status, notes, slotId = null) => {
+export const respondToAppointment = async (userId, status, notes, slotId = null, patientIdentifier = null) => {
   const data = await sendGraphQL(`
-    mutation RespondAppointment($userId: ID!, $slotId: ID, $status: SCHEDULING_STATUS!, $notes: String) {
-      respondAppointment(userId: $userId, slotId: $slotId, status: $status, notes: $notes) {
+    mutation RespondAppointment($userId: ID, $patientIdentifier: String, $slotId: ID, $status: SCHEDULING_STATUS!, $notes: String) {
+      respondAppointment(userId: $userId, patientIdentifier: $patientIdentifier, slotId: $slotId, status: $status, notes: $notes) {
         id
         patientId
         status
@@ -385,7 +446,13 @@ export const respondToAppointment = async (userId, status, notes, slotId = null)
         notes
       }
     }
-  `, { userId, slotId, status, notes });
+  `, {
+    userId: userId || null,
+    patientIdentifier: normalizePatientIdentifier(patientIdentifier),
+    slotId,
+    status,
+    notes,
+  });
   return data.respondAppointment;
 };
 
@@ -428,6 +495,7 @@ export const createScheduler = async (input) => {
         morningAllowed
         afternoonAllowed
         notes
+        purposeRequired
         isActive
         containsCustomDates
         whitelistOnly
@@ -456,6 +524,7 @@ export const updateScheduler = async (schedulerId, input) => {
         morningAllowed
         afternoonAllowed
         notes
+        purposeRequired
         isActive
         containsCustomDates
         whitelistOnly
@@ -521,7 +590,8 @@ export const deleteRequirement = async (schedulerId, label) => {
 // ── Mutations — Custom Dates ─────────────────────────────────────────────────
 
 /**
- * Add custom open dates to a scheduler with optional slot configuration.
+ * Add custom dates to a scheduler with slot configuration.
+ * Type is auto-derived: both morningAllowed and afternoonAllowed = 0 → Exclude, else → Include.
  * @param {string} schedulerId
  * @param {Array<{scheduledDate: string, morningAllowed?: number, afternoonAllowed?: number}>} dates
  * @returns {Promise<Array>} SlotCustomDateEntry[]
@@ -533,6 +603,7 @@ export const setCustomDates = async (schedulerId, dates) => {
         id
         slotScheduleId
         scheduledDate
+        type
         morningAllowed
         afternoonAllowed
         created_at

@@ -3,6 +3,27 @@ import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
 import { fetchMedicalItems, fetchMedicineBatches, fetchSupplyBatches } from '../medical-inventory/medical-inventory-service';
 import { computeItemStats } from '../medical-inventory/inventory-seed-data';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
+import { usePermissions } from '../../context/permissions-context';
+import { getLocationsByBranch } from '../../utils/branch-utils';
+import { getStaffSettings } from '../../context/settings-context';
+import { playNotificationSound } from '../../utils/notification-sound';
+import { useBanner } from '../../context/use-banner';
+
+/**
+ * Maps a socket event name to the frontend moduleId that must be enabled for a
+ * staff member to receive it.  Events not listed here are always allowed through
+ * (general / admin notifications, document:submitted which is user-specific, etc.)
+ */
+const EVENT_PERMISSION_MAP = {
+  'healthchat:ticket-created': 'healthChat',
+  'healthchat:new-message': 'healthChat',
+  'healthchat:ticket-closed': 'healthChat',
+  'healthchat:ticket-status-changed': 'healthChat',
+  'appointment:submitted': 'appointments',
+  'medicine:request:new': 'inventory',
+  'updateTicket': 'pendingRequests',
+};
 
 /**
  * Staff notification events emitted by the backend.
@@ -23,6 +44,7 @@ const EVENT_MAP = {
   'healthchat:ticket-created': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chat?.id ?? null },
     title: 'New Chat Request',
     message: 'A patient submitted a new health chat request.',
     refId: data?.chat?.id ?? null,
@@ -30,6 +52,7 @@ const EVENT_MAP = {
   'healthchat:new-message': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chatId ?? data?.chat?.id ?? null },
     title: 'New Chat Message',
     message: data?.message?.content
       ? `Patient: ${String(data.message.content).slice(0, 80)}`
@@ -39,6 +62,7 @@ const EVENT_MAP = {
   'healthchat:ticket-closed': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chatId ?? data?.chat?.id ?? null },
     title: 'Chat Session Closed',
     message: 'A health chat session has been closed.',
     refId: data?.chat?.id ?? null,
@@ -46,6 +70,7 @@ const EVENT_MAP = {
   'healthchat:ticket-status-changed': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chatId ?? data?.chat?.id ?? null },
     title: 'Chat Ticket Updated',
     message: `A health chat ticket is now ${(data?.status ?? '').toLowerCase() || 'updated'}.`,
     refId: data?.chat?.id ?? null,
@@ -77,6 +102,13 @@ const EVENT_MAP = {
     title: 'Record Update Request',
     message: 'A patient submitted a record update request.',
     refId: data?.recordId ?? null,
+  }),
+  'accountUpdated': (data) => ({
+    type: 'general',
+    route: null,
+    title: 'Account Updated',
+    message: data?._accountUpdateMessage || 'Your role has been updated. The page will reload to apply changes.',
+    refId: data?.timestamp ?? null,
   }),
   'document:submitted': (data) => ({
     type: 'document',
@@ -208,6 +240,16 @@ function persistSeenInventoryIds(ids) {
 }
 const MAX_NOTIFICATIONS = 50;
 
+// Maps notification.type → soundByModule key
+const TYPE_TO_SOUND_MODULE = {
+  chat: 'healthChat',
+  appointment: 'appointments',
+  medicine: 'medicineRequests',
+  record: 'general',
+  document: 'general',
+  general: 'general',
+};
+
 function loadPersistedNotifications() {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -227,13 +269,46 @@ function persistNotifications(notifications) {
 
 const NotificationContext = createContext(null);
 
+function getSessionUserId() {
+  try {
+    const refreshToken = tokenService.TokenStorage.getRefreshToken();
+    if (!refreshToken || typeof refreshToken !== 'string') return null;
+    const [userId] = refreshToken.split(':');
+    return userId ? String(userId) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Helper function to get allowed locations based on user's branch
+function getAllowedLocations(profile) {
+  return getLocationsByBranch(profile?.branch);
+}
+
 export function StaffNotificationProvider({ children }) {
+  const { profile } = useStaffProfile();
+  const { hasPermission, isLoading: permissionsLoading, refetch: refetchPermissions, branch: permissionBranch } = usePermissions();
+  const { showBanner } = useBanner();
   const [notifications, setNotifications] = useState(() => loadPersistedNotifications());
   const [inventoryAlerts, setInventoryAlerts] = useState([]);
   const [seenInventoryIds, setSeenInventoryIds] = useState(() => loadSeenInventoryIds());
   const socketRef = useRef(null);
   const subscribersRef = useRef({});
+
+  // Keep refs so socket event handlers always see the latest permission state
+  // without closing over stale values from the initial mount.
+  const hasPermissionRef = useRef(hasPermission);
+  const permissionsLoadingRef = useRef(permissionsLoading);
+  const profileRef = useRef(profile);
+  const refetchPermissionsRef = useRef(refetchPermissions);
+  const permissionBranchRef = useRef(permissionBranch);
+  useEffect(() => { hasPermissionRef.current = hasPermission; }, [hasPermission]);
+  useEffect(() => { permissionsLoadingRef.current = permissionsLoading; }, [permissionsLoading]);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  useEffect(() => { refetchPermissionsRef.current = refetchPermissions; }, [refetchPermissions]);
+  useEffect(() => { permissionBranchRef.current = permissionBranch; }, [permissionBranch]);
   const fetchInventoryRef = useRef(null);
+  const accountReloadScheduledRef = useRef(false);
 
   const addNotification = useCallback((event, data) => {
     const factory = EVENT_MAP[event];
@@ -252,6 +327,14 @@ export function StaffNotificationProvider({ children }) {
       persistNotifications(next);
       return next;
     });
+
+    // Play notification sound honoring per-module settings
+    const soundModuleKey = TYPE_TO_SOUND_MODULE[notif.type] ?? 'general';
+    const s = getStaffSettings();
+    if (s.soundEnabled && s.soundByModule[soundModuleKey] !== false) {
+      const moduleSound = s.soundFileByModule?.[soundModuleKey] ?? s.notificationSound;
+      playNotificationSound(s.soundVolume, moduleSound, null);
+    }
   }, []);
 
   const markAsRead = useCallback((id) => {
@@ -324,6 +407,10 @@ export function StaffNotificationProvider({ children }) {
       console.log('[NOTIFICATION] Socket connected successfully');
       socketRef.current = service;
 
+      // Join user-specific room keyed by authenticated staff userId.
+      // Server also auto-joins this room, but we emit explicitly for clarity.
+      service.emit('notification:join-self', {});
+
       // Join the staff member's branch room so they receive branch-scoped events
       // (appointment:submitted, medicine:request:new, updateTicket)
       service.emit('notification:join-branch', {});
@@ -332,8 +419,85 @@ export function StaffNotificationProvider({ children }) {
       Object.keys(EVENT_MAP).forEach((event) => {
         service.on(event, (data) => {
           if (!isMounted) return;
+
+          // Extra safety: enforce user-targeted scoping for account updates.
+          if (event === 'accountUpdated') {
+            const payloadUserId = data?.userId != null ? String(data.userId) : null;
+            const currentUserId = profileRef.current?.id != null
+              ? String(profileRef.current.id)
+              : getSessionUserId();
+
+            if (payloadUserId && currentUserId && payloadUserId !== currentUserId) {
+              return;
+            }
+          }
+
+          // Permission gate: drop the event if the staff does not have the required
+          // module permission.  We wait until permissions have finished loading to
+          // avoid silently dropping valid notifications during the loading window.
+          const requiredModule = EVENT_PERMISSION_MAP[event];
+          if (requiredModule) {
+            if (permissionsLoadingRef.current) return; // defer until loaded
+            if (!hasPermissionRef.current(requiredModule)) {
+              console.log(`[NOTIFICATION] Dropping event "${event}" — no "${requiredModule}" permission`);
+              return;
+            }
+          }
+
           console.log(`[NOTIFICATION] Received event: ${event}`, data);
-          addNotification(event, data);
+          let accountUpdateMessage = null;
+          if (event === 'accountUpdated') {
+            const currentRole = profileRef.current?.role ?? null;
+            const currentBranch = profileRef.current?.branch ?? permissionBranchRef.current ?? null;
+            const incomingRole = data?.newRole ?? null;
+            const incomingBranch = data?.newBranch ?? null;
+            const incomingStatus = data?.newStatus ?? null;
+
+            const roleChanged =
+              currentRole != null && incomingRole != null && String(currentRole) !== String(incomingRole);
+            const branchChanged =
+              currentBranch != null && incomingBranch != null && String(currentBranch) !== String(incomingBranch);
+            const statusChanged =
+              incomingStatus != null && String(incomingStatus).toLowerCase() === 'suspended';
+
+            if (incomingStatus === 'Suspended') {
+              accountUpdateMessage = 'Your account has been suspended. The page will reload.';
+            } else if (roleChanged) {
+              accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
+            } else if (branchChanged) {
+              accountUpdateMessage = 'Your branch assignment has been updated. The page will reload to apply changes.';
+            } else if (statusChanged) {
+              accountUpdateMessage = 'Your account status has been updated. The page will reload to apply changes.';
+            } else {
+              // Fallback when local profile/permissions are stale or still loading.
+              accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
+            }
+          }
+
+          addNotification(event, accountUpdateMessage ? { ...data, _accountUpdateMessage: accountUpdateMessage } : data);
+
+          if (event === 'accountUpdated') {
+            showBanner({
+              message: accountUpdateMessage || 'Your role has been updated. The page will reload to apply changes.',
+              type: 'info',
+              duration: 4000,
+            });
+
+            if (!accountReloadScheduledRef.current) {
+              accountReloadScheduledRef.current = true;
+
+              Promise.resolve(refetchPermissionsRef.current?.())
+                .catch(() => {
+                  // Ignore refresh errors; a forced reload runs below.
+                })
+                .finally(() => {
+                  window.setTimeout(() => {
+                    window.location.reload();
+                  }, 4000);
+                });
+            }
+          }
+
           const subs = subscribersRef.current[event];
           if (subs) subs.forEach((cb) => cb(data));
         });
@@ -400,34 +564,63 @@ export function StaffNotificationProvider({ children }) {
 
     const fetchAndComputeAlerts = async () => {
       try {
-        console.log('[INVENTORY_ALERTS] Fetching items and batches...');
+        // Skip inventory fetch if permissions are still loading or staff lacks inventory access
+        if (permissionsLoading) return;
+        if (!hasPermission('inventory')) {
+          setInventoryAlerts([]);
+          return;
+        }
+
+        // Get allowed locations based on user's profile
+        const allowedLocations = getAllowedLocations(profile);
+        
+        // Wait for profile to load before making any requests
+        if (allowedLocations.length === 0) {
+          console.log('[INVENTORY_ALERTS] Waiting for profile or no location access - skipping fetch');
+          setInventoryAlerts([]);
+          return;
+        }
+
+        console.log('[INVENTORY_ALERTS] Fetching items and batches for locations:', allowedLocations);
         const items = await fetchMedicalItems(null, 0, 500);
+        
+        // Fetch batches with location filter to prevent unauthorized access
         const batchResults = await Promise.all(
-          items.map((item) => {
+          items.map(async (item) => {
             const isMedicine = item.category?.toLowerCase() === 'medicine';
-            if (isMedicine) {
-              return fetchMedicineBatches(Number(item.id)).then((bs) =>
-                bs.map((b) => ({
-                  id: b.id,
-                  medicalItemId: Number(b.medicalItemId),
-                  batchNumber: b.batchNumber,
-                  availableQuantity: Number(b.availableQuantity ?? 0),
-                  expiryDate: b.expiryDate,
-                  location: b.location,
-                }))
-              );
-            } else {
-              return fetchSupplyBatches(Number(item.id)).then((bs) =>
-                bs.map((b) => ({
-                  id: b.id,
-                  medicalItemId: Number(b.supplyItemId),
-                  batchNumber: b.batchNumber,
-                  availableQuantity: Number(b.currentQuantity ?? 0),
-                  expiryDate: b.expiryDate,
-                  location: b.location,
-                }))
-              );
-            }
+            
+            // Fetch batches for each allowed location and combine them
+            const locationBatches = await Promise.all(
+              allowedLocations.map(async (location) => {
+                try {
+                  if (isMedicine) {
+                    const bs = await fetchMedicineBatches(Number(item.id), location);
+                    return bs.map((b) => ({
+                      id: b.id,
+                      medicalItemId: Number(b.medicalItemId),
+                      batchNumber: b.batchNumber,
+                      availableQuantity: Number(b.availableQuantity ?? 0),
+                      expiryDate: b.expiryDate,
+                      location: b.location,
+                    }));
+                  } else {
+                    const bs = await fetchSupplyBatches(Number(item.id), location);
+                    return bs.map((b) => ({
+                      id: b.id,
+                      medicalItemId: Number(b.supplyItemId),
+                      batchNumber: b.batchNumber,
+                      availableQuantity: Number(b.currentQuantity ?? 0),
+                      expiryDate: b.expiryDate,
+                      location: b.location,
+                    }));
+                  }
+                } catch (err) {
+                  console.warn(`[INVENTORY_ALERTS] Failed to fetch batches for item ${item.id} at location ${location}:`, err);
+                  return [];
+                }
+              })
+            );
+            return locationBatches.flat();
           })
         );
         const flatBatches = batchResults.flat();
@@ -455,11 +648,54 @@ export function StaffNotificationProvider({ children }) {
       isMounted = false;
       fetchInventoryRef.current = null;
     };
-  }, []);
+  }, [profile, hasPermission, permissionsLoading]); // Re-run when profile, permissions, or loading state changes
 
   const refreshInventoryAlerts = useCallback(() => {
     if (fetchInventoryRef.current) fetchInventoryRef.current();
   }, []);
+
+  // When permissions finish loading, prune any persisted notifications from
+  // sessionStorage that the staff is no longer permitted to see.
+  useEffect(() => {
+    if (permissionsLoading) return;
+    setNotifications((prev) => {
+      const next = prev.filter((n) => {
+        // General / admin / document notifications are always kept
+        const TYPE_TO_MODULE = {
+          chat: 'healthChat',
+          appointment: 'appointments',
+          medicine: 'inventory',
+          record: 'pendingRequests',
+        };
+        const requiredModule = TYPE_TO_MODULE[n.type];
+        if (!requiredModule) return true;
+        return hasPermission(requiredModule);
+      });
+      if (next.length !== prev.length) persistNotifications(next);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissionsLoading]);
+
+  // Play sound when new unseen inventory alerts arrive. Skip the very first
+  // fetch so opening the app doesn't immediately chime.
+  const prevInventoryIdsRef = useRef(null);
+  useEffect(() => {
+    const currentIds = new Set(inventoryAlerts.map((a) => a.id));
+    if (prevInventoryIdsRef.current === null) {
+      prevInventoryIdsRef.current = currentIds;
+      return;
+    }
+    const hasNew = inventoryAlerts.some((a) => !prevInventoryIdsRef.current.has(a.id));
+    prevInventoryIdsRef.current = currentIds;
+    if (hasNew) {
+      const s = getStaffSettings();
+      if (s.soundEnabled && s.soundByModule.inventory !== false) {
+        const moduleSound = s.soundFileByModule?.inventory ?? s.notificationSound;
+        playNotificationSound(s.soundVolume, moduleSound, null);
+      }
+    }
+  }, [inventoryAlerts]);
 
   const unseenInventoryCount = inventoryAlerts.filter((a) => !seenInventoryIds.has(a.id)).length;
   const unreadCount = notifications.filter((n) => n.unread).length + unseenInventoryCount;

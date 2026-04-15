@@ -15,6 +15,16 @@ const { encodeSchedulingFlags, decodeSchedulingFlags, validateSchedulerDate,
 
 const MAX_SCHEDULING_DAYS = parseInt(dotenv.MAX_SCHEDULING_DAYS || 7);
 
+/**
+ * Returns true if the given YYYY-MM-DD date string is strictly before today (server local date).
+ * Today itself is NOT considered past — only dates < today are blocked.
+ */
+function isPastDate(dateStr) {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return String(dateStr).slice(0, 10) < todayStr;
+}
+
 const Query = {
   _listOpenAppointments: async (_, { offset, limit, schedulerId = null }, { user, res }) => {
     if (!user) {
@@ -64,7 +74,7 @@ const Query = {
     return result.rows;
   },
 
-  _listAllOpenAppointments: async (_, { location, offset, limit }, { user, res }) => {
+  _listAllOpenAppointments: async (_, { location, staffBranch = 'Both', offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -72,7 +82,12 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
-      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
+      WHERE (
+        $4 = 'Both'
+        OR ($4 = 'Manila'      AND ss.location IN ('Arlegui', 'Casal'))
+        OR ($4 = 'QuezonCity'  AND ss.location = 'QuezonCity')
+      )
+      AND ss.location = COALESCE($1::"LocationDesignation", ss.location)
       ORDER BY ss.created_at ASC
       LIMIT $2 OFFSET $3;
     `;
@@ -80,7 +95,8 @@ const Query = {
     const result = await db.query(query, [
       location,
       limit || 10,
-      offset || 0
+      offset || 0,
+      staffBranch,
     ]);
     result.rows.forEach(row => {
       row.schedulePerWeek = decodeSchedulingFlags(row.scheduleFlags);
@@ -92,18 +108,19 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    // LEFT JOIN ScheduleDateEntity so morningAllowed/afternoonAllowed overrides are visible
+    
     const query = `
       SELECT
         scd.id,
         scd."slotScheduleId",
         scd."scheduledDate",
-        scd.created_at,
+        scd."type",
         sde."morningAllowed",
-        sde."afternoonAllowed"
+        sde."afternoonAllowed",
+        scd.created_at
       FROM "SlotCustomDate" scd
       LEFT JOIN "ScheduleDateEntity" sde
-        ON sde."slotId" = $1 AND sde."scheduledDate" = scd."scheduledDate"
+        ON sde."slotId" = scd."slotScheduleId" AND sde."scheduledDate" = scd."scheduledDate"
       WHERE scd."slotScheduleId" = $1
       ORDER BY scd."scheduledDate" ASC
       LIMIT $2 OFFSET $3;
@@ -301,7 +318,7 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
+  _searchAppointmentStatuses: async (_, { status, location, staffBranch = 'Both', date, schedulerId, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -321,6 +338,11 @@ const Query = {
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
       WHERE ps.status = $1
+      AND (
+        $7 = 'Both'
+        OR ($7 = 'Manila'      AND ss.location IN ('Arlegui', 'Casal'))
+        OR ($7 = 'QuezonCity'  AND ss.location = 'QuezonCity')
+      )
       AND ss.location = COALESCE($4::"LocationDesignation", ss.location)
       AND ($5::date IS NULL OR sde."scheduledDate"::date = $5::date)
       AND ($6::integer IS NULL OR ss.id = $6::integer)
@@ -330,7 +352,7 @@ const Query = {
 
     const result = await db.query(query,
       [status, limit || 10,
-       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null]);
+       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null, staffBranch]);
     const slots = result.rows;
 
     if (slots.length === 0) return slots;
@@ -350,7 +372,7 @@ const Query = {
     return slots.map(s => ({ ...s, requirements: reqBySlot[s.id] || [] }));
   },
 
-  _getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {
+  _getAppointmentStatusCounts: async (_, { location, staffBranch = 'Both', schedulerId, date }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -360,11 +382,16 @@ const Query = {
       FROM "patientSlot" ps
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
-      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
+      WHERE (
+        $4 = 'Both'
+        OR ($4 = 'Manila'      AND ss.location IN ('Arlegui', 'Casal'))
+        OR ($4 = 'QuezonCity'  AND ss.location = 'QuezonCity')
+      )
+      AND ss.location = COALESCE($1::"LocationDesignation", ss.location)
         AND ($2::integer IS NULL OR ss.id = $2::integer)
         AND ($3::date IS NULL OR sde."scheduledDate"::date = $3::date)
       GROUP BY ps.status;
-    `, [location || null, schedulerId ? parseInt(schedulerId, 10) : null, date || null]);
+    `, [location || null, schedulerId ? parseInt(schedulerId, 10) : null, date || null, staffBranch]);
 
     return result.rows;
   },
@@ -414,13 +441,20 @@ const Query = {
       const { morningAllowed, afternoonAllowed } = schedulerDefaults.rows[0];
 
       // Insert missing ScheduleDateEntity entries for any SlotCustomDate that doesn't have one
+      // For Include dates: use scheduler defaults; for Exclude dates: set to 0 (blocks appointments)
       await client.query(
         `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
          SELECT
            scd."slotScheduleId",
            scd."scheduledDate",
-           $2,
-           $3
+           CASE 
+             WHEN scd."type" = 'Exclude' THEN 0
+             ELSE $2
+           END,
+           CASE 
+             WHEN scd."type" = 'Exclude' THEN 0
+             ELSE $3
+           END
          FROM "SlotCustomDate" scd
          WHERE scd."slotScheduleId" = $1
            AND scd."scheduledDate" >= $4
@@ -493,12 +527,21 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    const normalizedPurpose = typeof purpose === "string" ? purpose.trim() : "";
     let allowedScheduler;
 
     try {
       allowedScheduler = await Query._listOpenAppointments(_, { offset: 0, limit: 1, schedulerId }, { user, res });
       if (allowedScheduler.length === 0) {
         throwGraphQLError(res).message("Scheduler not found or not allowed.").status(404).throw();
+      }
+
+      const purposeRequired = allowedScheduler[0]?.purposeRequired === true;
+      if (purposeRequired && !normalizedPurpose) {
+        throwGraphQLError(res)
+          .message("Purpose / reason for visit is required for this appointment type")
+          .status(400)
+          .throw();
       }
 
       // Validate scheduler/date
@@ -592,7 +635,7 @@ const Mutation = {
         `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session", "purpose")
          VALUES ($1, $2, 'Pending', $3, $4)
          RETURNING *;`,
-        [user.id, schedule.id, session, purpose || null]
+        [user.id, schedule.id, session, normalizedPurpose || null]
       );
 
       const patientSlotId = psResult.rows[0].id;
@@ -835,6 +878,24 @@ const Mutation = {
         throwGraphQLError(res).message("Invalid schedule days").status(400).throw();
       }
 
+      // Reject any past dates in the initial custom date lists
+      const allInitialDates = [
+        ...(input.slotIncludedDates || []),
+        ...(input.slotExcludedDates || [])
+      ];
+      const pastInitial = allInitialDates.filter(isPastDate);
+      if (pastInitial.length > 0) {
+        throwGraphQLError(res)
+          .message(`Cannot add, create, or change past dates: ${pastInitial.join(', ')}`)
+          .status(400)
+          .throw();
+      }
+
+      // Check if there are any custom dates (Include or Exclude)
+      const hasCustomDates = 
+        (input.slotIncludedDates && input.slotIncludedDates.length > 0) ||
+        (input.slotExcludedDates && input.slotExcludedDates.length > 0);
+
       const result = await client.query(
         `INSERT INTO "slotScheduler"
           (label, location, "patientType", "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", "purposeRequired", notes)
@@ -848,7 +909,7 @@ const Mutation = {
           input.morningAllowed,
           input.afternoonAllowed,
           input.whitelistOnly || false,
-          input.slotCustomDates.length > 0,
+          hasCustomDates,
           input.purposeRequired || false,
           input.notes || null,
         ]
@@ -860,11 +921,16 @@ const Mutation = {
 
       const schedulerId = result.rows[0].id;
 
-      // Use the same client inside transaction (skip if empty)
-      if (input.slotCustomDates && input.slotCustomDates.length > 0) {
-        await insertSlotCustomDates(schedulerId, input.slotCustomDates, client);
-        // Initialize ScheduleDateEntity for each custom date with scheduler defaults
-        for (const scheduledDate of input.slotCustomDates) {
+      // Process Include dates
+      if (input.slotIncludedDates && input.slotIncludedDates.length > 0) {
+        const includeDatesWithType = input.slotIncludedDates.map(date => ({
+          scheduledDate: date,
+          type: 'Include'
+        }));
+        await insertSlotCustomDates(schedulerId, includeDatesWithType, client);
+        
+        // Initialize ScheduleDateEntity for each included date
+        for (const scheduledDate of input.slotIncludedDates) {
           await client.query(
             `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
              SELECT $1, $2, $3, $4
@@ -875,6 +941,28 @@ const Mutation = {
           );
         }
       }
+
+      // Process Exclude dates
+      if (input.slotExcludedDates && input.slotExcludedDates.length > 0) {
+        const excludeDatesWithType = input.slotExcludedDates.map(date => ({
+          scheduledDate: date,
+          type: 'Exclude'
+        }));
+        await insertSlotCustomDates(schedulerId, excludeDatesWithType, client);
+        
+        // Initialize ScheduleDateEntity for each excluded date with 0 slots
+        for (const scheduledDate of input.slotExcludedDates) {
+          await client.query(
+            `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+             SELECT $1, $2, $3, $4
+             WHERE NOT EXISTS (
+               SELECT 1 FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2
+             );`,
+            [schedulerId, scheduledDate, 0, 0]
+          );
+        }
+      }
+
       if (input.whiteLists && input.whiteLists.length > 0) {
         await insertSchedulerWhitelist(schedulerId, input.whiteLists, client);
       }
@@ -975,6 +1063,43 @@ const Mutation = {
 
     if (result.rowCount === 0) {
       throwGraphQLError(res).message("Failed to update scheduler").status(500).throw();
+    }
+
+    // Cascade default slot updates to ScheduleDateEntity rows that are NOT backed by a
+    // SlotCustomDate entry (those are true "default" dates and should always match the
+    // scheduler defaults).  Custom date entities keep their own per-date overrides.
+    const newMorning = input.morningAllowed;
+    const newAfternoon = input.afternoonAllowed;
+    const slotDefaultChanged =
+      (newMorning !== undefined && newMorning !== null) ||
+      (newAfternoon !== undefined && newAfternoon !== null);
+
+    if (slotDefaultChanged) {
+      // Build a SET clause only for the columns that actually changed
+      const cascadeFields = [];
+      const cascadeValues = [];
+      let ci = 1;
+      if (newMorning !== undefined && newMorning !== null) {
+        cascadeFields.push(`"morningAllowed" = $${ci++}`);
+        cascadeValues.push(newMorning);
+      }
+      if (newAfternoon !== undefined && newAfternoon !== null) {
+        cascadeFields.push(`"afternoonAllowed" = $${ci++}`);
+        cascadeValues.push(newAfternoon);
+      }
+      cascadeValues.push(schedulerId);
+
+      await db.query(
+        `UPDATE "ScheduleDateEntity" sde
+         SET ${cascadeFields.join(', ')}
+         WHERE sde."slotId" = $${ci}
+           AND NOT EXISTS (
+             SELECT 1 FROM "SlotCustomDate" scd
+             WHERE scd."slotScheduleId" = sde."slotId"
+               AND scd."scheduledDate" = sde."scheduledDate"
+           );`,
+        cascadeValues
+      );
     }
 
     const scheduler = result.rows[0];
@@ -1149,6 +1274,17 @@ const Mutation = {
         .throw();
     }
 
+    // Reject any past dates — staff may only add/edit present or future dates
+    const pastDates = dates
+      .map(d => (typeof d === 'string' ? d : d.scheduledDate))
+      .filter(isPastDate);
+    if (pastDates.length > 0) {
+      throwGraphQLError(res)
+        .message(`Cannot add, create, or change past dates: ${pastDates.join(', ')}`)
+        .status(400)
+        .throw();
+    }
+
     const client = await db.connect();
     try {
       await client.query('BEGIN');
@@ -1164,29 +1300,9 @@ const Mutation = {
       }
       const defaults = schedulerResult.rows[0];
 
-      // Insert date markers into SlotCustomDate — skip any that already exist
-      // (can't use ON CONFLICT without a unique constraint; use WHERE NOT EXISTS instead)
-      const values = [];
-      const selectParts = dates.map((dateEntry, i) => {
-        const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
-        const offset = i * 2;
-        values.push(schedulerId, scheduledDate);
-        return `($${offset + 1}::integer, $${offset + 2}::date)`;
-      });
-
-      await client.query(
-        `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
-         SELECT v."slotScheduleId", v."scheduledDate"
-         FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate")
-         WHERE NOT EXISTS (
-           SELECT 1 FROM "SlotCustomDate" scd
-           WHERE scd."slotScheduleId" = v."slotScheduleId"
-             AND scd."scheduledDate" = v."scheduledDate"
-         );`,
-        values
-      );
-
-      // Always initialize/upsert ScheduleDateEntity for every custom date
+      // Auto-derive type for each date from morningAllowed/afternoonAllowed
+      // Both 0 → Exclude, otherwise → Include
+      // Insert/upsert SlotCustomDate entries and ScheduleDateEntity entries
       for (const dateEntry of dates) {
         const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
         const morning = (typeof dateEntry === 'object' && dateEntry.morningAllowed != null)
@@ -1195,7 +1311,18 @@ const Mutation = {
         const afternoon = (typeof dateEntry === 'object' && dateEntry.afternoonAllowed != null)
           ? dateEntry.afternoonAllowed
           : defaults.afternoonAllowed;
+        const derivedType = (morning === 0 && afternoon === 0) ? 'Exclude' : 'Include';
 
+        // Upsert SlotCustomDate (insert or update type if already exists)
+        await client.query(
+          `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate", "type")
+           VALUES ($1, $2, $3::"SlotCustomType")
+           ON CONFLICT ("slotScheduleId", "scheduledDate")
+           DO UPDATE SET "type" = $3::"SlotCustomType";`,
+          [schedulerId, scheduledDate, derivedType]
+        );
+
+        // Upsert ScheduleDateEntity
         const existing = await client.query(
           `SELECT id FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2 LIMIT 1;`,
           [schedulerId, scheduledDate]
@@ -1217,7 +1344,7 @@ const Mutation = {
         }
       }
 
-      // Step 1: If containsCustomDates is currently false, set it to true
+      // If containsCustomDates is currently false, set it to true
       if (!defaults.containsCustomDates) {
         await client.query(
           `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
@@ -1227,19 +1354,20 @@ const Mutation = {
 
       await client.query('COMMIT');
 
-      // Return full SlotCustomDateEntry objects (with slot counts from ScheduleDateEntity)
+      // Return full SlotCustomDateEntry objects with slot counts from ScheduleDateEntity
       const scheduledDates = dates.map(d => (typeof d === 'string' ? d : d.scheduledDate));
       const finalResult = await db.query(
         `SELECT
            scd.id,
            scd."slotScheduleId",
            scd."scheduledDate",
-           scd.created_at,
+           scd."type",
            sde."morningAllowed",
-           sde."afternoonAllowed"
+           sde."afternoonAllowed",
+           scd.created_at
          FROM "SlotCustomDate" scd
          LEFT JOIN "ScheduleDateEntity" sde
-           ON sde."slotId" = $1 AND sde."scheduledDate" = scd."scheduledDate"
+           ON sde."slotId" = scd."slotScheduleId" AND sde."scheduledDate" = scd."scheduledDate"
          WHERE scd."slotScheduleId" = $1
            AND scd."scheduledDate" = ANY($2)
          ORDER BY scd."scheduledDate" ASC;`,
@@ -1452,6 +1580,14 @@ const Mutation = {
   _updateDateIdentity: async (_, { schedulerId, date, input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Reject modifications to past dates
+    if (isPastDate(date)) {
+      throwGraphQLError(res)
+        .message("Cannot add, create, or change past dates")
+        .status(400)
+        .throw();
     }
 
     try {

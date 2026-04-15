@@ -35,7 +35,7 @@ const FORMAT_OPTIONS = [
 ];
 
 const SCOPE_OPTIONS = [
-  { value: 'full-report', label: 'Full Report', description: 'All 15 metrics' },
+  { value: 'full-report', label: 'Full Report', description: `All ${Object.keys(CHART_TYPE_MAP).length} metrics` },
   ...Object.entries(QUERY_CATEGORIES).map(([key, cat]) => ({
     value: key,
     label: cat.label,
@@ -61,6 +61,17 @@ const METRIC_LABELS = {
   'appointments-by-category': 'Appointments by Category',
   'appointments-by-status': 'Appointments by Status',
   'appointments-by-session': 'Appointments by Session',
+  'appointments-accommodated-trends': 'Appointments Accommodated Trends',
+  'female-reproductive-health': 'Female Reproductive Health',
+  'lifestyle-statistics': 'Lifestyle Statistics (Mean / Median / Mode)',
+  'oral-findings-percentages': 'Oral Finding Percentages',
+  'vital-signs-box-plot': 'Vital Signs Box Plot',
+  'patient-credential-status': 'Patient Credential Status',
+  'patient-population-by-branch': 'Patient Population by Branch',
+  'most-consumed-medicine': 'Most Consumed Medicine',
+  'most-consumed-supply': 'Most Consumed Supply',
+  'inventory-consumption-trends': 'Inventory Consumption Trends',
+  'inventory-report-summary': 'Inventory Report Summary',
 };
 
 const ALL_METRIC_KEYS = Object.keys(CHART_TYPE_MAP);
@@ -69,7 +80,7 @@ const ALL_METRIC_KEYS = Object.keys(CHART_TYPE_MAP);
  * Analytics Export Modal
  * Allows the user to pick format, scope (preset), and trigger download.
  */
-const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, groupBy }) => {
+const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, groupBy, department, sex }) => {
   const [format, setFormat] = useState('pdf');
   const [scope, setScope] = useState('full-report');
   const [selectedMetrics, setSelectedMetrics] = useState([]);
@@ -92,6 +103,8 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
         endDate,
         groupBy,
       };
+      if (department) opts.department = department;
+      if (sex) opts.sex = sex;
 
       if (scope === 'custom') {
         if (selectedMetrics.length === 0) {
@@ -111,7 +124,7 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
     } finally {
       setLoading(false);
     }
-  }, [format, scope, selectedMetrics, branch, startDate, endDate, groupBy, onClose]);
+  }, [format, scope, selectedMetrics, branch, startDate, endDate, groupBy, department, sex, onClose]);
 
   if (!open) return null;
 

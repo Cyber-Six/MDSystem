@@ -1,0 +1,449 @@
+scalar Date
+scalar UUID
+
+# ─── ENUMS ─────────────────────────────────────────────────────────────────────
+
+enum Designation {
+  Manila
+  QuezonCity
+  Both
+}
+
+enum AccountStatus {
+  Active
+  Suspended
+  Pending
+}
+
+enum CredentialsStatus {
+  Active
+  Unverified
+  Inactive
+  Locked
+}
+
+enum Identity {
+  Medical
+  Employee
+  Student
+  Superior
+}
+
+# ─── TYPES ─────────────────────────────────────────────────────────────────────
+
+type UserInfo {
+  email: String!
+  identity: Identity!
+  credentialsStatus: CredentialsStatus!
+  name: String!
+}
+
+type MedicalPersonnel {
+  id: ID!
+  role: String               # Free-form role string (can match template label)
+  title: String
+  designation: Designation
+  isActive: Boolean
+  user: UserInfo
+  roleTemplate: PermissionTemplate  # Optional: Associated permission template
+}
+
+# ─── PERMISSION TYPES ──────────────────────────────────────────────────────────
+
+# Reusable permission type with branch information
+# Represents a single permission with its enabled status and branch designation
+# Used consistently across staff permissions, templates, and accounts
+type BranchPermission {
+  key: String!           # Permission key (e.g., "emr_allow_view")
+  label: String!         # Permission label (e.g., "ALLOW_TO_VIEW_EMR")
+  enabled: Boolean!      # Whether permission is granted (true = exists in database, false = no record)
+  branch: Designation    # Branch for this permission (null if not granted)
+}
+
+# Staff permissions wrapper type - array of BranchPermission
+# Returned by getStaffPermissions query and stored in StaffAccount
+# Unified format across all permission queries and mutations
+type Permissions {
+  permissions: [BranchPermission!]!
+  count: Int!
+}
+
+# ─── TEMPLATE TYPES ────────────────────────────────────────────────────────────
+
+# Permission template for reusable permission sets
+type PermissionTemplate {
+  id: ID!
+  label: String!
+  createdBy: ID!
+  createdAt: String!
+  permissions: [BranchPermission!]!
+  permissionCount: Int!
+}
+
+# List of permission templates
+type PermissionTemplateList {
+  templates: [PermissionTemplate!]!
+  count: Int!
+}
+
+type StaffAccount {
+  id: ID!
+  email: String!
+  name: String!
+  role: String                                 # Role string from MedicalPersonnel (e.g., "Doctor", "Nurse")
+  branch: Designation
+  identity: Identity!
+  status: AccountStatus!
+  permissions: Permissions!                    # Array of BranchPermission objects with enabled status and branch
+  modulePermissions: ModulePermissionList      # Module-level permission view (derived from granular)
+  credentialsStatus: CredentialsStatus
+  lastLogin: String
+}
+
+# ─── MODULE PERMISSION TYPES ──────────────────────────────────────────────────
+
+# Module-level permission status (derived from granular permissions)
+type ModulePermission {
+  moduleId: String!    # e.g. "appointments", "inventory"
+  label: String!       # Human-readable label e.g. "Appointments"
+  enabled: Boolean!    # true if ALL underlying keys for this module are enabled
+}
+
+# List of module permissions
+type ModulePermissionList {
+  modules: [ModulePermission!]!
+  count: Int!
+}
+
+type StaffAccountList {
+  staff: [StaffAccount!]!
+  count: Int!
+}
+
+type MedicalPersonnelList {
+  personnel: [MedicalPersonnel!]!
+  count: Int!
+}
+
+type MutationResult {
+  ok: Boolean!
+  message: String!
+}
+
+type SemestralInactivationPreview {
+  ok: Boolean!
+  message: String!
+  scopedCount: Int!
+  willUpdateCount: Int!
+}
+
+type StaffAccountMutationResult {
+  ok: Boolean!
+  message: String!
+  warnings: [String!]
+  staff: StaffAccount
+}
+
+type MedicalPersonnelMutationResult {
+  ok: Boolean!
+  message: String!
+  personnel: MedicalPersonnel
+}
+
+type DeleteMedicalPersonnelResult {
+  ok: Boolean!
+  message: String!
+  identityReverted: Boolean!
+}
+
+# ─── USER SEARCH TYPES ────────────────────────────────────────────────────────
+
+type UserSearchResult {
+  id: ID!
+  email: String!
+  name: String!
+  identity: Identity!
+  credentialsStatus: CredentialsStatus!
+  isMedicalPersonnel: Boolean!
+}
+
+type UserSearchResultList {
+  users: [UserSearchResult!]!
+  count: Int!
+}
+
+# ─── SESSION MANAGEMENT TYPES ──────────────────────────────────────────────────
+
+type StaffSession {
+  deviceId: String!
+  status: String!
+  createdAt: String!
+  updatedAt: String
+  expiresAt: String
+  isCurrent: Boolean!
+}
+
+type StaffSessionList {
+  sessions: [StaffSession!]!
+  count: Int!
+  currentAnchor: String
+}
+
+type RotateAnchorResult {
+  ok: Boolean!
+  message: String!
+  sessionsInvalidated: Int!
+}
+
+# Admin transfer result type
+type InitiateAdminTransferResult {
+  ok: Boolean!
+  message: String!
+  verificationRequired: Boolean!
+  bootstrapMode: Boolean!
+}
+
+type ConfirmAdminTransferResult {
+  ok: Boolean!
+  message: String!
+  oldAdminId: ID
+  newAdminId: ID
+}
+
+# User list item for User Management tab
+type UserListItem {
+  id: ID!
+  name: String!
+  email: String!
+  branch: String!
+  type: String!
+  userType: String!
+  status: String!
+  inactiveExpiresAt: String
+  lastLogin: String
+}
+
+type UserListPage {
+  users: [UserListItem!]!
+  totalCount: Int!
+}
+
+type PatientDeletionCandidate {
+  id: UUID!
+  name: String!
+  email: String!
+  branch: String!
+  type: String!
+  status: String!
+  updatedAt: String
+  eligibleAfter: String
+  eligible: Boolean!
+}
+
+type PatientDeletionCandidatePage {
+  patients: [PatientDeletionCandidate!]!
+  totalCount: Int!
+}
+
+# Linked user sessions (detail view when clicking a user row)
+type LinkedUserSession {
+  deviceId: String!
+  refreshToken: String!
+  status: String!
+  createdAt: String
+  updatedAt: String
+  ttlSeconds: Int!
+  expiresAt: String
+}
+
+type UserLoginAttempt {
+  timestamp: String!
+  ip: String!
+  device: String!
+  status: String!
+}
+
+type LinkedUserSessionPage {
+  sessions: [LinkedUserSession!]!
+  totalCount: Int!
+}
+
+# User session info for paginated global active-session listing
+type UserSession {
+  sessionId: String!
+  userId: ID!
+  email: String!
+  role: String!
+  device: String!
+  refreshToken: String!
+  ttlSeconds: Int!
+  numberOfSessions: Int!
+  status: String!
+  lastActive: Float
+  exp: Float!
+}
+
+# Paginated user sessions response
+type UserSessionPage {
+  sessions: [UserSession!]!
+  totalCount: Int!
+}
+
+# ─── INPUT TYPES ───────────────────────────────────────────────────────────────
+
+input CreateMedicalPersonnelInput {
+  userId: ID!
+  title: String!
+  role: String!                # Free-form role string (can match template label)
+  designation: Designation!
+  templateId: ID               # Optional: Apply permissions from this template
+}
+
+input UpdateMedicalPersonnelInput {
+  title: String
+  role: String                 # Optional: Update role string
+  designation: Designation
+  isActive: Boolean
+  templateId: ID               # Optional: Apply/update permissions from template
+}
+
+# Individual permission with optional branch (for extended mutation)
+input ExtendedPermissionInput {
+  key: String!          # Permission key (e.g., "emr_allow_view")
+  enabled: Boolean!     # true = grant, false = revoke (removes database record)
+  branch: Designation   # Optional: Manila, QuezonCity, or Both (uses defaultBranch if not specified)
+}
+
+# Standard permission input (no branch - uses umbrella branch)
+input StandardPermissionInput {
+  key: String!          # Permission key (e.g., "emr_allow_view")
+  enabled: Boolean!     # true = grant, false = revoke (removes database record)
+}
+
+# Module-level permission input (simplified toggle)
+input ModulePermissionInput {
+  moduleId: String!    # e.g. "appointments", "inventory"
+  enabled: Boolean!    # true = grant all module keys, false = revoke all module keys
+}
+
+# ─── TEMPLATE INPUT TYPES ──────────────────────────────────────────────────────
+
+# Input for creating a permission template
+input CreateTemplateInput {
+  label: String!                         # Template name/label
+  permissions: [ExtendedPermissionInput!]!  # Permissions with branch
+  defaultBranch: Designation             # Default branch if not specified per permission
+}
+
+# Input for updating a permission template
+input UpdateTemplateInput {
+  label: String                          # Optional: new template name/label
+  permissions: [ExtendedPermissionInput!] # Optional: updated permissions
+  defaultBranch: Designation             # Optional: default branch for permissions without branch
+}
+
+# Result type for template mutations
+type TemplateMutationResult {
+  ok: Boolean!
+  message: String!
+  template: PermissionTemplate
+}
+
+# ─── QUERIES ───────────────────────────────────────────────────────────────────
+
+type Query {
+  # Staff Accounts
+  listStaffAccounts(status: CredentialsStatus, location: Designation): StaffAccountList!
+  getStaffAccount(userId: ID!): StaffAccount
+
+  # User Search (for adding new staff — Employee identity only)
+  searchUsers(query: String!, mdsOnly: Boolean): UserSearchResultList!
+
+  # Medical Personnel
+  listMedicalPersonnel(role: String, designation: Designation, isActive: Boolean): MedicalPersonnelList!
+  getMedicalPersonnel(userId: ID!): MedicalPersonnel
+
+  # Permissions - Returns all permissions with enabled status AND branch designation
+  getStaffPermissions(userId: ID!): Permissions!
+
+  # Module Permissions - Returns module-level enabled status (derived from granular permissions)
+  getStaffModulePermissions(userId: ID!): ModulePermissionList!
+
+  # Session Management
+  listStaffSessions(userId: ID!): StaffSessionList!
+
+  # Refresh Token Analytics
+  countActiveRefreshTokens: Int!
+  countActiveUsersInDays(days: Int!): Int!
+  countMaxActiveUsersInHours(hours: Int!): Int!
+  listUsers(offset: Int!, limit: Int!, search: String, branch: String, type: String, status: String, includeUnverified: Boolean = false): UserListPage!
+  previewSemestralInactivation(branch: String, department: String, identities: [Identity!]): SemestralInactivationPreview!
+  searchPatientDeletionCandidates(search: String, offset: Int = 0, limit: Int = 50): PatientDeletionCandidatePage!
+  listUserSessions(userId: ID!, offset: Int = 0, limit: Int = 10): [LinkedUserSession!]!
+  listUserLoginAttempts(userId: ID!, offset: Int!, limit: Int!): [UserLoginAttempt!]!
+  listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
+
+  # Permission Templates
+  listPermissionTemplates: PermissionTemplateList!
+  getPermissionTemplate(templateId: ID!): PermissionTemplate
+}
+
+# ─── MUTATIONS ─────────────────────────────────────────────────────────────────
+
+type Mutation {
+  # Medical Personnel
+  createMedicalPersonnel(input: CreateMedicalPersonnelInput!): MedicalPersonnelMutationResult!
+  updateMedicalPersonnel(userId: ID!, input: UpdateMedicalPersonnelInput!): MedicalPersonnelMutationResult!
+  deleteMedicalPersonnel(userId: ID!, revertIdentity: Boolean): DeleteMedicalPersonnelResult!
+
+  # Permissions - Standard (umbrella branch for all permissions)
+  # Use this when all permissions should have the same branch designation.
+  # The 'branch' parameter is applied to ALL permissions being set.
+  # Example: setStaffPermissionsStandard(userId: "1", permissions: [{key: "emr_allow_view", value: true}], branch: Manila)
+  setStaffPermissionsStandard(userId: ID!, permissions: [StandardPermissionInput!]!, branch: Designation!): MutationResult!
+
+  # Permissions - Extended (independent branch per permission)
+  # Use this when each permission needs its own branch designation.
+  # If a permission doesn't specify a branch, 'defaultBranch' is used (defaults to 'Both').
+  # Example: setStaffPermissionsExtended(userId: "1", permissions: [{key: "emr_allow_view", enabled: true, branch: Manila}, {key: "profile_allow_view", enabled: true, branch: QuezonCity}])
+  setStaffPermissionsExtended(userId: ID!, permissions: [ExtendedPermissionInput!]!, defaultBranch: Designation): MutationResult!
+
+  # Module Permissions - Set permissions at the module level (simplified toggle)
+  # Expands module toggles into granular permission keys using union logic.
+  # The 'branch' parameter is applied to ALL underlying permissions.
+  setStaffModulePermissions(userId: ID!, modules: [ModulePermissionInput!]!, branch: Designation!): MutationResult!
+
+  # Staff Account - Combined update for role and/or account status
+  # Branch is auto-detected from MedicalPersonnel.designation (defaults to 'Both').
+  # Status: Active = set is_active true; Suspended = set is_active false.
+  # Role: If provided, updates MedicalPersonnel.role and applies matching template permissions.
+  # Admin accounts cannot have their role changed (use Admin Transfer instead).
+  updateStaffAccount(userId: ID!, status: AccountStatus, role: String, templateId: ID, designation: Designation): StaffAccountMutationResult!
+
+  # Session Management
+  rotateStaffAnchor(userId: ID!): RotateAnchorResult!
+  revokeUserSession(userId: ID!, deviceId: String!): MutationResult!
+  setUserSessionRevoked(userId: ID!, deviceId: String!, revoked: Boolean!): MutationResult!
+  setAllUserSessionsRevoked(userId: ID!, revoked: Boolean!): MutationResult!
+
+  # Patient/User Account Controls
+  setUserAccountLocked(userId: ID!, locked: Boolean!): MutationResult!
+  setUserSuperior(userId: ID!): MutationResult!
+  setUserSuperiorStatus(userId: ID!, superior: Boolean!): MutationResult!
+  applySemestralInactivation(branch: String, department: String, identities: [Identity!]): MutationResult!
+  deletePatients(ids: [UUID!]!): MutationResult!
+
+  # Permission Templates
+  createPermissionTemplate(input: CreateTemplateInput!): TemplateMutationResult!
+  updatePermissionTemplate(templateId: ID!, input: UpdateTemplateInput!): TemplateMutationResult!
+  deletePermissionTemplate(templateId: ID!): MutationResult!
+
+  # Apply template to staff (copies template permissions to staff)
+  applyTemplateToStaff(userId: ID!, templateId: ID!): MutationResult!
+
+  # Admin Transfer - Initiate the transfer process (requires password re-authentication)
+  initiateAdminTransfer(newAdminUserId: ID!, password: String!): InitiateAdminTransferResult!
+
+  # Admin Transfer - Confirm with verification token
+  confirmAdminTransfer(verificationToken: String!): ConfirmAdminTransferResult!
+}

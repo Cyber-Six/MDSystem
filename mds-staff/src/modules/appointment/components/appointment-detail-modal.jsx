@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getPatientStatus, getPatientRecords, fetchRequirementFile } from '../staff-appointment-service';
+import { getPatientAppointmentSnapshot, fetchRequirementFile } from '../staff-appointment-service';
 
 /**
  * Appointment Detail Modal
@@ -58,12 +58,9 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
   const loadHistory = useCallback(async (pid) => {
     setHistoryLoading(true);
     try {
-      const [status, records] = await Promise.all([
-        getPatientStatus(pid),
-        getPatientRecords(pid, 0, 10),
-      ]);
-      setHistoryStatus(status);
-      setHistory(records || []);
+      const snapshot = await getPatientAppointmentSnapshot(pid, null, 0, 10);
+      setHistoryStatus(snapshot.status);
+      setHistory(snapshot.records || []);
     } catch {
       // non-critical — history panel stays empty
     } finally {

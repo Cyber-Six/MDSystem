@@ -5,6 +5,7 @@ const db = require('../../../config/db.js');
 const { connect } = require('../../../config/query.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
+const { checkCredentialsStatus } = require("../../../config/middleware/activeCredential.js");
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ const router = express.Router();
  * 
  * Also includes rejectedSubmissions array for audit trail
  */
-router.get('/requests', jwtProtect("patient"), async (req, res) => {
+router.get('/requests', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
     const patientId = req.user.id;
 
@@ -100,7 +101,7 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
  * - Selecting file + calling this API = submission (manual submit required from UI)
  * - Cannot submit if already Pending, Recorded, or no request exists
  */
-router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => {
+router.post('/requests/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   const client = await connect();
   let promotedFile = null;
   try {
@@ -307,7 +308,7 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
  * GET /documents/me
  * List all generated documents for the authenticated patient
  */
-router.get('/my', jwtProtect("patient"), async (req, res) => {
+router.get('/my', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
     const patientId = req.user.id;
 
@@ -347,7 +348,7 @@ router.get('/my', jwtProtect("patient"), async (req, res) => {
  * GET /documents/me/download/:documentId
  * Download a specific generated document as PDF for the authenticated patient
  */
-router.get('/my/download/:documentId', jwtProtect('patient'), async (req, res) => {
+router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
   try {
     const { documentId } = req.params;
     const patientId = req.user.id;
@@ -396,7 +397,7 @@ router.get('/my/download/:documentId', jwtProtect('patient'), async (req, res) =
  * GET /documents/me/:docType
  * List documents of a specific type for the authenticated patient
  */
-router.get('/my/:docType', jwtProtect('patient'), async (req, res) => {
+router.get('/my/:docType', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
   try {
     const { docType } = req.params;
     const patientId = req.user.id;

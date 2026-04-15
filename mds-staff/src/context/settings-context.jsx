@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { tokenService, axiosRequest } from '../packages-core-adapter';
+import { AVAILABLE_SOUNDS } from '../utils/notification-sound';
 
 // ── DB ↔ Frontend format converters ──────────────────────────────────────────
 // Converts between the flat localStorage shape and the nested API shape.
@@ -8,9 +9,14 @@ function toBackendPrefs(s) {
   return {
     appearance:   { themeMode: s.themeMode, fontSize: s.fontSize, compactSidebar: s.compactSidebar },
     notification: {
-      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume, soundByModule: s.soundByModule,
+      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume,
+      notificationSound: s.notificationSound,
+      soundByModule: s.soundByModule,
+      soundFileByModule: s.soundFileByModule,
       showBadges: s.showBadges, showBanners: s.showBanners, bannerErrorsOnly: s.bannerErrorsOnly,
       bannerCompact: s.bannerCompact, bannerAutoDismiss: s.bannerAutoDismiss, bannerDismissDelay: s.bannerDismissDelay,
+      channels: s.channels,
+      moduleChannels: s.moduleChannels,
     },
   };
 }
@@ -20,6 +26,20 @@ function mergeFromBackendPrefs(prefs) {
   const merged = sanitizeSettings(flat);
   if (prefs.notification?.soundByModule && typeof prefs.notification.soundByModule === 'object') {
     merged.soundByModule = { ...DEFAULT_SETTINGS.soundByModule, ...merged.soundByModule };
+  }
+  if (prefs.notification?.soundFileByModule && typeof prefs.notification.soundFileByModule === 'object') {
+    merged.soundFileByModule = { ...DEFAULT_SETTINGS.soundFileByModule, ...merged.soundFileByModule };
+  }
+  if (prefs.notification?.channels && typeof prefs.notification.channels === 'object') {
+    merged.channels = { ...DEFAULT_SETTINGS.channels, ...merged.channels };
+  }
+  if (prefs.notification?.moduleChannels && typeof prefs.notification.moduleChannels === 'object') {
+    merged.moduleChannels = { ...DEFAULT_SETTINGS.moduleChannels };
+    for (const key of NOTIFICATION_MODULE_KEYS) {
+      if (prefs.notification.moduleChannels[key] && typeof prefs.notification.moduleChannels[key] === 'object') {
+        merged.moduleChannels[key] = { ...DEFAULT_SETTINGS.channels, ...prefs.notification.moduleChannels[key] };
+      }
+    }
   }
   return merged;
 }
@@ -33,6 +53,50 @@ function isAuthenticated() {
   }
 }
 
+const MODULE_LABEL_TO_KEY = {
+  Appointments: 'appointments',
+  Requests: 'medicineRequests',
+  Inventory: 'inventory',
+  'Health Chat': 'healthChat',
+  General: 'general',
+};
+
+const NOTIFICATION_MODULE_KEYS = [
+  'appointments', 'healthChat', 'medicineRequests', 'documents',
+  'emr', 'inventory', 'roleManagement', 'general',
+];
+
+const MODULE_SOUND_FALLBACK = {
+  appointments: 'appointments.mp3',
+  medicineRequests: 'requests.mp3',
+  inventory: 'inventory.mp3',
+  healthChat: 'healthchat.mp3',
+  general: 'general.mp3',
+};
+
+// Build module defaults from AVAILABLE_SOUNDS so changing ids there (e.g.
+// appointments.mp3 -> ack.mp3) is automatically picked up by the frontend.
+const DEFAULT_SOUND_FILE_BY_MODULE = (() => {
+  const next = { ...MODULE_SOUND_FALLBACK };
+  AVAILABLE_SOUNDS.forEach((s) => {
+    const moduleKey = MODULE_LABEL_TO_KEY[s?.label];
+    if (moduleKey && typeof s?.id === 'string') {
+      next[moduleKey] = s.id;
+    }
+  });
+  return next;
+})();
+
+const AVAILABLE_SOUND_IDS = new Set(
+  AVAILABLE_SOUNDS
+    .map((s) => s?.id)
+    .filter((id) => typeof id === 'string'),
+);
+
+function isAllowedSoundId(id) {
+  return id === 'synthesis' || AVAILABLE_SOUND_IDS.has(id);
+}
+
 /**
  * Default settings for new users.
  * All flags are enabled by default to preserve existing behavior.
@@ -41,6 +105,10 @@ const DEFAULT_SETTINGS = {
   // ── Sound Settings ──
   soundEnabled: true,
   soundVolume: 1,
+  notificationSound: 'synthesis', // 'synthesis' | any id from AVAILABLE_SOUNDS
+  // Per-module defaults are generated from AVAILABLE_SOUNDS labels.
+  // Keep labels as: Appointments, Requests, Inventory, Health Chat, General.
+  soundFileByModule: DEFAULT_SOUND_FILE_BY_MODULE,
   soundByModule: {
     healthChat: true,
     appointments: true,
@@ -57,6 +125,23 @@ const DEFAULT_SETTINGS = {
   bannerAutoDismiss: true,
   bannerDismissDelay: 5,     // seconds
 
+  // ── Notification Channels ──
+  channels: {
+    web: true,            // Web/socket notifications — enabled by default
+    email: false,         // Always-send email — disabled by default
+    emailFallback: true,  // Email only when offline — enabled by default
+  },
+  moduleChannels: {
+    appointments:     { web: true, email: false, emailFallback: true },
+    healthChat:       { web: true, email: false, emailFallback: true },
+    medicineRequests: { web: true, email: false, emailFallback: true },
+    documents:        { web: true, email: false, emailFallback: true },
+    emr:              { web: true, email: false, emailFallback: true },
+    inventory:        { web: true, email: false, emailFallback: true },
+    roleManagement:   { web: true, email: false, emailFallback: true },
+    general:          { web: true, email: false, emailFallback: true },
+  },
+
   // ── Appearance ──
   themeMode: 'system',       // 'light' | 'dark' | 'system'
   fontSize: 'default',       // 'small' | 'default' | 'large'
@@ -66,6 +151,8 @@ const DEFAULT_SETTINGS = {
 };
 
 const SETTINGS_STORAGE_PREFIX = 'staff_settings_';
+const THEME_SWITCHING_CLASS = 'theme-switching';
+const THEME_SWITCH_ANIMATION_MS = 260;
 
 // SECURITY: Only allow alphanumeric, underscore, and hyphen in userId to prevent
 // key injection / namespace pollution in localStorage.
@@ -107,6 +194,9 @@ const BOOL_SETTINGS_KEYS = [
   'bannerCompact', 'bannerAutoDismiss', 'compactSidebar',
 ];
 const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
+const SOUND_FILE_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundFileByModule);
+// SECURITY: valid sound id — alphanumeric + dot/hyphen/underscore, max 64 chars.
+const VALID_SOUND_ID = /^[a-zA-Z0-9_\-.]{1,64}$/;
 
 /**
  * Strictly validate and sanitize a parsed settings object against known schema.
@@ -114,7 +204,17 @@ const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
  * SECURITY: Prevents XSS-planted localStorage values from poisoning app state.
  */
 function sanitizeSettings(parsed) {
-  const safe = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  const safe = {
+    ...DEFAULT_SETTINGS,
+    soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
+    soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
+    channels: { ...DEFAULT_SETTINGS.channels },
+    moduleChannels: {},
+  };
+  // Initialise moduleChannels from defaults
+  for (const key of NOTIFICATION_MODULE_KEYS) {
+    safe.moduleChannels[key] = { ...DEFAULT_SETTINGS.channels };
+  }
 
   // Boolean keys
   BOOL_SETTINGS_KEYS.forEach((key) => {
@@ -140,6 +240,49 @@ function sanitizeSettings(parsed) {
     });
   }
 
+  // soundFileByModule — validate each value against sound-id pattern
+  if (parsed.soundFileByModule && typeof parsed.soundFileByModule === 'object') {
+    SOUND_FILE_MODULE_KEYS.forEach((k) => {
+      const v = parsed.soundFileByModule[k];
+      if (typeof v === 'string' && VALID_SOUND_ID.test(v) && isAllowedSoundId(v)) {
+        safe.soundFileByModule[k] = v;
+      }
+    });
+  }
+
+  // notificationSound — SECURITY: only allow safe filenames or 'synthesis'
+  if (
+    typeof parsed.notificationSound === 'string'
+    && VALID_SOUND_ID.test(parsed.notificationSound)
+    && isAllowedSoundId(parsed.notificationSound)
+  ) {
+    safe.notificationSound = parsed.notificationSound;
+  }
+
+  // channels — global notification channel preferences
+  safe.channels = { ...DEFAULT_SETTINGS.channels };
+  if (parsed.channels && typeof parsed.channels === 'object') {
+    if (typeof parsed.channels.web === 'boolean')           safe.channels.web = parsed.channels.web;
+    if (typeof parsed.channels.email === 'boolean')         safe.channels.email = parsed.channels.email;
+    if (typeof parsed.channels.emailFallback === 'boolean') safe.channels.emailFallback = parsed.channels.emailFallback;
+  }
+
+  // moduleChannels — per-module notification channel overrides
+  safe.moduleChannels = {};
+  for (const key of NOTIFICATION_MODULE_KEYS) {
+    safe.moduleChannels[key] = { ...DEFAULT_SETTINGS.channels };
+  }
+  if (parsed.moduleChannels && typeof parsed.moduleChannels === 'object') {
+    for (const key of NOTIFICATION_MODULE_KEYS) {
+      if (parsed.moduleChannels[key] && typeof parsed.moduleChannels[key] === 'object') {
+        const mc = parsed.moduleChannels[key];
+        if (typeof mc.web === 'boolean')           safe.moduleChannels[key].web = mc.web;
+        if (typeof mc.email === 'boolean')         safe.moduleChannels[key].email = mc.email;
+        if (typeof mc.emailFallback === 'boolean') safe.moduleChannels[key].emailFallback = mc.emailFallback;
+      }
+    }
+  }
+
   return safe;
 }
 
@@ -156,7 +299,7 @@ function loadSettings(userId) {
   } catch {
     // corrupted data — fall through to defaults
   }
-  return { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  return sanitizeSettings({});
 }
 
 /**
@@ -180,8 +323,17 @@ const SettingsContext = createContext(null);
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => loadSettings());
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => (
+    typeof window !== 'undefined'
+      && window.matchMedia('(prefers-color-scheme: dark)').matches
+  ));
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
+  const resolvedTheme = settings.themeMode === 'system'
+    ? (systemPrefersDark ? 'dark' : 'light')
+    : settings.themeMode;
+  const isDarkMode = resolvedTheme === 'dark';
 
   // Track which key we last loaded so we can detect user switches.
   const currentKeyRef = useRef(getUserSettingsKey());
@@ -251,23 +403,43 @@ export function SettingsProvider({ children }) {
     }
   }, [settings.fontSize]);
 
-  // Apply theme mode to <html>
+  // Track system appearance so resolved theme updates immediately when in 'system' mode.
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (event) => setSystemPrefersDark(event.matches);
+
+    setSystemPrefersDark(mediaQuery.matches);
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
+
+    mediaQuery.addListener(handler);
+    return () => mediaQuery.removeListener(handler);
+  }, []);
+
+  // Apply resolved theme atomically to avoid per-component transition lag.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
     const root = document.documentElement;
-    const applyTheme = (mode) => {
-      if (mode === 'system') {
-        root.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
-      } else {
-        root.classList.toggle('dark', mode === 'dark');
-      }
+    let cleanupTimer = 0;
+
+    root.classList.add(THEME_SWITCHING_CLASS);
+    root.classList.toggle('dark', isDarkMode);
+
+    cleanupTimer = window.setTimeout(() => {
+      root.classList.remove(THEME_SWITCHING_CLASS);
+    }, THEME_SWITCH_ANIMATION_MS);
+
+    return () => {
+      if (cleanupTimer) window.clearTimeout(cleanupTimer);
+      root.classList.remove(THEME_SWITCHING_CLASS);
     };
-    applyTheme(settings.themeMode);
-    // Keep in sync when system preference changes and mode is 'system'
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => { if (settings.themeMode === 'system') applyTheme('system'); };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [settings.themeMode]);
+  }, [isDarkMode]);
 
   const updateSettings = useCallback((next) => {
     const updated = typeof next === 'function' ? next(settingsRef.current) : next;
@@ -292,6 +464,8 @@ export function SettingsProvider({ children }) {
     settings,
     updateSettings,
     isModuleSoundEnabled,
+    resolvedTheme,
+    isDarkMode,
     DEFAULT_SETTINGS,
   };
 

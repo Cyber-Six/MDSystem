@@ -29,6 +29,33 @@ const EXPORT_META = {
   'appointments-by-category': { label: 'Appointments by Category',    xAxis: 'Category',      yAxis: 'Count',   chartType: 'pie' },
   'appointments-by-status':   { label: 'Appointments by Status',      xAxis: 'Status',        yAxis: 'Count',   chartType: 'doughnut' },
   'appointments-by-session':  { label: 'Appointments by Session',     xAxis: 'Session',       yAxis: 'Count',   chartType: 'pie' },
+  'appointments-accommodated-trends': { label: 'Appointments Accommodated Trends', xAxis: 'Period', yAxis: 'Count', chartType: 'line', hasSeries: true },
+
+  // EMR / General / Inventory
+  'female-reproductive-health': { label: 'Female Reproductive Health', xAxis: 'Metric', yAxis: 'Count', chartType: 'doughnut' },
+  'lifestyle-statistics':       { label: 'Lifestyle Statistics',       xAxis: 'Metric', yAxis: 'Value', chartType: 'bar', hasSeries: true },
+  'oral-findings-percentages':  { label: 'Oral Finding Percentages',   xAxis: 'Finding', yAxis: 'Percentage', chartType: 'bar' },
+  'vital-signs-box-plot':       { label: 'Vital Signs Box Plot',       xAxis: 'Vital', yAxis: 'Median', chartType: 'bar' },
+  'patient-credential-status':  { label: 'Patient Credential Status',  xAxis: 'Status', yAxis: 'Patients', chartType: 'pie' },
+  'patient-population-by-branch': { label: 'Patient Population by Branch', xAxis: 'Branch', yAxis: 'Patients', chartType: 'bar' },
+  'most-consumed-medicine':     { label: 'Most Consumed Medicine',     xAxis: 'Medicine', yAxis: 'Units', chartType: 'bar' },
+  'most-consumed-supply':       { label: 'Most Consumed Supply',       xAxis: 'Supply', yAxis: 'Units', chartType: 'bar' },
+  'inventory-consumption-trends': { label: 'Inventory Consumption Trends', xAxis: 'Period', yAxis: 'Units', chartType: 'line', hasSeries: true },
+  'inventory-report-summary':   { label: 'Inventory Report Summary',   xAxis: 'Metric', yAxis: 'Value', chartType: 'bar' },
+
+  // Demographics
+  'patients-by-sex':              { label: 'Patients by Sex',                xAxis: 'Sex',             yAxis: 'Patients', chartType: 'bar' },
+  'consultations-by-sex':         { label: 'Consultations by Sex',           xAxis: 'Sex',             yAxis: 'Count',    chartType: 'bar' },
+  'top-diagnoses-by-sex':         { label: 'Top Diagnoses by Sex',           xAxis: 'Diagnosis',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'patients-by-age-group':        { label: 'Patients by Age Group',          xAxis: 'Age Group',       yAxis: 'Patients', chartType: 'bar' },
+  'consultations-by-age-group':   { label: 'Consultations by Age Group',     xAxis: 'Age Group',       yAxis: 'Count',    chartType: 'bar' },
+  'bmi-by-age-group':             { label: 'Average BMI by Age Group',       xAxis: 'Age Group',       yAxis: 'Avg BMI',  chartType: 'bar' },
+  'diagnoses-by-age-group':       { label: 'Diagnoses by Age Group',         xAxis: 'Age Group',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'consultations-by-department':  { label: 'Consultations by Department',    xAxis: 'Department',      yAxis: 'Count',    chartType: 'bar' },
+  'consultations-by-program':     { label: 'Consultations by Program',       xAxis: 'Program',         yAxis: 'Count',    chartType: 'bar' },
+  'lifestyle-risks-by-department':{ label: 'Lifestyle Risks by Department',  xAxis: 'Department',      yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'sex-age-group-matrix':         { label: 'Sex × Age Group Matrix',         xAxis: 'Age Group',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'diagnoses-sex-age':            { label: 'Diagnoses by Sex & Age',         xAxis: 'Diagnosis',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
 };
 
 /**
@@ -37,7 +64,7 @@ const EXPORT_META = {
 const EXPORT_PRESETS = {
   'full-report': {
     label: 'Full Analytics Report',
-    description: 'All 15 analytics metrics combined',
+    description: 'All analytics metrics combined',
     dataTypes: Object.keys(EXPORT_META),
   },
   'consultations': {
@@ -52,13 +79,13 @@ const EXPORT_PRESETS = {
   },
   'vitals': {
     label: 'Vital Signs Report',
-    description: 'BMI and blood pressure trend analysis',
-    dataTypes: ['bmi-trends', 'blood-pressure-trends'],
+    description: 'BMI, blood pressure, and vital-sign distribution analysis',
+    dataTypes: ['bmi-trends', 'blood-pressure-trends', 'vital-signs-box-plot'],
   },
   'appointments': {
     label: 'Appointments Report',
-    description: 'Appointment category, status, and session data',
-    dataTypes: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session'],
+    description: 'Appointment category, status, session, and accommodated trend data',
+    dataTypes: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session', 'appointments-accommodated-trends'],
   },
   'clinical': {
     label: 'Clinical Data Report',
@@ -67,8 +94,33 @@ const EXPORT_PRESETS = {
   },
   'lifestyle': {
     label: 'Lifestyle & Allergies Report',
-    description: 'Lifestyle risk factors and allergy data',
-    dataTypes: ['lifestyle-risks', 'allergy-by-type', 'allergy-by-severity'],
+    description: 'Lifestyle prevalence, statistics, and allergy data',
+    dataTypes: ['lifestyle-risks', 'lifestyle-statistics', 'allergy-by-type', 'allergy-by-severity'],
+  },
+  'emr': {
+    label: 'EMR Report',
+    description: 'Female reproductive, oral findings, lifestyle statistics, and vital-sign distribution analytics',
+    dataTypes: ['female-reproductive-health', 'lifestyle-statistics', 'oral-findings-percentages', 'vital-signs-box-plot'],
+  },
+  'general': {
+    label: 'General Population Report',
+    description: 'Credential status and branch population comparison',
+    dataTypes: ['patient-credential-status', 'patient-population-by-branch'],
+  },
+  'inventory': {
+    label: 'Inventory Report',
+    description: 'Consumption trends, top consumed items, and stock summary',
+    dataTypes: ['most-consumed-medicine', 'most-consumed-supply', 'inventory-consumption-trends', 'inventory-report-summary'],
+  },
+  'demographics': {
+    label: 'Demographics Report',
+    description: 'Sex, age group, department, and program distribution analytics',
+    dataTypes: [
+      'patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex',
+      'patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group',
+      'consultations-by-department', 'consultations-by-program', 'lifestyle-risks-by-department',
+      'sex-age-group-matrix', 'diagnoses-sex-age',
+    ],
   },
 };
 
@@ -165,11 +217,22 @@ function generateCSV(data, meta) {
     if (!meta_ || !result.labels) continue;
 
     lines.push(`# ${meta_.label}`);
-    lines.push(`${csvEscape(meta_.xAxis)},${csvEscape(meta_.yAxis)}`);
 
-    for (let i = 0; i < result.labels.length; i++) {
-      lines.push(`${csvEscape(result.labels[i])},${result.values[i] || 0}`);
+    if (meta_.hasSeries && result.series?.length) {
+      // Multi-series: one column per series
+      const seriesNames = result.series.map(s => csvEscape(s.name));
+      lines.push(`${csvEscape(meta_.xAxis)},${seriesNames.join(',')}`);
+      for (let i = 0; i < result.labels.length; i++) {
+        const vals = result.series.map(s => s.values[i] || 0).join(',');
+        lines.push(`${csvEscape(result.labels[i])},${vals}`);
+      }
+    } else {
+      lines.push(`${csvEscape(meta_.xAxis)},${csvEscape(meta_.yAxis)}`);
+      for (let i = 0; i < result.labels.length; i++) {
+        lines.push(`${csvEscape(result.labels[i])},${result.values[i] || 0}`);
+      }
     }
+
     lines.push(`Total,${result.total || 0}`);
     lines.push('');
   }
@@ -276,13 +339,21 @@ async function generateExcel(data, meta) {
 
     // Table header
     const hRow = sheet.getRow(4);
-    hRow.values = [meta_.xAxis, meta_.yAxis];
+    if (meta_.hasSeries && result.series?.length) {
+      hRow.values = [meta_.xAxis, ...result.series.map(s => s.name)];
+    } else {
+      hRow.values = [meta_.xAxis, meta_.yAxis];
+    }
     hRow.eachCell(cell => Object.assign(cell, headerStyle));
 
     // Data rows
     for (let i = 0; i < result.labels.length; i++) {
       const r = sheet.getRow(5 + i);
-      r.values = [result.labels[i], result.values[i] || 0];
+      if (meta_.hasSeries && result.series?.length) {
+        r.values = [result.labels[i], ...result.series.map(s => s.values[i] || 0)];
+      } else {
+        r.values = [result.labels[i], result.values[i] || 0];
+      }
       r.eachCell(cell => { cell.border = cellBorder; });
     }
 
@@ -294,9 +365,10 @@ async function generateExcel(data, meta) {
       cell.border = cellBorder;
     });
 
+    const colCount = (meta_.hasSeries && result.series?.length) ? 1 + result.series.length : 2;
     sheet.columns = [
       { width: 35 },
-      { width: 18 },
+      ...Array(colCount - 1).fill({ width: 18 }),
     ];
   }
 
@@ -317,7 +389,13 @@ async function generateExcel(data, meta) {
  */
 async function generatePDF(data, meta) {
   const sections = [];
-  const isTrendType = (dt) => ['consultation-trends', 'bmi-trends', 'blood-pressure-trends'].includes(dt);
+  const isTrendType = (dt) => [
+    'consultation-trends',
+    'bmi-trends',
+    'blood-pressure-trends',
+    'inventory-consumption-trends',
+    'appointments-accommodated-trends',
+  ].includes(dt);
 
   for (const [dataType, result] of Object.entries(data)) {
     const exportMeta = EXPORT_META[dataType];
@@ -403,7 +481,13 @@ async function generateSingleMetricPDF(dataType, result, meta) {
   const exportMeta = EXPORT_META[dataType];
   if (!exportMeta) throw new Error(`Unknown export type: ${dataType}`);
 
-  const isTrend = ['consultation-trends', 'bmi-trends', 'blood-pressure-trends'].includes(dataType);
+  const isTrend = [
+    'consultation-trends',
+    'bmi-trends',
+    'blood-pressure-trends',
+    'inventory-consumption-trends',
+    'appointments-accommodated-trends',
+  ].includes(dataType);
   const isBP = dataType === 'blood-pressure-trends';
   const groupBy = result.groupBy || meta.groupBy || 'monthly';
   const groupLabel = groupBy.charAt(0).toUpperCase() + groupBy.slice(1);

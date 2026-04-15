@@ -103,8 +103,20 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   const bookedSlots = useMemo(() => {
     const checkDayAvailable = (dayOfWeek, dateStr) => {
       const dayName = dayIndexToName[dayOfWeek];
+      const customDate = customDateMap[dateStr];
+
+      // Exclude custom dates block the day (even if in weekly schedule)
+      if (customDate?.type === 'Exclude') return false;
+
+      // Weekly schedule match
       if (currentSchedulePerWeek.includes(dayName)) return true;
-      if (customDateSet.has(dateStr)) return true;
+
+      // Include custom dates explicitly open
+      if (customDate?.type === 'Include') return true;
+
+      // Legacy: custom dates without a type default to Include
+      if (customDate && !customDate.type) return true;
+
       return false;
     };
 
@@ -123,13 +135,18 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       return false;
     };
 
+    const checkIsExcluded = (dateStr) => {
+      const customDate = customDateMap[dateStr];
+      return customDate?.type === 'Exclude';
+    };
+
     const data = {};
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(year, month, d).getDay();
 
       if (!checkDayAvailable(dayOfWeek, dateStr)) {
-        data[dateStr] = { isClosed: true };
+        data[dateStr] = { isClosed: true, isExcluded: checkIsExcluded(dateStr) };
         continue;
       }
 
@@ -174,6 +191,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   const getDayStatus = (dateStr) => {
     const info = bookedSlots[dateStr];
     if (!info) return 'none';
+    if (info.isClosed && info.isExcluded) return 'excluded';
     if (info.isClosed) return 'closed';
     if (info.isSuspended) return 'suspended';
     if (info.event) return 'event';
@@ -204,6 +222,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     event: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/30',
     custom: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30',
     disabled: 'bg-neutral-100 dark:bg-neutral-700/40 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700/60',
+    excluded: 'bg-rose-50 dark:bg-rose-900/20 text-rose-400 dark:text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/30',
     closed: 'bg-neutral-50 dark:bg-neutral-700/50 text-neutral-400 dark:text-neutral-500',
     none: 'bg-transparent text-neutral-300 dark:text-neutral-600',
   };
@@ -216,6 +235,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     event: 'bg-sky-500',
     custom: 'bg-violet-500',
     disabled: 'bg-neutral-400',
+    excluded: 'bg-rose-400',
     closed: '',
     none: '',
   };

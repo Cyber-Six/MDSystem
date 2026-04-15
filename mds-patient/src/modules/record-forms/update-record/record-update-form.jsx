@@ -5,22 +5,29 @@ import MedicalHistoryStep from './medical-history-step';
 import DentalHistoryStep from './dental-history-step';
 import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
-import { updatePersonalInfo } from './personal-info-service';
 import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
 import ValidationWarningModal from '../../../components/modals/validation-warning-modal';
 
-const RecordUpdateForm = () => {
+const RecordUpdateForm = ({
+  forceRecordType = null,
+  skipPersonalStep = false,
+  skipPersonalSubmit = false,
+  hideRecordChoice = false,
+  onSubmissionSuccess = null,
+  isInactiveMode = false,
+}) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
+  const effectiveRecordType = forceRecordType || recordType;
+  const shouldShowRecordChoice = !effectiveRecordType && !hideRecordChoice;
   const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
 
   // Revision tracking
   const [revisionStatus, setRevisionStatus] = useState(null); // { id, status, notes }
   const [showRevisionBanner, setShowRevisionBanner] = useState(false);
-  const [revisionLoading, setRevisionLoading] = useState(true);
   const [revisionPrefillData, setRevisionPrefillData] = useState(null); // Pre-fetched form data for revision
 
   // Success modal tracking
@@ -62,8 +69,6 @@ const RecordUpdateForm = () => {
         }
       } catch (error) {
         console.error('[RecordUpdateForm] Error checking revision status:', error.message);
-      } finally {
-        setRevisionLoading(false);
       }
     };
 
@@ -92,15 +97,15 @@ const RecordUpdateForm = () => {
 
   // Dynamically build steps based on recordType
   const getSteps = () => {
-    if (!recordType) return ['Personal Info'];
+    if (!effectiveRecordType) return skipPersonalStep ? [] : ['Personal Info'];
     
-    const baseSteps = ['Personal Info'];
+    const baseSteps = skipPersonalStep ? [] : ['Personal Info'];
     
-    if (recordType === 'medical' || recordType === 'both') {
+    if (effectiveRecordType === 'medical' || effectiveRecordType === 'both') {
       baseSteps.push('Medical History');
     }
     
-    if (recordType === 'dental' || recordType === 'both') {
+    if (effectiveRecordType === 'dental' || effectiveRecordType === 'both') {
       baseSteps.push('Dental History');
     }
     
@@ -114,6 +119,21 @@ const RecordUpdateForm = () => {
   const validateCurrentStep = () => {
     const stepName = steps[currentStep];
     const errors = [];
+
+    if (stepName === 'Personal Info') {
+      if (!formData.programId) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select a program before proceeding.' });
+      }
+      if (!formData.schoolYear) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your student category before proceeding.' });
+      }
+      if (!formData.emergencyContact1Name || !formData.emergencyContact1Relationship || !formData.emergencyContact1Number) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please complete all required Primary Emergency Contact fields.' });
+      }
+      if (!formData.emergencyContact2Name || !formData.emergencyContact2Relationship || !formData.emergencyContact2Number) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please complete all required Secondary Emergency Contact fields.' });
+      }
+    }
 
     if (stepName === 'Medical History') {
       // Lifestyle habits are always required
@@ -133,36 +153,44 @@ const RecordUpdateForm = () => {
           }
         }
       }
-      // If user said yes to hospitalizations, check sub-fields
+      // If user said yes to hospitalizations, check at least one condition is checked with an admission date
       if (formData.hasHospitalizations === 'yes') {
-        if (!formData.admissionDate) {
-          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Admission Date for your hospitalization.' });
-        }
-      }
-      // If user said yes to surgeries, check sub-fields
-      if (formData.hasSurgeries === 'yes') {
-        if (!formData.operationDate) {
-          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Operation Date for your surgery.' });
-        }
-      }
-      // If user said yes to medications, check at least one medication entry
-      if (formData.hasMedications === 'yes') {
-        const meds = formData.currentMedications || [];
-        if (meds.length === 0) {
-          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please add at least one medication.' });
-        } else {
-          for (const med of meds) {
-            if (!med.medicineId) {
-              errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the medication name/selection for all added medications.' });
-              break;
-            }
+        const conditions = formData.hospitalizationConditions || {};
+        const dates = formData.hospitalizationDates || {};
+        const checkedIds = Object.entries(conditions).filter(([, v]) => v).map(([k]) => k);
+        if (checkedIds.length > 0) {
+          const missingDate = checkedIds.some(id => !dates[id]?.admissionDate);
+          if (missingDate) {
+            errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Admission Date for all selected hospitalizations.' });
           }
+        }
+      }
+      // If user said yes to surgeries, check at least one procedure is checked with an operation date
+      if (formData.hasSurgeries === 'yes') {
+        const conditions = formData.operationConditions || {};
+        const dates = formData.operationDates || {};
+        const checkedIds = Object.entries(conditions).filter(([, v]) => v).map(([k]) => k);
+        if (checkedIds.length > 0) {
+          const missingDate = checkedIds.some(id => !dates[id]);
+          if (missingDate) {
+            errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Operation Date for all selected surgeries.' });
+          }
+        }
+      }
+      // If user said yes to medications, check at least one medication is selected
+      if (formData.hasMedications === 'yes') {
+        const selected = formData.selectedMedications || {};
+        const hasAny = Object.values(selected).some(v => v);
+        if (!hasAny) {
+          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please select at least one medication.' });
         }
       }
     }
 
     if (stepName === 'Dental History') {
-      const stepIndexForDental = recordType === 'both' ? 2 : 1;
+      const stepIndexForDental = (effectiveRecordType === 'both' && !skipPersonalStep)
+        ? 2
+        : 1;
       
       // Dentist visit info is required
       if (formData.seenByDentist === undefined || formData.seenByDentist === null) {
@@ -238,7 +266,7 @@ const RecordUpdateForm = () => {
         setPendingWarning({ scope: existing.scope });
         return; // stop here — wait for patient to confirm or cancel
       }
-    } catch (_) {
+    } catch {
       // If we can't check, just proceed — ensureNoActiveTicket will handle it
     }
     await doSubmit();
@@ -299,19 +327,22 @@ const RecordUpdateForm = () => {
 
   const doSubmit = async () => {
     setIsSubmitting(true);
+    const resolvedRecordType = effectiveRecordType || 'both';
     
     try {
       console.log('[RecordUpdateForm] ==================== STARTING SUBMISSION ====================');
-      console.log('[RecordUpdateForm] Record Type:', recordType);
+      console.log('[RecordUpdateForm] Record Type:', resolvedRecordType);
       console.log('[RecordUpdateForm] Form Data:', formData);
 
       // Submit all records (this creates ticket FIRST, then personal info, then medical/dental)
       console.log('[RecordUpdateForm] Submitting all records...');
-      const results = await submitUpdateRecord(formData, recordType);
+      const results = await submitUpdateRecord(formData, resolvedRecordType, {
+        skipPersonalUpdate: Boolean(skipPersonalSubmit || skipPersonalStep),
+      });
       console.log('[RecordUpdateForm] ✅ Records submitted successfully:', results);
       
       // Show success modal!
-      const recordTypeLabel = recordType === 'both' ? 'Medical and Dental' : recordType === 'medical' ? 'Medical' : 'Dental';
+      const recordTypeLabel = resolvedRecordType === 'both' ? 'Medical and Dental' : resolvedRecordType === 'medical' ? 'Medical' : 'Dental';
       setSuccessMessage(recordTypeLabel);
       setShowSuccessModal(true);
       
@@ -327,6 +358,7 @@ const RecordUpdateForm = () => {
   };
 
   const handleSuccessModalClose = () => {
+    const submittedRecordType = effectiveRecordType || recordType || null;
     setShowSuccessModal(false);
     // Reset form and redirect to choice page (preserve sex for OB-GYN gating)
     setFormData(prev => ({ sex: prev.sex }));
@@ -334,6 +366,10 @@ const RecordUpdateForm = () => {
     setRecordType(null);
     setRevisionStatus(null);
     setShowRevisionBanner(false);
+
+    if (typeof onSubmissionSuccess === 'function') {
+      onSubmissionSuccess({ recordType: submittedRecordType });
+    }
   };
 
   const renderStep = () => {
@@ -351,7 +387,7 @@ const RecordUpdateForm = () => {
           <ReviewStep 
             formData={formData} 
             onEdit={handleEdit} 
-            recordType={recordType}
+            recordType={effectiveRecordType}
             isRevision={revisionStatus?.status === 'Revision'}
             revisionNotes={revisionStatus?.notes || null}
           />
@@ -362,12 +398,15 @@ const RecordUpdateForm = () => {
   };
 
   const handleChoiceSelect = (choice) => {
+    if (hideRecordChoice) return;
+    if (forceRecordType && choice !== forceRecordType) return; // only allow the forced type
     setRecordType(choice);
     setCurrentStep(0);
     setFormData(prev => ({ sex: prev.sex }));
   };
 
   const handleChangeType = () => {
+    if (forceRecordType || hideRecordChoice) return;
     setRecordType(null);
     setCurrentStep(0);
     setFormData(prev => ({ sex: prev.sex }));
@@ -488,7 +527,7 @@ const RecordUpdateForm = () => {
                 <div className="text-sm font-semibold text-error-900 dark:text-error-200 mb-2">
                   🔍 Staff Notes:
                 </div>
-                <p className="text-sm text-error-800 dark:text-error-300 whitespace-pre-wrap">
+                <p className="text-sm text-error-800 dark:text-error-300 whitespace-pre-wrap mb-0">
                   {revisionStatus.notes}
                 </p>
               </div>
@@ -539,8 +578,10 @@ const RecordUpdateForm = () => {
                       return merged;
                     });
                   }
-                  
-                  setRecordType(recordTypeForRevision);
+
+                  if (!forceRecordType) {
+                    setRecordType(recordTypeForRevision);
+                  }
                   setCurrentStep(0);
                 }}
                 className="px-5 py-2.5 rounded-lg font-semibold bg-primary-500 hover:bg-primary-600 text-white transition-colors"
@@ -592,10 +633,21 @@ const RecordUpdateForm = () => {
         </div>
       )}
 
-      {!recordType ? (
-        <RecordChoicePage onSelect={handleChoiceSelect} />
+      {shouldShowRecordChoice ? (
+        <RecordChoicePage
+          onSelect={handleChoiceSelect}
+          disabledChoiceIds={forceRecordType === 'both' ? ['medical', 'dental'] : []}
+        />
       ) : (
         <div className="max-w-5xl mx-auto px-4">
+          {isInactiveMode && (
+            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
+              <p className="text-sm font-semibold text-yellow-800">Inactive Account Recovery Mode</p>
+              <p className="text-xs text-yellow-700 mt-1">
+                Complete your school information, emergency contacts, and medical and dental updates for staff re-checking and approval.
+              </p>
+            </div>
+          )}
           {/* Header Section */}
           <div className="rounded-2xl p-6 mb-6 bg-primary-500">
             <div className="flex items-center gap-4">
@@ -606,13 +658,13 @@ const RecordUpdateForm = () => {
               </div>
               <div className="flex-1">
                 <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>
-                  Update {recordType === 'medical' ? 'Medical Record' : recordType === 'dental' ? 'Dental Record' : 'Medical & Dental Record'}
+                  Update {effectiveRecordType === 'medical' ? 'Medical Record' : effectiveRecordType === 'dental' ? 'Dental Record' : 'Medical & Dental Record'}
                 </h1>
                 <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>
                   Keep your health information up-to-date
                 </p>
               </div>
-              {recordType && (
+              {effectiveRecordType && !forceRecordType && !hideRecordChoice && (
                 <button
                   onClick={handleChangeType}
                   className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm font-medium transition-colors"

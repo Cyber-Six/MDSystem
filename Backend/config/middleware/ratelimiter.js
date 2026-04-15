@@ -53,7 +53,7 @@ function roleBasedIpRateLimiter(route = "r") {
 
 function portalBasedIpRateLimiter(route = "r") {
   return function (req, res, next) {
-    const portal = detectPortalFromSubdomain(req);
+    const portal = detectPortalFromSubdomain(req).toLowerCase();
     logger.debug("Applying portalBasedIpRateLimiter middleware");
 
     const profileName = portal === "patient" ? "PatientAuthentication" : "staffAuthentication";

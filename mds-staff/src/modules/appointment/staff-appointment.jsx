@@ -4,6 +4,7 @@ import AvailabilityManager from './components/availability-manager';
 import AppointmentDetailModal from './components/appointment-detail-modal';
 import PatientLookup from './components/patient-lookup';
 import { useStaffNotifications } from '../notification/notification-context';
+import { readPersistedViewState, writePersistedViewState } from '../../utils/persistent-view-state';
 import {
   STATUS,
   SESSION,
@@ -26,6 +27,10 @@ import {
   updateDateIdentity,
 } from './staff-appointment-service';
 
+const APPOINTMENT_SECTION_STORAGE_KEY = 'mds_staff_appointment_active_section';
+const APPOINTMENT_SECTION_KEYS = ['queue', 'availability', 'lookup'];
+const isAppointmentSection = (value) => APPOINTMENT_SECTION_KEYS.includes(value);
+
 /**
  * Staff Appointment Page (v2 — clean UI)
  *
@@ -46,13 +51,20 @@ import {
  */
 const StaffAppointment = () => {
   const { subscribe } = useStaffNotifications();
-  const [activeSection, setActiveSection] = useState('queue');
+  const [activeSection, setActiveSection] = useState(() => (
+    readPersistedViewState(APPOINTMENT_SECTION_STORAGE_KEY, 'queue', isAppointmentSection)
+  ));
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [socketToast, setSocketToast] = useState(null);
   const queueRef = useRef(null);
   const toastTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!isAppointmentSection(activeSection)) return;
+    writePersistedViewState(APPOINTMENT_SECTION_STORAGE_KEY, activeSection);
+  }, [activeSection]);
 
   const showToast = useCallback((toast) => {
     setSocketToast(toast);
@@ -209,7 +221,7 @@ const StaffAppointment = () => {
       {/* Page Header + Section Switcher */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-secondary-800 dark:text-white leading-none m-0">Appointments</h1>
+          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Appointments</h1>
           <p className="text-xs text-secondary-500 dark:text-neutral-400">Manage appointment queue and slot availability</p>
         </div>
         <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">

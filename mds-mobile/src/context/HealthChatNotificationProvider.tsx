@@ -2,7 +2,7 @@
  * HealthChatNotificationProvider
  *
  * Maintains a persistent socket connection at the app level to listen for
- * health chat events.
+ * patient notification events across modules.
  *
  * Behaviour by app state:
  * - App ACTIVE + user on HealthChat → do nothing (user sees messages live)
@@ -12,8 +12,10 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { getApiBaseUrl, TokenStorage, refreshAccessToken, getNavigationRef, axiosRequest } from '../core';
+import { useSettings } from './SettingsContext';
 import {
   requestNotificationPermissions,
   setupNotificationChannel,
@@ -21,6 +23,7 @@ import {
   onNotificationResponse,
   getExpoPushToken,
   registerPushToken,
+  HEALTH_CHAT_CHANNEL_ID,
 } from '../services/notification-service';
 
 interface SocketService {
@@ -54,30 +57,123 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
   const [badgeCount, setBadgeCount] = useState(0);
   const socketRef = useRef<SocketService | null>(null);
   const appStateRef = useRef(AppState.currentState);
+  const { settings } = useSettings();
+  const settingsRef = useRef(settings);
+  const lastHandledNotificationIdRef = useRef<string | null>(null);
+  settingsRef.current = settings;
 
   const clearBadge = () => setBadgeCount(0);
   const incrementBadge = () => setBadgeCount((n) => n + 1);
 
+  const getDeepestRouteName = (state: any): string | null => {
+    if (!state?.routes?.length) return null;
+
+    let route = state.routes[state.index ?? 0];
+    while (route?.state?.routes?.length) {
+      route = route.state.routes[route.state.index ?? 0];
+    }
+
+    return route?.name ?? null;
+  };
+
+  const navigateToMainTab = (screen: string, params?: Record<string, unknown>): boolean => {
+    const nav = getNavigationRef();
+    if (!nav) return false;
+    nav.navigate('MainTabs', { screen, params });
+    return true;
+  };
+
+  const navigateToMoreStackScreen = (screen: string): boolean => {
+    return navigateToMainTab('More', { screen });
+  };
+
+  const navigateWhenReady = (navigateFn: () => boolean) => {
+    if (navigateFn()) return;
+    // Cold-start notifications can arrive before nav is fully ready.
+    setTimeout(() => {
+      navigateFn();
+    }, 350);
+  };
+
   const isOnHealthChat = () => {
-    return getNavigationRef()?.getCurrentRoute()?.name === 'HealthChat';
+    const nav = getNavigationRef();
+    if (!nav) return false;
+
+    const rootState = nav.getRootState?.();
+    const currentName = getDeepestRouteName(rootState) ?? nav.getCurrentRoute?.()?.name;
+    return currentName === 'HealthChat';
+  };
+
+  const navigateFromNotificationData = (rawData: any) => {
+    if (!rawData) return;
+
+    const type = String(rawData?.type ?? '').toLowerCase();
+    const event = String(rawData?.event ?? '').toLowerCase();
+
+    if (type === 'health-chat' || event.startsWith('healthchat:')) {
+      navigateWhenReady(() => navigateToMainTab('HealthChat'));
+      return;
+    }
+
+    if (type === 'appointment' || event.startsWith('appointment:')) {
+      navigateWhenReady(() => navigateToMainTab('Appointments'));
+      return;
+    }
+
+    if (type === 'medicine' || event.startsWith('medicine:')) {
+      navigateWhenReady(() => navigateToMainTab('Medicine'));
+      return;
+    }
+
+    if (type === 'document' || event.startsWith('document:')) {
+      navigateWhenReady(() => navigateToMoreStackScreen('MyDocuments'));
+      return;
+    }
+
+    if (type === 'record' || type === 'emr' || event.startsWith('updateticket')) {
+      navigateWhenReady(() => navigateToMainTab('UpdateRecord'));
+      return;
+    }
+
+    if (type === 'staff' || type === 'general' || event === 'staff:notification' || event === 'admin:notification') {
+      navigateWhenReady(() => navigateToMainTab('More'));
+    }
+  };
+
+  /**
+   * Check if web (push) channel is enabled for a given module.
+   * Uses the per-module override if set, otherwise falls back to the global channel.
+   */
+  const isModuleWebEnabled = (moduleKey: string): boolean => {
+    const s = settingsRef.current;
+    const mc = (s.moduleChannels as any)[moduleKey];
+    if (mc && typeof mc.web === 'boolean') return mc.web;
+    return s.channels.web;
   };
 
   /** Decides what to do when a notable socket event arrives.
+   * @param moduleKey - The notification module key (e.g. 'healthChat', 'appointments')
    * @param suppressOnHealthChat - Only suppress when user is on HealthChat (for chat-specific events).
    *   Set to false for appointment/medicine/record events that should always notify. */
   const handleEvent = async (
+    moduleKey: string,
     notifTitle: string,
     notifBody: string,
     notifData: Record<string, unknown>,
     suppressOnHealthChat = false,
   ) => {
+    // Respect user's notification channel preferences
+    if (!isModuleWebEnabled(moduleKey)) return;
+
     const isActive = appStateRef.current === 'active';
 
     if (isActive && suppressOnHealthChat && isOnHealthChat()) {
       return; // User already sees it live — only skip for health-chat events
     }
 
-    await showHealthChatNotification(notifTitle, notifBody, notifData);
+    if (settingsRef.current.showBanners) {
+      await showHealthChatNotification(notifTitle, notifBody, notifData);
+    }
 
     if (isActive) {
       incrementBadge();
@@ -102,17 +198,12 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
     const cleanup = onNotificationResponse((response) => {
       const data = response.notification.request.content.data;
       try {
-        const nav = getNavigationRef();
-        if (!nav) return;
-        if (data?.type === 'health-chat') {
-          nav.navigate('HealthChat');
-        } else if (data?.type === 'appointment') {
-          nav.navigate('Appointments');
-        } else if (data?.type === 'medicine') {
-          nav.navigate('Medicine');
-        } else if (data?.type === 'record' || data?.type === 'staff') {
-          nav.navigate('More');
+        const notificationId = String(response.notification.request.identifier ?? '');
+        if (notificationId && lastHandledNotificationIdRef.current === notificationId) {
+          return;
         }
+        lastHandledNotificationIdRef.current = notificationId || null;
+        navigateFromNotificationData(data);
       } catch {
         // Navigation may not be ready
       }
@@ -168,13 +259,14 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
             const body = msg.content_type === 'file'
               ? 'Sent an image'
               : (msg.content || 'New message');
-            await handleEvent('Health Chat', body, { type: 'health-chat', chatId: data.chatId }, true);
+            await handleEvent('healthChat', 'Health Chat', body, { type: 'health-chat', chatId: data.chatId }, true);
           }
         });
 
         // Listen for ticket approval
         socketService.on('healthchat:ticket-approved', async (data: any) => {
           await handleEvent(
+            'healthChat',
             'Health Chat Approved',
             'Your health chat request has been approved. A staff member is ready to assist you.',
             { type: 'health-chat', chatId: data?.chat?.id },
@@ -185,6 +277,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
         // Listen for ticket closed by staff
         socketService.on('healthchat:ticket-closed', async (data: any) => {
           await handleEvent(
+            'healthChat',
             'Health Chat Ended',
             'Your health chat session has been closed.',
             { type: 'health-chat', chatId: data?.chatId },
@@ -195,6 +288,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
         // Listen for ticket rejection
         socketService.on('healthchat:ticket-rejected', async (data: any) => {
           await handleEvent(
+            'healthChat',
             'Health Chat Declined',
             'Your health chat request was not approved. You may try again later.',
             { type: 'health-chat', chatId: data?.chat?.id },
@@ -210,11 +304,12 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
           const body = data?.notes
             ? `Your appointment has been ${verb}. Note: ${data.notes}`
             : `Your appointment has been ${verb}.`;
-          await handleEvent(`Appointment ${status}`, body, { type: 'appointment' });
+          await handleEvent('appointments', `Appointment ${status}`, body, { type: 'appointment' });
         });
 
         socketService.on('appointment:attendance-recorded', async () => {
           await handleEvent(
+            'appointments',
             'Attendance Recorded',
             'Your clinic visit has been recorded.',
             { type: 'appointment' },
@@ -225,6 +320,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:request:approved', async () => {
           await handleEvent(
+            'medicineRequests',
             'Medicine Request Approved',
             'Your medicine request has been approved.',
             { type: 'medicine' },
@@ -233,6 +329,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:request:rejected', async () => {
           await handleEvent(
+            'medicineRequests',
             'Medicine Request Declined',
             'Your medicine request was declined.',
             { type: 'medicine' },
@@ -241,6 +338,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:request:pending', async () => {
           await handleEvent(
+            'medicineRequests',
             'Medicine Request Received',
             'Your medicine request is being processed.',
             { type: 'medicine' },
@@ -249,6 +347,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:prescription:issued', async () => {
           await handleEvent(
+            'medicineRequests',
             'Prescription Ready',
             'A new prescription has been issued for you.',
             { type: 'medicine' },
@@ -260,7 +359,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
         socketService.on('updateTicket:statusChanged', async (data: any) => {
           const newStatus = data?.newStatus ?? 'Updated';
           const body = data?.message ?? `Your record update request has been ${newStatus.toLowerCase()}.`;
-          await handleEvent(`Record Update ${newStatus}`, body, { type: 'record' });
+          await handleEvent('emr', `Record Update ${newStatus}`, body, { type: 'record' });
         });
 
         // ── Staff announcements ─────────────────────────────────────────────
@@ -284,7 +383,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
           }
 
           if (body) {
-            await handleEvent(title, body, { type: 'staff' });
+            await handleEvent('general', title, body, { type: 'staff' });
           }
         });
 

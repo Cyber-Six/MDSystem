@@ -6,3 +6,4 @@ export { default as AnnouncementCarousel } from './components/announcement-carou
 export { default as AnnouncementModal } from './components/announcement-modal';
 
 export * from './announcement-service';
+export * from './timezoneUtils';

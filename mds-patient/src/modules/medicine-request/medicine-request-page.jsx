@@ -2,11 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { sendGraphQLRequest } from '../../utils/graphql-client';
 import { getMyPersonalEmail } from '../../services/emr-service';
 import { usePatientNotifications } from '../notification/notification-context';
+import { detectRoleFromHostname } from '@mdsystem/core/utils/role-detection';
+import { formatBatchDisplay } from '../../utils/batch-display-utils';
 import RequestNotificationModal from './components/request-notification-modal';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 
 const MedicineRequestPage = () => {
   const { subscribe } = usePatientNotifications();
+  const canViewBatchDetails = detectRoleFromHostname(window.location.hostname) === 'medical';
+
   // User info
   const [userEmail, setUserEmail] = useState('');
   const [emailPrefix, setEmailPrefix] = useState('');
@@ -53,6 +57,7 @@ const MedicineRequestPage = () => {
   // Data
   const [availableMedicines, setAvailableMedicines] = useState([]);
   const [groupedMedicines, setGroupedMedicines] = useState({});
+  const [allMedicinesForDisplay, setAllMedicinesForDisplay] = useState([]);
   const [requests, setRequests] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -99,6 +104,39 @@ const MedicineRequestPage = () => {
     fetchUserInfo();
   }, []);
 
+  // Fetch all medicines for display purposes (used for resolving history items)
+  useEffect(() => {
+    const fetchAllMedicinesForDisplay = async () => {
+      try {
+        const query = `
+          query GetAvailableMedicine($offset: Int, $limit: Int) {
+            getAvailableMedicine(offset: $offset, limit: $limit) {
+              id
+              item_name
+              category
+            }
+          }
+        `;
+        
+        const data = await sendGraphQLRequest(
+          query,
+          { offset: 0, limit: 500 },
+          { endpoint: '/medical-inventory/medicine-request/patient' }
+        );
+        
+        const medicines = data.getAvailableMedicine || [];
+        const dedupedMedicines = Array.from(
+          new Map(medicines.map((medicine) => [String(medicine.id), medicine])).values()
+        );
+        setAllMedicinesForDisplay(dedupedMedicines);
+      } catch (error) {
+        console.error('Error fetching medicines for display:', error);
+      }
+    };
+
+    fetchAllMedicinesForDisplay();
+  }, []);
+
   // Fetch available medicines on mount and when location changes
   useEffect(() => {
     // Only fetch if user location is determined
@@ -121,7 +159,6 @@ const MedicineRequestPage = () => {
           query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
             getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
               id
-              item_code
               item_name
               category
             }
@@ -135,12 +172,15 @@ const MedicineRequestPage = () => {
         );
         
         const medicines = data.getAvailableMedicine || [];
-        setAvailableMedicines(medicines);
+        const dedupedMedicines = Array.from(
+          new Map(medicines.map((medicine) => [String(medicine.id), medicine])).values()
+        );
+        setAvailableMedicines(dedupedMedicines);
         
-        // Group medicines by item_code
+        // Keep the grouped structure for existing selection/submission logic.
         const grouped = {};
-        medicines.forEach(medicine => {
-          const code = medicine.item_code;
+        dedupedMedicines.forEach(medicine => {
+          const code = String(medicine.id);
           if (!grouped[code]) {
             grouped[code] = {
               item_code: code,
@@ -503,6 +543,27 @@ const MedicineRequestPage = () => {
     return `${medicine.item_name}`;
   };
 
+  // Helper function to resolve medicine names from medicineId
+  const resolveMedicineNamesForRequest = (items) => {
+    if (!items || items.length === 0) return '—';
+    
+    const medicineNames = items
+      .map(item => {
+        // Try to find the medicine by ID in allMedicinesForDisplay
+        const medicine = allMedicinesForDisplay.find(m => String(m.id) === String(item.medicineId));
+        return medicine?.item_name || `Medicine #${item.medicineId}`;
+      })
+      .filter(name => name);
+    
+    if (medicineNames.length === 0) return `${items.length} item(s)`;
+    
+    // Join names with comma, or show count if too many
+    if (medicineNames.length > 2) {
+      return medicineNames.slice(0, 2).join(', ') + ` +${medicineNames.length - 2}`;
+    }
+    return medicineNames.join(', ');
+  };
+
   const formatDate = (dateValue) => {
     // Handle empty/null/undefined
     if (!dateValue && dateValue !== 0) return 'N/A';
@@ -644,7 +705,7 @@ const MedicineRequestPage = () => {
             {/* Error Message */}
             {errorMessage && (
               <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-800 dark:text-red-200">{errorMessage}</p>
+                <p className="text-sm text-red-800 dark:text-red-200 mb-0">{errorMessage}</p>
               </div>
             )}
 
@@ -740,9 +801,16 @@ const MedicineRequestPage = () => {
                       const isSelected = formData.items.some(item => item.itemCode === itemCode);
                       const selectedCount = formData.items.length;
                       const canSelect = isSelected || selectedCount < 2;
+                      const sortedBatches = canViewBatchDetails
+                        ? [...(medicineGroup.batches || [])].sort((a, b) => {
+                          const dateA = new Date(a.expiryDate || '2099-12-31').getTime();
+                          const dateB = new Date(b.expiryDate || '2099-12-31').getTime();
+                          return dateA - dateB;
+                        })
+                        : [];
                       
                       return (
-                        <div key={itemCode} className="space-y-2">
+                        <div key={itemCode} className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 space-y-2 hover:border-neutral-300 dark:hover:border-neutral-600 transition-colors">
                           <label className="flex items-start space-x-2 cursor-pointer">
                             <input
                               type="checkbox"
@@ -755,15 +823,41 @@ const MedicineRequestPage = () => {
                                   handleMedicineToggle(itemCode, medicineGroup);
                                 }
                               }}
-                              className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500 mt-1 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500 mt-0.5 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                             />
-                            <div className="text-sm text-neutral-700 dark:text-neutral-300">
-                              <div className="font-medium">{medicineGroup.item_name}</div>
+                            <div className="text-sm text-neutral-700 dark:text-neutral-300 flex-1">
+                              <div className="font-semibold text-neutral-800 dark:text-white">{medicineGroup.item_name}</div>
                               {!canSelect && !isSelected && (
-                                <div className="text-xs text-red-600 dark:text-red-400">Maximum 2 medicines reached</div>
+                                <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">Maximum 2 medicines reached</div>
                               )}
                             </div>
                           </label>
+
+                          {canViewBatchDetails && (
+                            <div className="text-xs text-neutral-500 dark:text-neutral-400 space-y-0.5 border-t border-neutral-200 dark:border-neutral-700 pt-2 mt-2">
+                              <div className="font-medium text-[10px] uppercase tracking-wider text-neutral-600 dark:text-neutral-500">Available Batches:</div>
+                              {sortedBatches.length > 0 ? (
+                                <ul className="space-y-0.5">
+                                  {sortedBatches.map((batch, idx) => (
+                                    <li key={batch.id} className="text-[11px] text-neutral-600 dark:text-neutral-400 flex items-start gap-1.5">
+                                      <span className="flex-shrink-0">
+                                        {idx === 0 && sortedBatches.length > 1 ? (
+                                          <span title="First to be dispensed (FEFO)" className="px-1 py-0.5 bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300 rounded text-[9px] font-bold leading-none">FEFO</span>
+                                        ) : idx === 0 && sortedBatches.length === 1 ? (
+                                          <span className="text-neutral-400 dark:text-neutral-600">•</span>
+                                        ) : (
+                                          <span className="text-neutral-400 dark:text-neutral-600">•</span>
+                                        )}
+                                      </span>
+                                      <span className="flex-1">{formatBatchDisplay(batch, { compact: true, showUnit: false })}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className="text-neutral-400 dark:text-neutral-600 text-[10px]">No batches available</div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -898,7 +992,7 @@ const MedicineRequestPage = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">
-                        {request.items?.length || 0} item(s)
+                        {resolveMedicineNamesForRequest(request.items)}
                       </td>
                       <td className="py-3 px-4">
                         {request.notes && (request.status === 'Approved' || request.status === 'Rejected') ? (

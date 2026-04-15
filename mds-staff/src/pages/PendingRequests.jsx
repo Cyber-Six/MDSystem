@@ -312,8 +312,6 @@ const PendingRequests = () => {
               <option value="all">All Types</option>
               <option value="Initial Record">Initial Record</option>
               <option value="Record Update">Record Update</option>
-              <option value="Appointment">Appointment</option>
-              <option value="Medicine Request">Medicine Request</option>
             </select>
 
             {/* Status Filter */}

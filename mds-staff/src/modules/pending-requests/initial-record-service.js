@@ -54,6 +54,15 @@ export const TICKET_STATUS = {
 
 // ── Queries ──────────────────────────────────────────────────────────────────
 
+// Module-level request cache for getStatusUpdateTickets.
+// Deduplicates simultaneous calls so that mounting multiple list components
+// at once (e.g. "All Types" view) only sends one network request per unique
+// parameter set.  Cached responses expire after 30 s; in-flight promises are
+// shared so two components with identical params share a single HTTP request.
+const _ticketCache   = new Map(); // cacheKey → { data, ts }
+const _ticketFlight  = new Map(); // cacheKey → Promise
+const _TICKET_TTL_MS = 30_000;   // 30 s
+
 /**
  * Fetch the latest update ticket for each patient matching the given statuses
  * and branch.
@@ -70,7 +79,16 @@ export const TICKET_STATUS = {
  * @returns {Promise<Array<{id, patientId, status}>>}
  */
 export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit = 20) => {
-  const data = await sendGraphQL(
+  const cacheKey = `${[...statuses].sort().join('|')}_${branch}_${offset}_${limit}`;
+
+  // Return a still-fresh cached result immediately.
+  const cached = _ticketCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts <= _TICKET_TTL_MS) return cached.data;
+
+  // If an identical request is already in-flight, share its promise.
+  if (_ticketFlight.has(cacheKey)) return _ticketFlight.get(cacheKey);
+
+  const request = sendGraphQL(
     `query GetStatusUpdateTickets(
        $statuses: [UpdateStatus!]!
        $branch: DesignationBranch!
@@ -94,8 +112,20 @@ export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit
        }
      }`,
     { statuses, branch, offset, limit },
-  );
-  return data.getStatusUpdateTickets ?? [];
+  )
+    .then((data) => {
+      const result = data.getStatusUpdateTickets ?? [];
+      _ticketCache.set(cacheKey, { data: result, ts: Date.now() });
+      _ticketFlight.delete(cacheKey);
+      return result;
+    })
+    .catch((err) => {
+      _ticketFlight.delete(cacheKey);
+      throw err;
+    });
+
+  _ticketFlight.set(cacheKey, request);
+  return request;
 };
 
 /**

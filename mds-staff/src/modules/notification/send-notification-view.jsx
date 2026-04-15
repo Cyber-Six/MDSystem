@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { notifyStaffs, notifyPatients, fetchAllStaff } from './notification-service';
 import { searchPatients, formatPatientName } from '../../services/patient-search-service';
 import { usePermissions } from '../../context/permissions-context';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
 
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_TITLE_LENGTH = 80;
-const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_DEBOUNCE_MS = 500;
 
 /**
  * Send Notification View — multicast support
@@ -24,6 +25,7 @@ const SEARCH_DEBOUNCE_MS = 300;
  */
 const SendNotificationView = () => {
   const { isAdmin } = usePermissions();
+  const { profile } = useStaffProfile();
 
   // ── Recipient type (staff | patients) ──────────────────────────────────────
   const [recipientType, setRecipientType] = useState(isAdmin ? 'staff' : 'patients');
@@ -109,7 +111,7 @@ const SendNotificationView = () => {
     setIsSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const results = await searchPatients(searchTerm, 20);
+        const results = await searchPatients(searchTerm, 20, profile?.branch || null, null, false);
         setSearchResults(results);
       } catch {
         setSearchResults([]);
@@ -119,7 +121,7 @@ const SendNotificationView = () => {
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(debounceRef.current);
-  }, [searchTerm, recipientType]);
+  }, [searchTerm, recipientType, profile?.branch]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 

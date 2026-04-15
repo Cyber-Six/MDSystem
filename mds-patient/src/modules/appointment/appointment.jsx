@@ -59,6 +59,7 @@ const PatientAppointment = () => {
 
   // Step 3 — purpose
   const [purpose, setPurpose] = useState('');
+  const [showPurposeRequiredError, setShowPurposeRequiredError] = useState(false);
 
   // Submission
   const [submitting, setSubmitting] = useState(false);
@@ -147,6 +148,7 @@ const PatientAppointment = () => {
     setSelectedDate('');
     setSelectedSession('');
     setAvailability(null);
+    setShowPurposeRequiredError(false);
 
     if (scheduler.containsCustomDates) {
       try {
@@ -216,6 +218,16 @@ const PatientAppointment = () => {
   };
 
   const handleSubmit = async () => {
+    const purposeRequired = selectedScheduler?.purposeRequired ?? false;
+    const normalizedPurpose = (purpose || '').trim();
+
+    if (purposeRequired && !normalizedPurpose) {
+      setShowPurposeRequiredError(true);
+      setError('Purpose / reason for visit is required for this appointment type.');
+      return;
+    }
+
+    setShowPurposeRequiredError(false);
     setSubmitting(true);
     setError(null);
     try {
@@ -223,11 +235,19 @@ const PatientAppointment = () => {
         scheduleRequirementId: r.id,
         filename: uploadedFiles[r.id]?.fileId || '',
       }));
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqPayload, purpose);
+      await submitAppointment(
+        selectedScheduler.id,
+        selectedDate,
+        selectedSession,
+        reqPayload,
+        normalizedPurpose,
+        purposeRequired
+      );
       setSuccessMessage('Your appointment has been submitted successfully!');
       await loadStatus();
       setStep(0);
       setPurpose('');
+      setShowPurposeRequiredError(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -250,7 +270,17 @@ const PatientAppointment = () => {
   };
 
   const handleBack = () => {
+    if (step === 3) {
+      setShowPurposeRequiredError(false);
+    }
     if (step > 0) setStep(step - 1);
+  };
+
+  const handlePurposeChange = (nextValue) => {
+    setPurpose(nextValue);
+    if (showPurposeRequiredError && nextValue.trim()) {
+      setShowPurposeRequiredError(false);
+    }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -428,7 +458,8 @@ const PatientAppointment = () => {
               requirements={requirements}
               uploadedFiles={uploadedFiles}
               purpose={purpose}
-              onPurposeChange={setPurpose}
+              onPurposeChange={handlePurposeChange}
+              showPurposeError={showPurposeRequiredError}
               submitting={submitting}
               onSubmit={handleSubmit}
               onBack={handleBack}

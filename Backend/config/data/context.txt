@@ -1,0 +1,1 @@
+{"level":"error","message":"Patient account deletion failed. Transaction rolled back: FOR UPDATE cannot be applied to the nullable side of an outer join","timestamp":"2026-04-15T12:08:56.613Z"}

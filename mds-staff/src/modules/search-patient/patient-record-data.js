@@ -6,6 +6,8 @@ export const GQL_FULL_RECORD = `
       profile_type program year department role
       credentials_status
       latest_ticket_id latest_status latest_scope latest_updated_at
+      medical_status appointment_status medicine_status healthchat_status document_status
+      access_denied
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
     getUserMedicalHistory(userId: $userId, limit: 1) {
@@ -61,14 +63,14 @@ export const GQL_FULL_RECORD = `
       id notes created_at
       operations { id procedureId operationDate notes }
     }
-    allergenCatalogs: getAllergenCatalogs { id allergen type }
-    conditionCatalogs: getDomainCatalogs(domain: MedicalCondition) { id name }
-    immunizationCatalogs: getDomainCatalogs(domain: Immunization) { id name }
-    operationCatalogs: getDomainCatalogs(domain: Operation) { id name }
-    hospitalizationCatalogs: getDomainCatalogs(domain: Hospitalization) { id name }
-    dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure) { id name }
-    medicationCatalogs: getDomainCatalogs(domain: Medication) { id name }
-    oralApplianceCatalogs: getOralApplianceCatalogs { id name }
+    allergenCatalogs: getAllergenCatalogs(limit: 1000) { id allergen type }
+    conditionCatalogs: getDomainCatalogs(domain: MedicalCondition, limit: 1000) { id name }
+    immunizationCatalogs: getDomainCatalogs(domain: Immunization, limit: 1000) { id name }
+    operationCatalogs: getDomainCatalogs(domain: Operation, limit: 1000) { id name }
+    hospitalizationCatalogs: getDomainCatalogs(domain: Hospitalization, limit: 1000) { id name }
+    dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure, limit: 1000) { id name }
+    medicationCatalogs: getDomainCatalogs(domain: Medication, limit: 1000) { id name }
+    oralApplianceCatalogs: getOralApplianceCatalogs(limit: 1000) { id name }
     getUserDentalPhotoRecord(userId: $userId, limit: 50) {
       id upperTeeth lowerTeeth isValid created_at status
     }

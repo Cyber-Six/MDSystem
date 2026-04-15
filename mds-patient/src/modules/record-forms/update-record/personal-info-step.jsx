@@ -1,36 +1,58 @@
 import React from 'react';
 import { Input, Select } from './form-elements';
+import { searchStudentProgram } from '@core/services/emr-service';
 
 const PersonalInfoStep = ({ formData, onChange }) => {
-  const programs = [
-    { value: 'BS Architecture', label: 'BS Architecture' },
-    { value: 'BS Chemical Engineering', label: 'BS Chemical Engineering' },
-    { value: 'BS Civil Engineering', label: 'BS Civil Engineering' },
-    { value: 'BS Computer Engineering', label: 'BS Computer Engineering' },
-    { value: 'BS Electrical Engineering', label: 'BS Electrical Engineering' },
-    { value: 'BS Electronics Engineering', label: 'BS Electronics Engineering' },
-    { value: 'BS Industrial Engineering', label: 'BS Industrial Engineering' },
-    { value: 'BS Mechanical Engineering', label: 'BS Mechanical Engineering' },
-    { value: 'BS Environmental and Sanitary Engineering', label: 'BS Environmental and Sanitary Engineering' },
-    { value: 'BS Computer Science', label: 'BS Computer Science' },
-    { value: 'BS Data Science and Analytics', label: 'BS Data Science and Analytics' },
-    { value: 'BS Entertainment and Multimedia Computing', label: 'BS Entertainment and Multimedia Computing' },
-    { value: 'BS Information Technology', label: 'BS Information Technology' },
-    { value: 'BS Information Systems', label: 'BS Information Systems' },
-    { value: 'BS Accountancy', label: 'BS Accountancy' },
-    { value: 'BS Accounting Information Systems', label: 'BS Accounting Information Systems' },
-    { value: 'BSBA Financial Management', label: 'BSBA Financial Management' },
-    { value: 'BSBA Human Resource Management', label: 'BSBA Human Resource Management' },
-    { value: 'BSBA Logistics and Supply Chain Management', label: 'BSBA Logistics and Supply Chain Management' },
-    { value: 'BSBA Marketing Management', label: 'BSBA Marketing Management' },
-    { value: 'Bachelor of Arts in English Language', label: 'Bachelor of Arts in English Language' },
-    { value: 'Bachelor of Arts in Political Science', label: 'Bachelor of Arts in Political Science' },
-    { value: 'Bachelor of Secondary Education Major in English', label: 'Bachelor of Secondary Education Major in English' },
-    { value: 'Bachelor of Secondary Education Major in Mathematics', label: 'Bachelor of Secondary Education Major in Mathematics' },
-    { value: 'Bachelor of Secondary Education Major in Sciences', label: 'Bachelor of Secondary Education Major in Sciences' },
-    { value: 'Bachelor of Special Needs Education', label: 'Bachelor of Special Needs Education' },
-    { value: 'Teaching Certificate Program', label: 'Teaching Certificate Program' }
-  ];
+  // Program search state
+  const [programInput, setProgramInput] = React.useState(formData.program || '');
+  const [programSuggestions, setProgramSuggestions] = React.useState([]);
+  const [programSearching, setProgramSearching] = React.useState(false);
+  const [programFocused, setProgramFocused] = React.useState(false);
+  const programWrapperRef = React.useRef(null);
+  const programDebounceRef = React.useRef(null);
+
+  // Sync programInput display when formData.program changes (e.g. revision prefill)
+  React.useEffect(() => {
+    setProgramInput(formData.program || '');
+  }, [formData.program]);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (programWrapperRef.current && !programWrapperRef.current.contains(e.target)) {
+        setProgramFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleProgramInputChange = (value) => {
+    setProgramInput(value);
+    if (formData.programId) {
+      onChange({ ...formData, program: '', programId: '' });
+    }
+    if (programDebounceRef.current) clearTimeout(programDebounceRef.current);
+    if (!value.trim()) { setProgramSuggestions([]); return; }
+    programDebounceRef.current = setTimeout(async () => {
+      setProgramSearching(true);
+      try {
+        const results = await searchStudentProgram(value.trim());
+        setProgramSuggestions(results);
+      } catch {
+        setProgramSuggestions([]);
+      } finally {
+        setProgramSearching(false);
+      }
+    }, 300);
+  };
+
+  const selectProgram = (item) => {
+    setProgramInput(item.label);
+    setProgramFocused(false);
+    setProgramSuggestions([]);
+    onChange({ ...formData, program: item.label, programId: item.id });
+  };
 
   const handleInputChange = (field, value) => {
     onChange({ ...formData, [field]: value });
@@ -75,13 +97,47 @@ const PersonalInfoStep = ({ formData, onChange }) => {
         </div>
 
         <div className="mb-6">
-          <Select
-            label="Program"
-            required
-            options={programs}
-            value={formData.program || ''}
-            onChange={(e) => handleInputChange('program', e.target.value)}
-          />
+          <label className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
+            Program <span className="text-error-500 ml-1">*</span>
+          </label>
+          <div ref={programWrapperRef} className="relative">
+            <input
+              type="text"
+              className={`w-full px-3 py-2 text-sm border rounded-lg transition-all duration-200
+                focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                placeholder:text-neutral-400
+                dark:bg-neutral-800 dark:border-neutral-600 dark:text-white dark:placeholder:text-neutral-500
+                ${formData.programId ? 'bg-primary-50 dark:bg-primary-500/10 border-primary-300' : 'bg-white border-neutral-300'}`}
+              placeholder="Type to search for your program..."
+              value={programInput}
+              autoComplete="off"
+              onFocus={() => setProgramFocused(true)}
+              onChange={(e) => handleProgramInputChange(e.target.value)}
+            />
+            {formData.programId && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-primary-600 font-medium pointer-events-none">✓</span>
+            )}
+            {programFocused && programInput.trim() && (
+              <div className="absolute z-10 mt-1 w-full border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-md max-h-60 overflow-y-auto">
+                {programSearching && (
+                  <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                )}
+                {!programSearching && programSuggestions.length === 0 && (
+                  <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">No programs found.</div>
+                )}
+                {programSuggestions.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                    onMouseDown={(e) => { e.preventDefault(); selectProgram(item); }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <Select
@@ -144,6 +200,14 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : undefined}
             />
           </div>
+          <div className="mt-2">
+            <Input
+              label="Address"
+              placeholder="Contact's home address"
+              value={formData.emergencyContact1Address || ''}
+              onChange={(e) => handleInputChange('emergencyContact1Address', e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Secondary Emergency Contact */}
@@ -173,6 +237,14 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               value={formData.emergencyContact2Number || ''}
               onChange={(e) => handleInputChange('emergencyContact2Number', handlePhone('ec2', e.target.value))}
               error={phoneWarnings.ec2 ? 'Contact number cannot exceed 11 digits.' : undefined}
+            />
+          </div>
+          <div className="mt-2">
+            <Input
+              label="Address"
+              placeholder="Contact's home address"
+              value={formData.emergencyContact2Address || ''}
+              onChange={(e) => handleInputChange('emergencyContact2Address', e.target.value)}
             />
           </div>
         </div>

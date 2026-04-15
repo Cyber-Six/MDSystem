@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getPatientStatus, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
+import { getPatientAppointmentSnapshot, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
 import { searchPatients, formatPatientName, getProfileLabel } from '../../../services/patient-search-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import AppointmentDetailModal from './appointment-detail-modal';
 
 // ── Change this value to adjust the search debounce delay ───────────────────
-const LOOKUP_DEBOUNCE_MS = 1000;
+const LOOKUP_DEBOUNCE_MS = 500;
 
 const PAGE_SIZE = 10;
 
@@ -21,7 +22,8 @@ const STATUS_COLORS = {
 };
 
 const PatientLookup = () => {
-  // ── Search state ───────────────────────────────────────────────────────────
+  // ── Search state ─────────────────────────────────────────────
+  const { profile } = useStaffProfile();
   const [searchInput, setSearchInput]       = useState('');
   const [searchResults, setSearchResults]   = useState([]);
   const [isSearching, setIsSearching]       = useState(false);
@@ -32,6 +34,7 @@ const PatientLookup = () => {
   // ── Selected patient & appointment records state ───────────────────────────
   const [selectedPatient, setSelectedPatient] = useState(null);   // full patient object
   const [resolvedUserId,  setResolvedUserId]  = useState(null);
+  const [resolvedPatientIdentifier, setResolvedPatientIdentifier] = useState(null);
   const [currentStatus,   setCurrentStatus]   = useState(null);
   const [records,         setRecords]         = useState([]);
   const [offset,          setOffset]          = useState(0);
@@ -58,7 +61,7 @@ const PatientLookup = () => {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed);
+        const data = await searchPatients(trimmed, 15, profile?.branch || null, null, false);
         setSearchResults(data);
       } catch (err) {
         setSearchError(err.message || 'Search failed');
@@ -72,8 +75,8 @@ const PatientLookup = () => {
   }, [searchInput]);
 
   // ── Fetch appointment records for a resolved userId ────────────────────────
-  const fetchRecords = useCallback(async (internalId, pageOffset, append = false) => {
-    const data = await getPatientRecords(internalId, pageOffset, PAGE_SIZE);
+  const fetchRecords = useCallback(async (internalId, pageOffset, append = false, patientIdentifier = null) => {
+    const data = await getPatientRecords(internalId, pageOffset, PAGE_SIZE, patientIdentifier);
     if (append) {
       setRecords((prev) => [...prev, ...(data || [])]);
     } else {
@@ -87,6 +90,7 @@ const PatientLookup = () => {
   const handleSelectPatient = async (patient) => {
     setSelectedPatient(patient);
     setResolvedUserId(null);
+    setResolvedPatientIdentifier(null);
     setCurrentStatus(null);
     setRecords([]);
     setOffset(0);
@@ -99,13 +103,21 @@ const PatientLookup = () => {
     setSearchFired(false);
 
     try {
-      const internalId = String(patient.id);
-      const [status] = await Promise.all([
-        getPatientStatus(internalId),
-        fetchRecords(internalId, 0),
-      ]);
-      setCurrentStatus(status);
+      const internalId = patient?.id !== undefined && patient?.id !== null ? String(patient.id) : null;
+      const lookupIdentifier = patient?.identifier ? String(patient.identifier) : null;
+      const lookupUserId = internalId;
+
+      if (!lookupUserId && !lookupIdentifier) {
+        throw new Error('Unable to identify selected patient.');
+      }
+
+      const snapshot = await getPatientAppointmentSnapshot(lookupUserId, lookupIdentifier, 0, PAGE_SIZE);
+      setCurrentStatus(snapshot.status);
+      setRecords(snapshot.records);
+      setHasMore(snapshot.records.length === PAGE_SIZE);
+      setOffset(0);
       setResolvedUserId(internalId);
+      setResolvedPatientIdentifier(lookupIdentifier);
     } catch (err) {
       setRecordsError(err.message || 'Failed to load appointment records.');
     } finally {
@@ -117,6 +129,7 @@ const PatientLookup = () => {
   const handleClearPatient = () => {
     setSelectedPatient(null);
     setResolvedUserId(null);
+    setResolvedPatientIdentifier(null);
     setCurrentStatus(null);
     setRecords([]);
     setOffset(0);
@@ -126,12 +139,14 @@ const PatientLookup = () => {
   };
 
   const refreshRecords = useCallback(async () => {
-    if (!resolvedUserId) return;
-    const data = await getPatientRecords(resolvedUserId, 0, PAGE_SIZE);
-    setRecords(data || []);
+    if (!resolvedUserId && !resolvedPatientIdentifier) return;
+    const lookupUserId = resolvedUserId || null;
+    const snapshot = await getPatientAppointmentSnapshot(lookupUserId, resolvedPatientIdentifier, 0, PAGE_SIZE);
+    setRecords(snapshot.records);
     setOffset(0);
-    setHasMore((data?.length ?? 0) === PAGE_SIZE);
-  }, [resolvedUserId]);
+    setHasMore(snapshot.records.length === PAGE_SIZE);
+    setCurrentStatus(snapshot.status);
+  }, [resolvedUserId, resolvedPatientIdentifier]);
 
   const handleModalConfirm = async (patientId, slotId) => {
     await respondToAppointment(patientId, STATUS.SCHEDULED, undefined, slotId);
@@ -161,7 +176,8 @@ const PatientLookup = () => {
     const nextOffset = offset + PAGE_SIZE;
     setLoadingMore(true);
     try {
-      await fetchRecords(resolvedUserId, nextOffset, true);
+      const lookupUserId = resolvedUserId || null;
+      await fetchRecords(lookupUserId, nextOffset, true, resolvedPatientIdentifier);
       setOffset(nextOffset);
     } catch (err) {
       setRecordsError(err.message);
@@ -303,7 +319,7 @@ const PatientLookup = () => {
         </div>
       )}
 
-      {selectedPatient && !loading && resolvedUserId && (
+      {selectedPatient && !loading && (resolvedUserId || resolvedPatientIdentifier) && (
         <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
           {/* Patient summary header */}
           <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
@@ -379,7 +395,7 @@ const PatientLookup = () => {
           </div>
 
           {/* Load more */}
-          {hasMore && resolvedUserId && (
+          {hasMore && (resolvedUserId || resolvedPatientIdentifier) && (
             <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 text-center">
               <button
                 onClick={handleLoadMore}

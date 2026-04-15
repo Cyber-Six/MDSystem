@@ -1,24 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { fetchAvailableMedicine, issuePrescription } from '../../prescription-service';
-import { getDisplayLocation } from '../../medical-inventory-service';
-
-// Helper to format date for display (remove time portion)
-const formatDateDisplay = (dateValue) => {
-  if (!dateValue) return 'N/A';
-  try {
-    const date = new Date(dateValue);
-    if (isNaN(date.getTime())) return 'N/A';
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch (err) {
-    return 'N/A';
-  }
-};
+import { getDisplayLocation, formatDateDisplay, formatBatchDisplay } from '../../medical-inventory-service';
 
 /**
  * Dispense Medicine Modal — issue medicine batch(es) to a patient.
  * Creates MedicineEntity assignments and transaction record with full audit trail.
+ * @param {string|number} patientId - Patient ID
+ * @param {string} patientName - Patient name for display
+ * @param {Array} allowedLocations - List of locations the user has access to
+ * @param {Function} onClose - Close modal handler
+ * @param {Function} onSuccess - Success handler
  */
-const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) => {
+const DispenseMedicineModal = ({ patientId, patientName, allowedLocations = [], onClose, onSuccess }) => {
   const [medicines, setMedicines] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
   const [location, setLocation] = useState('All');
@@ -27,14 +20,24 @@ const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) =
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [filterLocation, setFilterLocation] = useState('All');
+  const [filterLocation, setFilterLocation] = useState(() => allowedLocations[0] || 'All');
 
-  // Fetch available medicines on mount
+  // Fetch available medicines when filterLocation changes
   useEffect(() => {
     const loadMedicines = async () => {
       try {
         setLoading(true);
-        const data = await fetchAvailableMedicine(filterLocation === 'All' ? null : filterLocation);
+        let data;
+        if (filterLocation === 'All') {
+          // Fetch from each allowed location individually and merge
+          const results = await Promise.all(
+            (allowedLocations.length > 0 ? allowedLocations : ['Arlegui', 'Casal', 'QuezonCity'])
+              .map((loc) => fetchAvailableMedicine(loc))
+          );
+          data = results.flat();
+        } else {
+          data = await fetchAvailableMedicine(filterLocation);
+        }
         setMedicines(data);
       } catch (err) {
         setError(err.message || 'Failed to load medicines');
@@ -43,7 +46,7 @@ const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) =
       }
     };
     loadMedicines();
-  }, [filterLocation]);
+  }, [filterLocation, allowedLocations]);
 
   // Filter medicines by search
   const filtered = medicines.filter((m) => {
@@ -99,7 +102,7 @@ const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) =
   };
 
   const selectedCount = selectedItems.length;
-  const locations = ['All', 'Arlegui', 'Casal', 'QuezonCity'];
+  const locations = ['All', ...allowedLocations];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -208,14 +211,11 @@ const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) =
                         {med.item_name} ({med.dosageValue} {med.dosageUnit})
                       </p>
                       <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none mt-0.5">
-                        {med.item_code} • Batch: {med.batchNumber}
+                        {med.item_code} • {formatBatchDisplay(med, { compact: true })}
                       </p>
                       <div className="flex gap-2 mt-1 flex-wrap">
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
                           {getDisplayLocation(med.location)}
-                        </span>
-                        <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-400">
-                          Expires: {formatDateDisplay(med.expiryDate)}
                         </span>
                       </div>
                     </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fetchActiveAnnouncements } from '../announcement-service';
 import { axiosRequest } from '../../../packages-core-adapter';
 import AnnouncementModal from './announcement-modal';
+import { formatAnnouncementDate, getAnnouncementTimeZone } from '../timezoneUtils';
 
 /* Small authenticated image loader (media endpoints require JWT) */
 function AuthImage({ path, alt, className }) {
@@ -30,6 +31,7 @@ const AnnouncementCarousel = () => {
   const [error, setError] = useState(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const clientTimeZone = getAnnouncementTimeZone();
 
   useEffect(() => {
     const loadAnnouncements = async () => {
@@ -98,9 +100,9 @@ const AnnouncementCarousel = () => {
 
   const currentAnnouncement = announcements[currentIndex];
   const hasMultiple = announcements.length > 1;
-  const formattedDate = new Date(currentAnnouncement.created_at).toLocaleDateString('en-US', {
+  const formattedDate = formatAnnouncementDate(currentAnnouncement.created_at, clientTimeZone, {
     month: 'short', day: 'numeric', year: 'numeric',
-  });
+  }) || 'Unknown date';
 
   return (
     <>

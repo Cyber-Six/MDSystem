@@ -6,8 +6,104 @@ const { connect } = require('../../../config/query.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
 const docGen = require('../../../services/doc-generate-module/index.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
+const { permissions, isMedicalPermittedPatientBased, isMedicalPermitted } = require('../../../services/permit.js');
 
 const router = express.Router();
+
+function pickFirstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function calculateAgeFromDob(dateOfBirth) {
+  if (!dateOfBirth) return '';
+
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return '';
+
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  if (today.getMonth() < dob.getMonth() || (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? String(age) : '';
+}
+
+async function normalizePrescriptionPatientData(patientId, incomingPatient = {}) {
+  const normalized = { ...(incomingPatient || {}) };
+  const sourcePatientId = patientId || incomingPatient?.id || null;
+
+  if (sourcePatientId) {
+    try {
+      const patientResult = await db.query(
+        `SELECT id, first_name, middle_name, last_name, suffix, date_of_birth, sex
+         FROM "UsersPersonal"
+         WHERE id = $1`,
+        [sourcePatientId]
+      );
+
+      if (patientResult.rows.length > 0) {
+        const row = patientResult.rows[0];
+        const dob = row.date_of_birth ? new Date(row.date_of_birth) : null;
+        const dobFromDb = dob && !Number.isNaN(dob.getTime())
+          ? dob.toISOString().slice(0, 10)
+          : '';
+
+        normalized.id = sourcePatientId;
+        normalized.firstName = pickFirstNonEmpty(normalized.firstName, normalized.first_name, row.first_name);
+        normalized.middleName = pickFirstNonEmpty(normalized.middleName, normalized.middle_name, row.middle_name);
+        normalized.lastName = pickFirstNonEmpty(normalized.lastName, normalized.last_name, row.last_name);
+        normalized.suffix = pickFirstNonEmpty(normalized.suffix, row.suffix);
+        normalized.dateOfBirth = pickFirstNonEmpty(normalized.dateOfBirth, normalized.date_of_birth, dobFromDb);
+        normalized.sex = pickFirstNonEmpty(normalized.sex, normalized.gender, row.sex);
+      }
+    } catch (err) {
+      logger.warn('Prescription patient enrichment lookup failed', {
+        patientId: sourcePatientId,
+        error: err.message,
+      });
+    }
+  }
+
+  if (!normalized.firstName && normalized.name) {
+    const parts = String(normalized.name).trim().split(/\s+/).filter(Boolean);
+    if (parts.length > 0) {
+      normalized.firstName = parts[0];
+      if (!normalized.lastName && parts.length > 1) {
+        normalized.lastName = parts.slice(1).join(' ');
+      }
+    }
+  }
+
+  const fullName = [normalized.firstName, normalized.middleName, normalized.lastName, normalized.suffix]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  if (!fullName) {
+    normalized.firstName = 'Unknown';
+  }
+
+  if (!normalized.age) {
+    normalized.age = calculateAgeFromDob(normalized.dateOfBirth);
+  }
+
+  if (!normalized.age) {
+    normalized.age = 'Unknown';
+  }
+
+  if (!normalized.sex) {
+    normalized.sex = 'Unknown';
+  }
+
+  normalized.id = normalized.id || sourcePatientId;
+  return normalized;
+}
 
 // ============================================================
 // NON-GENERATED DOCUMENTS (REQUIRED/RAW)
@@ -29,6 +125,11 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
 
     if (!patientId) {
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view this patient\'s documents.' });
     }
 
     // Get all document tags
@@ -109,6 +210,11 @@ router.get('/required/:documentId', jwtProtect('medical'), async (req, res) => {
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view this patient\'s documents.' });
+    }
+
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
               prd.id as "submissionId", prd.file, prd.status,
@@ -172,6 +278,12 @@ router.post('/required/:documentId', jwtProtect('medical'), async (req, res) => 
     if (!patientId) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
     }
 
     // Check if the document tag exists
@@ -289,6 +401,12 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
+    }    
+
     // Find the CURRENT (non-archived) submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
@@ -376,6 +494,12 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
+    }
+
     // Find the CURRENT (non-archived) submission - only Pending can be rejected
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
@@ -458,6 +582,12 @@ router.delete('/required/:documentId/cancel', jwtProtect('medical'), async (req,
     if (!patientId) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
     }
 
     // Find the current submission
@@ -549,6 +679,12 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
     if (!patientId) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
     }
 
     // Check if the document tag exists
@@ -661,6 +797,12 @@ router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, 
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
+    }
+
     // Find the current non-archived submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
@@ -744,6 +886,12 @@ router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, 
  */
 router.get('/templates', jwtProtect('medical'), async (req, res) => {
   try {
+
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_generate);
+    if (!permitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view document templates.' });
+    }
+
     const templates = docGen.getTemplateMetadata();
     res.json({ success: true, templates });
   } catch (err) {
@@ -760,6 +908,11 @@ router.get('/templates/:docType/sample', jwtProtect('medical'), async (req, res)
   try {
     const { docType } = req.params;
     const sampleData = docGen.getSampleData(docType);
+
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_generate);
+    if (!permitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view document templates.' });
+    }
 
     if (!sampleData) {
       return res.status(404).json({ error: 'TEMPLATE_NOT_FOUND' });
@@ -784,6 +937,11 @@ router.post('/:docType/preview', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType } = req.params;
     const { data } = req.body;
+    
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_generate);
+    if (!permitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to generate documents.' });
+    }
 
     const template = docGen.getTemplate(docType);
     if (!template) {
@@ -794,6 +952,10 @@ router.post('/:docType/preview', jwtProtect('medical'), async (req, res) => {
       ...data,
       physician: data?.physician || { id: req.user.id },
     };
+
+    if (docType === 'prescription') {
+      enrichedData.patient = await normalizePrescriptionPatientData(data?.patient?.id, enrichedData.patient);
+    }
 
     logger.info('Document preview requested', {
       docType,
@@ -818,6 +980,12 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType } = req.params;
     const { patientId, data } = req.body;
+    const scopedPatientId = patientId || data?.patient?.id;
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_generate, scopedPatientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to generate documents for this patient.' });
+    }
 
     const template = docGen.getTemplate(docType);
     if (!template) {
@@ -828,9 +996,13 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
 
     const enrichedData = {
       ...data,
-      patient: { ...data?.patient, id: patientId || data?.patient?.id },
+      patient: { ...data?.patient, id: scopedPatientId },
       physician: data?.physician || { id: req.user.id },
     };
+
+    if (docType === 'prescription') {
+      enrichedData.patient = await normalizePrescriptionPatientData(scopedPatientId, enrichedData.patient);
+    }
 
     // Auto-fill physician details from DB when not provided
     if (!enrichedData.physician?.firstName) {
@@ -861,7 +1033,7 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
     }
 
     if (shouldPersist) {
-      if (!patientId && !data?.patient?.id) {
+      if (!scopedPatientId) {
         return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
       }
 
@@ -889,7 +1061,7 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
       }
 
       const templateId = templateRecord.rows[0].id;
-      const actualPatientId = patientId || data?.patient?.id;
+      const actualPatientId = scopedPatientId;
 
       const docResult = await db.query(
         `INSERT INTO "PatientDocuments" ("patientId", "templateId", "issuedBy", "expired_at")
@@ -954,12 +1126,115 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
 // ============================================================
 
 /**
+ * GET /documents/generated/patient/:patientId
+ * List all generated documents for a patient (all templates)
+ */
+router.get('/generated/patient/:patientId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view documents for this patient.' });
+    }
+
+    const result = await db.query(
+      `SELECT pd.id, pd."patientId", pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
+              dt.template as "templateType", dt.description,
+              up_patient.first_name as "patientFirstName", up_patient.last_name as "patientLastName",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       LEFT JOIN "UsersPersonal" up_patient ON pd."patientId" = up_patient.id
+       LEFT JOIN "UsersPersonal" up_issuer ON pd."issuedBy" = up_issuer.id
+       WHERE pd."patientId" = $1
+       ORDER BY pd."created_at" DESC`,
+      [patientId]
+    );
+
+    const documents = result.rows.map((row) => ({
+      id: row.id,
+      patient: {
+        id: row.patientId,
+        name: `${row.patientFirstName || ''} ${row.patientLastName || ''}`.trim() || 'Unknown',
+      },
+      templateType: row.templateType,
+      description: row.description,
+      issuedBy: {
+        id: row.issuedBy,
+        name: `${row.issuedByFirstName || ''} ${row.issuedByLastName || ''}`.trim() || 'Unknown',
+      },
+      expiredAt: row.expired_at,
+      createdAt: row.created_at,
+    }));
+
+    res.json({ success: true, documents });
+  } catch (err) {
+    logger.error('Generated document list for patient failed', { error: err.message });
+    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
+  }
+});
+
+/**
+ * GET /documents/generated/download/:documentId
+ * Download a generated document for staff (permission-scoped by patient)
+ */
+router.get('/generated/download/:documentId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { documentId } = req.params;
+
+    const docResult = await db.query(
+      `SELECT pd.id, pd."patientId", dt.template as "templateType"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       WHERE pd.id = $1`,
+      [documentId]
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    }
+
+    const docMeta = docResult.rows[0];
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, docMeta.patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to download this document.' });
+    }
+
+    const dataResult = await db.query(
+      `SELECT data FROM "documentData" WHERE "documentId" = $1`,
+      [documentId]
+    );
+
+    if (dataResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_DATA_NOT_FOUND' });
+    }
+
+    const pdfBuffer = Buffer.from(dataResult.rows[0].data, 'base64');
+    const filename = `${docMeta.templateType}_${documentId}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (err) {
+    logger.error('Generated document download failed', { error: err.message });
+    res.status(500).json({ error: 'DOWNLOAD_FAILED', message: err.message });
+  }
+});
+
+/**
  * GET /documents/:docType/patient/:patientId
  * List documents of a specific type for a patient
  */
 router.get('/:docType/patient/:patientId', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType, patientId } = req.params;
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view documents for this patient.' });
+    }
 
     const result = await db.query(
       `SELECT pd.id, pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
@@ -1000,6 +1275,11 @@ router.get('/:docType/patients', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType } = req.params;
 
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_view);
+    if (!permitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view documents.' });
+    }
+
     const result = await db.query(
       `SELECT DISTINCT pd."patientId",
               up.first_name, up.last_name,
@@ -1035,6 +1315,11 @@ router.get('/:docType/patients', jwtProtect('medical'), async (req, res) => {
 router.get('/:docType', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType } = req.params;
+
+    const { permitted } = await isMedicalPermitted(req.user.id, permissions.document_allow_view);
+    if (!permitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view documents.' });
+    }
 
     const result = await db.query(
       `SELECT pd.id, pd."patientId", pd."templateId", pd."issuedBy",

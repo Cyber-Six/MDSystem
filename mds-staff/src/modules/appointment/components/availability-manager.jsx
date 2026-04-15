@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check, X, Trash2, Save, FileText, Trash } from 'lucide-react';
 
 /**
@@ -46,6 +46,8 @@ import {
   checkDateOccupancy,
   cancelDateAppointments,
 } from '../staff-appointment-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
+import { getLocationsByBranch } from '../../../utils/branch-utils';
 
 // Include Sunday in the days list - Sunday disabled by default, only enabled via custom dates
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -56,6 +58,9 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
  * SRS §3.4.2
  */
 const AvailabilityManager = () => {
+  const { profile } = useStaffProfile();
+  const allowedLocations = useMemo(() => getLocationsByBranch(profile?.branch), [profile?.branch]);
+
   const [showEventModal, setShowEventModal] = useState(false);
   const [_eventModalDate, _setEventModalDate] = useState(null); // Reserved for future use
   const [editingEvent, setEditingEvent] = useState(null);
@@ -98,9 +103,8 @@ const AvailabilityManager = () => {
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [customDateInput, setCustomDateInput] = useState({
     scheduledDate: '',
-    morningAllowed: null,
-    afternoonAllowed: null,
-    useCustomSlots: false,
+    morningAllowed: '',
+    afternoonAllowed: '',
   });
 
   // Date occupancy modal — shown when a date being disabled/removed still has active bookings
@@ -120,8 +124,10 @@ const AvailabilityManager = () => {
     setLoading(true);
     setError('');
     try {
-      const list = await listAllSchedulers();
-      setSchedulers(list || []);
+      const raw = await listAllSchedulers();
+      // Filter schedulers to only those in this staff member's allowed locations
+      const list = (raw || []).filter(s => allowedLocations.includes(s.location));
+      setSchedulers(list);
       if (list?.length > 0) {
         const kept = preserveId ? list.find((s) => String(s.id) === String(preserveId)) : null;
         const selected = kept || list[0];
@@ -138,11 +144,11 @@ const AvailabilityManager = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [allowedLocations]);
 
   useEffect(() => {
-    loadSchedulers();
-  }, [loadSchedulers]);
+    if (allowedLocations.length > 0) loadSchedulers();
+  }, [loadSchedulers, allowedLocations]);
 
   // Update edit form and reload data when active scheduler ID changes.
   // Use activeScheduler?.id (not the full object) so optimistic updates
@@ -228,6 +234,14 @@ const AvailabilityManager = () => {
     setDayOverrideData(monthAvailability[dateStr] || null);
   };
 
+  // Returns true if dateStr is strictly before today (past date)
+  const isPastDate = (dateStr) => {
+    if (!dateStr) return false;
+    const t = new Date();
+    const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    return normalizeDate(dateStr) < todayStr;
+  };
+
   // Check if a specific date is available (in schedule or custom dates)
   const isDateAvailable = (dateStr) => {
     if (!dateStr || !editForm) return false;
@@ -237,23 +251,28 @@ const AvailabilityManager = () => {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayName = dayNames[dayOfWeek];
 
+    // Check if there's an Exclude custom date — blocks even regular schedule days
+    const customDate = customDates.find(cd => normalizeDate(cd.scheduledDate) === normalized);
+    if (customDate?.type === 'Exclude') return false;
+
     // Check if it's in the regular schedule
-    if (editForm.schedulePerWeek?.includes(dayName)) {
-      return true;
-    }
-    // Check if it's a custom date (normalize for comparison)
-    return customDates.some(cd => normalizeDate(cd.scheduledDate) === normalized);
+    if (editForm.schedulePerWeek?.includes(dayName)) return true;
+
+    // Check if it's an Include custom date
+    if (customDate?.type === 'Include') return true;
+
+    return false;
   };
 
   // Handle adding a date as custom date from DaySlotEditor
   const handleAddCustomDateFromEditor = async (dateStr, morning, afternoon) => {
     if (!activeScheduler?.id) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
     try {
-      await setCustomDatesAPI(activeScheduler.id, [{
-        scheduledDate: dateStr,
-        morningAllowed: morning,
-        afternoonAllowed: afternoon,
-      }]);
+      await setCustomDatesAPI(activeScheduler.id, [{ scheduledDate: dateStr }]);
       await loadCustomDates(activeScheduler.id);
       // Sync containsCustomDates flag locally
       setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
@@ -298,6 +317,10 @@ const AvailabilityManager = () => {
   // Handle saving day override
   const handleSaveDayOverride = async (input) => {
     if (!activeScheduler?.id || !selectedCalendarDate) return;
+    if (isPastDate(selectedCalendarDate)) {
+      setError('Cannot add, create, or change past dates');
+      throw new Error('Cannot add, create, or change past dates');
+    }
     try {
       const updated = await updateDateIdentity(activeScheduler.id, selectedCalendarDate, input);
       setDayOverrideData(updated);
@@ -314,6 +337,10 @@ const AvailabilityManager = () => {
   // Handle editing session limit from calendar inline popup
   const handleEditSessionLimit = async (dateStr, session, value) => {
     if (!activeScheduler?.id) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      throw new Error('Cannot add, create, or change past dates');
+    }
     try {
       const input = session === 'morning'
         ? { morningAllowed: value }
@@ -375,6 +402,10 @@ const AvailabilityManager = () => {
   // Handle disabling a date (set both sessions to 0)
   const handleDisableDate = async (dateStr) => {
     if (!activeScheduler?.id || !dateStr) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
     await _withOccupancyCheck(
       dateStr,
       'Disable this date',
@@ -399,6 +430,10 @@ const AvailabilityManager = () => {
   // Handle re-enabling a disabled date (reset to scheduler defaults)
   const handleResetDate = async (dateStr) => {
     if (!activeScheduler?.id || !dateStr) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
     try {
       const result = await updateDateIdentity(activeScheduler.id, dateStr, {
         morningAllowed: activeScheduler.morningAllowed,
@@ -433,9 +468,8 @@ const AvailabilityManager = () => {
     setShowCustomDatePicker(false);
     setCustomDateInput({
       scheduledDate: '',
-      morningAllowed: null,
-      afternoonAllowed: null,
-      useCustomSlots: false,
+      morningAllowed: '',
+      afternoonAllowed: '',
     });
   };
 
@@ -449,13 +483,12 @@ const AvailabilityManager = () => {
     setShowCustomDatePicker(false);
     setCustomDateInput({
       scheduledDate: '',
-      morningAllowed: null,
-      afternoonAllowed: null,
-      useCustomSlots: false,
+      morningAllowed: '',
+      afternoonAllowed: '',
     });
     setEditForm({
       label: '',
-      location: 'Arlegui',
+      location: allowedLocations[0] || 'Arlegui',
       patientType: null,
       schedulePerWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
       morningAllowed: 25,
@@ -474,25 +507,37 @@ const AvailabilityManager = () => {
   // Handle adding a custom date
   const handleAddCustomDate = async () => {
     if (!customDateInput.scheduledDate) return;
+    if (isPastDate(customDateInput.scheduledDate)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
 
-    const dateEntry = {
-      scheduledDate: customDateInput.scheduledDate,
-      ...(customDateInput.useCustomSlots && customDateInput.morningAllowed != null
-        ? { morningAllowed: parseInt(customDateInput.morningAllowed) }
-        : {}),
-      ...(customDateInput.useCustomSlots && customDateInput.afternoonAllowed != null
-        ? { afternoonAllowed: parseInt(customDateInput.afternoonAllowed) }
-        : {}),
-    };
+    const morning = customDateInput.morningAllowed === '' || customDateInput.morningAllowed == null
+      ? editForm?.morningAllowed ?? 25
+      : parseInt(customDateInput.morningAllowed, 10) || 0;
+    const afternoon = customDateInput.afternoonAllowed === '' || customDateInput.afternoonAllowed == null
+      ? editForm?.afternoonAllowed ?? 25
+      : parseInt(customDateInput.afternoonAllowed, 10) || 0;
+    const derivedType = (morning === 0 && afternoon === 0) ? 'Exclude' : 'Include';
 
     if (isCreatingNew) {
       // For new scheduler, just add to local state (will be saved with scheduler)
-      setCustomDates(prev => [...prev, { ...dateEntry, id: `temp-${Date.now()}` }]);
+      setCustomDates(prev => [...prev, {
+        scheduledDate: customDateInput.scheduledDate,
+        morningAllowed: morning,
+        afternoonAllowed: afternoon,
+        type: derivedType,
+        id: `temp-${Date.now()}`,
+      }]);
     } else if (activeScheduler?.id) {
       // For existing scheduler, save to backend immediately
       try {
         setSaving(true);
-        await setCustomDatesAPI(activeScheduler.id, [dateEntry]);
+        await setCustomDatesAPI(activeScheduler.id, [{
+          scheduledDate: customDateInput.scheduledDate,
+          morningAllowed: morning,
+          afternoonAllowed: afternoon,
+        }]);
         await loadCustomDates(activeScheduler.id);
         // Sync containsCustomDates flag locally
         setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
@@ -511,9 +556,8 @@ const AvailabilityManager = () => {
     // Reset input
     setCustomDateInput({
       scheduledDate: '',
-      morningAllowed: null,
-      afternoonAllowed: null,
-      useCustomSlots: false,
+      morningAllowed: '',
+      afternoonAllowed: '',
     });
     setShowCustomDatePicker(false);
   };
@@ -590,7 +634,8 @@ const AvailabilityManager = () => {
           notes: editForm.notes || null,
           whitelistOnly: editForm.whitelistOnly ?? false,
           purposeRequired: editForm.purposeRequired ?? false,
-          slotCustomDates: [],
+          slotIncludedDates: [],
+          slotExcludedDates: [],
           whiteLists: [],
         });
 
@@ -607,12 +652,12 @@ const AvailabilityManager = () => {
 
         // After scheduler created, add any pending custom dates
         if (created?.id && customDates.length > 0) {
-          const dateEntries = customDates.map(cd => ({
+          const dateInputs = customDates.map(cd => ({
             scheduledDate: cd.scheduledDate,
-            ...(cd.morningAllowed != null ? { morningAllowed: cd.morningAllowed } : {}),
-            ...(cd.afternoonAllowed != null ? { afternoonAllowed: cd.afternoonAllowed } : {}),
+            morningAllowed: cd.morningAllowed ?? editForm.morningAllowed,
+            afternoonAllowed: cd.afternoonAllowed ?? editForm.afternoonAllowed,
           }));
-          await setCustomDatesAPI(created.id, dateEntries);
+          await setCustomDatesAPI(created.id, dateInputs);
           setCustomDates([]);
         }
 
@@ -961,13 +1006,13 @@ const AvailabilityManager = () => {
                         Location
                       </label>
                       <select
-                        value={editForm.location || 'Arlegui'}
+                        value={editForm.location || allowedLocations[0] || 'Arlegui'}
                         onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
                         className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                       >
-                        <option value="Arlegui">Arlegui</option>
-                        <option value="Casal">Casal</option>
-                        <option value="QuezonCity">Quezon City</option>
+                        {allowedLocations.includes('Arlegui') && <option value="Arlegui">Arlegui</option>}
+                        {allowedLocations.includes('Casal') && <option value="Casal">Casal</option>}
+                        {allowedLocations.includes('QuezonCity') && <option value="QuezonCity">Quezon City</option>}
                       </select>
                     </div>
                     <div>
@@ -1090,7 +1135,7 @@ const AvailabilityManager = () => {
                         </button>
                       </div>
                       <p className="text-xs text-secondary-400 dark:text-neutral-500 mb-2">
-                        Add specific dates to accept appointments, regardless of available days
+                        Set slot counts per date. Both AM &amp; PM at 0 = Excluded (blocked).
                       </p>
 
                       {/* Add Custom Date Form */}
@@ -1098,64 +1143,75 @@ const AvailabilityManager = () => {
                         <div className="mb-3 p-3 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg space-y-2">
                           <input
                             type="date"
+                            min={(() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })()}
                             value={customDateInput.scheduledDate}
                             onChange={(e) => setCustomDateInput({ ...customDateInput, scheduledDate: e.target.value })}
                             className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                           />
-                          <label className="flex items-center gap-2 text-sm text-secondary-600 dark:text-neutral-400">
-                            <input
-                              type="checkbox"
-                              checked={customDateInput.useCustomSlots}
-                              onChange={(e) => setCustomDateInput({ ...customDateInput, useCustomSlots: e.target.checked })}
-                              className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
-                            />
-                            Custom slot capacity
-                          </label>
-                          {customDateInput.useCustomSlots && (
-                            <div className="flex gap-2">
-                              <div className="flex-1">
-                                <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block">
-                                  <Sun className="w-3 h-3 inline mr-0.5" /> Morning
-                                </label>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  placeholder={String(editForm.morningAllowed || 25)}
-                                  value={customDateInput.morningAllowed ?? ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === '') { setCustomDateInput({ ...customDateInput, morningAllowed: null }); return; }
-                                    const num = parseInt(val, 10);
-                                    if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, morningAllowed: num });
-                                  }}
-                                  className="w-full px-2 py-1.5 text-base text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                                />
-                              </div>
-                              <div className="flex-1">
-                                <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block">
-                                  <Moon className="w-3 h-3 inline mr-0.5" /> Afternoon
-                                </label>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  placeholder={String(editForm.afternoonAllowed || 25)}
-                                  value={customDateInput.afternoonAllowed ?? ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === '') { setCustomDateInput({ ...customDateInput, afternoonAllowed: null }); return; }
-                                    const num = parseInt(val, 10);
-                                    if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, afternoonAllowed: num });
-                                  }}
-                                  className="w-full px-2 py-1.5 text-base text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                                />
-                              </div>
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-xs text-secondary-500 dark:text-neutral-400 flex items-center gap-1 mb-1">
+                                <Sun className="w-3 h-3" /> Morning
+                              </label>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder={String(editForm?.morningAllowed ?? 25)}
+                                value={customDateInput.morningAllowed}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '') { setCustomDateInput({ ...customDateInput, morningAllowed: '' }); return; }
+                                  const num = parseInt(val, 10);
+                                  if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, morningAllowed: num });
+                                }}
+                                className="w-full px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                              />
                             </div>
+                            <div className="flex-1">
+                              <label className="text-xs text-secondary-500 dark:text-neutral-400 flex items-center gap-1 mb-1">
+                                <Moon className="w-3 h-3" /> Afternoon
+                              </label>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder={String(editForm?.afternoonAllowed ?? 25)}
+                                value={customDateInput.afternoonAllowed}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '') { setCustomDateInput({ ...customDateInput, afternoonAllowed: '' }); return; }
+                                  const num = parseInt(val, 10);
+                                  if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, afternoonAllowed: num });
+                                }}
+                                className="w-full px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                              />
+                            </div>
+                          </div>
+                          {(() => {
+                            const m = customDateInput.morningAllowed === '' || customDateInput.morningAllowed == null
+                              ? (editForm?.morningAllowed ?? 25) : (parseInt(customDateInput.morningAllowed, 10) || 0);
+                            const a = customDateInput.afternoonAllowed === '' || customDateInput.afternoonAllowed == null
+                              ? (editForm?.afternoonAllowed ?? 25) : (parseInt(customDateInput.afternoonAllowed, 10) || 0);
+                            const isExclude = m === 0 && a === 0;
+                            return (
+                              <div className={`text-xs px-2 py-1 rounded text-center font-medium ${
+                                isExclude
+                                  ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
+                                  : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                              }`}>
+                                {isExclude ? 'Will be Excluded (blocked)' : 'Will be Included (open)'}
+                              </div>
+                            );
+                          })()}
+                          {customDateInput.scheduledDate && isPastDate(customDateInput.scheduledDate) && (
+                            <p className="text-xs text-error-600 dark:text-error-400 text-center font-medium">
+                              Cannot add, create, or change past dates
+                            </p>
                           )}
                           <button
                             type="button"
                             onClick={handleAddCustomDate}
-                            disabled={!customDateInput.scheduledDate || saving}
-                            className="w-full px-3 py-2 text-sm font-medium text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                            disabled={!customDateInput.scheduledDate || saving || isPastDate(customDateInput.scheduledDate)}
+                            className="w-full px-3 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 bg-primary-500 hover:bg-primary-600"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             Add Custom Date
@@ -1165,32 +1221,61 @@ const AvailabilityManager = () => {
 
                       {/* Custom Dates List */}
                       {customDates.length > 0 ? (
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
                           {customDates.map((cd) => {
                             const normalized = normalizeDate(cd.scheduledDate);
                             const dateObj = normalized ? new Date(normalized + 'T00:00:00') : null;
                             const dateLabel = dateObj && !isNaN(dateObj.getTime())
                               ? dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
                               : normalized || 'Unknown';
+                            const isExclude = cd.type === 'Exclude';
+                            const isPast = isPastDate(normalized);
+                            const mSlots = cd.morningAllowed ?? '—';
+                            const aSlots = cd.afternoonAllowed ?? '—';
                             return (
                               <div
                                 key={cd.id || normalized}
-                                className="flex items-center justify-between px-2 py-1.5 bg-violet-50 dark:bg-violet-900/20 rounded text-sm"
+                                className={`flex items-center justify-between px-2 py-1.5 rounded text-sm ${
+                                  isPast
+                                    ? 'bg-neutral-50 dark:bg-neutral-700/30 opacity-60'
+                                    : isExclude
+                                      ? 'bg-rose-50 dark:bg-rose-900/20'
+                                      : 'bg-violet-50 dark:bg-violet-900/20'
+                                }`}
                               >
-                                <div>
-                                  <span className="font-medium text-violet-700 dark:text-violet-400">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPast ? 'bg-neutral-400' : isExclude ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                                  <span className={`font-medium truncate ${
+                                    isPast
+                                      ? 'text-neutral-500 dark:text-neutral-400'
+                                      : isExclude
+                                        ? 'text-rose-700 dark:text-rose-400'
+                                        : 'text-violet-700 dark:text-violet-400'
+                                  }`}>
                                     {dateLabel}
                                   </span>
-                                  {(cd.morningAllowed != null || cd.afternoonAllowed != null) && (
-                                    <span className="ml-1.5 text-violet-500 dark:text-violet-500">
-                                      ({cd.morningAllowed ?? 'default'}/{cd.afternoonAllowed ?? 'default'})
+                                  <span className="text-xs text-secondary-500 dark:text-neutral-400 flex-shrink-0">
+                                    AM {mSlots} / PM {aSlots}
+                                  </span>
+                                  {isPast ? (
+                                    <span className="text-xs px-1 py-0.5 rounded flex-shrink-0 bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400">
+                                      Past
+                                    </span>
+                                  ) : (
+                                    <span className={`text-xs px-1 py-0.5 rounded flex-shrink-0 ${
+                                      isExclude
+                                        ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
+                                        : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                                    }`}>
+                                      {isExclude ? 'Blocked' : 'Open'}
                                     </span>
                                   )}
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveCustomDate(normalized)}
-                                  className="p-1 text-violet-400 hover:text-error-500 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors"
+                                  className="p-1 text-neutral-400 hover:text-error-500 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors flex-shrink-0"
+                                  title="Delete custom date"
                                 >
                                   <X className="w-3 h-3" />
                                 </button>

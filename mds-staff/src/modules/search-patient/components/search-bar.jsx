@@ -36,6 +36,7 @@ const SearchBar = ({ searchTerm, onSearchTermChange, searchType, onSearchTypeCha
           <option value="all">All Types</option>
           <option value="student">Students</option>
           <option value="employee">Employees</option>
+          <option value="superior">Superior</option>
         </select>
       </div>
 

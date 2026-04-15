@@ -27,6 +27,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
   const { setAuthenticated } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const currentYear = new Date().getFullYear();
 
   useEffect(() => {
     // Get user info from token or storage
@@ -252,7 +253,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             styles.footerCopyright,
             { color: isDark ? colors.neutral[600] : colors.neutral[300] }
           ]}>
-            © 2024 TIP Medical Services
+            © {currentYear} @ mdsystem
           </Text>
         </View>
       </ScrollView>

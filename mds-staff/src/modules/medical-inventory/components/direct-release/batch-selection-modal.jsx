@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { formatBatchDisplay, formatDateDisplay } from '../../medical-inventory-service';
 
 /**
  * Batch Selection Modal
@@ -146,20 +147,8 @@ const BatchSelectionModal = ({ medicine, batches, onSelect, onCancel }) => {
                         </div>
 
                         <p className="text-sm font-medium text-secondary-800 dark:text-white">
-                          Batch: {batch.batchNumber}
+                          {formatBatchDisplay(batch, { compact: true })}
                         </p>
-                        <div className="text-xs text-neutral-600 dark:text-neutral-400 space-y-1 mt-1.5">
-                          <div>
-                            <span className="font-medium">Expires:</span>{' '}
-                            {formatDate(batch.expiryDate)}
-                          </div>
-                          <div>
-                            <span className="font-medium">Available:</span>{' '}
-                            <span className="text-primary-600 dark:text-primary-400 font-bold">
-                              {batch.availableQuantity || 0} units
-                            </span>
-                          </div>
-                        </div>
                       </div>
 
                       {/* Right: Selection Indicator */}

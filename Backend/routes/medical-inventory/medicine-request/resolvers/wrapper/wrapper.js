@@ -1,5 +1,5 @@
 const db = require("../../../../../config/query.js");
-const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
+const { throwGraphQLError, GraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 const { ValidateBranchbyUserBranch } = require("../../../../../utils/validator.js");
 // Enhanced aggregation: includes medicine name by joining with MedicalItems
@@ -29,14 +29,43 @@ const ITEMS_AGG = `
   ) AS items`.trim();
 
 const Query = {
-  _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
-    const sql = `
-      SELECT
-        mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
-        mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
+  _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { user, res }) => {
+    const role = String(user?.role || '').toLowerCase();
+    const isStaff = role === 'medical';
+
+    if (isStaff) {
+      const sql = `
+        SELECT
+          mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
+          mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
+        FROM "MedicalItems" mi
+        JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
+        WHERE
+          mi.active = true AND
+          mi.category = 'Medicine' AND
+          mb."expiryDate" > CURRENT_DATE AND
+          mb.location = COALESCE($1, mb.location) AND
+          EXISTS (
+            SELECT 1
+            FROM "MedicineEntity" me
+            WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
+          )
+        ORDER BY mi.item_name, mb."expiryDate"
+        OFFSET $2 LIMIT $3
+      `;
+
+      const result = await db.query(sql, [location, offset, limit]);
+      return result.rows;
+    }
+
+    const patientSql = `
+      SELECT DISTINCT ON (mi.id)
+        mi.id,
+        mi.item_name,
+        mi.category
       FROM "MedicalItems" mi
       JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-      WHERE 
+      WHERE
         mi.active = true AND
         mi.category = 'Medicine' AND
         mb."expiryDate" > CURRENT_DATE AND
@@ -46,12 +75,12 @@ const Query = {
           FROM "MedicineEntity" me
           WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
         )
-      ORDER BY mi.item_name, mb."expiryDate"
+      ORDER BY mi.id, mb."expiryDate", mb.id
       OFFSET $2 LIMIT $3
     `;
 
-    const result = await db.query(sql, [location, offset, limit]);
-    return result.rows;
+    const patientResult = await db.query(patientSql, [location, offset, limit]);
+    return patientResult.rows;
   },
 
   _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
@@ -241,11 +270,11 @@ const Mutation = {
         throwGraphQLError(res).message("Medicine request not found").status(404).throw();
       }
 
-      // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed
+      // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed/Rejected/Cancelled
       const currentStatus = current.rows[0].status;
       const allowedTransitions = {
         "Pending": ["Approved", "Rejected", "Cancelled"],
-        "Approved": ["Completed", "Rejected"],
+        "Approved": ["Completed", "Rejected", "Cancelled"],
       };
 
       if (!allowedTransitions[currentStatus]?.includes(status)) {
@@ -286,6 +315,12 @@ const Mutation = {
       return result.rows[0];
     } catch (err) {
       await client.query('ROLLBACK');
+
+      // If it's already a GraphQLError, rethrow it directly
+      if (err instanceof GraphQLError) {
+        throw err;
+      }
+      
       logger.error("Error in _setStatusMedicineRequest:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
     } finally {

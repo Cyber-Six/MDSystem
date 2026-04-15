@@ -36,10 +36,10 @@ const sendGraphQL = async (query, variables = {}) => {
 /**
  * Get pending tickets (awaiting approval)
  */
-export const getPendingTickets = async (offset = 0, limit = 50) => {
+export const getPendingTickets = async (offset = 0, limit = 50, location = 'Both') => {
   const query = `
-    query GetPendingTickets($offset: Int, $limit: Int) {
-      getPendingTickets(offset: $offset, limit: $limit) {
+    query GetPendingTickets($location: Designation, $offset: Int, $limit: Int) {
+      getPendingTickets(location: $location, offset: $offset, limit: $limit) {
         chats {
           id
           patientId
@@ -81,17 +81,17 @@ export const getPendingTickets = async (offset = 0, limit = 50) => {
     }
   `;
 
-  const data = await sendGraphQL(query, { offset, limit });
+  const data = await sendGraphQL(query, { location, offset, limit });
   return data.getPendingTickets;
 };
 
 /**
  * Get active tickets (ongoing chats)
  */
-export const getActiveTickets = async (offset = 0, limit = 50) => {
+export const getActiveTickets = async (offset = 0, limit = 50, location = 'Both') => {
   const query = `
-    query GetActiveTickets($offset: Int, $limit: Int) {
-      getActiveTickets(offset: $offset, limit: $limit) {
+    query GetActiveTickets($location: Designation, $offset: Int, $limit: Int) {
+      getActiveTickets(location: $location, offset: $offset, limit: $limit) {
         chats {
           id
           patientId
@@ -133,17 +133,17 @@ export const getActiveTickets = async (offset = 0, limit = 50) => {
     }
   `;
 
-  const data = await sendGraphQL(query, { offset, limit });
+  const data = await sendGraphQL(query, { location, offset, limit });
   return data.getActiveTickets;
 };
 
 /**
  * Get all tickets with optional status filter
  */
-export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
+export const getAllTickets = async (status = null, offset = 0, limit = 50, location = 'Both') => {
   const query = `
-    query GetAllTickets($status: ChatStatus, $offset: Int, $limit: Int) {
-      getAllTickets(status: $status, offset: $offset, limit: $limit) {
+    query GetAllTickets($status: ChatStatus, $location: Designation, $offset: Int, $limit: Int) {
+      getAllTickets(status: $status, location: $location, offset: $offset, limit: $limit) {
         chats {
           id
           patientId
@@ -185,17 +185,17 @@ export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
     }
   `;
 
-  const data = await sendGraphQL(query, { status, offset, limit });
+  const data = await sendGraphQL(query, { status, location, offset, limit });
   return data.getAllTickets;
 };
 
 /**
  * Get archived tickets (closed or expired)
  */
-export const getArchivedTickets = async (offset = 0, limit = 50) => {
+export const getArchivedTickets = async (offset = 0, limit = 50, location = 'Both') => {
   // Get both closed and expired tickets
-  const closedResult = await getAllTickets('Closed', offset, limit / 2);
-  const expiredResult = await getAllTickets('Expired', offset, limit / 2);
+  const closedResult = await getAllTickets('Closed', offset, limit / 2, location);
+  const expiredResult = await getAllTickets('Expired', offset, limit / 2, location);
 
   const allChats = [...closedResult.chats, ...expiredResult.chats]
     .sort((a, b) => new Date(b.session_end || b.archived_at) - new Date(a.session_end || a.archived_at));
@@ -566,10 +566,10 @@ export const extendSession = async (chatId) => {
 /**
  * Get patient conversations grouped by patient (1 row per patient)
  */
-export const getPatientConversations = async (statuses = null, offset = 0, limit = 50) => {
+export const getPatientConversations = async (statuses = null, offset = 0, limit = 50, location = 'Both') => {
   const query = `
-    query GetPatientConversations($statuses: [ChatStatus], $offset: Int, $limit: Int) {
-      getPatientConversations(statuses: $statuses, offset: $offset, limit: $limit) {
+    query GetPatientConversations($location: Designation, $statuses: [ChatStatus], $offset: Int, $limit: Int) {
+      getPatientConversations(location: $location, statuses: $statuses, offset: $offset, limit: $limit) {
         conversations {
           patientId
           patient {
@@ -628,7 +628,7 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
     }
   `;
 
-  const data = await sendGraphQL(query, { statuses, offset, limit });
+  const data = await sendGraphQL(query, { location, statuses, offset, limit });
   return data.getPatientConversations;
 };
 

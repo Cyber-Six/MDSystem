@@ -11,8 +11,9 @@
  * Branches: Casal, Arlegui, Quezon City (LocationDesignation enum)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  Animated,
   View,
   Text,
   TextInput,
@@ -22,13 +23,16 @@ import {
   StyleSheet,
   RefreshControl,
   Modal,
+  Easing,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useBanner } from '../../context/BannerContext';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import { getPatientProfile } from '../../services/profile-service';
 import {
   BRANCHES,
@@ -42,6 +46,8 @@ import {
 } from '../../services/medicine-service';
 
 const DISMISSED_KEY = 'dismissedMedicalNotifications';
+const ERROR_AUTO_DISMISS_MS = 4500;
+const ERROR_ANIMATION_MS = 220;
 
 interface GroupedMedicine {
   item_code: string;
@@ -61,9 +67,15 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   Revision: { bg: colors.primary[100], text: colors.primary[700] },
 };
 
+const normalizeStatus = (status?: string | null) => (status || '').trim().toLowerCase();
+const isPendingStatus = (status?: string | null) => normalizeStatus(status) === 'pending';
+
 export const MedicineRequestScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { showBanner } = useBanner();
+  const showInlineMenuButton = route.name !== 'MedicineRequest';
 
   // Views
   const [view, setView] = useState<'form' | 'status'>('form');
@@ -82,6 +94,10 @@ export const MedicineRequestScreen: React.FC = () => {
   const [loadingMeds, setLoadingMeds] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorVersion, setErrorVersion] = useState(0);
+  const errorAnim = useRef(new Animated.Value(0)).current;
+  const errorDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorVersionRef = useRef(0);
 
   // Cancel-and-resubmit flow
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -96,6 +112,98 @@ export const MedicineRequestScreen: React.FC = () => {
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+
+  const pendingRequests = useMemo(
+    () =>
+      requests
+        .filter((r) => isPendingStatus(r.status))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [requests]
+  );
+  const latestPendingRequest = pendingRequests[0] ?? null;
+  const hasPendingRequest = pendingRequests.length > 0;
+
+  const clearErrorTimer = useCallback(() => {
+    if (!errorDismissTimerRef.current) return;
+    clearTimeout(errorDismissTimerRef.current);
+    errorDismissTimerRef.current = null;
+  }, []);
+
+  const dismissError = useCallback((animated = true, expectedVersion = errorVersionRef.current) => {
+    clearErrorTimer();
+
+    if (!animated) {
+      if (errorVersionRef.current === expectedVersion) {
+        errorAnim.stopAnimation();
+        errorAnim.setValue(0);
+        setError(null);
+      }
+      return;
+    }
+
+    Animated.timing(errorAnim, {
+      toValue: 0,
+      duration: ERROR_ANIMATION_MS,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      if (errorVersionRef.current !== expectedVersion) return;
+      setError(null);
+      errorAnim.setValue(0);
+    });
+  }, [clearErrorTimer, errorAnim]);
+
+  const showError = useCallback((message: string) => {
+    clearErrorTimer();
+    setError(message);
+    setErrorVersion((prev) => {
+      const next = prev + 1;
+      errorVersionRef.current = next;
+      return next;
+    });
+  }, [clearErrorTimer]);
+
+  const errorAnimatedStyle = useMemo(
+    () => ({
+      opacity: errorAnim,
+      transform: [
+        {
+          translateY: errorAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [-10, 0],
+          }),
+        },
+        {
+          scale: errorAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.98, 1],
+          }),
+        },
+      ],
+    }),
+    [errorAnim]
+  );
+
+  useEffect(() => {
+    if (!error) return;
+
+    const versionAtStart = errorVersionRef.current;
+    errorAnim.stopAnimation();
+    errorAnim.setValue(0);
+
+    Animated.timing(errorAnim, {
+      toValue: 1,
+      duration: ERROR_ANIMATION_MS + 60,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    errorDismissTimerRef.current = setTimeout(() => {
+      dismissError(true, versionAtStart);
+    }, ERROR_AUTO_DISMISS_MS);
+
+    return clearErrorTimer;
+  }, [error, errorVersion, dismissError, clearErrorTimer, errorAnim]);
 
   // ── Load profile & detect location access ──────────────────────────────
   useEffect(() => {
@@ -162,7 +270,7 @@ export const MedicineRequestScreen: React.FC = () => {
     }
     const load = async () => {
       setLoadingMeds(true);
-      setError(null);
+      dismissError(false);
       try {
         const meds = await getAvailableMedicine(location);
         setMedicines(meds);
@@ -181,13 +289,13 @@ export const MedicineRequestScreen: React.FC = () => {
         });
         setGrouped(Object.values(groupMap));
       } catch (err: any) {
-        setError('Failed to load medicines: ' + err.message);
+        showError('Failed to load medicines: ' + err.message);
       } finally {
         setLoadingMeds(false);
       }
     };
     load();
-  }, [location]);
+  }, [location, dismissError, showError]);
 
   // ── Load request history ───────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
@@ -214,25 +322,24 @@ export const MedicineRequestScreen: React.FC = () => {
 
   // ── Submit (with cancel-and-resubmit gate) ────────────────────────────
   const handleSubmit = async () => {
-    setError(null);
-    if (!purpose.trim()) { setError('Please enter the purpose of your request.'); return; }
-    if (!location) { setError('Please select a branch.'); return; }
-    if (selectedCodes.size === 0) { setError('Please select at least one medicine.'); return; }
+    dismissError(false);
+    if (!purpose.trim()) { showError('Please enter the purpose of your request.'); return; }
+    if (!location) { showError('Please select a branch.'); return; }
+    if (selectedCodes.size === 0) { showError('Please select at least one medicine.'); return; }
 
     // Build items from first batch of each selected code (like the web app)
     const items: Array<{ batchId: number; quantity: number }> = [];
     for (const code of selectedCodes) {
       const group = grouped.find((g) => g.item_code === code);
       if (!group || group.batches.length === 0) {
-        setError(`No available batch for ${group?.item_name || code}`);
+        showError(`No available batch for ${group?.item_name || code}`);
         return;
       }
       items.push({ batchId: parseInt(group.batches[0].id, 10), quantity: 1 });
     }
 
     // If there's a pending request, offer cancel-and-resubmit (mirrors web)
-    const hasPending = requests.some((r) => r.status?.toLowerCase() === 'pending');
-    if (hasPending) {
+    if (hasPendingRequest) {
       setPendingItems(items);
       setShowCancelConfirm(true);
       return;
@@ -253,7 +360,7 @@ export const MedicineRequestScreen: React.FC = () => {
       setMedicines([]);
       setGrouped([]);
     } catch (err: any) {
-      setError(err.message || 'Failed to submit request.');
+      showError(err.message || 'Failed to submit request.');
     } finally {
       setSubmitting(false);
     }
@@ -262,18 +369,14 @@ export const MedicineRequestScreen: React.FC = () => {
   const cancelPendingAndResubmit = async () => {
     setShowCancelConfirm(false);
     setSubmitting(true);
-    setError(null);
+    dismissError(false);
     try {
       await cancelMedicineRequest();
       // Update local state immediately
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.status?.toLowerCase() === 'pending' ? { ...r, status: 'Cancelled' } : r
-        )
-      );
+      setRequests((prev) => prev.map((r) => (isPendingStatus(r.status) ? { ...r, status: 'Cancelled' } : r)));
       await doSubmit(pendingItems);
     } catch (err: any) {
-      setError(
+      showError(
         err.message ||
           'Unable to cancel your existing request. Please contact clinic staff.',
       );
@@ -289,7 +392,7 @@ export const MedicineRequestScreen: React.FC = () => {
         next.delete(code);
       } else {
         if (next.size >= 2) {
-          setError('You can select a maximum of 2 medicines per request.');
+          showError('You can select a maximum of 2 medicines per request.');
           return prev;
         }
         next.add(code);
@@ -306,7 +409,7 @@ export const MedicineRequestScreen: React.FC = () => {
       showBanner({ type: 'success', message: 'Medicine request cancelled.' });
       await loadHistory();
     } catch (err: any) {
-      setError(err.message || 'Failed to cancel request.');
+      showError(err.message || 'Failed to cancel request.');
     } finally {
       setCancelling(false);
     }
@@ -345,23 +448,82 @@ export const MedicineRequestScreen: React.FC = () => {
         </View>
       </Modal>
 
+      {showInlineMenuButton && (
+        <View style={styles.topMenuRow}>
+          <TouchableOpacity
+            style={[
+              styles.menuButton,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+            onPress={() => toggleAppDrawer(navigation)}
+            accessibilityRole="button"
+            accessibilityLabel="Open sidebar"
+          >
+            <Ionicons
+              name="menu"
+              size={22}
+              color={isDark ? colors.neutral[100] : colors.secondary[900]}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── Tab bar ─────────────────────────────────────────────────────── */}
       <View style={[styles.tabBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <TouchableOpacity
           style={[styles.tab, view === 'form' && styles.activeTab, view === 'form' && { borderBottomColor: colors.primary[500] }]}
           onPress={() => setView('form')}
         >
-          <Text style={[styles.tabText, { color: view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-            New Request
-          </Text>
+          <View style={styles.tabInner}>
+            <Ionicons
+              name="create-outline"
+              size={14}
+              color={view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
+            />
+            <Text style={[styles.tabText, { color: view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
+              New Request
+            </Text>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, view === 'status' && styles.activeTab, view === 'status' && { borderBottomColor: colors.primary[500] }]}
           onPress={() => setView('status')}
         >
-          <Text style={[styles.tabText, { color: view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-            Request Status
-          </Text>
+          <View style={styles.tabInner}>
+            <Ionicons
+              name="list-outline"
+              size={14}
+              color={view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
+            />
+            <Text style={[styles.tabText, { color: view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
+              Request Status
+            </Text>
+            {hasPendingRequest && (
+              <View
+                style={[
+                  styles.tabCountBadge,
+                  {
+                    backgroundColor: view === 'status'
+                      ? colors.primary[500]
+                      : (isDark ? colors.neutral[700] : colors.neutral[200]),
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabCountText,
+                    {
+                      color: view === 'status'
+                        ? '#FFFFFF'
+                        : (isDark ? colors.primary[200] : colors.primary[700]),
+                    },
+                  ]}
+                >
+                  {pendingRequests.length}
+                </Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -404,14 +566,58 @@ export const MedicineRequestScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Error */}
-          {error && (
-            <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50], borderColor: colors.error[400] }]}>
-              <Text style={{ color: colors.error[500], flex: 1 }}>{error}</Text>
-              <TouchableOpacity onPress={() => setError(null)}>
-                <Ionicons name="close" size={18} color={colors.error[500]} />
+          {hasPendingRequest && latestPendingRequest && (
+            <View
+              style={[
+                styles.pendingSummaryCard,
+                {
+                  backgroundColor: isDark ? 'rgba(241,197,38,0.12)' : colors.primary[50],
+                  borderColor: isDark ? 'rgba(241,197,38,0.35)' : colors.primary[200],
+                },
+              ]}
+            >
+              <View style={[styles.pendingSummaryIconWrap, { backgroundColor: isDark ? 'rgba(241,197,38,0.2)' : '#FFFFFF' }]}>
+                <Ionicons name="time-outline" size={16} color={colors.primary[500]} />
+              </View>
+              <View style={styles.pendingSummaryBody}>
+                <Text style={[styles.pendingSummaryTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                  {pendingRequests.length === 1
+                    ? 'You have 1 pending medicine request.'
+                    : `You have ${pendingRequests.length} pending medicine requests.`}
+                </Text>
+                <Text style={[styles.pendingSummaryMeta, { color: isDark ? colors.neutral[300] : colors.neutral[700] }]}>
+                  Latest: Request #{latestPendingRequest.id} · {new Date(latestPendingRequest.created_at).toLocaleDateString()} · {latestPendingRequest.items?.length || 0} item{(latestPendingRequest.items?.length || 0) !== 1 ? 's' : ''}
+                </Text>
+                <Text style={[styles.pendingSummaryHint, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+                  Submitting a new request will prompt you to cancel your pending one first.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.pendingSummaryAction, { backgroundColor: isDark ? colors.neutral[700] : '#FFFFFF' }]}
+                onPress={() => setView('status')}
+              >
+                <Text style={[styles.pendingSummaryActionText, { color: isDark ? colors.primary[300] : colors.primary[700] }]}>View</Text>
               </TouchableOpacity>
             </View>
+          )}
+
+          {/* Error */}
+          {error && (
+            <Animated.View
+              style={[
+                styles.alertBox,
+                {
+                  backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50],
+                  borderColor: colors.error[400],
+                },
+                errorAnimatedStyle,
+              ]}
+            >
+              <Text style={{ color: colors.error[500], flex: 1 }}>{error}</Text>
+              <TouchableOpacity onPress={() => dismissError()}>
+                <Ionicons name="close" size={18} color={colors.error[500]} />
+              </TouchableOpacity>
+            </Animated.View>
           )}
 
           {/* Purpose (Chief Complaint) */}
@@ -681,7 +887,7 @@ export const MedicineRequestScreen: React.FC = () => {
                     </View>
                   )}
 
-                  {req.status === 'Pending' && (
+                  {isPendingStatus(req.status) && (
                     <TouchableOpacity
                       style={[styles.cancelButton, { opacity: cancelling ? 0.5 : 1 }]}
                       onPress={handleCancel}
@@ -710,6 +916,18 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
+  topMenuRow: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    marginBottom: 4,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Tab bar
   tabBar: {
@@ -723,8 +941,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
+  tabInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   activeTab: {},
   tabText: { fontWeight: '600', fontSize: 14 },
+  tabCountBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  tabCountText: { fontSize: 11, fontWeight: '700' },
 
   // Header
   headerBanner: {
@@ -738,6 +966,35 @@ const styles = StyleSheet.create({
   headerIcon: { marginTop: 1 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  pendingSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+    marginBottom: 14,
+  },
+  pendingSummaryIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  pendingSummaryBody: { flex: 1 },
+  pendingSummaryTitle: { fontSize: 13, fontWeight: '700' },
+  pendingSummaryMeta: { fontSize: 12, marginTop: 3 },
+  pendingSummaryHint: { fontSize: 12, marginTop: 4 },
+  pendingSummaryAction: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  pendingSummaryActionText: { fontSize: 12, fontWeight: '700' },
 
   alertBox: {
     flexDirection: 'row',

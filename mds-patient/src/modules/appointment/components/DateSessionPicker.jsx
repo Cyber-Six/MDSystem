@@ -75,9 +75,10 @@ const DateSessionPicker = ({
     [maxDateObj, today]
   );
 
-  // Build custom date set for quick lookup (handles both string and object formats)
-  const customDateSet = useMemo(() => {
-    const set = new Set();
+  // Build custom date map for quick lookup (handles both string and object formats)
+  // Map: dateStr → { type, morningAllowed, afternoonAllowed }
+  const customDateMap = useMemo(() => {
+    const map = new Map();
     const toLocal = (s) => {
       if (!s) return '';
       if (!s.includes('T') && !s.endsWith('Z')) return s;
@@ -88,21 +89,34 @@ const DateSessionPicker = ({
     (customDates || []).forEach(cd => {
       if (typeof cd === 'string') {
         const key = toLocal(cd);
-        if (key) set.add(key);
+        if (key) map.set(key, { type: 'Include' });
       } else if (cd?.scheduledDate) {
         const key = toLocal(String(cd.scheduledDate));
-        if (key) set.add(key);
+        if (key) map.set(key, {
+          type: cd.type || 'Include',
+          morningAllowed: cd.morningAllowed,
+          afternoonAllowed: cd.afternoonAllowed,
+        });
       }
     });
-    return set;
+    return map;
   }, [customDates]);
 
   const isScheduleMatch = (dateStr) => {
     if (!scheduler) return false;
+
+    // Check for Exclude custom date first — blocks even regular schedule days
+    const customEntry = customDateMap.get(dateStr);
+    if (customEntry?.type === 'Exclude') return false;
+
     const d = new Date(dateStr + 'T00:00:00');
     const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
     if (scheduler.schedulePerWeek?.includes(dayName)) return true;
-    return customDateSet.has(dateStr);
+
+    // Include custom date opens the day
+    if (customEntry?.type === 'Include') return true;
+
+    return false;
   };
 
   const isDateAllowed = (dateStr) => {
@@ -118,11 +132,15 @@ const DateSessionPicker = ({
     if (!apiData) return 'available'; // No booking data yet = open
 
     const totalAllowed = (apiData.morningAllowed || 0) + (apiData.afternoonAllowed || 0);
+
+    // Staff disabled this date (both sessions explicitly set to 0) — treat as unavailable, not full
+    if (totalAllowed === 0) return 'unavailable';
+
     const totalBooked = (apiData.morningRegistered || 0) + (apiData.morningPending || 0) +
                         (apiData.afternoonRegistered || 0) + (apiData.afternoonPending || 0);
 
-    if (totalAllowed > 0 && totalBooked >= totalAllowed) return 'full';
-    if (totalAllowed > 0 && totalBooked / totalAllowed >= 0.7) return 'partial';
+    if (totalBooked >= totalAllowed) return 'full';
+    if (totalBooked / totalAllowed >= 0.7) return 'partial';
     return 'available';
   };
 
@@ -261,7 +279,7 @@ const DateSessionPicker = ({
       )}
 
       {/* ── Session picker — only this part was changed ── */}
-      {availability && selectedDate && isDateAllowed(selectedDate) && (
+      {availability && selectedDate && isDateAllowed(selectedDate) && getDayStatus(selectedDate) !== 'unavailable' && (
         <div className="mb-6">
           <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
             Select session for <span className="font-semibold text-neutral-900 dark:text-white">{selectedDate}</span>

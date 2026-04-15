@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { axiosRequest, TokenStorage } from '../../packages-core-adapter';
 import { validatePassword, passwordsMatch } from '@mdsystem/core/validation/password-validation';
 import DataConsent from './data-consent';
 
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '';
 const TOTAL_STEPS = 4;
 
 const Register = ({ onBackToLogin }) => {
@@ -30,6 +31,50 @@ const Register = ({ onBackToLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // reCAPTCHA state
+  const [recaptchaToken, setRecaptchaToken] = useState('');
+  const [recaptchaWidgetId, setRecaptchaWidgetId] = useState(null);
+  const recaptchaRef = useRef(null);
+
+  // ── reCAPTCHA v2 setup ────────────────────────────────────────────────
+  const renderRecaptcha = useCallback(() => {
+    if (!RECAPTCHA_SITE_KEY || !window.grecaptcha || !recaptchaRef.current) return;
+    if (recaptchaWidgetId !== null) return;
+
+    window.grecaptcha.ready(() => {
+      const id = window.grecaptcha.render(recaptchaRef.current, {
+        sitekey: RECAPTCHA_SITE_KEY,
+        callback: (token) => setRecaptchaToken(token),
+        'expired-callback': () => setRecaptchaToken(''),
+        'error-callback': () => setRecaptchaToken(''),
+      });
+      setRecaptchaWidgetId(id);
+    });
+  }, [recaptchaWidgetId]);
+
+  const resetRecaptcha = useCallback(() => {
+    setRecaptchaToken('');
+    if (recaptchaWidgetId !== null && window.grecaptcha) {
+      try { window.grecaptcha.reset(recaptchaWidgetId); } catch { /* noop */ }
+    }
+  }, [recaptchaWidgetId]);
+
+  useEffect(() => {
+    if (!RECAPTCHA_SITE_KEY) return;
+    // Re-render reCAPTCHA widget when switching steps that need it
+    if (currentStep !== 1 && currentStep !== 2) return;
+    // Reset widget ID so it can be re-rendered on the new DOM element
+    setRecaptchaWidgetId(null);
+    setRecaptchaToken('');
+    const timer = setInterval(() => {
+      if (window.grecaptcha && recaptchaRef.current && recaptchaWidgetId === null) {
+        renderRecaptcha();
+        clearInterval(timer);
+      }
+    }, 200);
+    return () => clearInterval(timer);
+  }, [currentStep, renderRecaptcha, recaptchaWidgetId]);
+
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -55,6 +100,12 @@ const Register = ({ onBackToLogin }) => {
     // Validation
     if (!formData.email || !formData.password || !formData.confirmPassword) {
       setError('All fields are required.');
+      setLoading(false);
+      return;
+    }
+
+    if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+      setError('Please complete the reCAPTCHA check.');
       setLoading(false);
       return;
     }
@@ -88,7 +139,6 @@ const Register = ({ onBackToLogin }) => {
         }
         // Auto-send OTP immediately after successful registration
         try {
-          const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
           await axiosRequest.post('/auth/email/verification', {
             email: formData.email,
             recaptchaToken
@@ -109,6 +159,7 @@ const Register = ({ onBackToLogin }) => {
       } else {
         setError(errorMessage || 'Registration failed. Please try again.');
       }
+      resetRecaptcha();
     } finally {
       setLoading(false);
     }
@@ -161,7 +212,11 @@ const Register = ({ onBackToLogin }) => {
     setLoading(true);
 
     try {
-      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setError('Please complete the reCAPTCHA check to resend.');
+        setLoading(false);
+        return;
+      }
 
       const response = await axiosRequest.post('/auth/email/verification', {
         email: formData.email,
@@ -250,7 +305,7 @@ const Register = ({ onBackToLogin }) => {
     <div className="w-full max-w-md mx-auto">
       {error && (
         <div className="mb-2 p-2 bg-error-50 border border-error-300 rounded-lg">
-          <p className="text-error-600 text-xs text-center">{error}</p>
+          <p className="text-error-600 text-xs text-center mb-0">{error}</p>
         </div>
       )}
 
@@ -365,6 +420,13 @@ const Register = ({ onBackToLogin }) => {
           </div>
         </div>
 
+        {/* reCAPTCHA widget */}
+        {RECAPTCHA_SITE_KEY && (
+          <div className="flex justify-center mt-2">
+            <div ref={recaptchaRef} />
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={loading}
@@ -414,13 +476,13 @@ const Register = ({ onBackToLogin }) => {
 
       {error && (
           <div className="mb-5 p-3 bg-error-50 border border-error-300 rounded-lg">
-          <p className="text-error-600 text-xs text-center">{error}</p>
+          <p className="text-error-600 text-xs text-center mb-0">{error}</p>
         </div>
       )}
 
       {successMessage && (
         <div className="mb-5 p-3 bg-success-50 border border-success-300 rounded-lg">
-          <p className="text-success-600 text-xs text-center">{successMessage}</p>
+          <p className="text-success-600 text-xs text-center mb-0">{successMessage}</p>
         </div>
       )}
 
@@ -460,6 +522,13 @@ const Register = ({ onBackToLogin }) => {
           {loading ? 'Verifying...' : 'Verify Code'}
         </button>
 
+        {/* reCAPTCHA widget for resend */}
+        {RECAPTCHA_SITE_KEY && (
+          <div className="flex justify-center mt-2">
+            <div ref={recaptchaRef} />
+          </div>
+        )}
+
         <button
           type="button"
           onClick={handleResendOTP}
@@ -494,7 +563,7 @@ const Register = ({ onBackToLogin }) => {
 
       {error && (
           <div className="mb-5 p-3 bg-error-50 border border-error-300 rounded-lg">
-          <p className="text-error-600 text-xs text-center">{error}</p>
+          <p className="text-error-600 text-xs text-center mb-0">{error}</p>
         </div>
       )}
 

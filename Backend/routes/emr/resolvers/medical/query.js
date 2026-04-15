@@ -11,6 +11,42 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 // Medical staff can view records in any active status (Approved = current live data)
 const reviewable_statuses = ["InProgress", "Pending", "RevisionSubmitted", "Revision", "Approved"];
 
+function maskRestrictedSuperiorBasicInfo(row) {
+  return {
+    ...row,
+    // Keep only list-safe metadata for restricted Superior records.
+    sex: null,
+    program: null,
+    year: null,
+    department: null,
+    role: null,
+    credentials_status: null,
+    latest_ticket_id: null,
+    latest_status: null,
+    latest_scope: null,
+    latest_updated_at: null,
+    medical_status: null,
+    appointment_status: null,
+    medicine_status: null,
+    healthchat_status: null,
+    document_status: null,
+    access_denied: true,
+  };
+}
+
+function attachAccessState(row, canViewSuperiorDetails) {
+  if (!row) return row;
+  if (row.profile_type !== 'Superior') {
+    return { ...row, access_denied: false };
+  }
+
+  if (canViewSuperiorDetails) {
+    return { ...row, access_denied: false };
+  }
+
+  return maskRestrictedSuperiorBasicInfo(row);
+}
+
 const Query = {
   getUserUpdateTicket: async (_, args, { user, res }) => {
     const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.emr_allow_view, args.userId);
@@ -271,34 +307,107 @@ const Query = {
     return result;
   },
 
+  searchStudentProgram: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchStudentProgram(_, args, { user, res });
+    return result;
+  },
+
   getStatusUpdateTickets: async (_, args, { user, res }) => {
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
+    const { permitted, branch: permBranch } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
     if (!permitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getStatusUpdateTickets`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
+    }
 
-    const result = await Wrapper._getStatusUpdateTickets(_, args, { user, res });
+    // Clamp the requested branch to the staff member's permitted branch.
+    // If staff has a specific branch (Manila/QuezonCity), they cannot escalate to 'Both'.
+    const effectiveBranch = (permBranch && permBranch !== 'Both')
+      ? permBranch
+      : (args.branch || 'Both');
+
+    const result = await Wrapper._getStatusUpdateTickets(_, { ...args, branch: effectiveBranch }, { user, res });
     return result;
   },
 
   // ─── Patient Search ───────────────────────────────────────────────────────
   getPatientBasicInfo: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.emr_allow_view, args.userId);
-    if (!isPermitted) {
+    // Step 1: check baseline view permission/branch without Superior strictness.
+    const isBasePermitted = await permit.isMedicalPermittedPatientBased(
+      user.id,
+      permit.permissions.emr_allow_view,
+      args.userId,
+      false
+    );
+
+    if (!isBasePermitted) {
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getPatientBasicInfo for patient ${args.userId}`);
       throwGraphQLError(res).message('Unauthorized').status(401).throw();
     }
-    return await Wrapper._getPatientBasicInfo(_, args, { user, res });
+
+    const row = await Wrapper._getPatientBasicInfo(_, args, { user, res });
+    if (!row) return null;
+
+    // Step 2: if target is Superior, return masked metadata when privilege is missing.
+    let canViewSuperiorDetails = true;
+    if (row.profile_type === 'Superior') {
+      const superiorPermit = await permit.isMedicalPermitted(
+        user.id,
+        permit.permissions.privileged_to_perform_on_superior
+      );
+      canViewSuperiorDetails = superiorPermit.permitted;
+    }
+
+    const response = attachAccessState(row, canViewSuperiorDetails);
+    if (response?.access_denied) {
+      const auditTs = new Date().toISOString();
+      logger.warn(
+        `Restricted Superior details for user ID ${user.id} on patient ${args.userId} at ${auditTs}: access_denied=true`
+      );
+    } else {
+      // Audit-oriented snapshot of module statuses shown in the patient header.
+      logger.info('Patient module statuses resolved', {
+        staffId: String(user.id),
+        patientId: String(args.userId),
+        medical_status: response?.medical_status || null,
+        appointment_status: response?.appointment_status || null,
+        medicine_status: response?.medicine_status || null,
+        healthchat_status: response?.healthchat_status || null,
+        document_status: response?.document_status || null,
+      });
+    }
+
+    return response;
   },
 
   searchPatients: async (_, args, { user, res }) => {
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
-    if (!permitted) {
+    const isPermitted = await permit.isMedicalPermittedLocationBasedMulti(user.id, 
+      [
+        permit.permissions.emr_allow_view, permit.permissions.appointment_allow_view_records, permit.permissions.notification_allow_send_to_patients
+      ] 
+      , args.branch);
+    if (!isPermitted) {
       logger.warn(`Unauthorized search attempt by user ID ${user.id}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
     if (!args.searchTerm || args.searchTerm.trim().length < 2) return [];
-    return await Wrapper._searchPatients(_, args, { user, res });
+
+    const rows = await Wrapper._searchPatients(_, { ...args }, { user, res });
+    const { permitted: canViewSuperiorDetails } = await permit.isMedicalPermitted(
+      user.id,
+      permit.permissions.privileged_to_perform_on_superior
+    );
+
+    const mappedRows = rows.map((row) => attachAccessState(row, canViewSuperiorDetails));
+    const restrictedSuperiorIds = mappedRows.filter((row) => row?.access_denied).map((row) => row.id);
+
+    if (restrictedSuperiorIds.length > 0) {
+      logger.info(
+        `Superior details masked in search for user ID ${user.id}; patientIds=[${restrictedSuperiorIds.join(',')}]`
+      );
+    }
+
+    return mappedRows;
   },
 
 };

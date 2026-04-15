@@ -7,7 +7,7 @@ const remove = require("../query/delete.js");
 
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
-const { generateDomainCodes } = require("../../../utils/validator.js");
+const { generateDomainCodes, normalizeName } = require("../../../utils/validator.js");
 
 const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
     require("../../profile/resolvers/wrapper/wrapper.js");
@@ -50,9 +50,12 @@ const Mutation = {
              AND ec.id = $1;`,
           [recordId]
         );
-      }
 
-      await reloadCredentialStatus(_, { userId: args.userId, client }, { user, res }); // reload credential status after approval
+        // Only Approved should trigger credential re-evaluation.
+        // Running this on Revision/Rejected can incorrectly reactivate
+        // users that were intentionally marked Inactive.
+        await reloadCredentialStatus(_, { userId: args.userId, client, caller:"emr" }, { user, res });
+      }
       
       await client.query('COMMIT');
       logger.info(`User ID ${user.id} updated ticket ID ${recordId} to status ${newStatus}`);
@@ -85,21 +88,20 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "student_profile" 
-        ("profileId", program, year)
+        ("profileId", "programId", year)
        VALUES ($1, $2, $3)
        ON CONFLICT ("profileId") DO UPDATE
-         SET program = EXCLUDED.program,
-             year = EXCLUDED.year
+         SET "programId" = COALESCE(EXCLUDED."programId", "student_profile"."programId"),
+             year = COALESCE(EXCLUDED.year, "student_profile".year)
              RETURNING *;`,
       [
         recordId,
-        args.input.program,
+        args.input.programId,
         args.input.year
       ]
     );
     logger.debug("Upserted Student Profile:", result.rows[0]);
-    //return result.rows[0];
-    return {...(args.input), id: recordId, archived_at: null};
+    return {...result.rows[0], id: recordId, archived_at: null};
   },
 
   _EmployeeProfile: async (_, {args, recordId}, { user, res }) => {
@@ -851,14 +853,24 @@ const Mutation = {
       throwGraphQLError(res).status(403).message("Forbidden").throw();
     }
 
+    // Normalize names to Title Case before storing so display is consistent
+    const normalizedNames = (names || []).map(n => normalizeName(n));
+
+    // Upsert that:
+    // 1. Inserts with isValid = true so new entries appear in searches (filterIsValid: true)
+    // 2. On case-insensitive duplicate (uniq_domain_name_lower), sets isValid = true on the
+    //    existing row — fixing entries that were previously created with isValid = false
+    // 3. Returns the row in all cases (new or existing), preventing 500 errors on duplicates
     const query = `
-      INSERT INTO "DomainTypeCatalog" (domain, name, created_by, code)
-      SELECT $1, UNNEST($2::text[]), $3, UNNEST($4::text[])
-      ON CONFLICT (domain, name) DO NOTHING
+      INSERT INTO "DomainTypeCatalog" (domain, name, "isValid", created_by, code)
+      SELECT $1, UNNEST($2::text[]), true, $3, UNNEST($4::text[])
+      ON CONFLICT (domain, LOWER(name)) DO UPDATE
+        SET "isValid" = true,
+            name = EXCLUDED.name
       RETURNING *;
     `;
 
-    const result = await db.query(query, [domain, names || [], user.id, generateDomainCodes(names, domain)]);
+    const result = await db.query(query, [domain, normalizedNames, user.id, generateDomainCodes(normalizedNames, domain)]);
     logger.debug("Inserted DomainTypeCatalogs:", result.rows);
     return result.rows;
   },
@@ -882,7 +894,8 @@ const Mutation = {
     const query = `
       INSERT INTO "AllergenCatalog" (allergen, type, created_by)
       VALUES ${values}
-      ON CONFLICT (allergen, type) DO NOTHING
+      ON CONFLICT (allergen, type) DO UPDATE
+        SET "isValid" = true
       RETURNING *;
     `;
 

@@ -46,23 +46,55 @@ router.post('/change-password', jwtProtect('patient'), async (req, res) => {
 // GET /auth/user/login-activity
 router.get('/login-activity', jwtProtect('patient'), async (req, res) => {
   try {
+    const columnSql = `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'UserLoginAttempt';
+    `;
+    const columnResult = await query(columnSql);
+    const availableColumns = new Set(columnResult.rows.map((row) => row.column_name));
+
+    const timestampColumn = availableColumns.has('attempted_at')
+      ? 'attempted_at'
+      : (availableColumns.has('created_at') ? 'created_at' : null);
+
+    if (!timestampColumn) {
+      logger.warn('[AUTH] Login activity: UserLoginAttempt missing attempted_at/created_at. Returning empty sessions.');
+      return res.json({ ok: true, sessions: [] });
+    }
+
+    const ipAddressSelect = availableColumns.has('ip_address')
+      ? 'ip_address'
+      : 'NULL::text AS ip_address';
+    const userAgentSelect = availableColumns.has('user_agent')
+      ? 'user_agent'
+      : 'NULL::text AS user_agent';
+    const typeFilter = availableColumns.has('type') ? `AND type = 'Patient'` : '';
+
     const sql = `
-      SELECT id, was_successful, created_at
+      SELECT id, was_successful, ${timestampColumn} AS login_at, ${ipAddressSelect}, ${userAgentSelect}
       FROM "UserLoginAttempt"
       WHERE user_id = $1
-      ORDER BY created_at DESC
+      ${typeFilter}
+      ORDER BY login_at DESC
       LIMIT 50;
     `;
     const result = await query(sql, [req.user.id]);
 
     const sessions = result.rows.map((row) => ({
-      id: row.id.toString(),
-      wasSuccessful: row.was_successful,
-      timestamp: row.created_at,
+      id: String(row.id),
+      wasSuccessful: Boolean(row.was_successful),
+      timestamp: row.login_at,
+      ipAddress: row.ip_address || null,
+      userAgent: row.user_agent || null,
     }));
 
     return res.json({ ok: true, sessions });
   } catch (err) {
+    if (err?.code === '42P01' || err?.code === '42703') {
+      logger.warn(`[AUTH] Login activity schema mismatch (${err.code}). Returning empty sessions.`);
+      return res.json({ ok: true, sessions: [] });
+    }
     logger.error('[AUTH] Login activity error:', err);
     return res.status(500).json({ ok: false, message: 'Internal server error.' });
   }

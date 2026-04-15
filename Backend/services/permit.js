@@ -43,6 +43,10 @@ const permissions = {
   analytics_allow_view: "ALLOW_TO_VIEW_ANALYTICS",
   analytics_allow_export: "ALLOW_TO_EXPORT_ANALYTICS",
 
+  document_allow_view: "ALLOW_TO_VIEW_DOCUMENTS",
+  document_allow_manage: "ALLOW_TO_MANAGE_DOCUMENTS",
+  document_allow_generate: "ALLOW_TO_GENERATE_DOCUMENTS",
+
   role_management_allow_access: "ALLOW_TO_ACCESS_ROLE_MANAGEMENT",
   role_management_allow_edit: "ALLOW_TO_EDIT_ROLE_MANAGEMENT",
 
@@ -54,6 +58,122 @@ const ADMIN_ONLY_KEYS = new Set([
   'role_management_allow_access',
   'role_management_allow_edit',
 ]);
+
+// ─── GROUPED TEMPLATE PERMISSIONS ───────────────────────────────────────────
+// Parent groups for template UX/API hierarchy. Each group is defined by its
+// child permission keys (keys in the `permissions` object above).
+const PERMISSION_GROUP_DEFINITIONS = Object.freeze({
+  documents: Object.freeze({
+    id: 'documents',
+    label: 'DOCUMENTS',
+    childKeys: Object.freeze([
+      'document_allow_view',
+      'document_allow_manage',
+      'document_allow_generate',
+    ]),
+  }),
+});
+
+function createDisabledPermissionEntry(key) {
+  return {
+    key,
+    label: permissions[key],
+    enabled: false,
+    branch: null,
+  };
+}
+
+/**
+ * Build hierarchical permission groups from a flat BranchPermission list.
+ * This is used by template APIs so frontend can render parent + children
+ * deterministically without inferring hierarchy client-side.
+ */
+function buildPermissionGroups(branchPermissions = []) {
+  const flatMap = new Map((branchPermissions || []).map((perm) => [perm.key, perm]));
+
+  return Object.values(PERMISSION_GROUP_DEFINITIONS).map((group) => {
+    const children = group.childKeys.map((key) => {
+      return flatMap.get(key) || createDisabledPermissionEntry(key);
+    });
+
+    const enabledChildCount = children.filter((child) => child.enabled).length;
+
+    return {
+      id: group.id,
+      label: group.label,
+      enabled: enabledChildCount > 0,
+      fullyEnabled: enabledChildCount === children.length && children.length > 0,
+      childCount: children.length,
+      enabledChildCount,
+      children,
+    };
+  });
+}
+
+/**
+ * Normalize template inputs where permissions can be provided as:
+ * 1) flat permission list, 2) grouped parent/children input, or both.
+ *
+ * Precedence rules (deterministic):
+ * - Flat permissions are loaded first.
+ * - Group parent `enabled` applies to all children when explicitly set.
+ * - If parent is OFF, child overrides are ignored.
+ * - If parent is ON/unspecified, explicit child entries override parent/default.
+ */
+function normalizeTemplatePermissionsInput({ permissionsList = [], permissionGroups = [], defaultBranch = 'Both' }) {
+  const merged = new Map();
+
+  const setPermission = (key, enabled, branch) => {
+    const label = permissions[key];
+    if (!label) {
+      throw new Error(`Invalid permission key: ${key}`);
+    }
+
+    merged.set(key, {
+      key,
+      enabled: Boolean(enabled),
+      branch: branch || defaultBranch || 'Both',
+    });
+  };
+
+  for (const perm of permissionsList || []) {
+    if (!perm || !perm.key) continue;
+    setPermission(perm.key, perm.enabled, perm.branch);
+  }
+
+  for (const groupInput of permissionGroups || []) {
+    if (!groupInput || !groupInput.groupId) continue;
+
+    const groupDef = PERMISSION_GROUP_DEFINITIONS[groupInput.groupId];
+    if (!groupDef) {
+      throw new Error(`Invalid permission group: ${groupInput.groupId}`);
+    }
+
+    const groupBranch = groupInput.branch || defaultBranch || 'Both';
+    const hasExplicitParent = typeof groupInput.enabled === 'boolean';
+
+    if (hasExplicitParent) {
+      for (const childKey of groupDef.childKeys) {
+        setPermission(childKey, groupInput.enabled, groupBranch);
+      }
+    }
+
+    // Parent OFF means children are not toggleable in that request.
+    if (groupInput.enabled === false) {
+      continue;
+    }
+
+    for (const child of groupInput.children || []) {
+      if (!child || !child.key) continue;
+      if (!groupDef.childKeys.includes(child.key)) {
+        throw new Error(`Permission key ${child.key} is not part of group ${groupDef.id}`);
+      }
+      setPermission(child.key, child.enabled, child.branch || groupBranch);
+    }
+  }
+
+  return Array.from(merged.values());
+}
 
 async function isMedicalAdmin(userId) {
   return await findMedicalPermit(userId, permissions.is_admin);;
@@ -299,77 +419,78 @@ async function setStaffPermissionsStandard({ personnelId, permissionsList, assig
 }
 
 async function isMedicalPermitted(userId, label) {
+  return await isMedicalPermittedMulti(userId, [label]);
+}
+
+async function isMedicalPermittedMulti(userId, labels) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) {
-    logger.info(`Admin bypass granted for userId=${userId} on permission ${label}`);
-    return {permitted: true, branch: 'Both'};
-  } // Admin bypass
+    logger.info(`Admin bypass granted for userId=${userId} on permissions [${[].concat(labels).join(', ')}]`);
+    return { permitted: true, branch: 'Both' };
+  }
 
-  // Case: patientId null → skip patient join, only check if role exists
   const result = await db.query(
     `SELECT rm.branch
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
      WHERE rm."personnelId" = $1
-       AND rt.label = $2
+       AND rt.label = ANY($2::text[])
      LIMIT 1;`,
-    [userId, label]
+    [userId, [].concat(labels)]
   );
-  
 
   if (result.rows.length === 0) {
     logger.warn(
-      `Unauthorized access attempt by staff ${userId} without ${label} permission.`
+      `Unauthorized access attempt by staff ${userId} without any of [${[].concat(labels).join(', ')}] permission(s).`
     );
     return { permitted: false, branch: null };
   }
 
-
   return { permitted: true, branch: result.rows[0].branch };
 }
 
-
 async function isMedicalPermittedPatientBased(userId, label, patientId, strictSuperiority = true) {
+  return await isMedicalPermittedPatientBasedMulti(userId, [label], patientId, strictSuperiority);
+}
+
+async function isMedicalPermittedPatientBasedMulti(userId, labels, patientId, strictSuperiority = true) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) {
-    logger.info(`Admin bypass granted for userId=${userId} on permission ${label}${patientId ? ` with patient context ${patientId}` : ""}`);
+    logger.info(`Admin bypass granted for userId=${userId} on permissions [${[].concat(labels).join(', ')}]${patientId ? ` with patient context ${patientId}` : ""}`);
     return true;
-  } // Admin bypass
+  }
 
   const result = await db.query(
-    `SELECT uc.identity
+    `SELECT p.profile AS identity
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
      JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
      JOIN "UsersPersonal" up ON up.id = $3
-     JOIN "UserCredentials" uc ON uc.id = up.id
+     JOIN "Patients" p ON p.id = up.id
      WHERE rm."personnelId" = $1
-       AND rt.label = $2
+       AND rt.label = ANY($2::text[])
        AND (
          rm.branch = 'Both' OR
          up.branch = 'Both' OR
          up.branch = rm.branch
        )
      LIMIT 1;`,
-    [userId, label, patientId]
+    [userId, [].concat(labels), patientId]
   );
-  
+
   if (result.rows.length === 0) {
     logger.warn(
-      `Unauthorized access attempt by staff ${userId} without ${label} permission${patientId ? ` on patient ${patientId}` : ""}`
+      `Unauthorized access attempt by staff ${userId} without any of [${[].concat(labels).join(', ')}] permission(s)${patientId ? ` on patient ${patientId}` : ""}`
     );
     return false;
   }
 
-  // If patient is Superior, staff must have privileged permit
   const identity = result.rows[0].identity;
   if (identity === "Superior" && strictSuperiority) {
-    const permitted = await findMedicalPermit(userId,
-      permissions.privileged_to_perform_on_superior
-    );
+    const permitted = await findMedicalPermit(userId, permissions.privileged_to_perform_on_superior);
     if (!permitted) {
       logger.warn(
-        `Unauthorized access attempt by staff ${userId} lacking superior privileges for ${label} on patient ${patientId}`
+        `Unauthorized access attempt by staff ${userId} lacking superior privileges for [${[].concat(labels).join(', ')}] on patient ${patientId}`
       );
       return false;
     }
@@ -378,58 +499,67 @@ async function isMedicalPermittedPatientBased(userId, label, patientId, strictSu
   return true;
 }
 
-
 async function isMedicalPermittedLocationBased(userId, label, location) {
+  return await isMedicalPermittedLocationBasedMulti(userId, [label], location);
+}
+
+async function isMedicalPermittedLocationBasedMulti(userId, labels, location) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) {
-    logger.info(`Admin bypass granted for userId=${userId} on permission ${label} with location context ${location}`);
+    logger.info(`Admin bypass granted for userId=${userId} on permissions [${labels.join(', ')}] with location context ${location}`);
     return true;
-  } // Admin bypass
+  }
 
   let result = await db.query(
     `SELECT 1
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
      WHERE rm."personnelId" = $1
-       AND rt.label = $2 
-       AND (rm.branch = 'Both' OR rm.branch = $3)
+       AND rt.label = ANY($2::text[])
+       AND (rm.branch = 'Both' OR rm.branch = $3 OR $3 = 'Both')
      LIMIT 1;`,
-    [userId, label, location]
+    [userId, labels, location]
   );
 
   if (result.rows.length === 0) {
     logger.warn(
-      `Unauthorized access attempt by staff ${userId} without ${label} permission with location context ${location}`
+      `Unauthorized access attempt by staff ${userId} without any of [${labels.join(', ')}] permission(s) with location context ${location}`
     );
     return false;
   }
   return true;
 }
 
+
 async function isMedicalPermittedBranchBased(userId, label, branch) {
+  return await isMedicalPermittedBranchBasedMulti(userId, [label], branch);
+}
+
+async function isMedicalPermittedBranchBasedMulti(userId, labels, branch) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) {
-    logger.info(`Admin bypass granted for userId=${userId} on permission ${label} with branch context ${branch}`);
+    logger.info(`Admin bypass granted for userId=${userId} on permissions [${labels.join(', ')}] with branch context ${branch}`);
     return true;
-  } // Admin bypass
+  }
 
   let result = await db.query(
     `SELECT 1
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-     WHERE rm."personnelId" = $1 AND
-       rt.label = $2 AND (
-        rm.branch = 'Both' OR 
-        (rm.branch = 'Manila' AND $3::"LocationDesignation" IN ('Arlegui', 'Casal')) OR
-        (rm.branch = 'QuezonCity' AND $3::"LocationDesignation" = 'QuezonCity')
+     WHERE rm."personnelId" = $1
+       AND rt.label = ANY($2::text[])
+       AND (
+         rm.branch = 'Both' OR 
+         (rm.branch = 'Manila' AND $3::"LocationDesignation" IN ('Arlegui', 'Casal')) OR
+         (rm.branch = 'QuezonCity' AND $3::"LocationDesignation" = 'QuezonCity')
        )
      LIMIT 1;`,
-    [userId, label, branch]
+    [userId, labels, branch]
   );
 
   if (result.rows.length === 0) {
     logger.warn(
-      `Unauthorized access attempt by staff ${userId} without ${label} permission with branch context ${branch}`
+      `Unauthorized access attempt by staff ${userId} without any of [${labels.join(', ')}] permission(s) with branch context ${branch}`
     );
     return false;
   }
@@ -532,7 +662,7 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
       id: String(templateId),
       label: template.label,
       createdBy: String(template.created_by),
-      createdAt: template.created_at.toISOString()
+      createdAt: new Date(template.created_at).toISOString()
     };
 
   } catch (error) {
@@ -595,8 +725,9 @@ async function getPermissionTemplate(templateId) {
     id: String(template.id),
     label: template.label,
     createdBy: String(template.created_by),
-    createdAt: template.created_at.toISOString(),
+    createdAt: new Date(template.created_at).toISOString(),
     permissions: permsList,
+    permissionGroups: buildPermissionGroups(permsList),
     permissionCount: permsList.filter(p => p.enabled).length
   };
 }
@@ -645,8 +776,9 @@ async function listPermissionTemplates() {
       id: String(row.id),
       label: row.label,
       createdBy: String(row.created_by),
-      createdAt: row.created_at.toISOString(),
+      createdAt: new Date(row.created_at).toISOString(),
       permissions: permsList,
+      permissionGroups: buildPermissionGroups(permsList),
       permissionCount: permsList.filter(p => p.enabled).length
     };
   });
@@ -829,11 +961,15 @@ async function deletePermissionTemplate(templateId) {
 
 /**
  * Apply a template to a staff member (copy template permissions to staff)
+ * REVISED: Preserves template branch assignments for location-scoped permissions
+ * 
  * @param {Object} params
  * @param {number} params.personnelId - Staff user ID
  * @param {number} params.templateId - Template ID to apply
  * @param {number} params.assignedBy - Admin user ID applying the template
- * @param {string} params.staffBranch - Staff's branch designation (Manila, QuezonCity, Both) - all permissions inherit this branch
+ * @param {string} params.staffBranch - Staff's branch designation (Manila, QuezonCity, Both)
+ *                                     - For non-location-scoped permissions, defaults to this
+ *                                     - For location-scoped permissions, template branches are PRESERVED
  * @param {Object} params.client - Optional database client for transaction support
  * @returns {Promise<Object>} Result with inserted permissions
  */
@@ -845,14 +981,27 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy, staff
     throw new Error(`Template with id ${templateId} not found`);
   }
 
+  // Location-scoped permissions that should preserve template branch assignments
+  // These are permissions where the branch represents accessible locations
+  const LOCATION_SCOPED_KEYS = new Set([
+    'announcement_allow_crud',
+    'health_chat_allow_access'
+    // Add other location-based permissions here
+  ]);
+
   // Filter only enabled permissions
-  // If staffBranch provided, all permissions inherit the staff's branch (override template's branches)
+  // Preserve template branch for location-scoped permissions
+  // Use staffBranch as default for other permissions
   const enabledPermissions = template.permissions
     .filter(p => p.enabled)
     .map(p => ({
       key: p.key,
       enabled: true,
-      branch: staffBranch || p.branch  // Use staff's branch if provided, otherwise use template's branch
+      // For location-scoped permissions, use template branch
+      // For others, use staff branch or default to 'Both'
+      branch: LOCATION_SCOPED_KEYS.has(p.key) 
+        ? p.branch  // Keep template's branch for location-scoped
+        : (staffBranch || p.branch || 'Both')  // Use staff branch for non-location-scoped
     }));
 
   // Apply permissions using existing function, passing client through
@@ -942,6 +1091,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
 
 // ─── MODULE-LEVEL PERMISSION MAP ─────────────────────────────────────────────
 // Maps frontend module IDs to their underlying backend permission keys.
+// MUST be kept in sync with Frontend mds-staff/src/modules/role-management/role-permissions.js
 // When a module is ON, ALL listed keys are granted.
 // When a module is OFF, keys are revoked ONLY if no other enabled module uses them (union logic).
 
@@ -949,6 +1099,7 @@ const MODULE_PERMISSION_MAP = {
   patientSearch: [
     'profile_allow_view',
     'emr_allow_view',
+    'profile_allow_update_email_identifier',  // ← Added to match frontend
   ],
   pendingRequests: [
     'emr_allow_approval',
@@ -960,6 +1111,7 @@ const MODULE_PERMISSION_MAP = {
     'emr_allow_view',
     'emr_allow_edit',
     'emr_allow_edit_catalogs',
+    'emr_allow_set_vital_sign',  // ← Added to match frontend
     'consultation_allow_view',
     'consultation_allow_edit',
     'profile_allow_view',
@@ -984,13 +1136,28 @@ const MODULE_PERMISSION_MAP = {
     'inventory_allow_dispense',
     'inventory_allow_manage_requests',
     'inventory_allow_prescribe',
+    'inventory_allow_configure',  // ← Added to match frontend
+  ],
+  announcements: [
+    'announcement_allow_crud',
   ],
   healthChat: [
     'health_chat_allow_access',
   ],
+  sendNotification: [
+    'notification_allow_send_to_patients',
+  ],
   analytics: [
     'analytics_allow_view',
     'analytics_allow_export',
+  ],
+  documents: [
+    'document_allow_view',
+    'document_allow_manage',
+    'document_allow_generate',
+  ],
+  superiorAccess: [
+    'privileged_to_perform_on_superior',  // ← Added to match frontend
   ],
   // roleManagement intentionally excluded — admin-only via is_admin, not assignable via templates
 };
@@ -1002,8 +1169,12 @@ const MODULE_LABELS = {
   dentalRecords: 'Dental Records',
   appointments: 'Appointments',
   inventory: 'Inventory',
+  announcements: 'Announcements',
   healthChat: 'Health Chat',
+  sendNotification: 'Send Notification',
   analytics: 'Analytics',
+  documents: 'Documents',
+  superiorAccess: 'Superior Account Access',  // ← Added to match frontend
   // roleManagement excluded — admin-only access
 };
 
@@ -1117,9 +1288,13 @@ module.exports = {
   setMedicalPermit,
   unsetMedicalPermit,
   isMedicalPermitted,
+  isMedicalPermittedMulti,
   isMedicalPermittedPatientBased,
+  isMedicalPermittedPatientBasedMulti,
   isMedicalPermittedLocationBased,
+  isMedicalPermittedLocationBasedMulti,
   isMedicalPermittedBranchBased,
+  isMedicalPermittedBranchBasedMulti,
   clearMedicalPermits,
   getMedicalpermits,
   getStaffBranch,
@@ -1135,6 +1310,9 @@ module.exports = {
   deletePermissionTemplate,
   applyTemplateToStaff,
   propagateTemplatePermissions,
+  PERMISSION_GROUP_DEFINITIONS,
+  buildPermissionGroups,
+  normalizeTemplatePermissionsInput,
   // Module-level permission functions
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,

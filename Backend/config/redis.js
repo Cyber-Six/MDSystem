@@ -390,7 +390,7 @@ async function createVerificationSession(email, purpose, account_type = "patient
       data_consent: user.data_consent ? "true" : "false",
       data_consent_version: user.data_consent_version || "",
       data_consent_agreed: user.data_consent_agreed
-        ? user.data_consent_agreed.toISOString()
+        ? new Date(user.data_consent_agreed).toISOString()
         : "",
     });
   } else { // account doesnt exist
@@ -592,6 +592,96 @@ async function listUserSessions(userId) {
 }
 
 /**
+ * List refresh sessions for a specific user with Redis key and TTL metadata.
+ * Uses batched mGet + pipelined TTL for efficiency.
+ *
+ * @param {string|number} userId
+ * @returns {Promise<Array<{key: string, ttlSeconds: number, session: object}>>}
+ */
+async function listUserSessionsWithMeta(userId) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!userId) throw new Error("listUserSessionsWithMeta: userId is required");
+
+  const pattern = `rt:${String(userId)}:*`;
+  const keys = [];
+
+  const normalizeExecNumber = (value) => {
+    if (Array.isArray(value)) {
+      if (value.length === 2) return Number(value[1]);
+      if (value.length === 1) return Number(value[0]);
+    }
+    return Number(value);
+  };
+
+  const normalizeScanIteratorItem = (raw) => {
+    if (raw === null || raw === undefined) return [];
+
+    if (Array.isArray(raw)) {
+      return raw.flatMap((item) => normalizeScanIteratorItem(item));
+    }
+
+    if (Buffer.isBuffer(raw)) {
+      const key = raw.toString().trim();
+      return key ? [key] : [];
+    }
+
+    const key = String(raw).trim();
+    return key ? [key] : [];
+  };
+
+  for await (const rawItem of client.scanIterator({ match: pattern, count: 100 })) {
+    const scannedKeys = normalizeScanIteratorItem(rawItem);
+    for (const key of scannedKeys) {
+      keys.push(key);
+    }
+  }
+
+  if (keys.length === 0) {
+    return [];
+  }
+
+  const rawValues = await client.mGet(keys);
+  const normalizedRawValues = Array.isArray(rawValues)
+    ? rawValues
+    : keys.map(() => null);
+
+  const ttlPipeline = client.multi();
+  for (const key of keys) {
+    ttlPipeline.ttl(key);
+  }
+  const ttlValues = await ttlPipeline.exec();
+  const normalizedTtlValues = Array.isArray(ttlValues)
+    ? ttlValues
+    : keys.map(() => null);
+
+  const records = [];
+
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index];
+    const raw = normalizedRawValues[index];
+    if (!raw) continue;
+
+    const ttlSeconds = normalizeExecNumber(normalizedTtlValues[index]);
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) continue;
+
+    try {
+      const session = JSON.parse(raw);
+      if (!session || typeof session !== 'object') continue;
+
+      records.push({
+        key,
+        ttlSeconds,
+        session,
+      });
+    } catch {
+      logger.error('Skipping refresh session with invalid JSON', { key });
+    }
+  }
+
+  return records;
+}
+
+/**
  * Delete all refresh sessions for a user
  * @param {string|number} userId
  * @returns {Promise<number>} Number of sessions deleted
@@ -629,58 +719,195 @@ async function deleteStaffAnchor(userId) {
 }
 
 /**
+ * Scan ALL refresh sessions across all users with key metadata.
+ * Includes Redis key and TTL so callers can enforce active-session checks.
+ *
+ * @returns {Promise<Array<{key: string, ttlSeconds: number, session: object}>>}
+ */
+async function scanAllRefreshSessionsWithMeta() {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const pattern = `rt:*`;
+  const records = [];
+  const batchSize = 100;
+
+  let batch = [];
+
+  const normalizeScanIteratorItem = (raw) => {
+    if (raw === null || raw === undefined) return [];
+
+    if (Array.isArray(raw)) {
+      return raw.flatMap((item) => normalizeScanIteratorItem(item));
+    }
+
+    if (Buffer.isBuffer(raw)) {
+      const key = raw.toString().trim();
+      return key ? [key] : [];
+    }
+
+    if (typeof raw === "string") {
+      const key = raw.trim();
+      return key ? [key] : [];
+    }
+
+    const key = String(raw).trim();
+    return key ? [key] : [];
+  };
+
+  const parseRefreshSessionKey = (key) => {
+    if (typeof key !== "string" || !key.startsWith("rt:")) return null;
+    if (key.startsWith("rt:fail:") || key.startsWith("rt:lock:")) return null;
+
+    const parts = key.split(":");
+    if (parts.length !== 3) return null;
+
+    const [, keyUserId, keyDeviceId] = parts;
+    if (!keyUserId || !keyDeviceId) return null;
+
+    return { keyUserId, keyDeviceId };
+  };
+
+  const normalizeExecNumber = (value) => {
+    // Some Redis clients/modes may surface pipeline replies as [err, value].
+    if (Array.isArray(value)) {
+      if (value.length === 2) {
+        return Number(value[1]);
+      }
+      if (value.length === 1) {
+        return Number(value[0]);
+      }
+    }
+    return Number(value);
+  };
+
+  const flushBatch = async () => {
+    if (batch.length === 0) return;
+
+    const keys = batch;
+    batch = [];
+
+    const rawValues = await client.mGet(keys);
+    const normalizedRawValues = Array.isArray(rawValues)
+      ? rawValues
+      : keys.map(() => null);
+
+    const ttlPipeline = client.multi();
+    for (const key of keys) {
+      ttlPipeline.ttl(key);
+    }
+    const ttlValues = await ttlPipeline.exec();
+    const normalizedTtlValues = Array.isArray(ttlValues)
+      ? ttlValues
+      : keys.map(() => null);
+
+    for (let index = 0; index < keys.length; index += 1) {
+      const key = keys[index];
+      const parsedKey = parseRefreshSessionKey(key);
+      if (!parsedKey) {
+        logger.error('Skipping refresh session with missing userId/deviceId', { key });
+        continue;
+      }
+
+      const { keyUserId, keyDeviceId } = parsedKey;
+
+      const raw = normalizedRawValues[index];
+      if (!raw) continue;
+
+      const ttlSeconds = normalizeExecNumber(normalizedTtlValues[index]);
+      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+        logger.error('Skipping refresh session due to expired TTL', { key, ttlSeconds });
+        continue;
+      }
+
+      try {
+        const session = JSON.parse(raw);
+        if (!session || typeof session !== 'object') {
+          logger.error('Skipping refresh session with invalid JSON', { key });
+          continue; // Skip if not an object
+        }
+
+        const sessionUserId = session.userId !== undefined && session.userId !== null
+          ? String(session.userId)
+          : null;
+
+        if (!sessionUserId) {
+          logger.error('Skipping refresh session with missing userId', { key });
+          continue;
+        }
+
+        if (sessionUserId !== String(keyUserId)) {
+          logger.error('Skipping refresh session due to key/userId mismatch', {
+            key,
+            keyUserId,
+            sessionUserId,
+          });
+          continue;
+        }
+
+        const sessionRefreshToken = typeof session.refreshToken === 'string'
+          ? session.refreshToken.trim()
+          : '';
+        const sessionDeviceId = session.deviceId !== undefined && session.deviceId !== null
+          ? String(session.deviceId)
+          : null;
+
+        if (!sessionDeviceId) {
+          logger.error('Skipping refresh session with missing userId/deviceId', { key, userId: sessionUserId });
+          continue;
+        }
+
+        if (sessionDeviceId !== String(keyDeviceId)) {
+          logger.error('Skipping refresh session due to key/deviceId mismatch', {
+            key,
+            keyDeviceId,
+            sessionDeviceId,
+          });
+          continue;
+        }
+
+        // Refresh tokens are UUIDs, not JWTs. Keep only non-empty string tokens.
+        if (!sessionRefreshToken) {
+          continue;
+        }
+        
+        records.push({
+          key,
+          ttlSeconds,
+          session,
+        });
+      } catch {
+        logger.error('Skipping refresh session with invalid JSON', { key });
+      }
+    }
+  };
+
+  for await (const rawScanItem of client.scanIterator({ match: pattern, count: batchSize })) {
+    const scannedKeys = normalizeScanIteratorItem(rawScanItem);
+
+    for (const key of scannedKeys) {
+      logger.debug('Scanning Redis key', { key });
+      // Explicitly skip limiter families only; all other rt:* keys are parsed in flushBatch.
+      if (key.startsWith('rt:fail:') || key.startsWith('rt:lock:')) continue;
+      if (!key.startsWith('rt:')) continue;
+
+      batch.push(key);
+      if (batch.length >= batchSize) {
+        await flushBatch();
+      }
+    }
+  }
+
+  await flushBatch();
+  return records;
+}
+
+/**
  * Scan ALL refresh sessions across all users (for system-wide queries)
  * @returns {Promise<Array>} Array of session objects with userId and deviceId
  */
 async function scanAllRefreshSessions() {
-  if (!client) throw new Error("Redis client not initialized");
-
-  const pattern = `rt:*`;
-  const sessions = [];
-  const batchSize = 100; // how many keys to fetch per MGET
-
-  let batch = [];
-
-  for await (const key of client.scanIterator({ match: pattern, count: batchSize })) {
-    // Skip non-session keys (e.g., rt:fail:*, rt:lock:*)
-    const parts = key.split(':');
-    if (parts.length !== 3) continue;
-
-    batch.push(key);
-
-    // When batch is full, fetch them all at once
-    if (batch.length >= batchSize) {
-      const rawValues = await client.mGet(batch);
-      rawValues.forEach(raw => {
-        if (raw) {
-          try {
-            const session = JSON.parse(raw);
-            sessions.push(session);
-          } catch {
-            // Skip invalid JSON
-          }
-        }
-      });
-      batch = [];
-    }
-  }
-
-  // Handle leftover keys in the last batch
-  if (batch.length > 0) {
-    const rawValues = await client.mGet(batch);
-    rawValues.forEach(raw => {
-      if (raw) {
-        try {
-          const session = JSON.parse(raw);
-          sessions.push(session);
-        } catch {
-          // Skip invalid JSON
-        }
-      }
-    });
-  }
-
-  return sessions;
+  const records = await scanAllRefreshSessionsWithMeta();
+  return records.map((record) => record.session);
 }
 
 
@@ -1039,7 +1266,7 @@ const LoginFailureMatrix = {
     prefix: "login:staff",
     failTtl: Number(process.env.STAFF_LOGIN_FAIL_TTL) || 300,
     lockdownSeconds: Number(process.env.STAFF_LOGIN_FAIL_LOCKDOWN_SECONDS) || 300,
-    threshold: Number(process.env.STAFF_FAILED_LOGIN_THRESHOLD) || 3,
+    threshold: Number(process.env.STAFF_FAILED_LOGIN_THRESHOLD) || 5,
   },
 };
 
@@ -1076,6 +1303,44 @@ async function isLoginLocked(email, portal) {
 
   const ttl = await client.ttl(lockKey);
   return ttl > 0 ? ttl : 0; // return remaining lockout time in seconds
+}
+
+// ── Adaptive reCAPTCHA ──────────────────────────────────────────────────
+// Threshold at which the server starts requiring reCAPTCHA for an email.
+// Below this, login requests are accepted without a captcha token.
+const RECAPTCHA_FAIL_THRESHOLD = Number(process.env.RECAPTCHA_FAIL_ATTEMPT_THRESHOLD) || 3;
+
+/**
+ * Read the current consecutive-failure count for an email + portal.
+ * Returns 0 when no failures are recorded (key absent or expired).
+ */
+async function getLoginFailureCount(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) throw new Error(`Unknown portal for failure count: ${portal}`);
+  const prefix = LoginFailureMatrix[portal].prefix;
+  const val = await client.get(`${prefix}:fail:${email}`);
+  return val ? parseInt(val, 10) : 0;
+}
+
+/**
+ * Whether the current failure count means the next request must include a
+ * valid reCAPTCHA token.  Used by the login routes to decide whether to
+ * enforce the captcha check.
+ */
+async function shouldRequireRecaptcha(email, portal) {
+  const count = await getLoginFailureCount(email, portal);
+  return count >= RECAPTCHA_FAIL_THRESHOLD;
+}
+
+/**
+ * Clear the failure counter after a fully-completed successful login.
+ * Prevents stale counts from requiring captcha on the next login session.
+ */
+async function resetLoginFailures(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) return; // unknown portal — no-op
+  const prefix = LoginFailureMatrix[portal].prefix;
+  await client.del(`${prefix}:fail:${email}`);
 }
 
 async function triggerExpiredMedical(supply, batchId) {
@@ -1166,6 +1431,9 @@ module.exports = {
   getOTPLockoutTTL,
   incrementLoginFailure,
   isLoginLocked,
+  getLoginFailureCount,
+  shouldRequireRecaptcha,
+  resetLoginFailures,
 
   createVerificationSession,
   getVerificationSession,
@@ -1180,6 +1448,8 @@ module.exports = {
   saveStaffAnchor,
   getStaffAnchor,
   listUserSessions,
+  listUserSessionsWithMeta,
+  scanAllRefreshSessionsWithMeta,
   scanAllRefreshSessions,
   deleteAllUserSessions,
   deleteStaffAnchor,

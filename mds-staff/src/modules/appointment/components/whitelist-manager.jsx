@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Search, UserPlus, UserMinus, Users, AlertCircle } from 'lucide-react';
 import { listWhitelist, addWhitelist, removeWhitelist } from '../staff-appointment-service';
 import { searchPatients, formatPatientName } from '../../../services/patient-search-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
 
 /**
  * Whitelist Manager Component
@@ -9,6 +10,7 @@ import { searchPatients, formatPatientName } from '../../../services/patient-sea
  * Allows viewing, adding, and removing whitelisted patients.
  */
 const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
+  const { profile } = useStaffProfile();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -78,7 +80,7 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
     // Debounce search by 1000ms (1 second) to save backend resources
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const results = await searchPatients(value.trim(), 10);
+        const results = await searchPatients(value.trim(), 10, profile?.branch || null, null, false);
 
         // Filter out patients already in whitelist
         const filteredResults = results.filter(

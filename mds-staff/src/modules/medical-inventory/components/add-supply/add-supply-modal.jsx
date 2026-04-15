@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ITEM_CATEGORY, ALL_LOCATIONS, getDisplayLocation } from '../../medical-inventory-service';
+import React, { useState, useEffect } from 'react';
+import { ITEM_CATEGORY, getDisplayLocation } from '../../medical-inventory-service';
 
 const DOSAGE_UNITS = ['mg', 'g', 'mcg', 'ml', 'L', 'IU'];
 const SUPPLY_UNITS = ['pcs', 'box', 'pack', 'set', 'kit'];
@@ -34,8 +34,13 @@ const isExpiryDateInPast = (expiryDate) => {
 /**
  * Add Supply Modal — receive a new batch for an existing medical item.
  * Supports both medicine batches (with dosage) and supply batches (with units).
+ * @param {string} itemId - Pre-selected item ID (optional)
+ * @param {Array} items - List of medical items
+ * @param {Array} allowedLocations - List of locations the user has access to
+ * @param {Function} onClose - Close modal handler
+ * @param {Function} onSave - Save handler
  */
-const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
+const AddSupplyModal = ({ itemId, items, allowedLocations = [], onClose, onSave }) => {
   const [selectedItemId, setSelectedItemId] = useState(itemId || '');
   const [form, setForm] = useState({
     batchNumber: '',
@@ -44,10 +49,17 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
     dosageValue: '',
     dosageUnit: 'mg',
     unit: 'pcs',
-    location: 'Casal',
+    location: '',
     supplierName: '',
     notes: '',
   });
+
+  // Set default location when allowedLocations changes
+  useEffect(() => {
+    if (allowedLocations.length > 0 && !form.location) {
+      setForm(f => ({ ...f, location: allowedLocations[0] }));
+    }
+  }, [allowedLocations, form.location]);
   const [saveAnother, setSaveAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -85,7 +97,7 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
   const isMedicine = selectedItem?.category?.toLowerCase() === ITEM_CATEGORY.MEDICINE.toLowerCase();
 
   const resetForm = () => {
-    setForm({ batchNumber: '', expiryDate: '', quantity: '', dosageValue: '', dosageUnit: 'mg', unit: 'pcs', location: 'Casal', supplierName: '', notes: '' });
+    setForm({ batchNumber: '', expiryDate: '', quantity: '', dosageValue: '', dosageUnit: 'mg', unit: 'pcs', location: allowedLocations[0] || '', supplierName: '', notes: '' });
     setTouched({});
   };
 
@@ -302,7 +314,7 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Clinic Location *</label>
               <select value={form.location} onChange={(e) => set('location', e.target.value)} required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                 <option value="">Select a location...</option>
-                {ALL_LOCATIONS.map((l) => <option key={l} value={l}>{getDisplayLocation(l)}</option>)}
+                {allowedLocations.map((l) => <option key={l} value={l}>{getDisplayLocation(l)}</option>)}
               </select>
             </div>
           </div>

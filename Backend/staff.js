@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const compression = require('compression');
+const helmet = require('helmet');
 const db = require('./config/db.js');
 const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
@@ -15,16 +16,17 @@ const { initMedicalInventoryGraphQL } = require('./routes/medical-inventory/inve
 const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
-const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.js');
+const { initRoleManagementGraphQL } = require('./routes/admin/role-management/graphql.js');
 const { initDashboardGraphQL } = require('./routes/dashboard/graphql.js');
+//const initAdminPatientManagementGraphQL = require('./routes/admin/patient-management/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
-const analyticsRoutes = require('./routes/documents/analytics/analytics.js');
+const analyticsRoutes = require('./routes/analytics/analytics.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
-const staffRoutes = require('./routes/staff/staff.js');
+const staffRoutes = require('./routes/staff/profile.js');
 const dashboardRestRoutes = require('./routes/dashboard/rest-endpoint.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentStaffRoutes = require('./routes/documents/document/document-staff.js');
@@ -33,6 +35,7 @@ const settingsRoutes = require('./routes/settings/settings.js');
 const totpRoutes = require('./routes/settings/totp.js');
 const settingsPasswordRoutes = require('./routes/settings/password.js');
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
+const googleOAuthRoutes = require('./routes/auth/oauth/google.js');
 
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
@@ -47,7 +50,31 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const app = express();
 
 // Middleware
-app.use(cors());
+const corsOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',')
+  : [];
+app.use(cors({
+  origin: corsOrigins.length > 0 ? corsOrigins : false,
+  credentials: true,
+}));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:     ["'self'"],
+      scriptSrc:      ["'self'", "'unsafe-inline'", "https://www.google.com", "https://accounts.google.com", "https://www.gstatic.com"],
+      styleSrc:       ["'self'", "'unsafe-inline'"],
+      imgSrc:         ["'self'", "data:", "https:", "blob:"],
+      connectSrc:     ["'self'", "wss:", "ws:"],
+      frameSrc:       ["'self'", "https://www.google.com"],
+      fontSrc:        ["'self'", "data:"],
+      objectSrc:      ["'none'"],
+      baseUri:        ["'self'"],
+      formAction:     ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for Google Sign-In button
+}));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.set("trust proxy", true);
@@ -82,12 +109,14 @@ initPrescriptionGraphQL(app);
 initMedicalHealthChatGraphQL(app);
 initRoleManagementGraphQL(app);
 initDashboardGraphQL(app);
+//initAdminPatientManagementGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
 app.use('/auth/refresh', refreshAuthRoutes);
+app.use('/auth/oauth', googleOAuthRoutes);
 
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);

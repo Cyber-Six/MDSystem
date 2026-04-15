@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense, useMemo } from 'react';
 import { searchPatients } from '../../services/patient-search-service';
 import { usePatientTabs } from '../../context/patient-tabs-context';
+import { usePermissions } from '../../context/permissions-context';
+import { useBanner } from '../../context/use-banner';
 import SearchBar from './components/search-bar';
 import SearchResultsList from './components/search-results-list';
+import PatientInitialBadge from './components/patient-initial-badge';
+import { canExpandPatientDetails, SUPERIOR_DETAILS_DENIED_CUE } from './superior-access';
 
 const PatientRecordView = lazy(() => import('./patient-record-view.jsx'));
 
@@ -17,26 +21,62 @@ const TabLoader = () => (
 
 export default function SearchPatientView() {
   const { tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs } = usePatientTabs();
+  const { branch: roleBranch, isLoading: permissionsLoading, hasPermission, isAdmin } = usePermissions();
+  const { showBanner } = useBanner();
 
   // ── Search state ────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults]       = useState([]);
   const [isLoading, setIsLoading]   = useState(false);
   const [error, setError]           = useState(null);
+  const [authError, setAuthError]   = useState(null);
+  const [enforcedBranch, setEnforcedBranch] = useState(null);
   const [hasFired, setHasFired]     = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [searchType, setSearchType] = useState('all');
   const inputRef = useRef(null);
   const listRef  = useRef(null);
 
+  const selectedIdentities = useMemo(() => {
+    if (searchType === 'student') return ['Student'];
+    if (searchType === 'employee') return ['Employee'];
+    if (searchType === 'superior') return ['Superior'];
+    return null;
+  }, [searchType]);
+
+  // Resolve authoritative branch from authenticated RoleManagement context.
+  useEffect(() => {
+    if (permissionsLoading) return;
+
+    if (!roleBranch) {
+      setEnforcedBranch(null);
+      setAuthError('Unauthorized: your staff branch/designation is missing. Please contact an administrator.');
+      return;
+    }
+
+    setEnforcedBranch(roleBranch);
+    setAuthError(null);
+  }, [roleBranch, permissionsLoading]);
+
   // ── Drag-to-reorder state ─────────────────────────────────────────────────
   const [draggedTabId, setDraggedTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
 
   // ── Open patient record directly in a tab ─────────────────────────────────
+  const canViewSuperiorDetails = isAdmin || hasPermission('superiorAccess');
+
   const handleSelectPatient = useCallback((patient) => {
+    if (!canExpandPatientDetails(patient, canViewSuperiorDetails)) {
+      showBanner({
+        type: 'error',
+        message: SUPERIOR_DETAILS_DENIED_CUE,
+        duration: 5000,
+      });
+      return;
+    }
+
     openTab(patient, 'personal');
-  }, [openTab]);
+  }, [openTab, showBanner, canViewSuperiorDetails]);
 
   // ── Debounced search (shows loader immediately, waits before API call) ────
   useEffect(() => {
@@ -44,6 +84,20 @@ export default function SearchPatientView() {
     if (trimmed.length < 2) {
       setResults([]);
       setHasFired(false);
+      setFocusedIdx(-1);
+      setIsLoading(false);
+      return;
+    }
+
+    // Never allow branch to be supplied by user input in this component.
+    if (permissionsLoading) {
+      setIsLoading(false);
+      return;
+    }
+
+    if (authError || !enforcedBranch) {
+      setResults([]);
+      setHasFired(true);
       setFocusedIdx(-1);
       setIsLoading(false);
       return;
@@ -57,7 +111,7 @@ export default function SearchPatientView() {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed);
+        const data = await searchPatients(trimmed, 15, enforcedBranch, selectedIdentities, true);
         setResults(data);
       } catch (err) {
         setError(err.message || 'Search failed');
@@ -68,14 +122,10 @@ export default function SearchPatientView() {
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, selectedIdentities, permissionsLoading, authError, enforcedBranch]);
 
-  // ── Filter by type locally ────────────────────────────────────────────────
-  const filtered = results.filter((p) => {
-    if (searchType === 'student') return p.profile_type === 'Student';
-    if (searchType === 'employee') return p.profile_type === 'Employee';
-    return true;
-  });
+  // Backend now receives identity filters directly; keep result set as-is.
+  const filtered = results;
 
   // ── Keyboard nav ──────────────────────────────────────────────────────────
   const handleKeyDown = useCallback(
@@ -167,12 +217,7 @@ export default function SearchPatientView() {
               className="flex items-center gap-1.5 min-w-0 flex-1"
               title={`${tab.patientName} - ${tab.label}`}
             >
-              <span
-                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                style={{ background: '#C9A01E' }}
-              >
-                {tab.patientName.charAt(0)}
-              </span>
+              <PatientInitialBadge initials={tab.patientName.charAt(0)} size="sm" />
               <span className="truncate font-medium text-xs">
                 {tab.patientName}
               </span>
@@ -213,9 +258,9 @@ export default function SearchPatientView() {
             />
 
             {/* Error message */}
-            {error && (
+            {(authError || error) && (
               <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg p-3 text-sm text-error-700 dark:text-error-400">
-                {error}
+                {authError || error}
               </div>
             )}
 

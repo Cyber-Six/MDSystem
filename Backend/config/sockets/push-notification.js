@@ -17,12 +17,124 @@ const { deletePushToken } = require('./notification-store');
 
 const expo = new Expo();
 
+const DEFAULT_CHANNEL_ID = 'mds-notifications';
+const HEALTH_CHAT_CHANNEL_ID = 'health-chat';
+
+function toTitleCaseWords(input) {
+  return String(input || '')
+    .replace(/[:._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function resolveTypeAndChannelFromEvent(eventName) {
+  if (eventName.startsWith('healthchat:')) {
+    return { type: 'health-chat', channelId: HEALTH_CHAT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('appointment:')) {
+    return { type: 'appointment', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('medicine:')) {
+    return { type: 'medicine', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('document:')) {
+    return { type: 'document', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('updateTicket')) {
+    return { type: 'record', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('inventory:')) {
+    return { type: 'inventory', channelId: DEFAULT_CHANNEL_ID };
+  }
+  if (eventName.startsWith('role:')) {
+    return { type: 'role-management', channelId: DEFAULT_CHANNEL_ID };
+  }
+  return { type: 'general', channelId: DEFAULT_CHANNEL_ID };
+}
+
+function buildRoutingData(data) {
+  const safeData = {};
+  if (!data || typeof data !== 'object') return safeData;
+
+  // Keep payload compact while still preserving navigation IDs.
+  const candidateKeys = [
+    'chatId', 'slotId', 'requestId', 'documentId', 'recordId',
+    'templateType', 'status', 'newStatus', 'id',
+  ];
+  for (const key of candidateKeys) {
+    if (data[key] !== undefined && data[key] !== null) {
+      safeData[key] = data[key];
+    }
+  }
+
+  if (!safeData.chatId && data.chat && typeof data.chat === 'object' && data.chat.id) {
+    safeData.chatId = data.chat.id;
+  }
+
+  return safeData;
+}
+
+function fallbackBodyForEvent(eventName, data) {
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message.trim();
+  }
+  if (typeof data?.notes === 'string' && data.notes.trim()) {
+    return data.notes.trim();
+  }
+  return `You have a new ${toTitleCaseWords(eventName)} notification.`;
+}
+
+function toPushPayload(title, body, type, eventName, data = {}, channelId = DEFAULT_CHANNEL_ID) {
+  return {
+    title,
+    body,
+    channelId,
+    data: {
+      type,
+      event: eventName,
+      ...data,
+    },
+  };
+}
+
+function parseAnnouncementMessage(data, fallbackTitle) {
+  let title = fallbackTitle;
+  let body = '';
+
+  if (typeof data?.message === 'string') {
+    if (data.message.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(data.message);
+        title = parsed.title || fallbackTitle;
+        body = parsed.body || '';
+      } catch {
+        body = data.message;
+      }
+    } else {
+      body = data.message;
+    }
+  }
+
+  if (!body) return null;
+  return { title, body };
+}
+
+function buildGenericPushContent(eventName, data) {
+  const { type, channelId } = resolveTypeAndChannelFromEvent(eventName);
+  const title = toTitleCaseWords(eventName) || 'Notification';
+  const body = fallbackBodyForEvent(eventName, data);
+  const routingData = buildRoutingData(data);
+
+  return toPushPayload(title, body, type, eventName, routingData, channelId);
+}
+
 /**
  * Map a socket event name + data payload to a human-readable push notification.
  *
  * @param {string} eventName
  * @param {*}      data
- * @returns {{ title: string, body: string } | null}   null → no push for this event
+ * @returns {{ title: string, body: string, channelId: string, data: object } | null} null → no push for this event
  */
 function eventToPushContent(eventName, data) {
   switch (eventName) {
@@ -30,25 +142,119 @@ function eventToPushContent(eventName, data) {
       const msg = data?.message;
       const isFile = msg?.promptType === 'file' || msg?.content_type === 'file';
       const body = isFile ? '📎 Sent an image' : (msg?.text || msg?.content || 'New message');
-      return { title: '💬 Health Chat', body };
+      return toPushPayload('💬 Health Chat', body, 'health-chat', eventName, { chatId: data?.chatId ?? data?.chat?.id }, HEALTH_CHAT_CHANNEL_ID);
     }
     case 'healthchat:ticket-approved':
-      return {
-        title: '✅ Health Chat Approved',
-        body: 'Your health chat request has been approved. A staff member is ready to assist you.',
-      };
+      return toPushPayload(
+        '✅ Health Chat Approved',
+        'Your health chat request has been approved. A staff member is ready to assist you.',
+        'health-chat',
+        eventName,
+        { chatId: data?.chatId ?? data?.chat?.id },
+        HEALTH_CHAT_CHANNEL_ID,
+      );
     case 'healthchat:ticket-closed':
-      return {
-        title: 'Health Chat Ended',
-        body: 'Your health chat session has been closed.',
-      };
+      return toPushPayload(
+        'Health Chat Ended',
+        'Your health chat session has been closed.',
+        'health-chat',
+        eventName,
+        { chatId: data?.chatId ?? data?.chat?.id },
+        HEALTH_CHAT_CHANNEL_ID,
+      );
     case 'healthchat:ticket-rejected':
-      return {
-        title: '❌ Health Chat Declined',
-        body: 'Your health chat request was not approved. You may try again later.',
-      };
+      return toPushPayload(
+        '❌ Health Chat Declined',
+        'Your health chat request was not approved. You may try again later.',
+        'health-chat',
+        eventName,
+        { chatId: data?.chatId ?? data?.chat?.id },
+        HEALTH_CHAT_CHANNEL_ID,
+      );
+    case 'healthchat:ticket-transferred':
+      return toPushPayload(
+        'Health Chat Reassigned',
+        'Your health chat has been reassigned to another staff member.',
+        'health-chat',
+        eventName,
+        { chatId: data?.chatId ?? data?.chat?.id },
+        HEALTH_CHAT_CHANNEL_ID,
+      );
+    case 'healthchat:ticket-taken-over':
+      return toPushPayload(
+        'Health Chat Updated',
+        'A staff member has taken over your health chat session.',
+        'health-chat',
+        eventName,
+        { chatId: data?.chatId ?? data?.chat?.id },
+        HEALTH_CHAT_CHANNEL_ID,
+      );
+    case 'healthchat:session-extended':
+      return toPushPayload(
+        'Health Chat Session Extended',
+        'Your health chat inactivity timer has been reset.',
+        'health-chat',
+        eventName,
+        { chatId: data?.chatId ?? data?.chat?.id, expiresAt: data?.expiresAt },
+        HEALTH_CHAT_CHANNEL_ID,
+      );
+
+    case 'appointment:responded': {
+      const status = data?.status || 'Updated';
+      const verb = status === 'Approved' ? 'confirmed' : String(status).toLowerCase();
+      const body = data?.notes
+        ? `Your appointment has been ${verb}. Note: ${data.notes}`
+        : `Your appointment has been ${verb}.`;
+      return toPushPayload(`Appointment ${status}`, body, 'appointment', eventName, { slotId: data?.slotId });
+    }
+    case 'appointment:attendance-recorded':
+      return toPushPayload('Attendance Recorded', 'Your clinic visit has been recorded.', 'appointment', eventName, { slotId: data?.slotId });
+
+    case 'medicine:request:approved':
+      return toPushPayload('Medicine Request Approved', 'Your medicine request has been approved.', 'medicine', eventName, { requestId: data?.requestId });
+    case 'medicine:request:rejected':
+      return toPushPayload('Medicine Request Declined', 'Your medicine request was declined.', 'medicine', eventName, { requestId: data?.requestId });
+    case 'medicine:request:pending':
+      return toPushPayload('Medicine Request Received', 'Your medicine request is being processed.', 'medicine', eventName, { requestId: data?.requestId });
+    case 'medicine:request:cancelled':
+      return toPushPayload('Medicine Request Cancelled', 'Your medicine request was cancelled.', 'medicine', eventName, { requestId: data?.requestId });
+    case 'medicine:prescription:issued':
+      return toPushPayload('Prescription Ready', 'A new prescription has been issued for you.', 'medicine', eventName, { requestId: data?.requestId });
+
+    case 'document:new':
+      return toPushPayload('New Document Available', data?.message || 'A new document has been issued for you.', 'document', eventName, { documentId: data?.documentId, templateType: data?.templateType });
+    case 'document:approved':
+      return toPushPayload('Document Approved', data?.message || 'Your submitted document has been approved.', 'document', eventName, { documentId: data?.documentId });
+    case 'document:rejected':
+      return toPushPayload('Document Rejected', data?.message || 'Your submitted document was rejected.', 'document', eventName, { documentId: data?.documentId });
+    case 'document:cancelled':
+      return toPushPayload('Document Request Cancelled', data?.message || 'A document request has been cancelled.', 'document', eventName, { documentId: data?.documentId });
+    case 'document:requested':
+      return toPushPayload('Document Requested', data?.message || 'A healthcare provider requested a document from you.', 'document', eventName, { documentId: data?.documentId });
+    case 'document:archived':
+      return toPushPayload('Document Archived', data?.message || 'Your document was archived.', 'document', eventName, { documentId: data?.documentId });
+
+    case 'updateTicket:statusChanged': {
+      const status = data?.newStatus || 'Updated';
+      const body = data?.message || `Your record update request has been ${String(status).toLowerCase()}.`;
+      return toPushPayload(`Record Update ${status}`, body, 'record', eventName, { recordId: data?.recordId });
+    }
+
+    case 'staff:notification': {
+      const parsed = parseAnnouncementMessage(data, 'Message from Staff');
+      if (!parsed) return null;
+      return toPushPayload(parsed.title, parsed.body, 'general', eventName);
+    }
+
+    case 'admin:notification': {
+      const parsed = parseAnnouncementMessage(data, 'Message from Admin');
+      if (!parsed) return null;
+      return toPushPayload(parsed.title, parsed.body, 'general', eventName);
+    }
+
     default:
-      return null; // No push for other events
+      // Fallback: keep push valid for any future module event routed through notifyUser().
+      return buildGenericPushContent(eventName, data);
   }
 }
 
@@ -60,8 +266,9 @@ function eventToPushContent(eventName, data) {
  * @param {string} body
  * @param {object} [data]      - Custom data payload (accessible in the app on tap)
  * @param {string} [userId]    - User ID for token cleanup on DeviceNotRegistered
+ * @param {string} [channelId] - Android notification channel ID
  */
-async function sendExpoPushNotification(pushToken, title, body, data = {}, userId = null) {
+async function sendExpoPushNotification(pushToken, title, body, data = {}, userId = null, channelId = DEFAULT_CHANNEL_ID) {
   if (!Expo.isExpoPushToken(pushToken)) {
     logger.warn(`[PUSH] Invalid Expo push token: ${pushToken}`);
     return;
@@ -72,8 +279,9 @@ async function sendExpoPushNotification(pushToken, title, body, data = {}, userI
     sound: 'default',
     title,
     body,
-    data: { type: 'health-chat', ...data },
-    channelId: 'health-chat', // Android channel
+    priority: 'high',
+    data,
+    channelId,
   };
 
   try {

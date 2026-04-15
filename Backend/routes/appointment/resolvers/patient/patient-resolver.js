@@ -64,7 +64,7 @@ const Mutation = {
     try {
       const location = result.location;
       if (location) {
-        emitToRoom(`branch:${location}`, "appointment:submitted", {
+        emitToRoom(`branch:${location}:appointments`, "appointment:submitted", {
           slotId: result.id,
           patientId: user.id,
           schedulerId,

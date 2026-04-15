@@ -18,16 +18,55 @@ import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 import { useStaffNotifications } from '../notification/notification-context';
 import { useMedicineRequestSocket } from './hooks/useMedicineRequestSocket';
 import { usePermissions } from '../../context/permissions-context';
-import { useStaffProfile } from '../../hooks/use-staff-profile';
-import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
-import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
+import { getLocationsByBranch } from '../../utils/branch-utils';
+import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, fetchAllBatchesForItems, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
+import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchAllMedicineRequestsByLocations, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
-import { getPatientBasicInfo } from '../../modules/pending-requests/patient-record-service';
+import { getPatientBasicInfoBatch } from '../../modules/pending-requests/patient-record-service';
 import { formatPatientName } from '../../services/patient-search-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
+import { readPersistedViewState, writePersistedViewState } from '../../utils/persistent-view-state';
+
+const INVENTORY_SECTION_STORAGE_KEY = 'mds_staff_inventory_active_section';
+const INVENTORY_PERSISTABLE_SECTIONS = ['dashboard', 'items', 'dispense', 'direct-release'];
+const isPersistableInventorySection = (value) => INVENTORY_PERSISTABLE_SECTIONS.includes(value);
+
+// ── Approval persistence helpers (localStorage) ───────────────────────────
+// The backend does not store approved quantities, so we persist them locally.
+// Each entry: { quantities: {0: 5, 1: 3}, approvedAt: <timestamp ms> }
+const APPROVAL_EXPIRY_DAYS = 7;
+const _approvalKey = (id) => `mds_inv_approved_${id}`;
+
+const saveApprovalToStorage = (requestId, quantities) => {
+  try {
+    localStorage.setItem(_approvalKey(requestId), JSON.stringify({ quantities, approvedAt: Date.now() }));
+  } catch { /* storage unavailable */ }
+};
+
+const loadApprovalFromStorage = (requestId) => {
+  try {
+    const raw = localStorage.getItem(_approvalKey(requestId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // backward-compat: old format was a plain quantities object
+    if (parsed && parsed.quantities !== undefined) return parsed;
+    return { quantities: parsed, approvedAt: null };
+  } catch { return null; }
+};
+
+const clearApprovalFromStorage = (requestId) => {
+  try { localStorage.removeItem(_approvalKey(requestId)); } catch { /* ignore */ }
+};
+
+const isApprovalExpired = (requestId) => {
+  const data = loadApprovalFromStorage(requestId);
+  if (!data?.approvedAt) return false;
+  return (Date.now() - data.approvedAt) > APPROVAL_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+};
+// ─────────────────────────────────────────────────────────────────────────
 
 
 /**
@@ -36,13 +75,14 @@ import {
  */
 const MedicalInventory = () => {
   const routerLocation = useLocation();
-  const { subscribe, refreshInventoryAlerts } = useStaffNotifications();
-  const { hasPermission } = usePermissions();
-  const { profile } = useStaffProfile();
-  const [activeSection, setActiveSection] = useState(
-    routerLocation.state?.section ?? 'dashboard'
-  );
-  const [directReleaseLocation, setDirectReleaseLocation] = useState('Casal');
+  const routeSection = routerLocation.state?.section;
+  const { refreshInventoryAlerts } = useStaffNotifications();
+  const { hasPermission, branch: staffBranch } = usePermissions();
+  const [activeSection, setActiveSection] = useState(() => {
+    if (isPersistableInventorySection(routeSection)) return routeSection;
+    return readPersistedViewState(INVENTORY_SECTION_STORAGE_KEY, 'dashboard', isPersistableInventorySection);
+  });
+  const [directReleaseLocation, setDirectReleaseLocation] = useState(null); // Will be set based on user's allowed locations
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState('');
@@ -106,180 +146,120 @@ const MedicalInventory = () => {
   const [successModalData, setSuccessModalData] = useState({ title: 'Success', message: '' });
   const hasLoadedRequestsRef = useRef(false);
   const patientNameCacheRef = useRef({}); // Cache for patient names to avoid redundant API calls
+  const requestsLoadPromiseRef = useRef(null);
+  const lastRequestsLoadAtRef = useRef(0);
 
-  // Helper function to get patient name with caching
-  const getPatientNameCached = useCallback(async (patientId) => {
-    if (!patientId) return `Patient #${patientId}`;
+  useEffect(() => {
+    if (!isPersistableInventorySection(routeSection)) return;
+    setActiveSection(routeSection);
+  }, [routeSection]);
 
-    // Check cache first
-    if (patientNameCacheRef.current[patientId]) {
-      return patientNameCacheRef.current[patientId];
-    }
+  useEffect(() => {
+    if (!isPersistableInventorySection(activeSection)) return;
+    writePersistedViewState(INVENTORY_SECTION_STORAGE_KEY, activeSection);
+  }, [activeSection]);
 
-    // Check if user has permission to view patient information
-    // getPatientBasicInfo requires emr_allow_view permission, which is part of patientSearch or medicalRecords modules
-    const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
-
-    if (!canViewPatientInfo) {
-      // User doesn't have permission to view patient info, use fallback immediately
-      const fallback = `Patient #${patientId}`;
-      patientNameCacheRef.current[patientId] = fallback;
-      return fallback;
-    }
-
-    try {
-      const patient = await getPatientBasicInfo(patientId);
-      if (patient) {
-        const name = formatPatientName(patient);
-        patientNameCacheRef.current[patientId] = name;
-        return name;
-      }
-    } catch (err) {
-      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err);
-    }
-
-    // Fallback to ID if fetch fails
-    const fallback = `Patient #${patientId}`;
-    patientNameCacheRef.current[patientId] = fallback;
-    return fallback;
-  }, [hasPermission]);
-
-  // Helper function to enrich multiple requests with patient names
+  // Helper function to enrich multiple requests with patient names.
+  // Uses a single batched /emr/medical request for all unique patient IDs
+  // instead of one request per patient.
   const enrichRequestsWithPatientNames = useCallback(async (requests) => {
-    const uniquePatientIds = [...new Set(requests.map(r => r.patientId))];
-    
-    // Fetch all patient names in parallel
-    const patientNames = await Promise.all(
-      uniquePatientIds.map(id => getPatientNameCached(id))
-    );
-    
-    // Create a map of patientId -> patientName
+    if (requests.length === 0) return [];
+
+    const uniquePatientIds = [...new Set(requests.map(r => r.patientId).filter(Boolean))];
+
+    // Build name map from cache first
     const patientNameMap = {};
-    uniquePatientIds.forEach((id, index) => {
-      patientNameMap[id] = patientNames[index];
-    });
-    
-    // Enrich requests with patient names
+    const uncachedIds = [];
+    for (const id of uniquePatientIds) {
+      if (patientNameCacheRef.current[id]) {
+        patientNameMap[id] = patientNameCacheRef.current[id];
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+
+    // Fetch all uncached patients in one batched request (if permitted)
+    if (uncachedIds.length > 0) {
+      const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
+      if (canViewPatientInfo) {
+        try {
+          const batchMap = await getPatientBasicInfoBatch(uncachedIds);
+          for (const [id, patient] of batchMap.entries()) {
+            const name = patient ? formatPatientName(patient) : `Patient #${id}`;
+            patientNameCacheRef.current[id] = name;
+            patientNameMap[id] = name;
+          }
+        } catch (err) {
+          console.warn('Failed to batch-fetch patient names:', err.message);
+          for (const id of uncachedIds) {
+            patientNameMap[id] = patientNameMap[id] ?? `Patient #${id}`;
+          }
+        }
+      } else {
+        for (const id of uncachedIds) {
+          const fallback = `Patient #${id}`;
+          patientNameCacheRef.current[id] = fallback;
+          patientNameMap[id] = fallback;
+        }
+      }
+    }
+
     return requests.map(req => ({
       ...req,
       patientName: patientNameMap[req.patientId] || `Patient #${req.patientId}`,
       patientType: 'Self-Request',
       _isRealRequest: true,
     }));
-  }, [getPatientNameCached]);
+  }, [hasPermission]);
 
-  // Helper function to get allowed locations based on user's branch
-  const getAllowedLocations = useCallback(() => {
-    if (!profile || !profile.branch) {
-      return ['Arlegui', 'Casal', 'QuezonCity']; // Default: try all locations
-    }
+  // Memoized list of allowed locations based on the staff's branch from permissions context
+  const allowedLocationsList = useMemo(() => getLocationsByBranch(staffBranch), [staffBranch]);
 
-    // Branch determines which locations a staff can access
-    switch (profile.branch) {
-      case 'Manila':
-        return ['Arlegui', 'Casal'];
-      case 'QuezonCity':
-        return ['QuezonCity'];
-      case 'Both':
-        return null; // null means query all locations without filter
-      default:
-        return ['Arlegui', 'Casal', 'QuezonCity']; // Fallback: try all
+  // Set default directReleaseLocation based on user's allowed locations
+  useEffect(() => {
+    if (allowedLocationsList.length > 0 && directReleaseLocation === null) {
+      setDirectReleaseLocation(allowedLocationsList[0]);
     }
-  }, [profile]);
+  }, [allowedLocationsList, directReleaseLocation]);
 
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
     setItemsLoading(true);
     setItemsError('');
     try {
+      // Wait for profile to load before making any requests
+      // If user has no access to any locations (empty array), don't fetch batches
+      if (allowedLocationsList.length === 0) {
+        console.log('⏳ Waiting for profile or no location access - skipping inventory fetch');
+        setItems([]);
+        setBatches([]);
+        setItemsLoading(false);
+        return;
+      }
+
+      console.log('📍 Fetching inventory for allowed locations:', allowedLocationsList);
+
       const data = await fetchMedicalItems();
       setItems(data);
 
-      const allowedLocations = getAllowedLocations();
-
-      // Fetch batches for all items in parallel
-      const batchResults = await Promise.all(
-        data.map(async (item) => {
-          const isMedicine = item.category?.toLowerCase() === 'medicine';
-
-          // If allowedLocations is null (user has "Both" access), fetch all batches without filter
-          // Otherwise, fetch batches for each allowed location and combine them
-          let batches = [];
-
-          if (allowedLocations === null) {
-            // User has "Both" access - fetch all batches without location filter
-            if (isMedicine) {
-              batches = await fetchMedicineBatches(Number(item.id));
-            } else {
-              batches = await fetchSupplyBatches(Number(item.id));
-            }
-          } else {
-            // User has limited access - fetch batches for each allowed location
-            const locationBatches = await Promise.all(
-              allowedLocations.map(async (location) => {
-                try {
-                  if (isMedicine) {
-                    return await fetchMedicineBatches(Number(item.id), location);
-                  } else {
-                    return await fetchSupplyBatches(Number(item.id), location);
-                  }
-                } catch (err) {
-                  console.warn(`Failed to fetch batches for location ${location}:`, err);
-                  return [];
-                }
-              })
-            );
-            // Flatten the results from all locations
-            batches = locationBatches.flat();
-          }
-
-          // Normalize the batch data
-          return batches.map((b) => {
-            if (isMedicine) {
-              return {
-                id: b.id,
-                medicalItemId: Number(b.medicalItemId),
-                batchNumber: b.batchNumber,
-                currentQuantity: Number(b.availableQuantity ?? 0),
-                availableQuantity: Number(b.availableQuantity ?? 0),
-                initialQuantity: Number(b.availableQuantity ?? 0),
-                dosageValue: Number(b.dosageValue ?? 0),
-                dosageUnit: b.dosageUnit,
-                expiryDate: b.expiryDate,
-                location: b.location,
-                supplierName: b.supplierName,
-                notes: b.notes,
-              };
-            } else {
-              return {
-                id: b.id,
-                medicalItemId: Number(b.supplyItemId),
-                batchNumber: b.batchNumber,
-                currentQuantity: Number(b.currentQuantity ?? 0),
-                availableQuantity: Number(b.currentQuantity ?? 0),
-                unit: b.unit,
-                expiryDate: b.expiryDate,
-                location: b.location,
-                supplierName: b.supplierName,
-                notes: b.notes,
-              };
-            }
-          });
-        })
-      );
-
-      const flatBatches = batchResults.flat();
+      // Fetch ALL batches for ALL items at ALL locations in ONE GraphQL request.
+      const flatBatches = await fetchAllBatchesForItems(data, allowedLocationsList);
       setBatches(flatBatches);
     } catch (err) {
       setItemsError(err.message || 'Failed to load medical items.');
     } finally {
       setItemsLoading(false);
     }
-  }, [getAllowedLocations]);
+  }, [allowedLocationsList]);
 
   useEffect(() => {
     loadItems();
   }, [loadItems]);
+
+  const refreshInventoryItems = useCallback(async () => {
+    await loadItems();
+    refreshInventoryAlerts();
+  }, [loadItems, refreshInventoryAlerts]);
 
   // Helper function to show success modal
   const showSuccess = useCallback((title = 'Success', message = '', details = null) => {
@@ -439,33 +419,6 @@ const MedicalInventory = () => {
       });
     }
 
-    const normalized = batch.isMedicine
-      ? {
-          id: created.id,
-          medicalItemId: created.medicalItemId,
-          batchNumber: created.batchNumber,
-          dosageValue: created.dosageValue,
-          dosageUnit: created.dosageUnit,
-          currentQuantity: Number(created.dosageValue ?? 0),
-          availableQuantity: Number(batch.quantity ?? 0),
-          initialQuantity: Number(created.dosageValue ?? 0),
-          expiryDate: created.expiryDate,
-          location: created.location,
-          supplierName: created.supplierName,
-          notes: created.notes,
-        }
-      : {
-          id: created.id,
-          medicalItemId: created.supplyItemId,
-          batchNumber: created.batchNumber,
-          currentQuantity: created.currentQuantity,
-          expiryDate: created.expiryDate,
-          location: created.location,
-          supplierName: created.supplierName,
-          notes: created.notes,
-        };
-    setBatches([...batches, normalized]);
-
     // Record ADD transaction for per-item history
     const addQty = Number(batch.quantity ?? 0);
     recordTransaction({
@@ -478,8 +431,11 @@ const MedicalInventory = () => {
       batchNumber: batch.batchNumber,
     });
 
+    await refreshInventoryItems();
+
     setShowAddSupply(false);
-    showSuccess('Batch Received', `Batch ${batch.batchNumber} received (${batch.quantity} units).`);
+    setSupplyContext(null);
+    showSuccess('Inventory Updated', 'Inventory updated successfully.', `Batch ${created.batchNumber} received (${batch.quantity} units).`);
   };
 
   const handleSplit = async ({ sourceBatchId, quantity, toClinic, notes }) => {
@@ -540,39 +496,116 @@ const MedicalInventory = () => {
         batchNumber: source.batchNumber,
       });
 
-      // Reload from backend so batch counts reflect all the moves
-      await loadItems();
-      refreshInventoryAlerts();
+      // Reload from backend so all dependent views show canonical values.
+      await refreshInventoryItems();
 
       setShowSplitSupply(false);
-      showSuccess('Supply Transferred', `Successfully moved ${quantity} units to ${toClinic}.`);
+      setSplitContext(null);
+      showSuccess('Inventory Updated', 'Inventory updated successfully.', `Moved ${quantity} units to ${toClinic}.`);
     } catch (err) {
       setError(err.message || 'Failed to split supply. Please try again.');
     }
   };
 
   // Auto-load all medicine requests on mount (all statuses)
-  const loadAllMedicineRequests = useCallback(async () => {
+  // Fetches requests for each allowed location to prevent unauthorized errors
+  const loadAllMedicineRequests = useCallback(async (options = {}) => {
+    const { force = false } = options;
+
+    // Prevent burst reloads from multiple triggers (socket + UI actions).
+    if (requestsLoadPromiseRef.current) {
+      return requestsLoadPromiseRef.current;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastRequestsLoadAtRef.current < 1200) {
+      return;
+    }
+
     setIsLoadingRequests(true);
-    try {
-      const rawRequests = await fetchAllMedicineRequests(null);
-      const enrichedWithNames = await enrichRequestsWithPatientNames(rawRequests);
+    const loadPromise = (async () => {
+      try {
+      // Wait for profile to load
+      if (allowedLocationsList.length === 0) {
+        console.log('⏳ Waiting for profile - skipping medicine requests fetch');
+        setRequests([]);
+        setIsLoadingRequests(false);
+        return;
+      }
+
+      // Fetch requests for all allowed locations in ONE batched GraphQL request.
+      const uniqueRequests = await fetchAllMedicineRequestsByLocations(allowedLocationsList);
+      
+      const enrichedWithNames = await enrichRequestsWithPatientNames(uniqueRequests);
       const enriched = enrichedWithNames.map(req => ({
         ...req,
         items: enrichRequestItems(req.items || []),
       }));
-      setRequests(enriched);
-    } catch (err) {
-      setError(err.message || 'Failed to load medicine requests.');
-    } finally {
-      setIsLoadingRequests(false);
-    }
-  }, [enrichRequestItems, enrichRequestsWithPatientNames]);
+
+      // Identify stale approved requests (approved > 7 days ago) BEFORE setState
+      // so we can fire backend cancellations after the state update
+      const staleRequestIds = enriched
+        .filter(req => (req.status === 'Approved' || req.status === 'InProgress') && isApprovalExpired(req.id))
+        .map(req => req.id);
+      staleRequestIds.forEach(id => clearApprovalFromStorage(id));
+
+      // Use functional update to preserve frontend-only approval data.
+      // Priority order: in-memory state → localStorage → backend item.quantity (original requested qty)
+      setRequests(prev => {
+        const prevMap = new Map(prev.map(r => [String(r.id), r]));
+        const staleSet = new Set(staleRequestIds.map(String));
+        return enriched.map(req => {
+          // Auto-expire stale approved requests in local state
+          if (staleSet.has(String(req.id))) {
+            return { ...req, status: 'Cancelled', approvedQuantities: null, approvedBatchIds: null };
+          }
+          if (req.status === 'Approved' || req.status === 'InProgress') {
+            const existing = prevMap.get(String(req.id));
+            const fromStorage = loadApprovalFromStorage(req.id);
+            const approvedQty = existing?.approvedQuantities || fromStorage?.quantities;
+            if (approvedQty) {
+              return {
+                ...req,
+                approvedQuantities: approvedQty,
+                approvedBatchIds: existing?.approvedBatchIds || null,
+                items: (req.items || []).map((item, idx) => ({
+                  ...item,
+                  quantity: approvedQty[idx] != null ? Number(approvedQty[idx]) : item.quantity,
+                })),
+              };
+            }
+          }
+          return req;
+        });
+      });
+
+      // Auto-cancel stale requests on the backend (fire-and-forget)
+      staleRequestIds.forEach(id => {
+        setMedicineRequestStatus(id, 'Cancelled', 'Auto-cancelled: not picked up within 7 days')
+          .catch(err => console.warn('Auto-cancel backend call failed for request', id, err));
+      });
+      } catch (err) {
+        setError(err.message || 'Failed to load medicine requests.');
+      } finally {
+        setIsLoadingRequests(false);
+        lastRequestsLoadAtRef.current = Date.now();
+        requestsLoadPromiseRef.current = null;
+      }
+    })();
+
+    requestsLoadPromiseRef.current = loadPromise;
+    return loadPromise;
+  }, [allowedLocationsList, enrichRequestItems, enrichRequestsWithPatientNames]);
+
+  const refreshInventoryAndQueue = useCallback(async () => {
+    await Promise.all([loadItems(), loadAllMedicineRequests({ force: true })]);
+    refreshInventoryAlerts();
+  }, [loadItems, loadAllMedicineRequests, refreshInventoryAlerts]);
 
   useEffect(() => {
     if (itemsLoading || hasLoadedRequestsRef.current) return;
     hasLoadedRequestsRef.current = true;
-    loadAllMedicineRequests();
+    loadAllMedicineRequests({ force: true });
   }, [itemsLoading, loadAllMedicineRequests]);
 
   // Handle new medicine request from patient (real-time via socket)
@@ -605,22 +638,41 @@ const MedicalInventory = () => {
     } catch (err) {
       console.error('Failed to load new request details:', err);
       // Still reload all requests as fallback
-      loadAllMedicineRequests();
+      loadAllMedicineRequests({ force: true });
     }
   }, [enrichRequestItems, enrichRequestsWithPatientNames, loadAllMedicineRequests]);
+
+  // Handle real-time status changes (e.g., patient cancels a request)
+  // Updates local state immediately so reservation calculations stay accurate
+  const handleRequestStatusChange = useCallback(async (data) => {
+    console.log('🔔 Request status changed:', data);
+    const { requestId, status } = data || {};
+    if (!requestId) return;
+
+    // Update status while preserving all local-only fields
+    // If the request moves out of Approved/InProgress, clear the approval data
+    // so those quantities are no longer counted as reserved
+    const clearApproval = !['Approved', 'InProgress'].includes(status);
+    if (clearApproval) {
+      clearApprovalFromStorage(requestId);
+    }
+    setRequests(prev => prev.map(r =>
+      String(r.id) === String(requestId)
+        ? {
+            ...r,
+            status: status || r.status,
+            ...(clearApproval ? { approvedQuantities: null, approvedBatchIds: null } : {}),
+          }
+        : r
+    ));
+  }, []);
 
   // Connect to socket for real-time updates
   const { isConnected: isSocketConnected } = useMedicineRequestSocket(
     handleNewMedicineRequest,    // onNewRequest
     null,                         // onRequestUpdate (not used yet)
-    null                          // onRequestStatusChange (not used yet)
+    handleRequestStatusChange    // onRequestStatusChange — keeps reservation logic in sync
   );
-
-  // Reload dispense queue when a patient submits a new medicine request via socket
-  useEffect(() => {
-    const unsub = subscribe('medicine:request:new', loadAllMedicineRequests);
-    return unsub;
-  }, [subscribe, loadAllMedicineRequests]);
 
   // Load real patient medicine requests into the dispense queue
   const loadPatientMedicineRequests = async (patientId) => {
@@ -724,11 +776,10 @@ const MedicalInventory = () => {
         notes: reason,
         itemId: source?.medicalItemId, batchNumber: source?.batchNumber || '',
       });
-      await loadItems();
-      refreshInventoryAlerts();
+      await refreshInventoryItems();
       setShowAdjustStock(false);
       setAdjustContext(null);
-      showSuccess('Stock Adjusted', `Stock ${type === 'add' ? 'increased' : 'decreased'} by ${quantity} units.`);
+      showSuccess('Inventory Updated', 'Inventory updated successfully.', `Stock ${type === 'add' ? 'increased' : 'decreased'} by ${quantity} units.`);
     } catch (err) {
       setError(err.message || 'Failed to adjust stock');
     }
@@ -787,13 +838,18 @@ const MedicalInventory = () => {
           dispensedByItemIdx[a.itemIdx] = (dispensedByItemIdx[a.itemIdx] || 0) + a.allocate;
         }
       });
-      
-      setRequests(requests.map((r) =>
+
+      // Clear localStorage — stock has been physically dispensed, no longer reserved
+      clearApprovalFromStorage(requestId);
+
+      setRequests(prev => prev.map((r) =>
         r.id === requestId
           ? {
               ...r,
               status: 'Completed',
               notes: notes || r.notes,
+              approvedQuantities: null,
+              approvedBatchIds: null,
               items: (r.items || []).map((item, idx) => ({
                 ...item,
                 quantity: dispensedByItemIdx[idx] || item.quantity,
@@ -818,8 +874,11 @@ const MedicalInventory = () => {
         batchNumber: (allocation || []).map((a) => batches.find((b) => b.id === a.id)?.batchNumber).filter(Boolean).join(', '),
       }, ...transactions]);
 
+      await refreshInventoryAndQueue();
+
       setShowDispense(false);
-      showSuccess('Medicine Dispensed', `Dispensed ${totalQty} units to ${req?.patientName || 'patient'}.`, `Transaction #${txId}`);
+      setDispenseContext(null);
+      showSuccess('Inventory Updated', 'Inventory updated successfully.', `Dispensed ${totalQty} units to ${req?.patientName || 'patient'} (Transaction #${txId}).`);
     } catch (err) {
       console.error('❌ Dispense mutation failed:', err);
       setError(err.message || 'Failed to dispense medicine. Please try again.');
@@ -840,32 +899,88 @@ const MedicalInventory = () => {
     setShowActionModal(true);
   };
 
-  const handleConfirmAction = async (request, notes, approvedQuantity, approvedBatchId) => {
+  // Cancel an already-approved request (staff action or auto-expire)
+  // Clears the reservation so the stock becomes available for other patients
+  const handleCancelRequest = useCallback(async (request) => {
+    const requestId = request?.id;
+    if (!requestId) return;
+
+    // Save previous approval data in case we need to revert
+    const prevApprovalData = loadApprovalFromStorage(requestId);
+
+    // Optimistic update: clear reservation immediately so the queue reflects it
+    clearApprovalFromStorage(requestId);
+    setRequests(prev => prev.map(r =>
+      r.id === requestId
+        ? { ...r, status: 'Cancelled', approvedQuantities: null, approvedBatchIds: null }
+        : r
+    ));
+
+    try {
+      await setMedicineRequestStatus(requestId, 'Cancelled', 'Cancelled by staff');
+    } catch (err) {
+      console.warn('Failed to cancel request on backend:', err);
+      // Revert optimistic update if backend call fails
+      if (prevApprovalData?.quantities) {
+        saveApprovalToStorage(requestId, prevApprovalData.quantities);
+      }
+      setRequests(prev => prev.map(r =>
+        r.id === requestId
+          ? {
+              ...r,
+              status: 'Approved',
+              approvedQuantities: prevApprovalData?.quantities || null,
+            }
+          : r
+      ));
+      setError('Failed to cancel the request. Please try again.');
+    }
+  }, []);
+
+  const handleConfirmAction = async (request, notes, approvedQuantities, approvedBatchIds) => {
     const requestId = request?.id;
     if (!requestId) return;
 
     try {
       const isApprove = actionType === 'approve';
       const status = isApprove ? 'Approved' : 'Rejected';
-      
+
       // Call backend with notes parameter for both actions
       await setMedicineRequestStatus(requestId, status, notes || undefined);
-      
-      // Update local state
-      setRequests(requests.map((r) => 
-        r.id === requestId 
-          ? { 
-              ...r, 
-              status, 
+
+      // Persist approval data to localStorage so it survives page refresh.
+      // The backend does not store approved quantities, so this is the only
+      // way to keep reservation logic accurate across sessions.
+      if (isApprove && approvedQuantities) {
+        saveApprovalToStorage(requestId, approvedQuantities);
+      } else {
+        clearApprovalFromStorage(requestId);
+      }
+
+      // Update local state using functional update to avoid stale closure issues
+      // (the await above can cause socket events to update requests mid-flight)
+      setRequests(prev => prev.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              status,
               notes: notes || null,
-              // Store approved quantity and batch in frontend state for use during dispensing
-              approvedQuantity: isApprove ? approvedQuantity : null,
-              approvedBatchId: isApprove ? approvedBatchId : null
-            } 
+              approvedQuantities: isApprove ? approvedQuantities : null,
+              approvedBatchIds: isApprove ? approvedBatchIds : null,
+              // Write approved qty into item.quantity so the reservation fallback is correct
+              items: isApprove && approvedQuantities
+                ? (r.items || []).map((item, idx) => ({
+                    ...item,
+                    quantity: approvedQuantities[idx] != null
+                      ? Number(approvedQuantities[idx])
+                      : item.quantity,
+                  }))
+                : r.items,
+            }
           : r
       ));
-      
-      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
+
+      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved and ready for dispense' : 'rejected'}!`);
       setShowActionModal(false);
       setSelectedActionRequest(null);
       setActionType(null);
@@ -895,13 +1010,16 @@ const MedicalInventory = () => {
     }
 
     try {
-      let fullRequest = request;
-      const hasUsableItems = Array.isArray(request.items) && request.items.length > 0;
+      // Get the CURRENT request from state to ensure we have the latest approved data
+      const freshRequest = requests.find(r => r.id === request.id) || request;
+      
+      let fullRequest = freshRequest;
+      const hasUsableItems = Array.isArray(freshRequest.items) && freshRequest.items.length > 0;
 
       if (!hasUsableItems) {
-        const fetched = await fetchMedicineRequestById(request.id);
+        const fetched = await fetchMedicineRequestById(freshRequest.id);
         if (fetched) {
-          fullRequest = { ...request, ...fetched };
+          fullRequest = { ...freshRequest, ...fetched };
         }
       }
 
@@ -1001,6 +1119,7 @@ const MedicalInventory = () => {
           batches={batches}
           requests={requests}
           transactions={transactions}
+          allowedLocations={allowedLocationsList}
           loading={itemsLoading}
           onNavigate={(section) => setActiveSection(section)}
           onSelectItem={handleSelectItem}
@@ -1012,6 +1131,7 @@ const MedicalInventory = () => {
           items={enrichedItems}
           loading={itemsLoading}
           error={itemsError}
+          allowedLocations={allowedLocationsList}
           onSelectItem={handleSelectItem}
           onAddItem={() => setShowAddItem(true)}
           onAddSupply={openAddSupply}
@@ -1040,9 +1160,11 @@ const MedicalInventory = () => {
             requests={requests}
             items={items}
             batches={batches}
+            allowedLocations={allowedLocationsList}
             onDispense={openDispense}
             onApprove={handleApprove}
             onReject={handleReject}
+            onCancel={handleCancelRequest}
             focusPatientId={loadedPatientId}
             onClearFocus={() => { setLoadedPatientId(null); setPatientReqsMsg(''); setPatientLookupId(''); }}
           />
@@ -1052,46 +1174,58 @@ const MedicalInventory = () => {
       {activeSection === 'direct-release' && (
         <div className="space-y-3">
           <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+            {allowedLocationsList.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-neutral-500 dark:text-neutral-400">You do not have access to any inventory locations.</p>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Please contact your administrator to configure your branch access.</p>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
-                <select
-                  value={directReleaseLocation}
-                  onChange={(e) => setDirectReleaseLocation(e.target.value)}
-                  className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
-                >
-                  <option value="Casal">Casal</option>
-                  <option value="Arlegui">Arlegui</option>
-                  <option value="QuezonCity">Quezon City</option>
-                </select>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
+                    <select
+                      value={directReleaseLocation || ''}
+                      onChange={(e) => setDirectReleaseLocation(e.target.value)}
+                      className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
+                    >
+                      {allowedLocationsList.map((loc) => (
+                        <option key={loc} value={loc}>
+                          {loc === 'QuezonCity' ? 'Quezon City' : loc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-            <DirectRelease
-              location={directReleaseLocation}
-              onRelease={(result) => {
-                loadAllMedicineRequests();
-                recordTransaction({
-                  action: 'direct_release',
-                  itemId: null,
-                  patientId: result.patientId,
-                  quantity: result.quantity,
-                  notes: result.notes,
-                });
-              }}
-              onShowSuccess={(title, message, details) => {
-                setSuccessModalData({ title, message, details });
-                setShowSuccessModal(true);
-              }}
-              onShowError={(errorMsg) => {
-                setError(errorMsg);
-                setTimeout(() => setError(''), 5000);
-              }}
-            />
+                <DirectRelease
+                  location={directReleaseLocation}
+                  allRequests={requests}
+                  onRelease={async (result) => {
+                    await refreshInventoryItems();
+                    recordTransaction({
+                      action: 'direct_release',
+                      itemId: null,
+                      patientId: result.patientId,
+                      quantity: result.quantity,
+                      notes: result.notes,
+                    });
+                  }}
+                  onShowSuccess={(title, message, details) => {
+                    setSuccessModalData({ title, message, details });
+                    setShowSuccessModal(true);
+                  }}
+                  onShowError={(errorMsg) => {
+                    setError(errorMsg);
+                    setTimeout(() => setError(''), 5000);
+                  }}
+                />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1125,6 +1259,7 @@ const MedicalInventory = () => {
         <AddSupplyModal
           itemId={supplyContext?.itemId}
           items={items}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowAddSupply(false)}
           onSave={handleAddSupply}
         />
@@ -1134,6 +1269,7 @@ const MedicalInventory = () => {
         <SplitSupplyModal
           batch={splitContext.batch}
           allBatches={splitContext.allBatches}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowSplitSupply(false)}
           onSplit={handleSplit}
         />
@@ -1165,9 +1301,11 @@ const MedicalInventory = () => {
         <DispenseMedicineModal
           patientId={dispenseMedicineContext.patientId}
           patientName={dispenseMedicineContext.patientName}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowDispenseMedicine(false)}
-          onSuccess={(result) => {
-            showSuccess('Medicine Dispensed', `Dispensed medicine to ${dispenseMedicineContext.patientName}.`, `Transaction ID: ${result.id}`);
+          onSuccess={async (result) => {
+            await refreshInventoryAndQueue();
+            showSuccess('Inventory Updated', 'Inventory updated successfully.', `Dispensed medicine to ${dispenseMedicineContext.patientName}. Transaction ID: ${result.id}`);
             setShowDispenseMedicine(false);
           }}
         />
@@ -1179,6 +1317,7 @@ const MedicalInventory = () => {
           action={actionType}
           batches={batches}
           items={items}
+          allRequests={requests}
           onConfirm={handleConfirmAction}
           onCancel={() => {
             setShowActionModal(false);

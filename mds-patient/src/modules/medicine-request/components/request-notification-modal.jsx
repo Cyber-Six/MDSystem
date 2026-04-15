@@ -18,7 +18,6 @@ const RequestNotificationModal = ({ request, onDismiss, batches, groupedMedicine
           query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
             getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
               id
-              item_code
               item_name
               category
             }
@@ -198,7 +197,7 @@ const RequestNotificationModal = ({ request, onDismiss, batches, groupedMedicine
           {/* Pickup Instructions */}
           {isApproved && (
             <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-900/50 rounded-lg p-3">
-              <p className="text-xs text-success-700 dark:text-success-300">
+              <p className="text-xs text-success-700 dark:text-success-300 mb-0">
                 Please visit the clinic during business hours to collect your medicine. Bring your patient ID for verification.
               </p>
             </div>

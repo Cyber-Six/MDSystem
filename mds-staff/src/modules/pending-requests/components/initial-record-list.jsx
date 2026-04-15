@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePermissions } from '../../../context/permissions-context';
 import {
   BRANCH,
   ALL_BRANCHES,
@@ -28,8 +29,16 @@ const InitialRecordList = ({
   externalStatusFilter = null,
   showStatusFilter = true,
 }) => {
-  const [branch, setBranch] = useState(BRANCH.BOTH);
+  const { branch: permBranch, allowedBranches } = usePermissions();
+  const [branch, setBranch] = useState(() => permBranch || BRANCH.BOTH);
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
+
+  // Sync branch when permissions finish loading
+  useEffect(() => {
+    if (permBranch && permBranch !== 'Both' && branch === BRANCH.BOTH) {
+      setBranch(permBranch);
+    }
+  }, [permBranch]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -124,11 +133,14 @@ const InitialRecordList = ({
             <select
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
-              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+              disabled={allowedBranches().length === 1}
+              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {ALL_BRANCHES.map((b) => (
-                <option key={b} value={b}>{b === 'QuezonCity' ? 'Quezon City' : b}</option>
-              ))}
+              {ALL_BRANCHES
+                .filter((b) => allowedBranches().includes(b))
+                .map((b) => (
+                  <option key={b} value={b}>{b === 'QuezonCity' ? 'Quezon City' : b}</option>
+                ))}
             </select>
           </div>
 
@@ -174,7 +186,7 @@ const InitialRecordList = ({
           <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-sm text-error-700 dark:text-error-400">{error}</p>
+          <p className="text-sm text-error-700 dark:text-error-400 mb-0">{error}</p>
         </div>
       )}
 

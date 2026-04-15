@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, AlertCircle, FileText, Download } from 'lucide-react';
 import { generatePrescription, downloadDocumentBlob } from '../../../services/prescription-document-service';
 
@@ -25,10 +25,92 @@ const emptyMedication = () => ({
 function calculateAge(dob) {
   if (!dob) return '';
   const birth = new Date(dob);
+  if (Number.isNaN(birth.getTime())) return '';
   const now = new Date();
   let age = now.getFullYear() - birth.getFullYear();
   if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--;
-  return age;
+  return age >= 0 ? age : '';
+}
+
+function pickFirstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function splitDisplayName(displayName) {
+  const clean = pickFirstNonEmpty(displayName);
+  if (!clean) {
+    return { firstName: '', middleName: '', lastName: '' };
+  }
+
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return { firstName: parts[0], middleName: '', lastName: '' };
+  }
+  if (parts.length === 2) {
+    return { firstName: parts[0], middleName: '', lastName: parts[1] };
+  }
+
+  return {
+    firstName: parts[0],
+    middleName: parts.slice(1, -1).join(' '),
+    lastName: parts[parts.length - 1],
+  };
+}
+
+function normalizePatientForPrescription(patient) {
+  const firstNameRaw = pickFirstNonEmpty(patient?.firstName, patient?.first_name, patient?.personal?.firstName);
+  const middleNameRaw = pickFirstNonEmpty(patient?.middleName, patient?.middle_name, patient?.personal?.middleName);
+  const lastNameRaw = pickFirstNonEmpty(patient?.lastName, patient?.last_name, patient?.personal?.lastName);
+  const suffix = pickFirstNonEmpty(patient?.suffix, patient?.personal?.suffix);
+
+  const directDisplayName = [firstNameRaw, middleNameRaw, lastNameRaw, suffix].filter(Boolean).join(' ').trim();
+  const fallbackDisplayName = pickFirstNonEmpty(patient?.name);
+  const parsedName = splitDisplayName(directDisplayName || fallbackDisplayName);
+
+  const firstName = firstNameRaw || parsedName.firstName || 'Unknown';
+  const middleName = middleNameRaw || parsedName.middleName;
+  const lastName = lastNameRaw || parsedName.lastName;
+
+  const dateOfBirth = pickFirstNonEmpty(
+    patient?.dateOfBirth,
+    patient?.date_of_birth,
+    patient?.personal?.dateOfBirth,
+    patient?.personal?.birthDateRaw,
+  );
+  const ageFromDob = dateOfBirth ? String(calculateAge(dateOfBirth)) : '';
+  const age = pickFirstNonEmpty(ageFromDob, patient?.age, patient?.personal?.age) || 'Unknown';
+  const sex = pickFirstNonEmpty(patient?.sex, patient?.gender, patient?.personal?.sex) || 'Unknown';
+  const contactNumber = pickFirstNonEmpty(patient?.contactNumber, patient?.contact_number, patient?.personal?.contactNumber);
+  const address = pickFirstNonEmpty(
+    patient?.address,
+    patient?.presentAddress,
+    patient?.personal?.presentAddress,
+    patient?.personal?.provinceAddress,
+  );
+
+  const computedDisplay = [firstName, middleName, lastName, suffix].filter(Boolean).join(' ').trim();
+  const displayName = !computedDisplay || computedDisplay.toLowerCase() === 'unknown'
+    ? 'Unknown Patient'
+    : computedDisplay;
+
+  return {
+    id: patient?.id || null,
+    firstName,
+    middleName,
+    lastName,
+    suffix,
+    dateOfBirth,
+    age,
+    sex,
+    contactNumber,
+    address,
+    displayName,
+  };
 }
 
 export default function ConsultationPrescriptionModal({ isOpen, onClose, patient, consultation, outcomes }) {
@@ -39,6 +121,8 @@ export default function ConsultationPrescriptionModal({ isOpen, onClose, patient
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
+
+  const normalizedPatient = useMemo(() => normalizePatientForPrescription(patient), [patient]);
 
   // Pre-fill diagnosis from consultation outcomes
   useEffect(() => {
@@ -88,24 +172,24 @@ export default function ConsultationPrescriptionModal({ isOpen, onClose, patient
   const handleSubmit = async () => {
     const validMeds = medications.filter(m => m.name.trim());
     if (validMeds.length === 0) { setError('Add at least one medication.'); return; }
+    if (!normalizedPatient.id) { setError('Patient ID is required to generate a prescription.'); return; }
 
     setLoading(true);
     setError('');
 
     try {
-      const patientAge = calculateAge(patient?.dateOfBirth);
       const payload = {
         patient: {
-          id: patient?.id,
-          firstName: patient?.firstName || patient?.first_name || '',
-          middleName: patient?.middleName || patient?.middle_name || '',
-          lastName: patient?.lastName || patient?.last_name || '',
-          suffix: patient?.suffix || '',
-          dateOfBirth: patient?.dateOfBirth || patient?.date_of_birth || '',
-          sex: patient?.sex || patient?.gender || '',
-          contactNumber: patient?.contactNumber || patient?.contact_number || '',
-          address: patient?.address || '',
-          age: patientAge,
+          id: normalizedPatient.id,
+          firstName: normalizedPatient.firstName,
+          middleName: normalizedPatient.middleName,
+          lastName: normalizedPatient.lastName,
+          suffix: normalizedPatient.suffix,
+          dateOfBirth: normalizedPatient.dateOfBirth,
+          sex: normalizedPatient.sex,
+          contactNumber: normalizedPatient.contactNumber,
+          address: normalizedPatient.address,
+          age: normalizedPatient.age,
         },
         prescription: {
           diagnosis: diagnosis.trim(),
@@ -124,7 +208,7 @@ export default function ConsultationPrescriptionModal({ isOpen, onClose, patient
         consultationId: consultation?.id || null,
       };
 
-      const result = await generatePrescription(patient?.id, payload);
+      const result = await generatePrescription(normalizedPatient.id, payload);
       const blob = await downloadDocumentBlob(result.documentId);
       const url = URL.createObjectURL(blob);
 
@@ -146,8 +230,8 @@ export default function ConsultationPrescriptionModal({ isOpen, onClose, patient
 
   if (!isOpen) return null;
 
-  const patientName = [patient?.firstName || patient?.first_name, patient?.lastName || patient?.last_name].filter(Boolean).join(' ') || 'Unknown Patient';
-  const patientAge = calculateAge(patient?.dateOfBirth || patient?.date_of_birth);
+  const patientName = normalizedPatient.displayName;
+  const patientAge = normalizedPatient.age;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-2 sm:p-4">
@@ -198,11 +282,11 @@ export default function ConsultationPrescriptionModal({ isOpen, onClose, patient
                 </div>
                 <div>
                   <span className="text-[10px] font-medium uppercase tracking-wide text-secondary-400 dark:text-neutral-500">Age</span>
-                  <p className="text-secondary-800 dark:text-neutral-200">{patientAge || '—'}</p>
+                  <p className="text-secondary-800 dark:text-neutral-200">{patientAge || 'Unknown'}</p>
                 </div>
                 <div>
                   <span className="text-[10px] font-medium uppercase tracking-wide text-secondary-400 dark:text-neutral-500">Sex</span>
-                  <p className="text-secondary-800 dark:text-neutral-200">{patient?.sex || patient?.gender || '—'}</p>
+                  <p className="text-secondary-800 dark:text-neutral-200">{normalizedPatient.sex || 'Unknown'}</p>
                 </div>
               </div>
 

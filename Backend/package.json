@@ -27,7 +27,9 @@
     "express": "^5.2.1",
     "express-graphql": "^0.12.0",
     "file-type": "^21.3.1",
+    "google-auth-library": "^10.6.2",
     "graphql": "^15.10.1",
+    "helmet": "^8.1.0",
     "ioredis": "^5.8.2",
     "joi": "^17.11.0",
     "jsonwebtoken": "^9.0.2",
@@ -46,6 +48,7 @@
   },
   "devDependencies": {
     "@ljharb/tsconfig": "^0.3.2",
-    "@tsconfig/recommended": "^1.0.13"
+    "@tsconfig/recommended": "^1.0.13",
+    "jest": "^30.3.0"
   }
 }

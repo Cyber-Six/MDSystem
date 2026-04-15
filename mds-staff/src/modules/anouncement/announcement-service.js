@@ -42,6 +42,7 @@ export const fetchAnnouncementById = async (id) => {
  * @param {string} data.description - Announcement description
  * @param {string} [data.pubmat] - Public material UUID/filename
  * @param {boolean} [data.isActive=true] - Whether announcement is active
+ * @param {string|null} [data.viewableUntil] - ISO date-time until visible; null for indefinite visibility
  * @returns {Promise<Object>} Created announcement object
  */
 export const createAnnouncement = async (data) => {
@@ -58,6 +59,7 @@ export const createAnnouncement = async (data) => {
  * Update an existing announcement (Staff only)
  * @param {string|number} id - Announcement ID
  * @param {Object} data - Partial announcement data to update
+ * @param {string|null} [data.viewableUntil] - ISO date-time until visible; null clears to indefinite visibility
  * @returns {Promise<Object>} Updated announcement object
  */
 export const updateAnnouncement = async (id, data) => {
@@ -87,12 +89,14 @@ export const deleteAnnouncement = async (id) => {
 
 /**
  * Fetch all announcements including inactive (Staff only - Admin)
- * @returns {Promise<Array>} Array of all announcements
+ * @param {string} [location] - Optional location filter ('Manila', 'QuezonCity', 'Both')
+ * @returns {Promise<{data: Array, branch: string}>} Announcements and user's permission branch
  */
-export const fetchAllAnnouncementsAdmin = async () => {
+export const fetchAllAnnouncementsAdmin = async (location) => {
   try {
-    const response = await axiosRequest.get('/announcement/admin/all');
-    return response.data.data || [];
+    const params = location ? { location } : {};
+    const response = await axiosRequest.get('/announcement/admin/all', { params });
+    return { data: response.data.data || [], branch: response.data.branch || 'Both' };
   } catch (err) {
     console.error('Failed to fetch all announcements:', err);
     throw err;

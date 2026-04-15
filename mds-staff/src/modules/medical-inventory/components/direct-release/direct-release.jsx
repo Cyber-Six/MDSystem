@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { fetchAvailableMedicineWithQuantities } from '../../prescription-service';
 import { issuePrescription } from '../../prescription-service';
-import { searchPatients } from '../../../../services/patient-search-service';
-import { getProfileLabel } from '../../../../services/patient-search-service';
+import { searchPatientsForInventory } from '../../services/inventory-patient-search';
+import { useStaffProfile } from '../../../../hooks/use-staff-profile';
+import { formatBatchDisplay, formatDateDisplay } from '../../medical-inventory-service';
 import BatchSelectionModal from './batch-selection-modal';
 
 /**
@@ -13,7 +14,11 @@ import BatchSelectionModal from './batch-selection-modal';
  * - Medicine selection with quantity input
  * - Immediate release without patient request approval
  */
-const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
+const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allRequests = [] }) => {
+  const { profile, isLoading: isProfileLoading } = useStaffProfile();
+  const searchCacheRef = useRef(new Map());
+  const latestSearchTokenRef = useRef(0);
+
   // Patient search state
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -52,56 +57,107 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
   // Notes viewing modal state
   const [viewNotesData, setViewNotesData] = useState(null); // { notes, medicineName, patientName }
 
-  // Patient search function
+  // Patient search function — uses staff REST endpoints (no EMR permission needed)
   const handlePatientSearch = useCallback(async (query) => {
-    if (!query || query.length < 2) {
+    const normalizedQuery = (query || '').trim().toLowerCase();
+    if (normalizedQuery.length < 2) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
+    // Profile must be loaded to know which branch the staff belongs to.
+    // Without it we cannot pass the correct branch param and the backend
+    // will return 403 regardless of what we send.
+    if (!profile?.branch) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const cacheKey = `${profile.branch}:${normalizedQuery}`;
+    const cached = searchCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSearchResults(cached);
+      setIsSearching(false);
+      return;
+    }
+
+    const searchToken = ++latestSearchTokenRef.current;
+
     setIsSearching(true);
     try {
-      const patients = await searchPatients(query, 15);
+      const patients = await searchPatientsForInventory(normalizedQuery, profile.branch);
       const formatted = patients.map((p) => ({
         id: p.id,
-        name: `${p.last_name}, ${p.first_name}${p.middle_name ? ' ' + p.middle_name[0] + '.' : ''}`,
+        name: p.name,
         identifier: p.identifier,
         email: p.email,
-        profile_type: p.profile_type,
-        program: p.program,
-        year: p.year,
-        department: p.department,
-        role: p.role,
-        profileLabel: getProfileLabel(p),
       }));
-      setSearchResults(formatted);
+
+      // Keep a small in-memory cache to avoid repeating identical search requests.
+      searchCacheRef.current.set(cacheKey, formatted);
+      if (searchCacheRef.current.size > 30) {
+        const firstKey = searchCacheRef.current.keys().next().value;
+        searchCacheRef.current.delete(firstKey);
+      }
+
+      // Ignore stale responses from older requests.
+      if (searchToken === latestSearchTokenRef.current) {
+        setSearchResults(formatted);
+      }
     } catch (err) {
       console.error('Patient search error:', err);
-      setSearchResults([]);
+      if (searchToken === latestSearchTokenRef.current) {
+        setSearchResults([]);
+      }
     } finally {
-      setIsSearching(false);
+      if (searchToken === latestSearchTokenRef.current) {
+        setIsSearching(false);
+      }
     }
-  }, []);
+  }, [profile?.branch]);
+
+  // Debounce search input to avoid one HTTP call per keystroke.
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      handlePatientSearch(trimmed);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput, handlePatientSearch]);
+
+  useEffect(() => {
+    // Branch context changed; clear old branch query cache.
+    searchCacheRef.current.clear();
+  }, [profile?.branch]);
 
   // Load medicines for the current location
-  useEffect(() => {
-    const loadMedicines = async () => {
-      if (!location) return;
+  const loadMedicines = useCallback(async () => {
+    if (!location) return;
 
-      setLoadingMedicines(true);
-      try {
-        const availableMedicines = await fetchAvailableMedicineWithQuantities(location, 0, 100);
-        setMedicines(availableMedicines || []);
-      } catch (err) {
-        console.error('Failed to load medicines:', err);
-        onShowError('Failed to load available medicines');
-      } finally {
-        setLoadingMedicines(false);
-      }
-    };
-
-    loadMedicines();
+    setLoadingMedicines(true);
+    try {
+      const availableMedicines = await fetchAvailableMedicineWithQuantities(location, 0, 100);
+      setMedicines(availableMedicines || []);
+    } catch (err) {
+      console.error('Failed to load medicines:', err);
+      onShowError('Failed to load available medicines');
+    } finally {
+      setLoadingMedicines(false);
+    }
   }, [location, onShowError]);
+
+  useEffect(() => {
+    loadMedicines();
+  }, [loadMedicines]);
 
   // Handle patient selection
   const handleSelectPatient = (patient) => {
@@ -112,6 +168,29 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
     setNotes('');
   };
 
+  // Compute total reserved quantity for a medicine item across all Approved/InProgress requests.
+  const getReservedQuantityForItem = useCallback((itemId) => {
+    if (!itemId) return 0;
+    const reservedStatuses = ['Approved', 'InProgress'];
+    return (allRequests || [])
+      .filter((r) =>
+        reservedStatuses.includes(r.status) &&
+        (!location || r.location === location)
+      )
+      .reduce((total, r) => {
+        return total + (r.items || []).reduce((itemTotal, item, idx) => {
+          const rItemId = String(item.itemId || item.medicineId || '');
+          if (rItemId === String(itemId)) {
+            const qty = r.approvedQuantities?.[idx] != null
+              ? Number(r.approvedQuantities[idx])
+              : Number(item.quantity || 0);
+            return itemTotal + qty;
+          }
+          return itemTotal;
+        }, 0);
+      }, 0);
+  }, [allRequests, location]);
+
   // Handle adding medicine to release
   const handleAddMedicine = (medicine) => {
     // Check if already added (any batch of this medicine)
@@ -121,16 +200,26 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
       return;
     }
 
+    const reserved = getReservedQuantityForItem(medicine.id);
+
     // If multiple batches exist, show batch selection modal
     if (medicine.totalBatches > 1) {
+      // Pre-adjust batch quantities to reflect reservations
+      const adjustedBatches = medicine.allBatches.map((batch) => ({
+        ...batch,
+        availableQuantity: Math.max(0, (batch.availableQuantity || 0) - reserved),
+      }));
       setBatchModalData({
         medicine: medicine,
-        batches: medicine.allBatches, // Use the grouped batches
+        batches: adjustedBatches,
       });
       setShowBatchModal(true);
     } else {
-      // Single batch - add directly
-      addMedicineToRelease(medicine);
+      // Single batch - adjust for reservations, then add directly
+      addMedicineToRelease({
+        ...medicine,
+        availableQuantity: Math.max(0, (medicine.availableQuantity || 0) - reserved),
+      });
     }
   };
 
@@ -266,6 +355,9 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
         return updated;
       });
 
+      // Reload available batches/quantities immediately after backend success.
+      await loadMedicines();
+
       // Reset form
       setSelectedPatient(null);
       setReleaseItems([]);
@@ -274,7 +366,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
 
       // Callback for parent component
       if (onRelease) {
-        onRelease(result);
+        await Promise.resolve(onRelease(result));
       }
     } catch (err) {
       console.error('Release error:', err);
@@ -413,13 +505,13 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search patient (min 2 characters)..."
+                  placeholder={isProfileLoading ? 'Loading profile...' : 'Search patient by name, email, or ID...'}
+                  disabled={isProfileLoading || !profile?.branch}
                   value={searchInput}
                   onChange={(e) => {
                     setSearchInput(e.target.value);
-                    handlePatientSearch(e.target.value);
                   }}
-                  className="w-full pl-9 pr-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  className="w-full pl-9 pr-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -761,18 +853,15 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
                         {record.quantity}
                       </td>
                       <td className="px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400">
-                        <div className="font-medium">{record.batchNumber}</div>
-                        {record.expiryDate && (
-                          <div className={`text-[10px] ${
-                            isExpired 
-                              ? 'text-error-600 dark:text-error-400' 
-                              : expirySoon 
-                              ? 'text-warning-600 dark:text-warning-400' 
-                              : 'text-neutral-500 dark:text-neutral-500'
-                          }`}>
-                            {new Date(record.expiryDate).toLocaleDateString()}
-                          </div>
-                        )}
+                        <div className={`font-medium ${
+                          isExpired 
+                            ? 'text-error-600 dark:text-error-400' 
+                            : expirySoon 
+                            ? 'text-warning-600 dark:text-warning-400' 
+                            : 'text-neutral-700 dark:text-neutral-300'
+                        }`}>
+                          {formatBatchDisplay(record, { compact: true })}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-secondary-700 dark:text-neutral-300">{displayLocation}</td>
                       <td className="px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400 max-w-xs">

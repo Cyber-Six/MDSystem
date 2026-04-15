@@ -24,7 +24,7 @@ router.post(
   ipRateLimiter("strictLimiter"),
   async (req, res) => {
     const userId = req.user.id;
-    const portal = detectPortalFromSubdomain(req);
+    const portal = detectPortalFromSubdomain(req).toLowerCase();
 
     try {
       const email = await findEmailByUserId(userId);
@@ -75,7 +75,7 @@ router.post(
   ipRateLimiter("strictLimiter"),
   async (req, res) => {
     const userId = req.user.id;
-    const portal = detectPortalFromSubdomain(req);
+    const portal = detectPortalFromSubdomain(req).toLowerCase();
     const { currentPassword, newPassword, totpToken, emailOtp } = req.body;
 
     // ── Input validation ──

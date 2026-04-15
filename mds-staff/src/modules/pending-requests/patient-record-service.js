@@ -58,7 +58,39 @@ export const getPatientBasicInfo = async (userId) => {
   return data.getPatientBasicInfo ?? null;
 };
 
-// ── Profile (Student / Employee) ─────────────────────────────────────────────
+/**
+ * Fetch basic info for multiple patients in ONE request using field aliases.
+ * Returns a Map of userId → patient object (null if not found / error).
+ *
+ * @param {string[]} userIds
+ * @returns {Promise<Map<string, Object|null>>}
+ */
+export const getPatientBasicInfoBatch = async (userIds) => {
+  const result = new Map(userIds.map((id) => [String(id), null]));
+  if (userIds.length === 0) return result;
+
+  const fields = `id identifier branch sex first_name last_name middle_name suffix profile_type program year department role latest_ticket_id latest_status latest_scope latest_updated_at`;
+  const aliasParts = userIds.map(
+    (id) => `u_${String(id).replace(/[^a-zA-Z0-9]/g, '_')}: getPatientBasicInfo(userId: "${id}") { ${fields} }`,
+  );
+
+  try {
+    const response = await axiosRequest.post('/emr/medical', {
+      query: `{ ${aliasParts.join('\n')} }`,
+    });
+    if (response.data?.errors) {
+      console.warn('[PatientRecordService] Partial errors in batched getPatientBasicInfo:', response.data.errors.map((e) => e.message));
+    }
+    const data = response.data?.data ?? {};
+    for (const id of userIds) {
+      const alias = `u_${String(id).replace(/[^a-zA-Z0-9]/g, '_')}`;
+      result.set(String(id), data[alias] ?? null);
+    }
+  } catch (err) {
+    console.warn('[PatientRecordService] getPatientBasicInfoBatch error:', err.message);
+  }
+  return result;
+};
 
 export const getUserProfile = async (userId) => {
   const data = await sendGraphQL(
@@ -330,7 +362,6 @@ export const getUserObgynHistory = async (userId) => {
          lastMenstrualPeriod
          hasDysmenorrhea
          notes
-         status
          created_at
        }
      }`,
@@ -431,36 +462,36 @@ export const fetchCatalogsForReview = async () => {
   try {
     const data = await sendGraphQL(`
       query FetchReviewCatalogs {
-        medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true) {
+        medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 200) {
           id
           name
         }
-        hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true) {
+        hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) {
           id
           name
         }
-        operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true) {
+        operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) {
           id
           name
         }
-        medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true) {
+        medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) {
           id
           name
         }
-        immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+        immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) {
           id
           name
         }
-        allergenCatalog: getAllergenCatalogs(filterIsValid: true) {
+        allergenCatalog: getAllergenCatalogs(filterIsValid: true, limit: 200) {
           id
           allergen
           type
         }
-        oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true) {
+        oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true, limit: 200) {
           id
           name
         }
-        dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
+        dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true, limit: 200) {
           id
           name
         }
@@ -494,70 +525,152 @@ export const fetchCatalogsForReview = async () => {
 // ── Aggregate Fetcher ────────────────────────────────────────────────────────
 
 /**
- * Fetch all patient record data needed for the review modal.
- * Fetches sections in parallel based on the ticket scope.
+ * Fetch all patient record data needed for the review modal in as few HTTP
+ * requests as possible.
+ *
+ * Strategy:
+ *  • ONE POST to /emr/medical  — all patient-data resolvers + all catalog
+ *    resolvers batched into a single GraphQL document via field aliases.
+ *  • ONE POST to /staff/emr   — vital signs (different endpoint, medical only).
+ *
+ * OB-GYNE is always included for medical-scope records (backend returns []
+ * for male patients) so the lazy-load second request is eliminated.
+ *
+ * The returned object includes a `catalogs` key so callers no longer need a
+ * separate fetchCatalogsForReview() call.
  *
  * @param {string} userId  — Patient ID
  * @param {string} scope   — 'Medical' | 'Dental' | 'Both'
- * @param {string} sex     — 'Male' | 'Female' (for OB-GYNE section)
- * @returns {Promise<Object>} All fetched record sections
+ * @param {string} _sex    — kept for API compatibility; OB-GYNE is now batched
+ * @returns {Promise<Object>} All fetched record sections + catalogs
  */
-export const fetchPatientRecordForReview = async (userId, scope = 'Both', sex = null) => {
+export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex = null) => {
   const includeMedical = scope === 'Medical' || scope === 'Both';
   const includeDental  = scope === 'Dental'  || scope === 'Both';
 
-  // Build parallel fetch promises based on scope
-  const fetches = {};
-
-  // Always fetch basic info & profile & emergency contacts
-  fetches.basicInfo        = getPatientBasicInfo(userId);
-  fetches.profile          = getUserProfile(userId);
-  fetches.emergencyContact = getUserEmergencyContact(userId);
-
-  // Medical sections
-  if (includeMedical) {
-    fetches.medicalHistory       = getUserMedicalHistory(userId);
-    fetches.lifestyle            = getUserLifestyle(userId);
-    fetches.allergyProfile       = getUserAllergyProfile(userId);
-    fetches.medicationProfile    = getUserMedicationProfile(userId);
-    fetches.immunizationProfile  = getUserImmunizationProfile(userId);
-    fetches.hospitalizationProfile = getUserHospitalizationProfile(userId);
-    fetches.operationProfile     = getUserOperationProfile(userId);
-    fetches.visualAcuityProfile  = getUserVisualAcuityProfile(userId);
-    fetches.vitalSigns           = getUserVitalSigns(userId);
-
-    // OB-GYNE only for female patients
-    if (sex?.toLowerCase() === 'female') {
-      fetches.obgynHistory = getUserObgynHistory(userId);
+  // ── Build a single batched /emr/medical query ─────────────────────────────
+  const medicalFields = includeMedical ? `
+    medicalHistory: getUserMedicalHistory(userId: $userId) {
+      id conditions { id conditionId description diagnosedDate relationship } notes created_at
     }
+    lifestyle: getUserLifestyle(userId: $userId) {
+      id smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer
+      frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency notes created_at
+    }
+    allergyProfile: getUserAllergyProfile(userId: $userId) {
+      id allergies { id allergenCatalogId status severity notes dateIdentified } notes created_at
+    }
+    medicationProfile: getUserMedicationProfile(userId: $userId) {
+      id medications { id medicineId description } notes created_at
+    }
+    immunizationProfile: getUserImmunizationProfile(userId: $userId) {
+      id immunizations { id vaccineTypeId immunizationDate doseNumber } notes created_at
+    }
+    hospitalizationProfile: getUserHospitalizationProfile(userId: $userId) {
+      id hospitalizations { id conditionId admissionDate dischargeDate notes } notes created_at
+    }
+    operationProfile: getUserOperationProfile(userId: $userId) {
+      id operations { id procedureId operationDate notes } notes created_at
+    }
+    visualAcuityProfile: getUserVisualAcuityProfile(userId: $userId) {
+      id notes acuity { id acuityId left_eye right_eye notes recorded_at } created_at
+    }
+    obgynHistory: getUserObgynHistory(userId: $userId) {
+      id lastMenstrualPeriod hasDysmenorrhea notes created_at
+    }` : '';
+
+  const dentalFields = includeDental ? `
+    dentalHistory: getUserDentalHistory(userId: $userId) {
+      id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
+    }
+    dentalProcedureProfile: getUserDentalProcedureProfile(userId: $userId) {
+      id procedures { id procedureTypeId procedureDate } notes created_at
+    }
+    oralApplianceProfile: getUserOralApplianceProfile(userId: $userId) {
+      id appliances { id tagId status dateIssued arch } notes created_at
+    }
+    dentalPhotoRecord: getUserDentalPhotoRecord(userId: $userId, limit: 1) {
+      id upperTeeth lowerTeeth isValid created_at
+    }` : '';
+
+  const batchedQuery = `
+    query FetchPatientRecordForReview($userId: ID!) {
+      basicInfo: getPatientBasicInfo(userId: $userId) {
+        id identifier branch sex first_name last_name middle_name suffix
+        profile_type program year department role latest_ticket_id
+        latest_status latest_scope latest_updated_at
+      }
+      profile: getUserProfile(userId: $userId) {
+        ... on StudentProfile { id program year status created_at }
+        ... on EmployeeProfile { id department role position status created_at }
+      }
+      emergencyContact: getUserEmergencyContact(userId: $userId) {
+        id
+        firstContact { id contactName relationship contactNumber isVerified }
+        secondContact { id contactName relationship contactNumber isVerified }
+        created_at
+      }
+      ${medicalFields}
+      ${dentalFields}
+      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 200) { id name }
+      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) { id name }
+      operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) { id name }
+      medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) { id name }
+      immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) { id name }
+      allergenCatalog: getAllergenCatalogs(filterIsValid: true, limit: 200) { id allergen type }
+      oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true, limit: 200) { id name }
+      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true, limit: 200) { id name }
+    }`;
+
+  // Fire the batched EMR query and the vital-signs query in parallel
+  // (vital signs uses a different endpoint so it cannot be merged)
+  const [emrSettled, vsSettled] = await Promise.allSettled([
+    sendGraphQL(batchedQuery, { userId }),
+    includeMedical ? getUserVitalSigns(userId) : Promise.resolve([]),
+  ]);
+
+  const emr = emrSettled.status === 'fulfilled' ? emrSettled.value : {};
+  const vs  = vsSettled.status  === 'fulfilled' ? vsSettled.value  : [];
+
+  if (emrSettled.status === 'rejected') {
+    console.error('fetchPatientRecordForReview: batched EMR query failed:', emrSettled.reason);
   }
 
-  // Dental sections
-  if (includeDental) {
-    fetches.dentalHistory          = getUserDentalHistory(userId);
-    fetches.dentalProcedureProfile = getUserDentalProcedureProfile(userId);
-    fetches.oralApplianceProfile   = getUserOralApplianceProfile(userId);
-    fetches.dentalPhotoRecord      = getUserDentalPhotoRecord(userId);
-  }
+  // Helper: arrays → first element; objects → as-is; null/undefined → null
+  const first = (val) => (Array.isArray(val) ? (val[0] ?? null) : (val ?? null));
 
-  // Execute all fetches in parallel
-  const keys = Object.keys(fetches);
-  const values = await Promise.allSettled(Object.values(fetches));
-
-  const result = {};
-  keys.forEach((key, i) => {
-    const settled = values[i];
-    if (settled.status === 'fulfilled') {
-      // For array returns, take the first (latest) record
-      const val = settled.value;
-      result[key] = Array.isArray(val) ? (val[0] ?? null) : val;
-    } else {
-      console.error(`Failed to fetch ${key}:`, settled.reason);
-      result[key] = null;
-    }
-  });
-
-  return result;
+  return {
+    basicInfo:              emr.basicInfo    ?? null,
+    profile:                first(emr.profile),
+    emergencyContact:       first(emr.emergencyContact),
+    // medical
+    medicalHistory:         first(emr.medicalHistory)         ?? null,
+    lifestyle:              first(emr.lifestyle)              ?? null,
+    allergyProfile:         first(emr.allergyProfile)         ?? null,
+    medicationProfile:      first(emr.medicationProfile)      ?? null,
+    immunizationProfile:    first(emr.immunizationProfile)    ?? null,
+    hospitalizationProfile: first(emr.hospitalizationProfile) ?? null,
+    operationProfile:       first(emr.operationProfile)       ?? null,
+    visualAcuityProfile:    first(emr.visualAcuityProfile)    ?? null,
+    vitalSigns:             first(vs)                         ?? null,
+    obgynHistory:           first(emr.obgynHistory)           ?? null,
+    // dental
+    dentalHistory:          first(emr.dentalHistory)          ?? null,
+    dentalProcedureProfile: first(emr.dentalProcedureProfile) ?? null,
+    oralApplianceProfile:   first(emr.oralApplianceProfile)   ?? null,
+    dentalPhotoRecord:      first(emr.dentalPhotoRecord)      ?? null,
+    // catalogs bundled in — callers no longer need fetchCatalogsForReview()
+    catalogs: {
+      medicalConditionCatalog: emr.medicalConditionCatalog ?? [],
+      hospitalizationCatalog:  emr.hospitalizationCatalog  ?? [],
+      operationCatalog:        emr.operationCatalog        ?? [],
+      medicationCatalog:       emr.medicationCatalog       ?? [],
+      immunizationCatalog:     emr.immunizationCatalog     ?? [],
+      allergenCatalog:         emr.allergenCatalog         ?? [],
+      oralApplianceCatalog:    emr.oralApplianceCatalog    ?? [],
+      dentalProcedureCatalog:  emr.dentalProcedureCatalog  ?? [],
+    },
+  };
 };
 
 // ══════════════════════════════════════════════════════════════════════════════

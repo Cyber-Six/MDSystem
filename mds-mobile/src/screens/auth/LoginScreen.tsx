@@ -3,7 +3,7 @@
  * Matches the frontend login flow with dark mode support
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -11,7 +11,8 @@ import {
   KeyboardAvoidingView, 
   Platform,
   TouchableOpacity,
-  StyleSheet
+  StyleSheet,
+  Image,
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,16 @@ import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert, LinkButton, Checkbox } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
 import { axiosRequest, TokenStorage } from '../../core';
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+
+// Complete any pending auth sessions on app load
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+// Server-side secret exchanged instead of a reCAPTCHA browser token.
+// Mobile native apps cannot render v2 checkbox widgets.
+const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || '';
 
 // Import validation functions from core package
 const validatePassword = (password: string): boolean => {
@@ -59,11 +70,96 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   // UI state
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // ── Google OAuth ──────────────────────────────────────────────────────
+  const discovery = AuthSession.useAutoDiscovery('https://accounts.google.com');
+  // Generate nonce once per component mount to prevent request invalidation on re-renders
+  const nonceRef = useRef(Math.random().toString(36).substring(2));
+
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: GOOGLE_CLIENT_ID,
+      redirectUri: AuthSession.makeRedirectUri(),
+      scopes: ['openid', 'profile', 'email'],
+      responseType: AuthSession.ResponseType.IdToken,
+      extraParams: {
+        hd: 'tip.edu.ph',
+        nonce: nonceRef.current,
+      },
+    },
+    discovery
+  );
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const idToken = response.params?.id_token;
+      if (idToken) {
+        handleGoogleLogin(idToken);
+      }
+    } else if (response?.type === 'error') {
+      setError('Google sign-in was cancelled or failed.');
+      setIsGoogleLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleLogin = async (idToken: string) => {
+    setError('');
+    setIsGoogleLoading(true);
+
+    try {
+      const res = await axiosRequest.post('/auth/oauth/google', {
+        credential: idToken,
+        recaptchaToken: MOBILE_RECAPTCHA_SECRET,
+      });
+
+      if (res.data.ok) {
+        setVerificationKey(res.data.LoginKey);
+        // Extract email from ID token for 2FA flow
+        try {
+          const payload = JSON.parse(atob(idToken.split('.')[1]));
+          setEmail(payload.email || '');
+        } catch { /* non-critical */ }
+
+        if (res.data.requires2FA) {
+          await handleSend2FA();
+          setCurrentStep('2fa');
+        } else {
+          setShowConsent(true);
+        }
+      }
+    } catch (err: any) {
+      const errorCode = err.response?.data?.error;
+      const errorMsg = err.response?.data?.message || 'Google sign-in failed.';
+      switch (errorCode) {
+        case 'INVALID_GOOGLE_TOKEN':
+          setError('Google authentication failed. Ensure you are using a @tip.edu.ph account.');
+          break;
+        case 'ACCOUNT_NOT_FOUND':
+          setError('No account found for this email. Please register first.');
+          break;
+        case 'ACCOUNT_LOCKED':
+          setError(errorMsg);
+          break;
+        default:
+          setError(errorMsg);
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGooglePress = async () => {
+    if (!GOOGLE_CLIENT_ID || !request) return;
+    setError('');
+    setIsGoogleLoading(true);
+    await promptAsync();
+  };
 
   // Send 2FA code
   const handleSend2FA = async () => {
     try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
+      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
       await axiosRequest.post('/auth/email/2fa', { 
         email,
         recaptchaToken 
@@ -91,7 +187,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsLoading(true);
 
     try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
+      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
       
       const response = await axiosRequest.post('/auth/login', { 
         email, 
@@ -185,7 +281,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsLoading(true);
 
     try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
+      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
       await axiosRequest.post('/auth/email/2fa', { 
         email,
         recaptchaToken 
@@ -308,6 +404,41 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           onPress={() => onNavigateToForgotPassword?.()} 
         />
       </View>
+
+      {/* Google Sign-In */}
+      {GOOGLE_CLIENT_ID ? (
+        <>
+          <View style={styles.oauthDivider}>
+            <View style={[styles.oauthDividerLine, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[300] }]} />
+            <Text style={[styles.oauthDividerText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>or</Text>
+            <View style={[styles.oauthDividerLine, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[300] }]} />
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.googleButton,
+              { 
+                borderColor: isDark ? colors.neutral[600] : colors.neutral[300],
+                backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+              }
+            ]}
+            onPress={handleGooglePress}
+            disabled={isGoogleLoading || !request}
+            activeOpacity={0.7}
+          >
+            <Image
+              source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
+              style={styles.googleIcon}
+            />
+            <Text style={[
+              styles.googleButtonText,
+              { color: isDark ? colors.neutral[100] : colors.secondary[900] }
+            ]}>
+              {isGoogleLoading ? 'Signing in...' : 'Sign in with Google'}
+            </Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
 
       <View style={[
         styles.divider,
@@ -557,6 +688,37 @@ const styles = StyleSheet.create({
   },
   buttonSpacer: {
     width: 12,
+  },
+  oauthDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  oauthDividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  oauthDividerText: {
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 10,
+  },
+  googleButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
 });
 

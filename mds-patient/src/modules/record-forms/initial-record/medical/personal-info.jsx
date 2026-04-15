@@ -1,5 +1,6 @@
 import React from 'react';
 import { Input, Select } from './form-elements';
+import { searchStudentProgram } from '../../../../services/emr-service';
 
 const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError = () => {} }) => {
   const handleChange = (field, value) => {
@@ -42,36 +43,61 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
     onChange({ ...data, emergencyContacts: contacts });
   };
 
-  const programOptions = [
-    { value: 'BS Architecture', label: 'BS Architecture' },
-    { value: 'BS Chemical Engineering', label: 'BS Chemical Engineering' },
-    { value: 'BS Civil Engineering', label: 'BS Civil Engineering' },
-    { value: 'BS Computer Engineering', label: 'BS Computer Engineering' },
-    { value: 'BS Electrical Engineering', label: 'BS Electrical Engineering' },
-    { value: 'BS Electronics Engineering', label: 'BS Electronics Engineering' },
-    { value: 'BS Industrial Engineering', label: 'BS Industrial Engineering' },
-    { value: 'BS Mechanical Engineering', label: 'BS Mechanical Engineering' },
-    { value: 'BS Environmental and Sanitary Engineering', label: 'BS Environmental and Sanitary Engineering' },
-    { value: 'BS Computer Science', label: 'BS Computer Science' },
-    { value: 'BS Data Science and Analytics', label: 'BS Data Science and Analytics' },
-    { value: 'BS Entertainment and Multimedia Computing', label: 'BS Entertainment and Multimedia Computing' },
-    { value: 'BS Information Technology', label: 'BS Information Technology' },
-    { value: 'BS Information Systems', label: 'BS Information Systems' },
-    { value: 'BS Accountancy', label: 'BS Accountancy' },
-    { value: 'BS Accounting Information Systems', label: 'BS Accounting Information Systems' },
-    { value: 'BSBA Financial Management', label: 'BSBA Financial Management' },
-    { value: 'BSBA Human Resource Management', label: 'BSBA Human Resource Management' },
-    { value: 'BSBA Logistics and Supply Chain Management', label: 'BSBA Logistics and Supply Chain Management' },
-    { value: 'BSBA Marketing Management', label: 'BSBA Marketing Management' },
-    { value: 'Bachelor of Arts in English Language', label: 'Bachelor of Arts in English Language' },
-    { value: 'Bachelor of Arts in Political Science', label: 'Bachelor of Arts in Political Science' },
-    { value: 'Bachelor of Secondary Education Major in English', label: 'Bachelor of Secondary Education Major in English' },
-    { value: 'Bachelor of Secondary Education Major in Mathematics', label: 'Bachelor of Secondary Education Major in Mathematics' },
-    { value: 'Bachelor of Secondary Education Major in Sciences', label: 'Bachelor of Secondary Education Major in Sciences' },
-    { value: 'Bachelor of Special Needs Education', label: 'Bachelor of Special Needs Education' },
-    { value: 'Teaching Certificate Program', label: 'Teaching Certificate Program' },
-    { value: 'Other', label: 'Other' },
-  ];
+  const programOptions = [];
+
+  // Program search state
+  const [programInput, setProgramInput] = React.useState(data.program || '');
+  const [programSuggestions, setProgramSuggestions] = React.useState([]);
+  const [programSearching, setProgramSearching] = React.useState(false);
+  const [programFocused, setProgramFocused] = React.useState(false);
+  const programWrapperRef = React.useRef(null);
+  const programDebounceRef = React.useRef(null);
+
+  // Sync programInput display when data.program changes (e.g. revision prefill)
+  React.useEffect(() => {
+    setProgramInput(data.program || '');
+  }, [data.program]);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (programWrapperRef.current && !programWrapperRef.current.contains(e.target)) {
+        setProgramFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleProgramInputChange = (value) => {
+    setProgramInput(value);
+    // Clear the stored selection when user edits the field
+    if (data.programId) {
+      onChange({ ...data, program: '', programId: '' });
+    }
+    onClearFieldError('program');
+    if (programDebounceRef.current) clearTimeout(programDebounceRef.current);
+    if (!value.trim()) { setProgramSuggestions([]); return; }
+    programDebounceRef.current = setTimeout(async () => {
+      setProgramSearching(true);
+      try {
+        const results = await searchStudentProgram(value.trim());
+        setProgramSuggestions(results);
+      } catch {
+        setProgramSuggestions([]);
+      } finally {
+        setProgramSearching(false);
+      }
+    }, 300);
+  };
+
+  const selectProgram = (item) => {
+    setProgramInput(item.label);
+    setProgramFocused(false);
+    setProgramSuggestions([]);
+    onChange({ ...data, program: item.label, programId: item.id });
+    onClearFieldError('program');
+  };
 
   const studentCategoryOptions = [
     { value: 'Grade11', label: 'Grade 11' },
@@ -243,25 +269,45 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="md:col-span-2">
-            <Select
-              label="Program"
-              required
-              value={data.program || ''}
-              onChange={(e) => handleChange('program', e.target.value)}
-              options={programOptions}
-              error={fieldErrors.program}
-            />
-            {data.program === 'Other' && (
-              <div className="mt-2">
-                <Input
-                  label="Specify Program"
-                  required
-                  value={data.programOther || ''}
-                  onChange={(e) => handleChange('programOther', e.target.value)}
-                  placeholder="Enter your specific program"
-                  error={fieldErrors.programOther}
-                />
-              </div>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">
+              Program <span className="text-red-500">*</span>
+            </label>
+            <div ref={programWrapperRef} className="relative">
+              <input
+                type="text"
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 ${fieldErrors.program ? 'border-red-400' : 'border-neutral-300'} ${data.programId ? 'bg-primary-50' : ''}`}
+                placeholder="Type to search for your program..."
+                value={programInput}
+                autoComplete="off"
+                onFocus={() => setProgramFocused(true)}
+                onChange={(e) => handleProgramInputChange(e.target.value)}
+              />
+              {data.programId && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-primary-600 font-medium pointer-events-none">✓</span>
+              )}
+              {programFocused && programInput.trim() && (
+                <div className="absolute z-10 mt-1 w-full border border-neutral-200 rounded-lg bg-white shadow-md">
+                  {programSearching && (
+                    <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
+                  )}
+                  {!programSearching && programSuggestions.length === 0 && (
+                    <div className="px-4 py-2 text-xs text-secondary-400 italic">No programs found.</div>
+                  )}
+                  {programSuggestions.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
+                      onMouseDown={(e) => { e.preventDefault(); selectProgram(item); }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {fieldErrors.program && (
+              <p className="mt-1 text-xs text-red-500">{fieldErrors.program}</p>
             )}
           </div>
           <Input

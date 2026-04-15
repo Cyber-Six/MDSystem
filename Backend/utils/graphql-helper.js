@@ -42,4 +42,4 @@ function throwGraphQLError(res) {
   return new GraphQLErrorBuilder(res);
 }
 
-module.exports = { throwGraphQLError };
+module.exports = { throwGraphQLError, GraphQLError };

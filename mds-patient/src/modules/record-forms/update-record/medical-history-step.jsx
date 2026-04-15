@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup } from './form-elements';
+import React, { useState, useEffect, useRef } from 'react';
+import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup, RadioButton } from './form-elements';
 import { fetchAllMedicalCatalogs } from './medical-history-service';
 import { useBanner } from '../../../context/use-banner.js';
+import {
+  searchImmunizationCatalog,
+  createImmunizationCatalog,
+  searchDomainCatalog,
+  createDomainCatalog,
+  searchAllergenCatalogByName,
+  createAllergenCatalogEntry,
+} from '@core/services/emr-service';
 
 const LIFESTYLE_FREQUENCY_OPTIONS = [
   { value: 'Daily',      label: 'Daily' },
@@ -17,6 +25,110 @@ const VAPE_TYPE_OPTIONS = [
   { value: 'THC',      label: 'THC' },
   { value: 'Flavored', label: 'Flavored' },
 ];
+
+const ALLERGEN_TYPE_OPTIONS = [
+  { value: 'Food', label: 'Food' },
+  { value: 'Drug', label: 'Drug' },
+  { value: 'Environmental', label: 'Environmental' },
+  { value: 'Insect', label: 'Insect' },
+  { value: 'Chemical', label: 'Chemical' },
+  { value: 'Other', label: 'Other' },
+];
+
+const ALLERGEN_TYPE_ORDER = ['Food', 'Drug', 'Environmental', 'Insect', 'Chemical', 'Other'];
+
+// Reusable search+create "Others" hook
+function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name' }) {
+  const [dynamicItems, setDynamicItems] = useState([]);
+  const [input, setInput] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const wrapperRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleInputChange = (value) => {
+    setInput(value);
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed) {
+      setSuggestions([]);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
+    const allLoaded = [...catalog, ...dynamicItems];
+    const seen = new Set();
+    const localMatches = allLoaded.filter((v) => {
+      if (seen.has(v.id)) return false;
+      seen.add(v.id);
+      return (v[nameKey] || '').toLowerCase().includes(trimmed);
+    });
+    setSuggestions(localMatches);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const dbResults = await searchFn(value.trim());
+        const mergedMap = new Map();
+        dbResults.forEach((v) => mergedMap.set(v.id, v));
+        localMatches.forEach((v) => { if (!mergedMap.has(v.id)) mergedMap.set(v.id, v); });
+        setSuggestions(Array.from(mergedMap.values()));
+      } catch {
+        // Keep local matches on error
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  };
+
+  const selectItem = (item) => {
+    const alreadyInMain = catalog.some((v) => v.id === item.id);
+    const alreadyInDynamic = dynamicItems.some((v) => v.id === item.id);
+    if (!alreadyInMain && !alreadyInDynamic) {
+      setDynamicItems((prev) => [...prev, item]);
+    }
+    setInput('');
+    setSuggestions([]);
+    setFocused(false);
+    return item;
+  };
+
+  const createItem = async (...args) => {
+    setCreating(true);
+    try {
+      const created = await createFn(...args);
+      if (created.length > 0) {
+        const newItem = created[0];
+        setDynamicItems((prev) => [...prev, newItem]);
+        setInput('');
+        setSuggestions([]);
+        setFocused(false);
+        return newItem;
+      }
+    } catch (err) {
+      console.error('[CatalogSearch] Failed to create catalog entry:', err.message);
+    } finally {
+      setCreating(false);
+    }
+    return null;
+  };
+
+  return {
+    dynamicItems, input, suggestions, creating, searching, focused,
+    wrapperRef, setFocused, handleInputChange, selectItem, createItem,
+  };
+}
 
 const MedicalHistoryStep = ({ formData, onChange }) => {
   const { clearAllBanners } = useBanner();
@@ -154,6 +266,48 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
     { id: 'family', label: 'Family' }
   ];
 
+  // ── Catalog search hooks ──
+  const immunizationOthers = useCatalogSearch({
+    catalog: catalogs.immunizations,
+    searchFn: searchImmunizationCatalog,
+    createFn: (name) => createImmunizationCatalog(name),
+  });
+
+  const allergenOthers = useCatalogSearch({
+    catalog: catalogs.allergens,
+    searchFn: searchAllergenCatalogByName,
+    createFn: (name, type) => createAllergenCatalogEntry(name, type),
+    nameKey: 'allergen',
+  });
+  const [allergenTypeForCreate, setAllergenTypeForCreate] = useState('Other');
+
+  const hospitalizationOthers = useCatalogSearch({
+    catalog: catalogs.hospitalizations,
+    searchFn: (q) => searchDomainCatalog('Hospitalization', q),
+    createFn: (name) => createDomainCatalog('Hospitalization', name),
+  });
+
+  const operationOthers = useCatalogSearch({
+    catalog: catalogs.operations,
+    searchFn: (q) => searchDomainCatalog('Operation', q),
+    createFn: (name) => createDomainCatalog('Operation', name),
+  });
+
+  const medicationOthers = useCatalogSearch({
+    catalog: catalogs.medications,
+    searchFn: (q) => searchDomainCatalog('Medication', q),
+    createFn: (name) => createDomainCatalog('Medication', name),
+  });
+
+  const medicalConditionOthers = useCatalogSearch({
+    catalog: [],
+    searchFn: (q) => searchDomainCatalog('MedicalCondition', q),
+    createFn: (name) => createDomainCatalog('MedicalCondition', name),
+  });
+
+  // Merge dynamic items with catalogs for lookups
+  const allAllergens = [...catalogs.allergens, ...allergenOthers.dynamicItems];
+
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
       {/* Header */}
@@ -187,6 +341,75 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   />
                 ))}
               </div>
+              {/* Dynamically added medical conditions from search */}
+              {medicalConditionOthers.dynamicItems.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                  {medicalConditionOthers.dynamicItems.map((condition) => (
+                    <Checkbox
+                      key={condition.id}
+                      label={condition.name}
+                      checked={formData.selfConditions?.[condition.id] || false}
+                      onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
+                    />
+                  ))}
+                </div>
+              )}
+              {/* Search or add medical conditions */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
+                <div ref={medicalConditionOthers.wrapperRef}>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                    placeholder="Type to search for a condition..."
+                    value={medicalConditionOthers.input}
+                    autoComplete="off"
+                    onFocus={() => medicalConditionOthers.setFocused(true)}
+                    onChange={(e) => medicalConditionOthers.handleInputChange(e.target.value)}
+                  />
+                  {medicalConditionOthers.focused && medicalConditionOthers.input.trim() && (
+                    <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                      {medicalConditionOthers.searching && (
+                        <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                      )}
+                      {medicalConditionOthers.suggestions.length > 0 ? (
+                        <>
+                          {medicalConditionOthers.suggestions.map(result => (
+                            <button
+                              key={result.id}
+                              type="button"
+                              className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                              onMouseDown={(e) => { e.preventDefault(); const item = medicalConditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
+                            >
+                              {result.name}
+                              {formData.selfConditions?.[result.id] && (
+                                <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                              )}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                            disabled={medicalConditionOthers.creating}
+                            onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                          >
+                            {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                          disabled={medicalConditionOthers.creating}
+                          onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                        >
+                          {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             {/* Additional Sections - Only visible in Yourself Tab */}
             <div className="space-y-4 mt-6">
@@ -200,88 +423,173 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               >
                 <div className="space-y-4">
                   <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="hasAllergies"
-                        value="yes"
-                        checked={formData.hasAllergies === 'yes'}
-                        onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
-                        className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                      />
-                      <span className="text-sm text-secondary-700">Yes</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="hasAllergies"
-                        value="no"
-                        checked={formData.hasAllergies === 'no'}
-                        onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
-                        className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                      />
-                      <span className="text-sm text-secondary-700">No</span>
-                    </label>
+                    <RadioButton label="Yes" name="hasAllergies" value="yes" checked={formData.hasAllergies === 'yes'} onChange={(e) => handleInputChange('hasAllergies', e.target.value)} />
+                    <RadioButton label="No" name="hasAllergies" value="no" checked={formData.hasAllergies === 'no'} onChange={(e) => handleInputChange('hasAllergies', e.target.value)} />
                   </div>
                   {formData.hasAllergies === 'yes' && (
                     <div className="space-y-4">
                       {catalogs.allergens.length > 0 ? (
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {catalogs.allergens.map((allergen) => (
-                              <Checkbox
-                                key={allergen.id}
-                                label={`${allergen.allergen} (${allergen.type})`}
-                                checked={(formData.selectedAllergies || []).includes(allergen.id)}
-                                onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
-                              />
-                            ))}
-                          </div>
-                          {(formData.selectedAllergies || []).length > 0 && (
-                            <div className="space-y-3">
-                              <h4 className="text-sm font-medium text-secondary-700">Allergy Details:</h4>
-                              {(formData.selectedAllergies || []).map((allergenId) => {
-                                const allergen = catalogs.allergens.find(a => a.id === allergenId);
-                                return allergen ? (
-                                  <div key={allergenId} className="bg-neutral-50 p-3 rounded-lg">
-                                    <p className="text-sm font-medium mb-2">{allergen.allergen}</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                      <Select
-                                        label="Status"
-                                        required
-                                        options={[
-                                          { value: 'Active', label: 'Active' },
-                                          { value: 'Resolved', label: 'Resolved' },
-                                          { value: 'Suspected', label: 'Suspected' }
-                                        ]}
-                                        value={(formData.allergyDetails?.[allergenId]?.status) || ''}
-                                        onChange={(e) => {
-                                          const details = { ...(formData.allergyDetails || {}) };
-                                          details[allergenId] = { ...details[allergenId], status: e.target.value };
-                                          handleInputChange('allergyDetails', details);
-                                        }}
+                        <div className="space-y-5">
+                          {ALLERGEN_TYPE_ORDER.filter(type =>
+                            catalogs.allergens.some(a => a.type === type)
+                          ).map((type) => (
+                            <div key={type}>
+                              <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-2">{type}</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
+                                {catalogs.allergens
+                                  .filter(a => a.type === type)
+                                  .map((allergen) => {
+                                    const isChecked = (formData.selectedAllergies || []).includes(allergen.id);
+                                    return (
+                                      <div key={allergen.id}>
+                                        <Checkbox
+                                          label={allergen.allergen}
+                                          checked={isChecked}
+                                          onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
+                                        />
+                                        {isChecked && (
+                                          <div className="ml-6 mt-1 mb-1 flex gap-2">
+                                            <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                              <option value="Unknown">Severity: Unknown</option>
+                                              <option value="Mild">Severity: Mild</option>
+                                              <option value="Moderate">Severity: Moderate</option>
+                                              <option value="Severe">Severity: Severe</option>
+                                            </select>
+                                            <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.status || 'Active'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], status: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                              <option value="Active">Status: Active</option>
+                                              <option value="Resolved">Status: Resolved</option>
+                                              <option value="Suspected">Status: Suspected</option>
+                                            </select>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          ))}
+                          {/* Dynamically added allergens from search */}
+                          {allergenOthers.dynamicItems.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-2">Added by you</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
+                                {allergenOthers.dynamicItems.map((allergen) => {
+                                  const isChecked = (formData.selectedAllergies || []).includes(allergen.id);
+                                  return (
+                                    <div key={allergen.id}>
+                                      <Checkbox
+                                        label={`${allergen.allergen} (${allergen.type})`}
+                                        checked={isChecked}
+                                        onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
                                       />
-                                      <Select
-                                        label="Severity"
-                                        required
-                                        options={[
-                                          { value: 'Mild', label: 'Mild' },
-                                          { value: 'Moderate', label: 'Moderate' },
-                                          { value: 'Severe', label: 'Severe' }
-                                        ]}
-                                        value={(formData.allergyDetails?.[allergenId]?.severity) || ''}
-                                        onChange={(e) => {
-                                          const details = { ...(formData.allergyDetails || {}) };
-                                          details[allergenId] = { ...details[allergenId], severity: e.target.value };
-                                          handleInputChange('allergyDetails', details);
-                                        }}
-                                      />
+                                      {isChecked && (
+                                        <div className="ml-6 mt-1 mb-1 flex gap-2">
+                                          <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                            <option value="Unknown">Severity: Unknown</option>
+                                            <option value="Mild">Severity: Mild</option>
+                                            <option value="Moderate">Severity: Moderate</option>
+                                            <option value="Severe">Severity: Severe</option>
+                                          </select>
+                                          <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.status || 'Active'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], status: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                            <option value="Active">Status: Active</option>
+                                            <option value="Resolved">Status: Resolved</option>
+                                            <option value="Suspected">Status: Suspected</option>
+                                          </select>
+                                        </div>
+                                      )}
                                     </div>
-                                  </div>
-                                ) : null;
-                              })}
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
+                          {/* Search or add allergens */}
+                          <div className="mt-2">
+                            <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Allergens (search or add):</label>
+                            <div ref={allergenOthers.wrapperRef}>
+                              <input
+                                type="text"
+                                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                                placeholder="Type to search for an allergen..."
+                                value={allergenOthers.input}
+                                autoComplete="off"
+                                onFocus={() => allergenOthers.setFocused(true)}
+                                onChange={(e) => allergenOthers.handleInputChange(e.target.value)}
+                              />
+                              {allergenOthers.focused && allergenOthers.input.trim() && (
+                                <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                                  {allergenOthers.searching && (
+                                    <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                                  )}
+                                  {allergenOthers.suggestions.length > 0 ? (
+                                    <>
+                                      {allergenOthers.suggestions.map(result => (
+                                        <button
+                                          key={result.id}
+                                          type="button"
+                                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                                          onMouseDown={(e) => { e.preventDefault(); const item = allergenOthers.selectItem(result); handleCheckboxChange('selectedAllergies', item.id, true); }}
+                                        >
+                                          {result.allergen} <span className="text-xs text-secondary-400">({result.type})</span>
+                                          {(formData.selectedAllergies || []).includes(result.id) && (
+                                            <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                                          )}
+                                        </button>
+                                      ))}
+                                      <div className="border-t border-neutral-200 dark:border-neutral-700 px-4 py-2">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <label className="text-xs text-secondary-500 dark:text-neutral-400">Type:</label>
+                                          <select
+                                            className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-1 py-0.5 bg-white dark:bg-neutral-800 dark:text-white"
+                                            value={allergenTypeForCreate}
+                                            onChange={(e) => setAllergenTypeForCreate(e.target.value)}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                          >
+                                            {ALLERGEN_TYPE_OPTIONS.map(opt => (
+                                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none disabled:opacity-50"
+                                          disabled={allergenOthers.creating}
+                                          onMouseDown={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleCheckboxChange('selectedAllergies', item.id, true); }}
+                                        >
+                                          {allergenOthers.creating ? 'Adding...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
+                                        </button>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="px-4 py-2">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <label className="text-xs text-secondary-500 dark:text-neutral-400">Type:</label>
+                                        <select
+                                          className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-1 py-0.5 bg-white dark:bg-neutral-800 dark:text-white"
+                                          value={allergenTypeForCreate}
+                                          onChange={(e) => setAllergenTypeForCreate(e.target.value)}
+                                          onMouseDown={(e) => e.stopPropagation()}
+                                        >
+                                          {ALLERGEN_TYPE_OPTIONS.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="w-full text-left text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none disabled:opacity-50"
+                                        disabled={allergenOthers.creating}
+                                        onMouseDown={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleCheckboxChange('selectedAllergies', item.id, true); }}
+                                      >
+                                        {allergenOthers.creating ? 'Adding...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
                         </div>
                       ) : (
                         <Textarea
@@ -315,28 +623,8 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             <div className="border-l-4 border-warning-500 pl-4">
               <h4 className="font-semibold text-secondary-700 mb-3">Smoker</h4>
               <div className="flex gap-4 mb-4">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="smoker"
-                    value="no"
-                    checked={formData.smoker === 'no'}
-                    onChange={(e) => handleInputChange('smoker', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">No</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="smoker"
-                    value="yes"
-                    checked={formData.smoker === 'yes'}
-                    onChange={(e) => handleInputChange('smoker', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Yes</span>
-                </label>
+                <RadioButton label="No" name="smoker" value="no" checked={formData.smoker === 'no'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
+                <RadioButton label="Yes" name="smoker" value="yes" checked={formData.smoker === 'yes'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
               </div>
               {formData.smoker === 'yes' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -362,28 +650,8 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             <div className="border-l-4 border-accent-500 pl-4">
               <h4 className="font-semibold text-secondary-700 mb-3">Alcohol Drinker</h4>
               <div className="flex gap-4 mb-4">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="alcoholDrinker"
-                    value="no"
-                    checked={formData.alcoholDrinker === 'no'}
-                    onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">No</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="alcoholDrinker"
-                    value="yes"
-                    checked={formData.alcoholDrinker === 'yes'}
-                    onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Yes</span>
-                </label>
+                <RadioButton label="No" name="alcoholDrinker" value="no" checked={formData.alcoholDrinker === 'no'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
+                <RadioButton label="Yes" name="alcoholDrinker" value="yes" checked={formData.alcoholDrinker === 'yes'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
               </div>
               {formData.alcoholDrinker === 'yes' && (
                 <Select
@@ -399,28 +667,8 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             <div className="border-l-4 border-primary-500 pl-4">
               <h4 className="font-semibold text-secondary-700 mb-3">Vaper</h4>
               <div className="flex gap-4 mb-4">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="vaper"
-                    value="no"
-                    checked={formData.vaper === 'no'}
-                    onChange={(e) => handleInputChange('vaper', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">No</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="vaper"
-                    value="yes"
-                    checked={formData.vaper === 'yes'}
-                    onChange={(e) => handleInputChange('vaper', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Yes</span>
-                </label>
+                <RadioButton label="No" name="vaper" value="no" checked={formData.vaper === 'no'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
+                <RadioButton label="Yes" name="vaper" value="yes" checked={formData.vaper === 'yes'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
               </div>
               {formData.vaper === 'yes' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -452,29 +700,9 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Do you wear glasses or contact lenses?</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="visualAcuity"
-                  value="yes"
-                  checked={formData.visualAcuity === 'yes'}
-                  onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="visualAcuity"
-                  value="no"
-                  checked={formData.visualAcuity === 'no'}
-                  onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">No</span>
-              </label>
+              <p className="text-sm text-secondary-700 dark:text-neutral-400 mr-4">Do you wear glasses or contact lenses?</p>
+              <RadioButton label="Yes" name="visualAcuity" value="yes" checked={formData.visualAcuity === 'yes'} onChange={(e) => handleInputChange('visualAcuity', e.target.value)} />
+              <RadioButton label="No" name="visualAcuity" value="no" checked={formData.visualAcuity === 'no'} onChange={(e) => handleInputChange('visualAcuity', e.target.value)} />
             </div>
             {formData.visualAcuity === 'yes' && (
               <div className="space-y-4">
@@ -538,28 +766,8 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   Do you experience Dysmenorrhea?
                 </label>
                 <div className="flex items-center gap-6 mt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="dysmenorrhea"
-                      value="yes"
-                      checked={formData.dysmenorrhea === 'yes'}
-                      onChange={(e) => handleInputChange('dysmenorrhea', e.target.value)}
-                      className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                    />
-                    <span className="text-sm text-secondary-700">Yes</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="dysmenorrhea"
-                      value="no"
-                      checked={formData.dysmenorrhea === 'no'}
-                      onChange={(e) => handleInputChange('dysmenorrhea', e.target.value)}
-                      className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                    />
-                    <span className="text-sm text-secondary-700">No</span>
-                  </label>
+                  <RadioButton label="Yes" name="dysmenorrhea" value="yes" checked={formData.dysmenorrhea === 'yes'} onChange={(e) => handleInputChange('dysmenorrhea', e.target.value)} />
+                  <RadioButton label="No" name="dysmenorrhea" value="no" checked={formData.dysmenorrhea === 'no'} onChange={(e) => handleInputChange('dysmenorrhea', e.target.value)} />
                 </div>
               </div>
             </div>
@@ -576,55 +784,145 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <p className="text-sm text-secondary-600 mb-4">Select vaccines you have received and provide details:</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {immunizations.map((vaccine) => (
-                <Checkbox
-                  key={vaccine.id}
-                  label={vaccine.name}
-                  checked={(formData.immunizations || []).includes(vaccine.id)}
-                  onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
-                />
-              ))}
-            </div>
-            {(formData.immunizations || []).length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-secondary-700">Immunization Details:</h4>
-                {(formData.immunizations || []).map((vaccineId) => {
-                  const vaccine = immunizations.find(v => v.id === vaccineId);
-                  return vaccine ? (
-                    <div key={vaccineId} className="bg-neutral-50 p-3 rounded-lg">
-                      <p className="text-sm font-medium mb-2">{vaccine.name}</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              {immunizations.map((vaccine) => {
+                const isChecked = (formData.immunizations || []).includes(vaccine.id);
+                return (
+                  <div key={vaccine.id}>
+                    <Checkbox
+                      label={vaccine.name}
+                      checked={isChecked}
+                      onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
+                    />
+                    {isChecked && (
+                      <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                         <Input
-                          label="Date Received *"
+                          label="Date Received"
                           type="date"
-                          required
-                          value={(formData.immunizationDetails?.[vaccineId]?.date) || ''}
+                          value={formData.immunizationDetails?.[vaccine.id]?.date || ''}
                           onChange={(e) => {
                             const details = { ...(formData.immunizationDetails || {}) };
-                            details[vaccineId] = { ...details[vaccineId], date: e.target.value };
+                            details[vaccine.id] = { ...details[vaccine.id], date: e.target.value };
                             handleInputChange('immunizationDetails', details);
                           }}
                         />
                         <Input
-                          label="Dose Number *"
+                          label="Dose Number"
                           type="number"
-                          required
                           min="1"
                           placeholder="1, 2, 3..."
-                          value={(formData.immunizationDetails?.[vaccineId]?.doseNumber) || ''}
+                          value={formData.immunizationDetails?.[vaccine.id]?.doseNumber || ''}
                           onChange={(e) => {
                             const details = { ...(formData.immunizationDetails || {}) };
-                            details[vaccineId] = { ...details[vaccineId], doseNumber: parseInt(e.target.value) || 1 };
+                            details[vaccine.id] = { ...details[vaccine.id], doseNumber: parseInt(e.target.value) || 1 };
                             handleInputChange('immunizationDetails', details);
                           }}
                         />
                       </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Dynamically added vaccines from search */}
+            {immunizationOthers.dynamicItems.length > 0 && (
+              <div className="space-y-2 mt-3">
+                {immunizationOthers.dynamicItems.map((vaccine) => {
+                  const isChecked = (formData.immunizations || []).includes(vaccine.id);
+                  return (
+                    <div key={vaccine.id}>
+                      <Checkbox
+                        label={vaccine.name}
+                        checked={isChecked}
+                        onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
+                      />
+                      {isChecked && (
+                        <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <Input
+                            label="Date Received"
+                            type="date"
+                            value={formData.immunizationDetails?.[vaccine.id]?.date || ''}
+                            onChange={(e) => {
+                              const details = { ...(formData.immunizationDetails || {}) };
+                              details[vaccine.id] = { ...details[vaccine.id], date: e.target.value };
+                              handleInputChange('immunizationDetails', details);
+                            }}
+                          />
+                          <Input
+                            label="Dose Number"
+                            type="number"
+                            min="1"
+                            placeholder="1, 2, 3..."
+                            value={formData.immunizationDetails?.[vaccine.id]?.doseNumber || ''}
+                            onChange={(e) => {
+                              const details = { ...(formData.immunizationDetails || {}) };
+                              details[vaccine.id] = { ...details[vaccine.id], doseNumber: parseInt(e.target.value) || 1 };
+                              handleInputChange('immunizationDetails', details);
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
-                  ) : null;
+                  );
                 })}
               </div>
             )}
+            {/* Search or add vaccines */}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Vaccines (search or add):</label>
+              <div ref={immunizationOthers.wrapperRef}>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  placeholder="Type to search for a vaccine..."
+                  value={immunizationOthers.input}
+                  autoComplete="off"
+                  onFocus={() => immunizationOthers.setFocused(true)}
+                  onChange={(e) => immunizationOthers.handleInputChange(e.target.value)}
+                />
+                {immunizationOthers.focused && immunizationOthers.input.trim() && (
+                  <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                    {immunizationOthers.searching && (
+                      <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                    )}
+                    {immunizationOthers.suggestions.length > 0 ? (
+                      <>
+                        {immunizationOthers.suggestions.map(result => (
+                          <button
+                            key={result.id}
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                            onMouseDown={(e) => { e.preventDefault(); const item = immunizationOthers.selectItem(result); handleCheckboxChange('immunizations', item.id, true); }}
+                          >
+                            {result.name}
+                            {(formData.immunizations || []).includes(result.id) && (
+                              <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                            )}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                          disabled={immunizationOthers.creating}
+                          onMouseDown={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) handleCheckboxChange('immunizations', item.id, true); }}
+                        >
+                          {immunizationOthers.creating ? 'Adding...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                        disabled={immunizationOthers.creating}
+                        onMouseDown={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) handleCheckboxChange('immunizations', item.id, true); }}
+                      >
+                        {immunizationOthers.creating ? 'Adding...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             <Textarea
               label="Immunization Notes (Optional)"
               placeholder="Any additional information about your immunizations, dates, or reactions."
@@ -644,67 +942,134 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Have you been hospitalized in the past?</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasHospitalizations"
-                  value="yes"
-                  checked={formData.hasHospitalizations === 'yes'}
-                  onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasHospitalizations"
-                  value="no"
-                  checked={formData.hasHospitalizations === 'no'}
-                  onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">No</span>
-              </label>
+              <p className="text-sm text-secondary-700 dark:text-neutral-400 mr-4">Have you been hospitalized in the past?</p>
+              <RadioButton label="Yes" name="hasHospitalizations" value="yes" checked={formData.hasHospitalizations === 'yes'} onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)} />
+              <RadioButton label="No" name="hasHospitalizations" value="no" checked={formData.hasHospitalizations === 'no'} onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)} />
             </div>
             {formData.hasHospitalizations === 'yes' && (
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.hospitalizations.length > 0 ? (
-                  <Select
-                    label="Condition requiring hospitalization *"
-                    required
-                    options={catalogs.hospitalizations.map(h => ({
-                      value: h.id,
-                      label: h.name
-                    }))}
-                    value={formData.hospitalizationCondition || ''}
-                    onChange={(e) => handleInputChange('hospitalizationCondition', e.target.value)}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-secondary-700">Condition requiring hospitalization *</label>
-                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      Hospitalization catalog unavailable. Please try again later.
-                    </p>
+                  <div className="space-y-2">
+                    {catalogs.hospitalizations.map((condition) => {
+                      const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
+                      return (
+                        <div key={condition.id}>
+                          <Checkbox
+                            label={condition.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <Input
+                                label="Admission Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.admissionDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), admissionDate: e.target.value } })}
+                              />
+                              <Input
+                                label="Discharge Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.dischargeDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {hospitalizationOthers.dynamicItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
+                    {hospitalizationOthers.dynamicItems.map((condition) => {
+                      const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
+                      return (
+                        <div key={condition.id}>
+                          <Checkbox
+                            label={condition.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <Input
+                                label="Admission Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.admissionDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), admissionDate: e.target.value } })}
+                              />
+                              <Input
+                                label="Discharge Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.dischargeDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Admission Date *"
-                    type="date"
-                    required
-                    value={formData.admissionDate || ''}
-                    onChange={(e) => handleInputChange('admissionDate', e.target.value)}
-                  />
-                  <Input
-                    label="Discharge Date"
-                    type="date"
-                    value={formData.dischargeDate || ''}
-                    onChange={(e) => handleInputChange('dischargeDate', e.target.value)}
-                  />
+                {/* Search or add hospitalization conditions */}
+                <div>
+                  <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
+                  <div ref={hospitalizationOthers.wrapperRef}>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                      placeholder="Type to search for a condition..."
+                      value={hospitalizationOthers.input}
+                      autoComplete="off"
+                      onFocus={() => hospitalizationOthers.setFocused(true)}
+                      onChange={(e) => hospitalizationOthers.handleInputChange(e.target.value)}
+                    />
+                    {hospitalizationOthers.focused && hospitalizationOthers.input.trim() && (
+                      <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                        {hospitalizationOthers.searching && (
+                          <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                        )}
+                        {hospitalizationOthers.suggestions.length > 0 ? (
+                          <>
+                            {hospitalizationOthers.suggestions.map(result => (
+                              <button
+                                key={result.id}
+                                type="button"
+                                className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                                onMouseDown={(e) => { e.preventDefault(); const item = hospitalizationOthers.selectItem(result); handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
+                              >
+                                {result.name}
+                                {formData.hospitalizationConditions?.[result.id] && (
+                                  <span className="ml-2 text-xs text-primary-500 font-medium">✓ Selected</span>
+                                )}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                              disabled={hospitalizationOthers.creating}
+                              onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
+                            >
+                              {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                            disabled={hospitalizationOthers.creating}
+                            onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
+                          >
+                            {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <Textarea
                   label="Hospitalization Notes (Optional)"
@@ -727,60 +1092,123 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Have you had any surgeries?</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasSurgeries"
-                  value="yes"
-                  checked={formData.hasSurgeries === 'yes'}
-                  onChange={(e) => handleInputChange('hasSurgeries', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasSurgeries"
-                  value="no"
-                  checked={formData.hasSurgeries === 'no'}
-                  onChange={(e) => handleInputChange('hasSurgeries', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">No</span>
-              </label>
+              <p className="text-sm text-secondary-700 dark:text-neutral-400 mr-4">Have you had any surgeries?</p>
+              <RadioButton label="Yes" name="hasSurgeries" value="yes" checked={formData.hasSurgeries === 'yes'} onChange={(e) => handleInputChange('hasSurgeries', e.target.value)} />
+              <RadioButton label="No" name="hasSurgeries" value="no" checked={formData.hasSurgeries === 'no'} onChange={(e) => handleInputChange('hasSurgeries', e.target.value)} />
             </div>
             {formData.hasSurgeries === 'yes' && (
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.operations.length > 0 ? (
-                  <Select
-                    label="Type of surgery/operation *"
-                    required
-                    options={catalogs.operations.map(o => ({
-                      value: o.id,
-                      label: o.name
-                    }))}
-                    value={formData.surgeryType || ''}
-                    onChange={(e) => handleInputChange('surgeryType', e.target.value)}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-secondary-700">Type of surgery/operation *</label>
-                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      Surgery catalog unavailable. Please try again later.
-                    </p>
+                  <div className="space-y-2">
+                    {catalogs.operations.map((procedure) => {
+                      const isChecked = formData.operationConditions?.[procedure.id] || false;
+                      return (
+                        <div key={procedure.id}>
+                          <Checkbox
+                            label={procedure.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1">
+                              <Input
+                                label="Date of Operation"
+                                type="date"
+                                value={formData.operationDates?.[procedure.id] || ''}
+                                onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {operationOthers.dynamicItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
+                    {operationOthers.dynamicItems.map((procedure) => {
+                      const isChecked = formData.operationConditions?.[procedure.id] || false;
+                      return (
+                        <div key={procedure.id}>
+                          <Checkbox
+                            label={procedure.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1">
+                              <Input
+                                label="Date of Operation"
+                                type="date"
+                                value={formData.operationDates?.[procedure.id] || ''}
+                                onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-                <Input
-                  label="Operation Date *"
-                  type="date"
-                  required
-                  value={formData.operationDate || ''}
-                  onChange={(e) => handleInputChange('operationDate', e.target.value)}
-                />
+                {/* Search or add operations */}
+                <div>
+                  <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Operations (search or add):</label>
+                  <div ref={operationOthers.wrapperRef}>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                      placeholder="Type to search for a procedure..."
+                      value={operationOthers.input}
+                      autoComplete="off"
+                      onFocus={() => operationOthers.setFocused(true)}
+                      onChange={(e) => operationOthers.handleInputChange(e.target.value)}
+                    />
+                    {operationOthers.focused && operationOthers.input.trim() && (
+                      <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                        {operationOthers.searching && (
+                          <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                        )}
+                        {operationOthers.suggestions.length > 0 ? (
+                          <>
+                            {operationOthers.suggestions.map(result => (
+                              <button
+                                key={result.id}
+                                type="button"
+                                className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                                onMouseDown={(e) => { e.preventDefault(); const item = operationOthers.selectItem(result); handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
+                              >
+                                {result.name}
+                                {formData.operationConditions?.[result.id] && (
+                                  <span className="ml-2 text-xs text-primary-500 font-medium">✓ Selected</span>
+                                )}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                              disabled={operationOthers.creating}
+                              onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
+                            >
+                              {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                            disabled={operationOthers.creating}
+                            onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
+                          >
+                            {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <Textarea
                   label="Surgery Notes (Optional)"
                   placeholder="Any additional information about your surgeries."
@@ -802,60 +1230,101 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Are you currently taking any medications?</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasMedications"
-                  value="yes"
-                  checked={formData.hasMedications === 'yes'}
-                  onChange={() => onChange({ ...formData, hasMedications: 'yes', currentMedications: formData.currentMedications?.length ? formData.currentMedications : [{ medicineId: '', description: '' }] })}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasMedications"
-                  value="no"
-                  checked={formData.hasMedications === 'no'}
-                  onChange={() => onChange({ ...formData, hasMedications: 'no', currentMedications: [] })}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">No</span>
-              </label>
+              <p className="text-sm text-secondary-700 dark:text-neutral-400 mr-4">Are you currently taking any medications?</p>
+              <RadioButton label="Yes" name="hasMedications" value="yes" checked={formData.hasMedications === 'yes'} onChange={() => onChange({ ...formData, hasMedications: 'yes', selectedMedications: formData.selectedMedications || {} })} />
+              <RadioButton label="No" name="hasMedications" value="no" checked={formData.hasMedications === 'no'} onChange={() => onChange({ ...formData, hasMedications: 'no', selectedMedications: {} })} />
             </div>
             {formData.hasMedications === 'yes' && (
               <div className="space-y-4">
                 {catalogs.medications.length > 0 ? (
-                  <Select
-                    label="Medication *"
-                    required
-                    options={catalogs.medications.map(m => ({ value: m.id, label: m.name }))}
-                    value={formData.currentMedications?.[0]?.medicineId || ''}
-                    onChange={(e) => {
-                      const entry = { ...(formData.currentMedications?.[0] || {}), medicineId: e.target.value };
-                      handleInputChange('currentMedications', [entry]);
-                    }}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-secondary-700">Medication *</label>
-                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      Medication catalog unavailable. Please try again later.
-                    </p>
+                  <div className="space-y-2">
+                    {catalogs.medications.map((medicine) => {
+                      const isChecked = formData.selectedMedications?.[medicine.id] || false;
+                      return (
+                        <div key={medicine.id}>
+                          <Checkbox
+                            label={medicine.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [medicine.id]: e.target.checked })}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {medicationOthers.dynamicItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
+                    {medicationOthers.dynamicItems.map((medicine) => {
+                      const isChecked = formData.selectedMedications?.[medicine.id] || false;
+                      return (
+                        <div key={medicine.id}>
+                          <Checkbox
+                            label={medicine.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [medicine.id]: e.target.checked })}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-                <Textarea
-                  label="Description/Dosage"
-                  placeholder="e.g., 500mg twice daily for diabetes"
-                  value={formData.currentMedications?.[0]?.description || ''}
-                  onChange={(e) => {
-                    const entry = { ...(formData.currentMedications?.[0] || {}), description: e.target.value };
-                    handleInputChange('currentMedications', [entry]);
-                  }}
-                />
+                {/* Search or add medications */}
+                <div>
+                  <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Medications (search or add):</label>
+                  <div ref={medicationOthers.wrapperRef}>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                      placeholder="Type to search for a medication..."
+                      value={medicationOthers.input}
+                      autoComplete="off"
+                      onFocus={() => medicationOthers.setFocused(true)}
+                      onChange={(e) => medicationOthers.handleInputChange(e.target.value)}
+                    />
+                    {medicationOthers.focused && medicationOthers.input.trim() && (
+                      <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                        {medicationOthers.searching && (
+                          <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                        )}
+                        {medicationOthers.suggestions.length > 0 ? (
+                          <>
+                            {medicationOthers.suggestions.map(result => (
+                              <button
+                                key={result.id}
+                                type="button"
+                                className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                                onMouseDown={(e) => { e.preventDefault(); const item = medicationOthers.selectItem(result); handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
+                              >
+                                {result.name}
+                                {formData.selectedMedications?.[result.id] && (
+                                  <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                                )}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                              disabled={medicationOthers.creating}
+                              onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
+                            >
+                              {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                            disabled={medicationOthers.creating}
+                            onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
+                          >
+                            {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <Textarea
                   label="Medication Notes (Optional)"
                   placeholder="Any additional information about your medications."
@@ -900,6 +1369,85 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   )}
                 </div>
               ))}
+              {/* Dynamically added family medical conditions from search */}
+              {medicalConditionOthers.dynamicItems.map((condition) => (
+                <div
+                  key={condition.id}
+                  className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"
+                >
+                  <Checkbox
+                    label={condition.name}
+                    checked={formData.familyConditions?.[condition.id]?.checked || false}
+                    onChange={(e) => handleFamilyConditionChange(condition.id, e.target.checked)}
+                  />
+                  {formData.familyConditions?.[condition.id]?.checked && (
+                    <div className="mt-3 ml-6">
+                      <Input
+                        label="Relationship"
+                        placeholder="e.g., Mother, Father, Brother, Sister"
+                        value={formData.familyConditions[condition.id]?.relationship || ''}
+                        onChange={(e) => handleFamilyRelationshipChange(condition.id, e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Search or add family medical conditions */}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
+              <div ref={medicalConditionOthers.wrapperRef}>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  placeholder="Type to search for a condition..."
+                  value={medicalConditionOthers.input}
+                  autoComplete="off"
+                  onFocus={() => medicalConditionOthers.setFocused(true)}
+                  onChange={(e) => medicalConditionOthers.handleInputChange(e.target.value)}
+                />
+                {medicalConditionOthers.focused && medicalConditionOthers.input.trim() && (
+                  <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                    {medicalConditionOthers.searching && (
+                      <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                    )}
+                    {medicalConditionOthers.suggestions.length > 0 ? (
+                      <>
+                        {medicalConditionOthers.suggestions.map(result => (
+                          <button
+                            key={result.id}
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                            onMouseDown={(e) => { e.preventDefault(); const item = medicalConditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
+                          >
+                            {result.name}
+                            {formData.familyConditions?.[result.id]?.checked && (
+                              <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                            )}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                          disabled={medicalConditionOthers.creating}
+                          onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                        >
+                          {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                        disabled={medicalConditionOthers.creating}
+                        onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                      >
+                        {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

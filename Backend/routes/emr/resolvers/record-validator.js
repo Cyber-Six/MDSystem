@@ -73,6 +73,8 @@ async function validateAllUpdateTicket(id) {
       CASE WHEN NOT EXISTS (SELECT 1 FROM "OralAppliance" oap WHERE oap.id = pul.id) THEN 'OralAppliance' END AS missing_oralappliance,
       CASE WHEN NOT EXISTS (SELECT 1 FROM "DentalProcedure" dpp WHERE dpp.id = pul.id) THEN 'DentalProcedure' END AS missing_dentalprocedure,
 
+      -- Profile and emergency-contact requirements are enforced for all statuses,
+      -- including Inactive users.
       CASE WHEN NOT EXISTS (SELECT 1 FROM "profileRecord" pr WHERE pr.id = pul.id) THEN 'profileRecord' END AS missing_profile,
       CASE WHEN NOT EXISTS (SELECT 1 FROM "EmergencyContact" ec WHERE ec.id = pul.id) THEN 'EmergencyContact' END AS missing_emergencycontact
 
@@ -85,9 +87,10 @@ async function validateAllUpdateTicket(id) {
     [id]
   );
 
+  if (result.rows.length === 0) return ["patientUpdateLog"];
+
   // Collect non-null values into an array
   const row = result.rows[0];
-  console.log("Validation Result Row:", row);
   const missing = Object.values(row).filter(v => v !== null);
 
   return missing; // e.g. ["VitalSigns", "DentalRecord"]

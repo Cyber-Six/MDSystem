@@ -103,6 +103,30 @@ const submitUpdateTicket = async () => {
 };
 
 /**
+ * Ensure an update ticket exists for the current user.
+ * If one already exists (InProgress or Revision), returns its ID.
+ * Otherwise creates a new ticket with the given scope.
+ * Silently returns null on failure so callers can treat it as non-blocking.
+ * @param {string} scope - 'Medical', 'Dental', or 'Both'
+ * @returns {Promise<string|null>} ticket ID or null
+ */
+export const ensureUpdateTicket = async (scope = 'Both') => {
+  try {
+    const existing = await fetchCurrentUpdateTicket();
+    if (existing?.id && (existing.status === 'InProgress' || existing.status === 'Revision')) {
+      console.log('[EMR Service] Update ticket already exists:', existing.id, existing.status);
+      return existing.id;
+    }
+    const ticketId = await createUpdateTicket(scope);
+    console.log('[EMR Service] Early update ticket created:', ticketId);
+    return ticketId;
+  } catch (error) {
+    console.warn('[EMR Service] ensureUpdateTicket failed (non-blocking):', error.message);
+    return null;
+  }
+};
+
+/**
  * Cancel the update ticket (in case of errors)
  */
 const cancelUpdateTicket = async () => {
@@ -459,7 +483,14 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
         ticketPromise = createUpdateTicket('Both');
       }
     } else {
-      ticketPromise = createUpdateTicket('Both');
+      // Check if a ticket was already created early (e.g. by ensureUpdateTicket on form mount)
+      const existing = await fetchCurrentUpdateTicket();
+      if (existing?.id && existing.status === 'InProgress') {
+        console.log('[EMR Service] Reusing early-created ticket:', existing.id);
+        ticketPromise = Promise.resolve(existing.id);
+      } else {
+        ticketPromise = createUpdateTicket('Both');
+      }
     }
 
     const [ticketResult, upperResult, lowerResult] = await Promise.allSettled([
@@ -611,47 +642,47 @@ export const createInitialEmployeeRecord = async (formData) => {
 export const fetchAllCatalogs = async () => {
   const query = `
     query FetchAllCatalogs {
-      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true) {
+      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true) {
+      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true) {
+      operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true) {
+      medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+      immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      allergenCatalog: getAllergenCatalogs(filterIsValid: true) {
+      allergenCatalog: getAllergenCatalogs(filterIsValid: true, limit: 200) {
         id
         allergen
         type
       }
-      oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true) {
+      oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true, limit: 200) {
         id
         name
         description
       }
-      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true) {
+      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
+      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true, limit: 200) {
         id
         code
         name
@@ -696,6 +727,150 @@ export const fetchAllCatalogs = async () => {
       dentalProcedureCatalog: [],
     };
   }
+};
+
+/**
+ * Search for student programs by label (used by the program search field in personal info).
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, label}>>}
+ */
+export const searchStudentProgram = async (query) => {
+  const gql = `
+    query SearchStudentProgram($label: String) {
+      searchStudentProgram(label: $label, limit: 20) {
+        id label
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { label: query || '' });
+    return data.searchStudentProgram || [];
+  } catch (err) {
+    console.warn('[EMR Service] searchStudentProgram failed:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Search for immunization catalog entries by name (used by the "Others" vaccine search field).
+ * Calls searchDomainCatalogs with the Immunization domain.
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const searchImmunizationCatalog = async (query) => {
+  const gql = `
+    query SearchImmunizations($names: [String!]!) {
+      searchDomainCatalogs(domain: "Immunization", filterIsValid: true, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { names: [query] });
+    return data.searchDomainCatalogs || [];
+  } catch (err) {
+    console.warn('[EMR Service] searchImmunizationCatalog failed:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Create a new immunization catalog entry (used when patient types a vaccine not in the system).
+ * Calls createDomainCatalogs with the Immunization domain.
+ * @param {string} name - The vaccine name to create
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const createImmunizationCatalog = async (name) => {
+  const mutation = `
+    mutation CreateImmunization($names: [String!]!) {
+      createDomainCatalogs(domain: Immunization, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(mutation, { names: [name] });
+  return data.createDomainCatalogs || [];
+};
+
+/**
+ * Generic search for domain catalog entries by name (used by "Others" search fields).
+ * @param {string} domain - The domain type (e.g., "Hospitalization", "Operation", "Medication")
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const searchDomainCatalog = async (domain, query) => {
+  const gql = `
+    query SearchDomainCatalog($domain: String, $names: [String!]!) {
+      searchDomainCatalogs(domain: $domain, filterIsValid: true, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { domain, names: [query] });
+    return data.searchDomainCatalogs || [];
+  } catch (err) {
+    console.warn(`[EMR Service] searchDomainCatalog(${domain}) failed:`, err.message);
+    return [];
+  }
+};
+
+/**
+ * Generic create for domain catalog entries (used by "Others" create buttons).
+ * @param {string} domain - The domain type enum value (e.g., "Hospitalization")
+ * @param {string} name - The entry name to create
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const createDomainCatalog = async (domain, name) => {
+  const mutation = `
+    mutation CreateDomainCatalog($names: [String!]!) {
+      createDomainCatalogs(domain: ${domain}, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(mutation, { names: [name] });
+  return data.createDomainCatalogs || [];
+};
+
+/**
+ * Search allergen catalog entries by name (used by "Others" allergen search field).
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, allergen, type, isValid}>>}
+ */
+export const searchAllergenCatalogByName = async (query) => {
+  const gql = `
+    query SearchAllergens($allergens: [String!]!) {
+      searchAllergenCatalogs(allergens: $allergens, filterIsValid: true) {
+        id allergen type isValid
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { allergens: [query] });
+    return data.searchAllergenCatalogs || [];
+  } catch (err) {
+    console.warn('[EMR Service] searchAllergenCatalogByName failed:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Create a new allergen catalog entry (used when patient types an allergen not in the system).
+ * @param {string} allergen - The allergen name
+ * @param {string} type - The allergen type (Food, Drug, Environmental, Insect, Chemical, Other)
+ * @returns {Promise<Array<{id, allergen, type, isValid}>>}
+ */
+export const createAllergenCatalogEntry = async (allergen, type = 'Other') => {
+  const mutation = `
+    mutation CreateAllergen($allergens: [AllergenCatalogInput!]!) {
+      createAllergenCatalogs(allergens: $allergens) {
+        id allergen type isValid
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(mutation, { allergens: [{ allergen, type }] });
+  return data.createAllergenCatalogs || [];
 };
 
 // ─── Record Builder Functions ─────────────────────────────────────────────────
@@ -743,7 +918,7 @@ const buildAllergyRecords = (medicalBackground) => {
     .filter(([, val]) => (typeof val === 'object' ? val?.checked : val))
     .map(([id, val]) => ({
       allergenCatalogId: id,
-      status: 'Active',
+      status: (typeof val === 'object' && val?.status) ? val.status : 'Active',
       severity: (typeof val === 'object' && val?.severity) ? val.severity : 'Unknown',
       notes: null,
       date_identified: null,
@@ -813,7 +988,8 @@ const buildImmunizationRecords = (medicalBackground, catalog) => {
     .flatMap(([id]) => {
       if (!validIds.has(id)) { noteParts.push(id); return []; }
       const date = medicalBackground?.immunizationDates?.[id] || today;
-      return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: 1 }];
+      const dose = medicalBackground?.immunizationDoses?.[id];
+      return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: dose ? parseInt(dose, 10) : 1 }];
     });
   if (medicalBackground?.immunizationOther?.trim()) {
     noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
@@ -862,11 +1038,9 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   const inputs = {};
 
   // Student Profile (conditional)
-  if (formData.personalInfo.program) {
+  if (formData.personalInfo.programId) {
     inputs.studentProfile = {
-      program: formData.personalInfo.program === 'Other' 
-        ? formData.personalInfo.programOther 
-        : formData.personalInfo.program,
+      programId: formData.personalInfo.programId,
       year: mapYearLevel(formData.personalInfo.studentCategory)
     };
   }
@@ -1473,7 +1647,6 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
 
   // ── Personal Info ──────────────────────────────────────────
   const rawProgram       = emr?.emrProfile?.program || '';
-  const isKnownProgram   = KNOWN_PROGRAMS.has(rawProgram);
   const ec               = emr?.emergencyContact || {};
 
   const personalInfo = {
@@ -1493,8 +1666,8 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     provinceAddress:    pr.province_address  || '',
     contactNumber:      pr.contactNumber     || '',
     studentNumber:      bid?.identifier   || '',
-    program:            isKnownProgram ? rawProgram : (rawProgram ? 'Other' : ''),
-    programOther:       isKnownProgram ? '' : rawProgram,
+    program:            rawProgram,
+    programId:          '',   // resolved asynchronously in fetchRevisionPrefill
     studentCategory:    reverseMapYearLevel(emr?.emrProfile?.year || ''),
     drugTestDone:       '',   // not persisted
     lastSchoolAttended: '',   // not persisted
@@ -1543,7 +1716,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const ls           = emr?.lifestyle                        || {};
   const va           = emr?.visualAcuity                     || {};
 
-  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, { checked: true, severity: a.severity || 'Unknown' }]));
+  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, { checked: true, severity: a.severity || 'Unknown', status: a.status || 'Active' }]));
   const hospMap         = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
   const hospDatesMap    = Object.fromEntries(hosps.map(h => [h.conditionId, {
     admissionDate: h.admissionDate ? new Date(h.admissionDate).toISOString().split('T')[0] : '',
@@ -1558,11 +1731,13 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const immunDatesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId,
     i.immunizationDate ? new Date(i.immunizationDate).toISOString().split('T')[0] : ''
   ]));
+  const immunDosesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, i.doseNumber || 1]));
 
   const vaNotesStr = va.notes || '';
   const medicalBackground = {
     immunizations:             immunMap,
     immunizationDates:         immunDatesMap,
+    immunizationDoses:         immunDosesMap,
     immunizationOther:         '',
     hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
     allergies:                 allergyMap,
@@ -1711,7 +1886,7 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId immunizationDate }
+          immunizations { vaccineTypeId immunizationDate doseNumber }
           notes
         }
         lifestyle: getLifestyle {
@@ -1765,6 +1940,22 @@ export const fetchRevisionPrefill = async () => {
   }
 
   const mapped = mapRevisionDataToFormData(profileData, emrData);
+
+  // Resolve the student programId from the label returned by the backend.
+  // StudentProfile.program is a label string; StudentProfileInput requires programId: ID!
+  const rawProgramLabel = emrData?.emrProfile?.program;
+  if (rawProgramLabel) {
+    try {
+      const programs = await searchStudentProgram(rawProgramLabel);
+      const match = programs.find(p => p.label === rawProgramLabel);
+      if (match) {
+        mapped.personalInfo.programId = match.id;
+        mapped.personalInfo.program   = match.label;
+      }
+    } catch (err) {
+      console.warn('[EMR Service] Could not resolve programId from label:', err.message);
+    }
+  }
 
   // Fetch previously submitted dental photos.
   // Store them as { file, preview } so uploadMediaFile() can re-stage the photo
@@ -1960,7 +2151,7 @@ export const checkInitialRecordStatus = async () => {
       { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
-      `query GetUpdateTicket { getUpdateTicket { id status notes } }`,
+      `query GetUpdateTicket { getUpdateTicket { id status notes created_at } }`,
       {}
     ),
   ]);
@@ -1981,14 +2172,28 @@ export const checkInitialRecordStatus = async () => {
   if (credentialStatus === 'Unverified') {
     const ticketStatus = ticket?.status || null;
     console.log('[EMR Service] Credential is Unverified — initial record required. Ticket status:', ticketStatus);
-    return { needsInitialRecord: true, status: ticketStatus, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
+    return {
+      needsInitialRecord: true,
+      status: ticketStatus,
+      ticketId: ticket?.id ?? null,
+      notes: ticket?.notes ?? null,
+      ticketCreatedAt: ticket?.created_at ?? null,
+      credentialStatus,
+    };
   }
 
   // Secondary check: non-Unverified credential (Active / Locked / Disabled) means
   // the patient has already completed and passed the initial record step.
   if (credentialStatus && credentialStatus !== 'Unverified') {
     console.log('[EMR Service] Credential is', credentialStatus, '— initial record already completed');
-    return { needsInitialRecord: false, status: ticket?.status ?? null, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
+    return {
+      needsInitialRecord: false,
+      status: ticket?.status ?? null,
+      ticketId: ticket?.id ?? null,
+      notes: ticket?.notes ?? null,
+      ticketCreatedAt: ticket?.created_at ?? null,
+      credentialStatus,
+    };
   }
 
   // Fallback (credential fetch failed): fall back to update-ticket heuristic.
@@ -1996,7 +2201,7 @@ export const checkInitialRecordStatus = async () => {
 
   if (!ticket) {
     console.log('[EMR Service] No update ticket found - initial record required');
-    return { needsInitialRecord: true, status: null };
+    return { needsInitialRecord: true, status: null, credentialStatus: null, ticketCreatedAt: null };
   }
 
   const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
@@ -2007,7 +2212,14 @@ export const checkInitialRecordStatus = async () => {
     currentStatus: ticket.status,
   });
 
-  return { needsInitialRecord, status: ticket.status, ticketId: ticket.id, notes: ticket.notes ?? null };
+  return {
+    needsInitialRecord,
+    status: ticket.status,
+    ticketId: ticket.id,
+    notes: ticket.notes ?? null,
+    ticketCreatedAt: ticket.created_at ?? null,
+    credentialStatus: null,
+  };
 };
 
 export default {

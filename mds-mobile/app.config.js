@@ -25,6 +25,10 @@ module.exports = ({ config }) => ({
   // ── Platform Config ───────────────────────────────────────────────────────
   ios: {
     supportsTablet: true,
+    bundleIdentifier: 'com.mdsystem.mdsmobile',
+    infoPlist: {
+      UIBackgroundModes: ['remote-notification'],
+    },
   },
 
   android: {
@@ -55,6 +59,11 @@ module.exports = ({ config }) => ({
 
   // ── Plugins ──────────────────────────────────────────────────────────────
   plugins: [
+    ['expo-notifications', {
+      defaultChannel: 'mds-notifications',
+      enableBackgroundRemoteNotifications: true,
+    }],
     '@react-native-community/datetimepicker',
+    'expo-web-browser',
   ],
 });

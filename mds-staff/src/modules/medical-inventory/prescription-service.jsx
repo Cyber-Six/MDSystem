@@ -105,6 +105,12 @@ export const fetchPatientPrescriptions = async (patientId, offset = 0, limit = 2
  */
 export const fetchAvailableMedicineWithQuantities = async (location = null, offset = 0, limit = 50) => {
   try {
+    // Location is required to prevent unauthorized access errors
+    if (!location) {
+      console.warn('fetchAvailableMedicineWithQuantities: location is required');
+      return [];
+    }
+
     // Fetch available medicines from prescription endpoint
     const medicines = await fetchAvailableMedicine(location, offset, limit);
     
@@ -118,19 +124,20 @@ export const fetchAvailableMedicineWithQuantities = async (location = null, offs
     });
     
     // Fetch batch details for each item to get exact quantities
+    // ALWAYS include location filter to prevent unauthorized access
     const enrichedMedicines = [];
     for (const itemId of Object.keys(medicinsByItemId)) {
       try {
         const batches = await sendInventoryGraphQL(
-          `query GetMedicalSupply($medicalItemId: Int!) {
-            getMedicalSupply(medicalItemId: $medicalItemId) {
+          `query GetMedicalSupply($medicalItemId: Int!, $location: LocationDesignation) {
+            getMedicalSupply(medicalItemId: $medicalItemId, location: $location) {
               id
               availableQuantity
               expiryDate
               batchNumber
             }
           }`,
-          { medicalItemId: parseInt(itemId, 10) },
+          { medicalItemId: parseInt(itemId, 10), location },
         );
         
         // Map availability data to medicines
@@ -152,6 +159,7 @@ export const fetchAvailableMedicineWithQuantities = async (location = null, offs
         });
       } catch (err) {
         // If batch fetch fails, add medicines without quantities
+        console.warn(`Failed to fetch batches for item ${itemId}:`, err.message);
         medicinsByItemId[itemId].forEach((med) => {
           enrichedMedicines.push({
             ...med,

@@ -176,6 +176,11 @@ const Query = {
     return result;
   },
 
+  searchStudentProgram: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchStudentProgram(_, args, { user, res });
+    return result;
+  },
+
 
 };
 

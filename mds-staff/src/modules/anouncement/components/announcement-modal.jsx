@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { formatAnnouncementDate, getAnnouncementTimeZone } from '../timezoneUtils';
 
 /* Small authenticated image loader (media endpoints require JWT) */
 function AuthImage({ path, alt, className }) {
@@ -21,6 +22,7 @@ function AuthImage({ path, alt, className }) {
  */
 const AnnouncementModal = ({ announcement, onClose }) => {
   if (!announcement) return null;
+  const clientTimeZone = getAnnouncementTimeZone();
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
@@ -29,10 +31,7 @@ const AnnouncementModal = ({ announcement, onClose }) => {
   };
 
   // Format date
-  const formattedDate = new Date(announcement.created_at).toLocaleDateString(
-    'en-US',
-    { year: 'numeric', month: 'long', day: 'numeric' }
-  );
+  const formattedDate = formatAnnouncementDate(announcement.created_at, clientTimeZone) || 'Unknown date';
 
   return (
     <div

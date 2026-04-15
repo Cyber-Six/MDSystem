@@ -121,7 +121,7 @@ const Mutation = {
       
       locations.forEach(location => {
         console.log(`[MEDICINE_REQUEST] Emitting to branch:${location}`);
-        emitToRoom(`branch:${location}`, 'medicine:request:new', {
+        emitToRoom(`branch:${location}:inventory`, 'medicine:request:new', {
           requestId: result.id,
           patientId: user.id,
           location,

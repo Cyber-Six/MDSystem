@@ -1,19 +1,7 @@
 import React, { useState } from 'react';
 import { getExpiryStatus, CATEGORY_COLORS } from '../../inventory-seed-data';
-import { getDisplayLocation } from '../../medical-inventory-service';
+import { getDisplayLocation, formatDateDisplay, formatBatchDisplay } from '../../medical-inventory-service';
 import TransactionDisplay from './transaction-display';
-
-// Helper to format date for display (remove time portion)
-const formatDateDisplay = (dateValue) => {
-  if (!dateValue) return '—';
-  try {
-    const date = new Date(dateValue);
-    if (isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch (err) {
-    return '—';
-  }
-};
 
 /**
  * Medical Item Detail — batch table (FEFO sorted) + transaction history.
@@ -121,27 +109,27 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
             <table className="w-full text-sm">
               <thead className="bg-neutral-50 dark:bg-neutral-700/50 border-b-2 border-neutral-200 dark:border-neutral-600">
                 <tr>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-5">
+                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-6">
                     <svg className="w-3 h-3 text-accent-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2L3 7l7 5 7-5-7-5zM3 12l7 5 7-5" /></svg>
                   </th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Batch #</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Location</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
+                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-16">Batch #</th>
+                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider min-w-20">Location</th>
+                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-24">Expiry</th>
                   {item.category?.toLowerCase() === 'medicine' ? (
                     <>
-                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Dosage</th>
-                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Quantity</th>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-20">Dosage</th>
+                      <th className="px-3 py-1.5 text-right text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-24 pr-6">Quantity</th>
                     </>
                   ) : (
                     <>
-                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Initial</th>
-                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Current</th>
-                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Used %</th>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-16">Initial</th>
+                      <th className="px-3 py-1.5 text-right text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-16 pr-4">Current</th>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-16">Used %</th>
                     </>
                   )}
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Received</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Supplier</th>
-                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Actions</th>
+                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider min-w-24">Received</th>
+                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider min-w-28">Supplier</th>
+                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider w-20">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
@@ -154,33 +142,33 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                   const usedPct = !isMedicineBatch && batch.initialQuantity > 0 ? Math.round(((batch.initialQuantity - batch.currentQuantity) / batch.initialQuantity) * 100) : 0;
                   return (
                     <tr key={`${batch.medicalItemId}-${batch.id}`} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
-                      <td className="px-3 py-1.5">
+                      <td className="px-3 py-1.5 w-6">
                         {idx === 0 && (
                           <span className="inline-flex px-1 py-0.5 text-[8px] font-bold rounded bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400" title="First to be dispensed (FEFO)">FEFO</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 text-xs font-mono text-secondary-700 dark:text-neutral-300">{batch.batchNumber}</td>
-                      <td className="px-3 py-1.5">
-                        <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${batch.location === 'Casal' ? 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400' : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'}`}>{getDisplayLocation(batch.location)}</span>
+                      <td className="px-3 py-1.5 text-xs font-mono text-secondary-700 dark:text-neutral-300 w-16 truncate" title={batch.batchNumber}>{batch.batchNumber || batch.id}</td>
+                      <td className="px-3 py-1.5 min-w-20">
+                        <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded whitespace-nowrap ${batch.location === 'Casal' ? 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400' : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'}`}>{getDisplayLocation(batch.location)}</span>
                       </td>
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-secondary-700 dark:text-neutral-300">{formatDateDisplay(batch.expiryDate)}</span>
+                      <td className="px-3 py-1.5 w-24">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-xs text-secondary-700 dark:text-neutral-300 whitespace-nowrap">{formatDateDisplay(batch.expiryDate)}</span>
                           <span className={`inline-flex px-1 py-0.5 text-[10px] font-medium rounded ${st.color}`}>{st.label}</span>
                         </div>
                       </td>
                       {isMedicineBatch ? (
                         <>
-                          <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">
+                          <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white w-20">
                             {batch.dosageValue != null ? `${batch.dosageValue} ${batch.dosageUnit || ''}` : '—'}
                           </td>
-                          <td className="px-3 py-1.5 text-center text-xs font-bold text-secondary-800 dark:text-white">{batch.currentQuantity ?? '0'} units</td>
+                          <td className="px-3 py-1.5 text-right text-xs font-bold text-secondary-800 dark:text-white w-24 pr-4 tabular-nums">{batch.currentQuantity ?? '0'} <span className="font-normal text-secondary-600 dark:text-neutral-400">units</span></td>
                         </>
                       ) : (
                         <>
-                          <td className="px-3 py-1.5 text-center text-xs text-secondary-500 dark:text-neutral-400">{batch.initialQuantity ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">{batch.currentQuantity ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-center">
+                          <td className="px-3 py-1.5 text-center text-xs text-secondary-500 dark:text-neutral-400 w-16">{batch.initialQuantity ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-right text-xs font-medium text-secondary-800 dark:text-white w-16 pr-4 tabular-nums">{batch.currentQuantity ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-center w-16">
                             <div className="flex items-center gap-1 justify-center">
                               <div className="w-12 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
                                 <div className={`h-full rounded-full ${usedPct >= 80 ? 'bg-error-500' : usedPct >= 50 ? 'bg-warning-500' : 'bg-success-500'}`} style={{ width: `${usedPct}%` }}></div>
@@ -190,13 +178,13 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                           </td>
                         </>
                       )}
-                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">{batch.receivedAt ? new Date(batch.receivedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">{batch.supplierName || '—'}</td>
-                      <td className="px-3 py-1.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => onSplit(batch)} className="text-[10px] text-primary-600 dark:text-primary-400 hover:underline font-medium" title="Split / Transfer to other clinic">Split</button>
+                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400 min-w-24 whitespace-nowrap">{batch.receivedAt ? new Date(batch.receivedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400 min-w-28 truncate" title={batch.supplierName || ''}>{batch.supplierName || '—'}</td>
+                      <td className="px-3 py-1.5 text-center w-20">
+                        <div className="flex items-center justify-center gap-1 flex-wrap">
+                          <button onClick={() => onSplit(batch)} className="text-[10px] text-primary-600 dark:text-primary-400 hover:underline font-medium whitespace-nowrap" title="Split / Transfer to other clinic">Split</button>
                           <span className="text-neutral-300 dark:text-neutral-600">·</span>
-                          <button onClick={() => onAdjust(batch)} className="text-[10px] text-warning-600 dark:text-warning-400 hover:underline font-medium" title="Adjust stock quantity">Adjust</button>
+                          <button onClick={() => onAdjust(batch)} className="text-[10px] text-warning-600 dark:text-warning-400 hover:underline font-medium whitespace-nowrap" title="Adjust stock quantity">Adjust</button>
                         </div>
                       </td>
                     </tr>

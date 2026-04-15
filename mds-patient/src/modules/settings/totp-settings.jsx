@@ -179,7 +179,7 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
         {/* Body */}
         <div className="px-6 py-5">
           <div className="mb-4 p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-700">
-            <p className="text-xs text-warning-700 dark:text-warning-300">
+            <p className="text-xs text-warning-700 dark:text-warning-300 mb-0">
               Enter the current code from your authenticator app to confirm disabling 2FA.
               You will need to set it up again if you want to re-enable it.
             </p>

@@ -1,3 +1,39 @@
+
+-- Set triggers for updated_at columns to auto-update on modification
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_updated_at_UserCredentials
+BEFORE UPDATE ON "UserCredentials"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_patientRawDocument
+BEFORE UPDATE ON "patientRawDocument"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_MedicineRequestLog
+BEFORE UPDATE ON "MedicineRequestLog"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_patientUpdateLog
+BEFORE UPDATE ON "patientUpdateLog"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_patientSlot
+BEFORE UPDATE ON "patientSlot"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+
 -- Medicine request rejection reason column (added post-initial build)
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
@@ -53,6 +89,70 @@ UNIQUE (label, location);
 ALTER TABLE "SlotCustomDate"
 ADD CONSTRAINT "SlotCustomDate_slotScheduleId_scheduledDate_key"
 UNIQUE ("slotScheduleId", "scheduledDate");
+
+-- SlotCustomType enum + SlotCustomDate schema alignment
+-- Step 1: Create the enum type if it does not exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'SlotCustomType'
+  ) THEN
+    CREATE TYPE "SlotCustomType" AS ENUM ('Include', 'Exclude');
+  END IF;
+END$$;
+
+-- Step 2: Add created_at column if missing (straightforward, no type conversion needed)
+ALTER TABLE "SlotCustomDate"
+  ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+-- Step 3: Handle the "type" column — four cases covered:
+--   a) column does not exist            → add it as the enum type directly
+--   b) column exists as TEXT/VARCHAR    → convert it to the enum type
+--   c) column exists as a wrong enum    → migrate via temp column (avoids cast error)
+--   d) column already is SlotCustomType → nothing to do
+DO $$
+DECLARE
+  col_type TEXT;
+BEGIN
+  SELECT data_type INTO col_type
+  FROM information_schema.columns
+  WHERE table_name = 'SlotCustomDate' AND column_name = 'type';
+
+  IF col_type IS NULL THEN
+    -- Case (a): column missing — add as enum
+    ALTER TABLE "SlotCustomDate"
+      ADD COLUMN "type" "SlotCustomType" NOT NULL DEFAULT 'Include'::"SlotCustomType";
+
+  ELSIF col_type IN ('text', 'character varying') THEN
+    -- Case (b): column is text/varchar — cast existing values and change type
+    ALTER TABLE "SlotCustomDate"
+      ALTER COLUMN "type" TYPE "SlotCustomType"
+        USING "type"::"SlotCustomType",
+      ALTER COLUMN "type" SET NOT NULL,
+      ALTER COLUMN "type" SET DEFAULT 'Include'::"SlotCustomType";
+
+  ELSIF col_type = 'USER-DEFINED' THEN
+    -- Case (c): column is an old/wrong enum type — migrate via temp column
+    -- (Direct enum-to-enum cast fails; dropping CASCADE removes the column too,
+    --  so we copy data out, drop the column, then recreate with the correct type.)
+    ALTER TABLE "SlotCustomDate" ADD COLUMN "type_temp" TEXT;
+    UPDATE "SlotCustomDate" SET "type_temp" = "type"::TEXT;
+    ALTER TABLE "SlotCustomDate" DROP COLUMN "type";
+    BEGIN
+      DROP TYPE IF EXISTS slotcustomtype;
+    EXCEPTION WHEN OTHERS THEN
+      NULL; -- old enum already gone, continue
+    END;
+    ALTER TABLE "SlotCustomDate"
+      ADD COLUMN "type" "SlotCustomType" NOT NULL DEFAULT 'Include'::"SlotCustomType";
+    UPDATE "SlotCustomDate"
+      SET "type" = "type_temp"::"SlotCustomType"
+      WHERE "type_temp" IS NOT NULL;
+    ALTER TABLE "SlotCustomDate" DROP COLUMN "type_temp";
+
+  -- Case (d): already correct enum — skip
+  END IF;
+END$$;
 
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
@@ -303,8 +403,13 @@ VALUES
 ('ALLOW_TO_VIEW_ANALYTICS', 'Permission to view analytics and reports'),
 ('ALLOW_TO_EXPORT_ANALYTICS', 'Permission to export analytics data'),
 
+('ALLOW_TO_VIEW_DOCUMENTS', 'Permission to view documents'),
+('ALLOW_TO_MANAGE_DOCUMENTS', 'Permission to manage (create/edit/delete) documents'),
+('ALLOW_TO_GENERATE_DOCUMENTS', 'Permission to generate documents'),
+
 ('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
-('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates');
+('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates')
+ON CONFLICT (label) DO NOTHING;
 
 -- User preferences table (stores portal settings per user)
 CREATE TABLE IF NOT EXISTS "UsersPreferences" (
@@ -315,3 +420,50 @@ CREATE TABLE IF NOT EXISTS "UsersPreferences" (
   updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id);
+
+-- Missing rolesTable entries (idempotent — safe to re-run)
+INSERT INTO "rolesTable" (label, data) VALUES
+('ALLOW_TO_SET_VITAL_SIGN',                'Permission to set vital signs'),
+('ALLOW_TO_CONFIGURE_INVENTORY',           'Permission to configure inventory settings and thresholds'),
+('ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS', 'Permission to send push notifications and alerts to patients')
+ON CONFLICT (label) DO NOTHING;
+
+-- Student programs (added post-initial build)
+INSERT INTO student_programs (label)
+VALUES
+  ('BS Architecture'),
+  ('BS Chemical Engineering'),
+  ('BS Civil Engineering'),
+  ('BS Computer Engineering'),
+  ('BS Electrical Engineering'),
+  ('BS Electronics Engineering'),
+  ('BS Industrial Engineering'),
+  ('BS Mechanical Engineering'),
+  ('BS Environmental and Sanitary Engineering'),
+  ('BS Computer Science'),
+  ('BS Data Science and Analytics'),
+  ('BS Entertainment and Multimedia Computing'),
+  ('BS Information Technology'),
+  ('BS Information Systems'),
+  ('BS Accountancy'),
+  ('BS Accounting Information Systems'),
+  ('BSBA Financial Management'),
+  ('BSBA Human Resource Management'),
+  ('BSBA Logistics and Supply Chain Management'),
+  ('BSBA Marketing Management'),
+  ('Bachelor of Arts in English Language'),
+  ('Bachelor of Arts in Political Science'),
+  ('Bachelor of Secondary Education Major in English'),
+  ('Bachelor of Secondary Education Major in Mathematics'),
+  ('Bachelor of Secondary Education Major in Sciences'),
+  ('Bachelor of Special Needs Education'),
+  ('Teaching Certificate Program');
+
+
+CREATE INDEX ON "UsersPersonal"(identifier text_pattern_ops);
+
+CREATE INDEX ON "UsersPersonal"(identifier);
+
+CREATE INDEX ON "UsersPersonalLog"(user_id, created_at DESC);
+
+CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);

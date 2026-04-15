@@ -57,6 +57,7 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,
@@ -95,12 +96,52 @@ export const fetchAllMedicineRequests = async (status = null, location = null, o
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,
     variables,
   );
   return data.getAllMedicineRequests ?? [];
+};
+
+/**
+ * Fetch all medicine requests for every supplied location in ONE GraphQL
+ * request using field aliases, then merge and deduplicate by ID.
+ *
+ * Replaces the previous pattern of one fetchAllMedicineRequests() call per
+ * location, reducing N_locations HTTP requests to 1.
+ *
+ * @param {string[]} locations — LocationDesignation values e.g. ['Arlegui','Casal']
+ * @returns {Promise<Array>} Deduplicated MedicineRequest[]
+ */
+export const fetchAllMedicineRequestsByLocations = async (locations) => {
+  if (locations.length === 0) return [];
+
+  const reqFields = `id patientId status purpose notes approved_by location created_at items { id medicineId requestId quantity itemName }`;
+
+  // Build one query with one alias per location
+  const aliasParts = locations.map(
+    (loc) => `${loc}: getAllMedicineRequests(location: ${loc}) { ${reqFields} }`,
+  );
+
+  let data;
+  try {
+    const response = await axiosRequest.post('/medical-inventory/medicine-request/medical', {
+      query: `{ ${aliasParts.join('\n')} }`,
+    });
+    if (response.data.errors) {
+      console.warn('⚠️ Partial errors in batched medicine requests:', response.data.errors.map((e) => e.message));
+    }
+    data = response.data.data ?? {};
+  } catch (err) {
+    console.error('❌ fetchAllMedicineRequestsByLocations error:', err.message);
+    return [];
+  }
+
+  // Merge all location arrays and deduplicate by request id
+  const all = locations.flatMap((loc) => data[loc] ?? []);
+  return Array.from(new Map(all.map((r) => [r.id, r])).values());
 };
 
 /**
@@ -125,6 +166,7 @@ export const fetchMedicineRequestById = async (requestId) => {
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,
@@ -159,6 +201,7 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,

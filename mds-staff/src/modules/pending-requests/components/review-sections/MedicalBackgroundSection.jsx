@@ -70,31 +70,61 @@ const MedicalBackgroundSection = ({
         <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
           Allergies
         </h4>
-        {allergyProfile?.allergies?.length > 0 ? (
-          <div className="space-y-2">
-            {allergyProfile.allergies.map((a, i) => (
-              <div key={a.id ?? i} className="flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                  a.status === 'Active'
-                    ? 'bg-error-100 dark:bg-error-900/20 text-error-800 dark:text-error-400'
-                    : a.status === 'Resolved'
-                    ? 'bg-success-100 dark:bg-success-900/20 text-success-800 dark:text-success-400'
-                    : 'bg-warning-100 dark:bg-warning-900/20 text-warning-800 dark:text-warning-400'
-                }`}>
-                  {getCatalogName(catalogs.allergenCatalog, a.allergenCatalogId, 'allergen') || `Allergen #${a.allergenCatalogId}`}
-                </span>
-                <span className="text-xs text-secondary-600 dark:text-neutral-400">
-                  Severity: {a.severity || '—'} &middot; Status: {a.status}
-                </span>
-                {a.notes && (
-                  <span className="text-xs text-secondary-500 dark:text-neutral-500 italic">
-                    — {a.notes}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
+        {allergyProfile?.allergies?.length > 0 ? (() => {
+          // Build a lookup map for quick access: id → { allergen, type }
+          const allergenMap = {};
+          (catalogs.allergenCatalog || []).forEach((c) => { allergenMap[String(c.id)] = c; });
+
+          // Group allergies by allergen type
+          const typeOrder = ['Food', 'Drug', 'Environmental', 'Insect', 'Chemical', 'Other'];
+          const grouped = {};
+          allergyProfile.allergies.forEach((a) => {
+            const entry = allergenMap[String(a.allergenCatalogId)];
+            const type = entry?.type || 'Other';
+            if (!grouped[type]) grouped[type] = [];
+            grouped[type].push({ ...a, _allergenName: entry?.allergen || null });
+          });
+
+          const sortedTypes = [
+            ...typeOrder.filter((t) => grouped[t]),
+            ...Object.keys(grouped).filter((t) => !typeOrder.includes(t)),
+          ];
+
+          return (
+            <div className="space-y-3">
+              {sortedTypes.map((type) => (
+                <div key={type}>
+                  <p className="text-xs font-medium text-secondary-400 dark:text-neutral-500 uppercase tracking-wide mb-1">
+                    {type}
+                  </p>
+                  <div className="space-y-2 pl-2">
+                    {grouped[type].map((a, i) => (
+                      <div key={a.id ?? i} className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                          a.status === 'Active'
+                            ? 'bg-error-100 dark:bg-error-900/20 text-error-800 dark:text-error-400'
+                            : a.status === 'Resolved'
+                            ? 'bg-success-100 dark:bg-success-900/20 text-success-800 dark:text-success-400'
+                            : 'bg-warning-100 dark:bg-warning-900/20 text-warning-800 dark:text-warning-400'
+                        }`}>
+                          {a._allergenName || `Allergen #${a.allergenCatalogId}`}
+                        </span>
+                        <span className="text-xs text-secondary-600 dark:text-neutral-400">
+                          Severity: {a.severity || '—'} &middot; Status: {a.status}
+                        </span>
+                        {a.notes && (
+                          <span className="text-xs text-secondary-500 dark:text-neutral-500 italic">
+                            — {a.notes}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })() : (
           <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No allergies reported</p>
         )}
         {allergyProfile?.notes && (

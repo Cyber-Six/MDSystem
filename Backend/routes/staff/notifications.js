@@ -64,10 +64,17 @@ router.post('/notify-staffs', jwtProtect('medical'), async (req, res) => {
 
     const { message, recipientIds } = req.body;
 
-    if (!message) {
+    if (!message || typeof message !== 'string') {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: 'Message is required'
+      });
+    }
+
+    if (message.length > 2000) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'Message must not exceed 2000 characters'
       });
     }
 
@@ -149,12 +156,20 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
       });
     }
 
+    
     const { message, recipientIds } = req.body;
 
-    if (!message) {
+    if (!message || typeof message !== 'string') {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: 'Message is required'
+      });
+    }
+
+    if (message.length > 2000) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'Message must not exceed 2000 characters'
       });
     }
 
@@ -204,7 +219,7 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check permission with resolved branch
-    const isPermitted = await permit.isMedicalPermittedBranchBased(staffUserId, permit.permissions.notification_allow_send_to_patients, checkBranch);
+    const isPermitted = await permit.isMedicalPermittedLocationBased(staffUserId, permit.permissions.notification_allow_send_to_patients, checkBranch);
     if (!isPermitted) {
       logger.warn(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} attempted to send patient notifications without permission for branch: ${checkBranch}`);
       return res.status(403).json({

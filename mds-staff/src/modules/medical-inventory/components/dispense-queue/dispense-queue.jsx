@@ -1,18 +1,50 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { STATUS_BADGES } from '../../inventory-seed-data';
+
+const APPROVAL_EXPIRY_DAYS = 7;
+
+// Read approval timestamp from localStorage (written by parent on approval)
+const getApprovalAgeDays = (requestId) => {
+  try {
+    const raw = localStorage.getItem(`mds_inv_approved_${requestId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const approvedAt = parsed?.approvedAt;
+    if (!approvedAt) return null;
+    return (Date.now() - approvedAt) / (24 * 60 * 60 * 1000);
+  } catch { return null; }
+};
 
 /**
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
+ * @param {Array} requests - Medicine requests
+ * @param {Array} items - Medical items
+ * @param {Array} batches - Medicine batches
+ * @param {Array} allowedLocations - List of locations the user has access to
+ * @param {Function} onDispense - Dispense handler
+ * @param {Function} onApprove - Approve handler
+ * @param {Function} onReject - Reject handler
+ * @param {Function} onCancel - Cancel approved request handler
+ * @param {string|number} focusPatientId - Patient ID to focus on
+ * @param {Function} onClearFocus - Clear focus handler
  */
-const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject, focusPatientId, onClearFocus }) => {
+const DispenseQueue = ({ requests, items, batches, allowedLocations = [], onDispense, onApprove, onReject, onCancel, focusPatientId, onClearFocus }) => {
   const [search, setSearch] = useState('');
-  const [filterLocation, setFilterLocation] = useState('Casal');
+  const [filterLocation, setFilterLocation] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [selectedPurpose, setSelectedPurpose] = useState(null);
   const [selectedNotes, setSelectedNotes] = useState(null);
+  const [cancelConfirmReq, setCancelConfirmReq] = useState(null);
+
+  // Set default filter location when allowedLocations changes
+  useEffect(() => {
+    if (allowedLocations.length > 0 && !filterLocation) {
+      setFilterLocation(allowedLocations[0]);
+    }
+  }, [allowedLocations, filterLocation]);
 
   // Helper to format date safely
   const formatDate = (dateValue) => {
@@ -90,7 +122,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
     });
   }, [requests, search, filterLocation, filterStatus, itemMap, focusPatientId]);
   const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
-  const locations = ['Casal', 'Arlegui', 'QuezonCity'];
+  const locations = allowedLocations;
 
   const getLocationDisplay = (loc) => {
     const map = { Casal: 'Casal', Arlegui: 'Arlegui', QuezonCity: 'Quezon City' };
@@ -209,8 +241,14 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                         }) || '—'}
                       </td>
                       <td className="px-3 py-1.5">
-                        {req.items?.length > 0 ? (
-                          <span className="text-xs font-medium text-secondary-800 dark:text-white">{req.items?.reduce((sum, i) => sum + (i.quantity || 0), 0)}</span>
+                        {req.items && req.items.length > 0 ? (
+                          <div className="space-y-1">
+                            {req.items.map((reqItem, idx) => (
+                              <div key={idx} className="text-xs font-medium text-secondary-800 dark:text-white">
+                                {reqItem.quantity || <span className="text-warning-600 dark:text-warning-400">pending</span>}
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
                         )}
@@ -265,12 +303,30 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                             </button>
                           </div>
                         )}
-                        {req.status === 'Approved' && (
-                          <button onClick={() => onDispense(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            Dispense
-                          </button>
-                        )}
+                        {req.status === 'Approved' && (() => {
+                          const ageDays = getApprovalAgeDays(req.id);
+                          const daysLeft = ageDays != null ? Math.max(0, APPROVAL_EXPIRY_DAYS - ageDays) : null;
+                          const expiringSoon = daysLeft != null && daysLeft <= 1;
+                          return (
+                            <div className="inline-flex flex-col items-end gap-1">
+                              {expiringSoon && (
+                                <span className="text-[10px] font-medium text-error-600 dark:text-error-400">
+                                  ⚠ Expires in {daysLeft < 1 ? '<1' : Math.ceil(daysLeft)} day{daysLeft >= 1 ? '' : ''}
+                                </span>
+                              )}
+                              <div className="inline-flex items-center gap-1">
+                                <button onClick={() => onDispense(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                  Dispense
+                                </button>
+                                <button onClick={() => setCancelConfirmReq(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-neutral-500 hover:bg-neutral-600 rounded-lg transition-colors" title="Cancel this reservation">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
                         {req.status === 'Completed' && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-success-700 dark:text-success-400 bg-success-100 dark:bg-success-900/30 rounded-lg">Completed</span>
                         )}
@@ -289,7 +345,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-white bg-neutral-600 dark:bg-neutral-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-700 dark:hover:bg-neutral-600 transition-colors"
             >
               Previous
             </button>
@@ -297,10 +353,10 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
               <button
                 key={i + 1}
                 onClick={() => setCurrentPage(i + 1)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                className={`px-2 py-1 text-xs font-medium transition-colors ${
                   currentPage === i + 1
-                    ? 'bg-primary-500 text-white'
-                    : 'border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                    ? 'bg-yellow-500 text-white font-semibold px-3 py-1.5 rounded-md'
+                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-neutral-200'
                 }`}
               >
                 {i + 1}
@@ -309,7 +365,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
             <button
               onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filtered.length / itemsPerPage), prev + 1))}
               disabled={currentPage === Math.ceil(filtered.length / itemsPerPage)}
-              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-white bg-yellow-500 hover:bg-yellow-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>
@@ -373,6 +429,45 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
+      {cancelConfirmReq && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-semibold text-secondary-900 dark:text-white">Cancel Reserved Stock?</h3>
+            </div>
+            <p className="text-sm text-secondary-600 dark:text-neutral-300 mb-2">
+              This will cancel request <span className="font-medium">#{cancelConfirmReq.id}</span> for <span className="font-medium">{cancelConfirmReq.patientName}</span>.
+            </p>
+            <p className="text-xs text-secondary-500 dark:text-neutral-400 mb-5">
+              The reserved stock will be released back to the available pool for other patients.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCancelConfirmReq(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-lg transition-colors"
+              >
+                Keep
+              </button>
+              <button
+                onClick={() => {
+                  onCancel?.(cancelConfirmReq);
+                  setCancelConfirmReq(null);
+                }}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-warning-500 hover:bg-warning-600 rounded-lg transition-colors"
+              >
+                Yes, Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
