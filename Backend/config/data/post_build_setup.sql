@@ -1,3 +1,39 @@
+
+-- Set triggers for updated_at columns to auto-update on modification
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_updated_at_UserCredentials
+BEFORE UPDATE ON "UserCredentials"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_patientRawDocument
+BEFORE UPDATE ON "patientRawDocument"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_MedicineRequestLog
+BEFORE UPDATE ON "MedicineRequestLog"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_patientUpdateLog
+BEFORE UPDATE ON "patientUpdateLog"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER set_updated_at_patientSlot
+BEFORE UPDATE ON "patientSlot"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+
 -- Medicine request rejection reason column (added post-initial build)
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
