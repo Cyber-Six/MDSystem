@@ -378,7 +378,7 @@ type Query {
   countMaxActiveUsersInHours(hours: Int!): Int!
   listUsers(offset: Int!, limit: Int!, search: String, branch: String, type: String, status: String, includeUnverified: Boolean = false): UserListPage!
   previewSemestralInactivation(branch: String, department: String, identities: [Identity!]): SemestralInactivationPreview!
-  searchPatientDeletionCandidates(search: String, offset: Int = 0, limit: Int = 50, intervalYears: Int!): PatientDeletionCandidatePage!
+  searchPatientDeletionCandidates(search: String, offset: Int = 0, limit: Int = 50): PatientDeletionCandidatePage!
   listUserSessions(userId: ID!, offset: Int = 0, limit: Int = 10): [LinkedUserSession!]!
   listUserLoginAttempts(userId: ID!, offset: Int!, limit: Int!): [UserLoginAttempt!]!
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
@@ -431,7 +431,7 @@ type Mutation {
   setUserSuperior(userId: ID!): MutationResult!
   setUserSuperiorStatus(userId: ID!, superior: Boolean!): MutationResult!
   applySemestralInactivation(branch: String, department: String, identities: [Identity!]): MutationResult!
-  deletePatients(ids: [UUID!]!, intervalYears: Int!): MutationResult!
+  deletePatients(ids: [UUID!]!): MutationResult!
 
   # Permission Templates
   createPermissionTemplate(input: CreateTemplateInput!): TemplateMutationResult!

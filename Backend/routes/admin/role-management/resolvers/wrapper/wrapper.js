@@ -329,19 +329,6 @@ function validateSemestralScope(branch, department, res) {
   return { normalizedBranch, normalizedDepartment };
 }
 
-function normalizeIntervalYears(intervalYears, res, { min = 1, max = 50 } = {}) {
-  const normalizedYears = Number(intervalYears);
-
-  if (!Number.isInteger(normalizedYears) || normalizedYears < min || normalizedYears > max) {
-    throwGraphQLError(res)
-      .message(`intervalYears must be an integer between ${min} and ${max}.`)
-      .status(400)
-      .throw();
-  }
-
-  return normalizedYears;
-}
-
 function normalizeDeletionIds(ids, res) {
   if (!Array.isArray(ids) || ids.length === 0) {
     throwGraphQLError(res)
@@ -403,6 +390,35 @@ async function deleteRowsByIdColumnIfExists(client, tableName, columnName, ids) 
   const query = `DELETE FROM ${quoteIdentifier(tableName)} WHERE ${quoteIdentifier(columnName)}::text = ANY($1::text[])`;
   const result = await client.query(query, [ids]);
   return Number(result.rowCount) || 0;
+}
+
+async function selectColumnValuesByFilter(client, {
+  tableName,
+  selectColumn = 'id',
+  filterColumn = 'id',
+  filterValues = [],
+}) {
+  if (!Array.isArray(filterValues) || filterValues.length === 0) return [];
+
+  const [hasSelectColumn, hasFilterColumn] = await Promise.all([
+    hasTableColumn(client, tableName, selectColumn),
+    hasTableColumn(client, tableName, filterColumn),
+  ]);
+
+  if (!hasSelectColumn || !hasFilterColumn) return [];
+
+  const query = `
+    SELECT DISTINCT ${quoteIdentifier(selectColumn)}::text AS value
+    FROM ${quoteIdentifier(tableName)}
+    WHERE ${quoteIdentifier(filterColumn)}::text = ANY($1::text[])
+  `;
+
+  const result = await client.query(query, [filterValues]);
+  return [...new Set(
+    (result.rows || [])
+      .map((row) => String(row.value || '').trim())
+      .filter(Boolean)
+  )];
 }
 
 async function deleteNonCascadeChildrenByRootIds(client, rootTableNames, ids) {
@@ -1265,7 +1281,7 @@ const Query = {
     };
   },
 
-  _searchPatientDeletionCandidates: async (_, { search, offset = 0, limit = 50, intervalYears }, { user, res }) => {
+  _searchPatientDeletionCandidates: async (_, { search, offset = 0, limit = 50 }, { user, res }) => {
     if (!Number.isInteger(offset) || offset < 0) {
       throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
     }
@@ -1277,7 +1293,6 @@ const Query = {
         .throw();
     }
 
-    const normalizedYears = normalizeIntervalYears(intervalYears, res);
     const normalizedSearch = typeof search === 'string' ? search.trim() : '';
     const searchPattern = normalizedSearch ? `%${normalizedSearch}%` : null;
 
@@ -1303,16 +1318,29 @@ const Query = {
            COALESCE(uc.identity::text, 'Unknown') AS type,
            COALESCE(uc.credentials_status::text, 'Unknown') AS status,
            COALESCE(uc.updated_at, NOW()) AS updated_at,
-           COALESCE(uc.updated_at, NOW()) + make_interval(years => $3::int) AS eligible_after
+           CASE
+             WHEN uc.credentials_status = 'Inactive'::"CredentialStatus"
+               THEN COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year'
+             ELSE NULL
+           END AS eligible_after
          FROM "UserCredentials" uc
          JOIN "Patients" p ON p.id = uc.id
          LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-         WHERE uc.identity::text = ANY($4::text[])
-           AND uc.credentials_status = 'Inactive'::"CredentialStatus"
+         WHERE uc.identity::text = ANY($3::text[])
            AND (
-             $5::text IS NULL
-             OR uc.email ILIKE $5
-             OR uc.id::text ILIKE $5
+             (
+               uc.credentials_status = 'Inactive'::"CredentialStatus"
+               AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
+             )
+             OR (
+               $4::text IS NOT NULL
+               AND uc.credentials_status = 'Locked'::"CredentialStatus"
+             )
+           )
+           AND (
+             $4::text IS NULL
+             OR uc.email ILIKE $4
+             OR uc.id::text ILIKE $4
              OR TRIM(CONCAT_WS(
                ' ',
                up.first_name,
@@ -1322,7 +1350,7 @@ const Query = {
                END,
                up.last_name,
                up.suffix
-             )) ILIKE $5
+             )) ILIKE $4
            )
        )
        SELECT
@@ -1334,12 +1362,20 @@ const Query = {
          status,
          updated_at,
          eligible_after,
-         eligible_after < NOW() AS eligible
+         true AS eligible
        FROM deletion_candidates
-       ORDER BY eligible DESC, eligible_after ASC, id DESC
+       ORDER BY
+         CASE
+           WHEN status = 'Inactive' THEN 0
+           WHEN status = 'Locked' THEN 1
+           ELSE 2
+         END,
+         eligible_after ASC NULLS LAST,
+         updated_at DESC,
+         id DESC
        OFFSET $1
        LIMIT $2`,
-      [offset, limit, normalizedYears, PATIENT_IDENTITY_VALUES, searchPattern]
+      [offset, limit, PATIENT_IDENTITY_VALUES, searchPattern]
     );
 
     const countResult = await db.query(
@@ -1348,7 +1384,13 @@ const Query = {
        JOIN "Patients" p ON p.id = uc.id
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        WHERE uc.identity::text = ANY($1::text[])
-         AND uc.credentials_status = 'Inactive'::"CredentialStatus"
+         AND (
+           (
+             uc.credentials_status = 'Inactive'::"CredentialStatus"
+             AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
+           )
+           OR ($2::text IS NOT NULL AND uc.credentials_status = 'Locked'::"CredentialStatus")
+         )
          AND (
            $2::text IS NULL
            OR uc.email ILIKE $2
@@ -2691,14 +2733,14 @@ const Mutation = {
     };
   },
 
-  _deletePatients: async (_, { ids, intervalYears }, { user, res }) => {
+  _deletePatients: async (_, { ids }, { user, res }) => {
     const normalizedIds = normalizeDeletionIds(ids, res);
-    const normalizedYears = normalizeIntervalYears(intervalYears, res);
     const nowMs = Date.now();
 
     const client = await db.db().connect();
     try {
       await client.query('BEGIN');
+      await client.query('SET CONSTRAINTS ALL DEFERRED');
 
       const eligibilityResult = await client.query(
         `SELECT
@@ -2707,13 +2749,13 @@ const Mutation = {
            COALESCE(uc.identity::text, 'Unknown') AS identity,
            COALESCE(uc.credentials_status::text, 'Unknown') AS status,
            COALESCE(uc.updated_at, NOW()) AS updated_at,
-           COALESCE(uc.updated_at, NOW()) + make_interval(years => $2::int) AS eligible_after,
+           COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' AS inactive_eligible_after,
            CASE WHEN p.id IS NOT NULL THEN true ELSE false END AS is_patient
          FROM "UserCredentials" uc
          LEFT JOIN "Patients" p ON p.id = uc.id
          WHERE uc.id::text = ANY($1::text[])
          FOR UPDATE`,
-        [normalizedIds, normalizedYears]
+        [normalizedIds]
       );
 
       const rows = eligibilityResult.rows || [];
@@ -2729,20 +2771,25 @@ const Mutation = {
         const rowReasons = [];
         const identity = String(row.identity || '');
         const status = String(row.status || '');
+        const normalizedStatus = status.toLowerCase();
         const isPatient = Boolean(row.is_patient) || PATIENT_IDENTITY_VALUES.includes(identity);
-        const eligibleAfterMs = row.eligible_after ? new Date(row.eligible_after).getTime() : Number.NaN;
+        const eligibleAfterMs = row.inactive_eligible_after ? new Date(row.inactive_eligible_after).getTime() : Number.NaN;
         const intervalElapsed = Number.isFinite(eligibleAfterMs) && eligibleAfterMs < nowMs;
+        const isLocked = normalizedStatus === 'locked';
+        const isInactiveAndOld = normalizedStatus === 'inactive' && intervalElapsed;
 
         if (!isPatient) {
           rowReasons.push('not a patient account');
         }
 
-        if (status.toLowerCase() !== 'inactive') {
-          rowReasons.push(`status is ${status}`);
-        }
-
-        if (!intervalElapsed) {
-          rowReasons.push(`updated_at + ${normalizedYears} year(s) has not elapsed`);
+        if (!isLocked && !isInactiveAndOld) {
+          if (normalizedStatus === 'inactive' && !intervalElapsed) {
+            rowReasons.push('inactive account is not older than 1 year');
+          } else if (!['inactive', 'locked'].includes(normalizedStatus)) {
+            rowReasons.push(`status is ${status}`);
+          } else {
+            rowReasons.push('account does not satisfy deletion rules');
+          }
         }
 
         if (rowReasons.length > 0) {
@@ -2758,21 +2805,134 @@ const Mutation = {
       }
 
       let deletedRelatedRows = 0;
+
+      const patientUpdateLogIds = await selectColumnValuesByFilter(client, {
+        tableName: 'patientUpdateLog',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const consultationIds = await selectColumnValuesByFilter(client, {
+        tableName: 'Consultation',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const consultationOutcomeIds = await selectColumnValuesByFilter(client, {
+        tableName: 'ConsultationOutcome',
+        selectColumn: 'id',
+        filterColumn: 'consultationId',
+        filterValues: consultationIds,
+      });
+
+      const healthChatIds = await selectColumnValuesByFilter(client, {
+        tableName: 'HealthChat',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const medicineRequestLogIds = await selectColumnValuesByFilter(client, {
+        tableName: 'MedicineRequestLog',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const medicineTransactionLogIds = await selectColumnValuesByFilter(client, {
+        tableName: 'MedicineTransactionLog',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const supplyTransactionLogIds = await selectColumnValuesByFilter(client, {
+        tableName: 'SupplyTransactionLog',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const patientDocumentIds = await selectColumnValuesByFilter(client, {
+        tableName: 'PatientDocuments',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const patientSlotIds = await selectColumnValuesByFilter(client, {
+        tableName: 'patientSlot',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const dentalRecordIds = await selectColumnValuesByFilter(client, {
+        tableName: 'DentalRecord',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const vitalSignsIds = await selectColumnValuesByFilter(client, {
+        tableName: 'VitalSigns',
+        selectColumn: 'id',
+        filterColumn: 'patientId',
+        filterValues: normalizedIds,
+      });
+
+      const patientUpdateNestedParents = [
+        'profileRecord',
+        'MedicalHistory',
+        'Hospitalization',
+        'Operation',
+        'Immunization',
+        'Allergy',
+        'OralAppliance',
+        'DentalProcedure',
+        'VisualAcuity',
+      ];
+
+      for (const tableName of patientUpdateNestedParents) {
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, [tableName], patientUpdateLogIds);
+      }
+
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['ConsultationOutcome'], consultationOutcomeIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineRequestLog'], medicineRequestLogIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineTransactionLog'], medicineTransactionLogIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['SupplyTransactionLog'], supplyTransactionLogIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['HealthChat'], healthChatIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['PatientDocuments'], patientDocumentIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientSlot'], patientSlotIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['DentalRecord'], dentalRecordIds);
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientUpdateLog'], patientUpdateLogIds);
+
+      const targetedIdDeletes = [
+        { table: 'ConsultationOutcome', ids: consultationOutcomeIds },
+        { table: 'Consultation', ids: consultationIds },
+        { table: 'HealthChat', ids: healthChatIds },
+        { table: 'MedicineRequestLog', ids: medicineRequestLogIds },
+        { table: 'MedicineTransactionLog', ids: medicineTransactionLogIds },
+        { table: 'SupplyTransactionLog', ids: supplyTransactionLogIds },
+        { table: 'PatientDocuments', ids: patientDocumentIds },
+        { table: 'patientSlot', ids: patientSlotIds },
+        { table: 'patientUpdateLog', ids: patientUpdateLogIds },
+        { table: 'VitalSigns', ids: vitalSignsIds },
+        { table: 'DentalRecord', ids: dentalRecordIds },
+      ];
+
+      for (const target of targetedIdDeletes) {
+        deletedRelatedRows += await deleteRowsByIdColumnIfExists(client, target.table, 'id', target.ids);
+      }
+
       const preCleanupTargets = [
         { table: 'UsersPreferences', column: 'id' },
         { table: 'UsersPersonalLog', column: 'user_id' },
         { table: 'UserLoginAttempt', column: 'user_id' },
         { table: 'patientRawDocument', column: 'patientId' },
-        { table: 'PatientDocuments', column: 'patientId' },
-        { table: 'MedicineRequestLog', column: 'patientId' },
-        { table: 'MedicineTransactionLog', column: 'patientId' },
-        { table: 'HealthChat', column: 'patientId' },
-        { table: 'Consultation', column: 'patientId' },
-        { table: 'patientSlot', column: 'patientId' },
         { table: 'schedulerWhitelist', column: 'patientId' },
-        { table: 'patientUpdateLog', column: 'patientId' },
-        { table: 'VitalSigns', column: 'patientId' },
-        { table: 'DentalRecord', column: 'patientId' },
       ];
 
       for (const target of preCleanupTargets) {
@@ -2818,7 +2978,6 @@ const Mutation = {
       logger.info('Patient account deletion completed by admin', {
         adminId: String(user?.id || ''),
         patientIds: normalizedIds,
-        intervalYears: normalizedYears,
         deletedCredentialCount,
         deletedPatientRows: Number(deletedPatients.rowCount) || 0,
         deletedPersonalRows: Number(deletedPersonal.rowCount) || 0,
