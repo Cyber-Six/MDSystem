@@ -1,4 +1,5 @@
 scalar Date
+scalar UUID
 
 # ─── ENUMS ─────────────────────────────────────────────────────────────────────
 
@@ -59,17 +60,6 @@ type BranchPermission {
   branch: Designation    # Branch for this permission (null if not granted)
 }
 
-# Hierarchical permission group used by Role Template UI (parent + children)
-type PermissionGroup {
-  id: String!
-  label: String!
-  enabled: Boolean!
-  fullyEnabled: Boolean!
-  childCount: Int!
-  enabledChildCount: Int!
-  children: [BranchPermission!]!
-}
-
 # Staff permissions wrapper type - array of BranchPermission
 # Returned by getStaffPermissions query and stored in StaffAccount
 # Unified format across all permission queries and mutations
@@ -87,7 +77,6 @@ type PermissionTemplate {
   createdBy: ID!
   createdAt: String!
   permissions: [BranchPermission!]!
-  permissionGroups: [PermissionGroup!]!
   permissionCount: Int!
 }
 
@@ -239,6 +228,23 @@ type UserListPage {
   totalCount: Int!
 }
 
+type PatientDeletionCandidate {
+  id: UUID!
+  name: String!
+  email: String!
+  branch: String!
+  type: String!
+  status: String!
+  updatedAt: String
+  eligibleAfter: String
+  eligible: Boolean!
+}
+
+type PatientDeletionCandidatePage {
+  patients: [PatientDeletionCandidate!]!
+  totalCount: Int!
+}
+
 # Linked user sessions (detail view when clicking a user row)
 type LinkedUserSession {
   deviceId: String!
@@ -308,21 +314,6 @@ input ExtendedPermissionInput {
   branch: Designation   # Optional: Manila, QuezonCity, or Both (uses defaultBranch if not specified)
 }
 
-# Child input entry for grouped permission updates
-input PermissionGroupChildInput {
-  key: String!
-  enabled: Boolean!
-  branch: Designation
-}
-
-# Parent-group input for grouped template updates
-input PermissionGroupInput {
-  groupId: String!
-  enabled: Boolean
-  branch: Designation
-  children: [PermissionGroupChildInput!]
-}
-
 # Standard permission input (no branch - uses umbrella branch)
 input StandardPermissionInput {
   key: String!          # Permission key (e.g., "emr_allow_view")
@@ -340,16 +331,14 @@ input ModulePermissionInput {
 # Input for creating a permission template
 input CreateTemplateInput {
   label: String!                         # Template name/label
-  permissions: [ExtendedPermissionInput!]!  # Flat permissions with branch
-  permissionGroups: [PermissionGroupInput!] # Optional grouped parent/children payload
+  permissions: [ExtendedPermissionInput!]!  # Permissions with branch
   defaultBranch: Designation             # Default branch if not specified per permission
 }
 
 # Input for updating a permission template
 input UpdateTemplateInput {
   label: String                          # Optional: new template name/label
-  permissions: [ExtendedPermissionInput!] # Optional: flat updated permissions
-  permissionGroups: [PermissionGroupInput!] # Optional: grouped updated permissions
+  permissions: [ExtendedPermissionInput!] # Optional: updated permissions
   defaultBranch: Designation             # Optional: default branch for permissions without branch
 }
 
@@ -389,6 +378,7 @@ type Query {
   countMaxActiveUsersInHours(hours: Int!): Int!
   listUsers(offset: Int!, limit: Int!, search: String, branch: String, type: String, status: String, includeUnverified: Boolean = false): UserListPage!
   previewSemestralInactivation(branch: String, department: String, identities: [Identity!]): SemestralInactivationPreview!
+  searchPatientDeletionCandidates(search: String, offset: Int = 0, limit: Int = 50, intervalYears: Int!): PatientDeletionCandidatePage!
   listUserSessions(userId: ID!, offset: Int = 0, limit: Int = 10): [LinkedUserSession!]!
   listUserLoginAttempts(userId: ID!, offset: Int!, limit: Int!): [UserLoginAttempt!]!
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
@@ -441,6 +431,7 @@ type Mutation {
   setUserSuperior(userId: ID!): MutationResult!
   setUserSuperiorStatus(userId: ID!, superior: Boolean!): MutationResult!
   applySemestralInactivation(branch: String, department: String, identities: [Identity!]): MutationResult!
+  deletePatients(ids: [UUID!]!, intervalYears: Int!): MutationResult!
 
   # Permission Templates
   createPermissionTemplate(input: CreateTemplateInput!): TemplateMutationResult!

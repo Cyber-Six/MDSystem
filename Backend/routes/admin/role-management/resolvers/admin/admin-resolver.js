@@ -84,6 +84,11 @@ const Query = {
     return await Wrapper.Query._previewSemestralInactivation(_, args, context);
   },
 
+  searchPatientDeletionCandidates: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._searchPatientDeletionCandidates(_, args, context);
+  },
+
   listUserSessions: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listUserSessions(_, args, context);
@@ -186,6 +191,11 @@ const Mutation = {
   applySemestralInactivation: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._applySemestralInactivation(_, args, context);
+  },
+
+  deletePatients: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._deletePatients(_, args, context);
   },
 
   createPermissionTemplate: async (_, args, context) => {

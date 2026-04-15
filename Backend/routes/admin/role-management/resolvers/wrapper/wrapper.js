@@ -58,6 +58,9 @@ const SEMESTRAL_ALLOWED_IDENTITIES = ['Student', 'Employee'];
 const USER_LIST_BRANCH_VALUES = ['Manila', 'QuezonCity', 'Both'];
 const USER_LIST_IDENTITY_VALUES = ['Student', 'Employee', 'Medical', 'Superior'];
 const USER_LIST_STATUS_VALUES = ['Unverified', 'Active', 'Inactive', 'Locked'];
+const PATIENT_IDENTITY_VALUES = ['Student', 'Employee', 'Superior'];
+const PATIENT_DELETION_MAX_BATCH = 500;
+const PATIENT_DELETION_MAX_LIMIT = 200;
 
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
@@ -324,6 +327,136 @@ function validateSemestralScope(branch, department, res) {
   }
 
   return { normalizedBranch, normalizedDepartment };
+}
+
+function normalizeIntervalYears(intervalYears, res, { min = 1, max = 50 } = {}) {
+  const normalizedYears = Number(intervalYears);
+
+  if (!Number.isInteger(normalizedYears) || normalizedYears < min || normalizedYears > max) {
+    throwGraphQLError(res)
+      .message(`intervalYears must be an integer between ${min} and ${max}.`)
+      .status(400)
+      .throw();
+  }
+
+  return normalizedYears;
+}
+
+function normalizeDeletionIds(ids, res) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throwGraphQLError(res)
+      .message('ids must contain at least one patient account id.')
+      .status(400)
+      .throw();
+  }
+
+  const normalizedIds = [...new Set(
+    ids
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  )];
+
+  if (normalizedIds.length === 0) {
+    throwGraphQLError(res)
+      .message('ids must contain at least one valid patient account id.')
+      .status(400)
+      .throw();
+  }
+
+  if (normalizedIds.length > PATIENT_DELETION_MAX_BATCH) {
+    throwGraphQLError(res)
+      .message(`A maximum of ${PATIENT_DELETION_MAX_BATCH} patient ids is allowed per delete request.`)
+      .status(400)
+      .throw();
+  }
+
+  return normalizedIds;
+}
+
+function quoteIdentifier(identifier) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(identifier || ''))) {
+    throw new Error(`Invalid SQL identifier: ${identifier}`);
+  }
+  return `"${identifier}"`;
+}
+
+async function hasTableColumn(client, tableName, columnName) {
+  const result = await client.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = $1
+       AND column_name = $2
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+
+  return result.rows.length > 0;
+}
+
+async function deleteRowsByIdColumnIfExists(client, tableName, columnName, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+
+  const exists = await hasTableColumn(client, tableName, columnName);
+  if (!exists) return 0;
+
+  const query = `DELETE FROM ${quoteIdentifier(tableName)} WHERE ${quoteIdentifier(columnName)}::text = ANY($1::text[])`;
+  const result = await client.query(query, [ids]);
+  return Number(result.rowCount) || 0;
+}
+
+async function deleteNonCascadeChildrenByRootIds(client, rootTableNames, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  if (!Array.isArray(rootTableNames) || rootTableNames.length === 0) return 0;
+
+  const fkResult = await client.query(
+    `SELECT
+       tc.constraint_name,
+       tc.table_name AS child_table,
+       ccu.table_name AS parent_table,
+       rc.delete_rule,
+       array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS child_columns
+     FROM information_schema.table_constraints tc
+     JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name = kcu.constraint_name
+      AND tc.table_schema = kcu.table_schema
+     JOIN information_schema.constraint_column_usage ccu
+       ON tc.constraint_name = ccu.constraint_name
+      AND tc.table_schema = ccu.table_schema
+     JOIN information_schema.referential_constraints rc
+       ON tc.constraint_name = rc.constraint_name
+      AND tc.table_schema = rc.constraint_schema
+     WHERE tc.constraint_type = 'FOREIGN KEY'
+       AND tc.table_schema = 'public'
+       AND ccu.table_schema = 'public'
+       AND ccu.table_name = ANY($1::text[])
+     GROUP BY tc.constraint_name, tc.table_name, ccu.table_name, rc.delete_rule`,
+    [rootTableNames]
+  );
+
+  let totalDeleted = 0;
+  const processedKeys = new Set();
+
+  for (const row of fkResult.rows || []) {
+    const deleteRule = String(row.delete_rule || '').toUpperCase();
+    const childTable = String(row.child_table || '').trim();
+    const childColumns = Array.isArray(row.child_columns) ? row.child_columns : [];
+
+    if (!childTable || deleteRule === 'CASCADE') continue;
+    if (rootTableNames.includes(childTable)) continue;
+    if (childColumns.length !== 1) continue;
+
+    const childColumn = String(childColumns[0] || '').trim();
+    if (!childColumn) continue;
+
+    const dedupeKey = `${childTable}.${childColumn}`;
+    if (processedKeys.has(dedupeKey)) continue;
+    processedKeys.add(dedupeKey);
+
+    totalDeleted += await deleteRowsByIdColumnIfExists(client, childTable, childColumn, ids);
+  }
+
+  return totalDeleted;
 }
 
 async function getSemestralScopeSummary({ identities, normalizedBranch, normalizedDepartment }) {
@@ -1129,6 +1262,124 @@ const Query = {
         : `${willUpdateCount} of ${scopedCount} account(s) will be set to Inactive.`,
       scopedCount,
       willUpdateCount,
+    };
+  },
+
+  _searchPatientDeletionCandidates: async (_, { search, offset = 0, limit = 50, intervalYears }, { user, res }) => {
+    if (!Number.isInteger(offset) || offset < 0) {
+      throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
+    }
+
+    if (!Number.isInteger(limit) || limit < 1 || limit > PATIENT_DELETION_MAX_LIMIT) {
+      throwGraphQLError(res)
+        .message(`limit must be between 1 and ${PATIENT_DELETION_MAX_LIMIT}`)
+        .status(400)
+        .throw();
+    }
+
+    const normalizedYears = normalizeIntervalYears(intervalYears, res);
+    const normalizedSearch = typeof search === 'string' ? search.trim() : '';
+    const searchPattern = normalizedSearch ? `%${normalizedSearch}%` : null;
+
+    const listResult = await db.query(
+      `WITH deletion_candidates AS (
+         SELECT
+           uc.id::text AS id,
+           COALESCE(NULLIF(
+             TRIM(CONCAT_WS(
+               ' ',
+               up.first_name,
+               CASE
+                 WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
+                 ELSE NULL
+               END,
+               up.last_name,
+               up.suffix
+             )),
+             ''
+           ), 'Unverified User') AS name,
+           COALESCE(uc.email, '--') AS email,
+           COALESCE(up.branch::text, '--') AS branch,
+           COALESCE(uc.identity::text, 'Unknown') AS type,
+           COALESCE(uc.credentials_status::text, 'Unknown') AS status,
+           COALESCE(uc.updated_at, NOW()) AS updated_at,
+           COALESCE(uc.updated_at, NOW()) + make_interval(years => $3::int) AS eligible_after
+         FROM "UserCredentials" uc
+         JOIN "Patients" p ON p.id = uc.id
+         LEFT JOIN "UsersPersonal" up ON up.id = uc.id
+         WHERE uc.identity::text = ANY($4::text[])
+           AND uc.credentials_status = 'Inactive'::"CredentialStatus"
+           AND (
+             $5::text IS NULL
+             OR uc.email ILIKE $5
+             OR uc.id::text ILIKE $5
+             OR TRIM(CONCAT_WS(
+               ' ',
+               up.first_name,
+               CASE
+                 WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
+                 ELSE NULL
+               END,
+               up.last_name,
+               up.suffix
+             )) ILIKE $5
+           )
+       )
+       SELECT
+         id,
+         name,
+         email,
+         branch,
+         type,
+         status,
+         updated_at,
+         eligible_after,
+         eligible_after < NOW() AS eligible
+       FROM deletion_candidates
+       ORDER BY eligible DESC, eligible_after ASC, id DESC
+       OFFSET $1
+       LIMIT $2`,
+      [offset, limit, normalizedYears, PATIENT_IDENTITY_VALUES, searchPattern]
+    );
+
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS total_count
+       FROM "UserCredentials" uc
+       JOIN "Patients" p ON p.id = uc.id
+       LEFT JOIN "UsersPersonal" up ON up.id = uc.id
+       WHERE uc.identity::text = ANY($1::text[])
+         AND uc.credentials_status = 'Inactive'::"CredentialStatus"
+         AND (
+           $2::text IS NULL
+           OR uc.email ILIKE $2
+           OR uc.id::text ILIKE $2
+           OR TRIM(CONCAT_WS(
+             ' ',
+             up.first_name,
+             CASE
+               WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
+               ELSE NULL
+             END,
+             up.last_name,
+             up.suffix
+           )) ILIKE $2
+         )`,
+      [PATIENT_IDENTITY_VALUES, searchPattern]
+    );
+
+    return {
+      patients: (listResult.rows || []).map((row) => ({
+        id: String(row.id),
+        name: row.name || 'Unverified User',
+        email: row.email || '--',
+        branch: row.branch || '--',
+        type: row.type || 'Unknown',
+        status: row.status || 'Unknown',
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+        eligibleAfter: row.eligible_after ? new Date(row.eligible_after).toISOString() : null,
+        eligible: Boolean(row.eligible),
+      })),
+      totalCount: Number(countResult.rows?.[0]?.total_count) || 0,
     };
   },
 
@@ -2438,6 +2689,161 @@ const Mutation = {
       ok: true,
       message: `${updatedCount} of ${scopedCount} account(s) set to Inactive.`,
     };
+  },
+
+  _deletePatients: async (_, { ids, intervalYears }, { user, res }) => {
+    const normalizedIds = normalizeDeletionIds(ids, res);
+    const normalizedYears = normalizeIntervalYears(intervalYears, res);
+    const nowMs = Date.now();
+
+    const client = await db.db().connect();
+    try {
+      await client.query('BEGIN');
+
+      const eligibilityResult = await client.query(
+        `SELECT
+           uc.id::text AS id,
+           COALESCE(uc.email, '--') AS email,
+           COALESCE(uc.identity::text, 'Unknown') AS identity,
+           COALESCE(uc.credentials_status::text, 'Unknown') AS status,
+           COALESCE(uc.updated_at, NOW()) AS updated_at,
+           COALESCE(uc.updated_at, NOW()) + make_interval(years => $2::int) AS eligible_after,
+           CASE WHEN p.id IS NOT NULL THEN true ELSE false END AS is_patient
+         FROM "UserCredentials" uc
+         LEFT JOIN "Patients" p ON p.id = uc.id
+         WHERE uc.id::text = ANY($1::text[])
+         FOR UPDATE`,
+        [normalizedIds, normalizedYears]
+      );
+
+      const rows = eligibilityResult.rows || [];
+      const foundIds = new Set(rows.map((row) => String(row.id)));
+      const missingIds = normalizedIds.filter((id) => !foundIds.has(id));
+      const failures = [];
+
+      if (missingIds.length > 0) {
+        failures.push(`Missing ids: ${missingIds.join(', ')}`);
+      }
+
+      for (const row of rows) {
+        const rowReasons = [];
+        const identity = String(row.identity || '');
+        const status = String(row.status || '');
+        const isPatient = Boolean(row.is_patient) || PATIENT_IDENTITY_VALUES.includes(identity);
+        const eligibleAfterMs = row.eligible_after ? new Date(row.eligible_after).getTime() : Number.NaN;
+        const intervalElapsed = Number.isFinite(eligibleAfterMs) && eligibleAfterMs < nowMs;
+
+        if (!isPatient) {
+          rowReasons.push('not a patient account');
+        }
+
+        if (status.toLowerCase() !== 'inactive') {
+          rowReasons.push(`status is ${status}`);
+        }
+
+        if (!intervalElapsed) {
+          rowReasons.push(`updated_at + ${normalizedYears} year(s) has not elapsed`);
+        }
+
+        if (rowReasons.length > 0) {
+          failures.push(`${row.id}: ${rowReasons.join(', ')}`);
+        }
+      }
+
+      if (failures.length > 0) {
+        throwGraphQLError(res)
+          .message(`Deletion preconditions failed. Transaction rolled back. ${failures.slice(0, 10).join(' | ')}`)
+          .status(409)
+          .throw();
+      }
+
+      let deletedRelatedRows = 0;
+      const preCleanupTargets = [
+        { table: 'UsersPreferences', column: 'id' },
+        { table: 'UsersPersonalLog', column: 'user_id' },
+        { table: 'UserLoginAttempt', column: 'user_id' },
+        { table: 'patientRawDocument', column: 'patientId' },
+        { table: 'PatientDocuments', column: 'patientId' },
+        { table: 'MedicineRequestLog', column: 'patientId' },
+        { table: 'MedicineTransactionLog', column: 'patientId' },
+        { table: 'HealthChat', column: 'patientId' },
+        { table: 'Consultation', column: 'patientId' },
+        { table: 'patientSlot', column: 'patientId' },
+        { table: 'schedulerWhitelist', column: 'patientId' },
+        { table: 'patientUpdateLog', column: 'patientId' },
+        { table: 'VitalSigns', column: 'patientId' },
+        { table: 'DentalRecord', column: 'patientId' },
+      ];
+
+      for (const target of preCleanupTargets) {
+        deletedRelatedRows += await deleteRowsByIdColumnIfExists(
+          client,
+          target.table,
+          target.column,
+          normalizedIds
+        );
+      }
+
+      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(
+        client,
+        ['UserCredentials', 'UsersPersonal', 'Patients'],
+        normalizedIds
+      );
+
+      const deletedPatients = await client.query(
+        `DELETE FROM "Patients" WHERE id::text = ANY($1::text[])`,
+        [normalizedIds]
+      );
+
+      const deletedPersonal = await client.query(
+        `DELETE FROM "UsersPersonal" WHERE id::text = ANY($1::text[])`,
+        [normalizedIds]
+      );
+
+      const deletedCredentials = await client.query(
+        `DELETE FROM "UserCredentials" WHERE id::text = ANY($1::text[])`,
+        [normalizedIds]
+      );
+
+      const deletedCredentialCount = Number(deletedCredentials.rowCount) || 0;
+      if (deletedCredentialCount !== normalizedIds.length) {
+        throwGraphQLError(res)
+          .message('Failed to delete all selected accounts. Transaction rolled back.')
+          .status(409)
+          .throw();
+      }
+
+      await client.query('COMMIT');
+
+      logger.info('Patient account deletion completed by admin', {
+        adminId: String(user?.id || ''),
+        patientIds: normalizedIds,
+        intervalYears: normalizedYears,
+        deletedCredentialCount,
+        deletedPatientRows: Number(deletedPatients.rowCount) || 0,
+        deletedPersonalRows: Number(deletedPersonal.rowCount) || 0,
+        deletedRelatedRows,
+      });
+
+      return {
+        ok: true,
+        message: `Deleted ${deletedCredentialCount} patient account(s) and ${deletedRelatedRows} related record(s).`,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+
+      if (error?.name === 'GraphQLError') {
+        throw error;
+      }
+
+      logger.error(`Patient account deletion failed. Transaction rolled back: ${error.message}`);
+      throwGraphQLError(res)
+        .message(`Patient deletion failed. Transaction rolled back. ${error.message || ''}`.trim())
+        .status(500)
+        .throw();
+    } finally {
+      client.release();
+    }
   },
 
   _createPermissionTemplate: async (_, { input }, { user, res }) => {
