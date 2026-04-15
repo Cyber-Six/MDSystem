@@ -76,7 +76,7 @@ const isApprovalExpired = (requestId) => {
 const MedicalInventory = () => {
   const routerLocation = useLocation();
   const routeSection = routerLocation.state?.section;
-  const { subscribe, refreshInventoryAlerts } = useStaffNotifications();
+  const { refreshInventoryAlerts } = useStaffNotifications();
   const { hasPermission, branch: staffBranch } = usePermissions();
   const [activeSection, setActiveSection] = useState(() => {
     if (isPersistableInventorySection(routeSection)) return routeSection;
@@ -146,6 +146,8 @@ const MedicalInventory = () => {
   const [successModalData, setSuccessModalData] = useState({ title: 'Success', message: '' });
   const hasLoadedRequestsRef = useRef(false);
   const patientNameCacheRef = useRef({}); // Cache for patient names to avoid redundant API calls
+  const requestsLoadPromiseRef = useRef(null);
+  const lastRequestsLoadAtRef = useRef(0);
 
   useEffect(() => {
     if (!isPersistableInventorySection(routeSection)) return;
@@ -507,9 +509,22 @@ const MedicalInventory = () => {
 
   // Auto-load all medicine requests on mount (all statuses)
   // Fetches requests for each allowed location to prevent unauthorized errors
-  const loadAllMedicineRequests = useCallback(async () => {
+  const loadAllMedicineRequests = useCallback(async (options = {}) => {
+    const { force = false } = options;
+
+    // Prevent burst reloads from multiple triggers (socket + UI actions).
+    if (requestsLoadPromiseRef.current) {
+      return requestsLoadPromiseRef.current;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastRequestsLoadAtRef.current < 1200) {
+      return;
+    }
+
     setIsLoadingRequests(true);
-    try {
+    const loadPromise = (async () => {
+      try {
       // Wait for profile to load
       if (allowedLocationsList.length === 0) {
         console.log('⏳ Waiting for profile - skipping medicine requests fetch');
@@ -569,22 +584,28 @@ const MedicalInventory = () => {
         setMedicineRequestStatus(id, 'Cancelled', 'Auto-cancelled: not picked up within 7 days')
           .catch(err => console.warn('Auto-cancel backend call failed for request', id, err));
       });
-    } catch (err) {
-      setError(err.message || 'Failed to load medicine requests.');
-    } finally {
-      setIsLoadingRequests(false);
-    }
+      } catch (err) {
+        setError(err.message || 'Failed to load medicine requests.');
+      } finally {
+        setIsLoadingRequests(false);
+        lastRequestsLoadAtRef.current = Date.now();
+        requestsLoadPromiseRef.current = null;
+      }
+    })();
+
+    requestsLoadPromiseRef.current = loadPromise;
+    return loadPromise;
   }, [allowedLocationsList, enrichRequestItems, enrichRequestsWithPatientNames]);
 
   const refreshInventoryAndQueue = useCallback(async () => {
-    await Promise.all([loadItems(), loadAllMedicineRequests()]);
+    await Promise.all([loadItems(), loadAllMedicineRequests({ force: true })]);
     refreshInventoryAlerts();
   }, [loadItems, loadAllMedicineRequests, refreshInventoryAlerts]);
 
   useEffect(() => {
     if (itemsLoading || hasLoadedRequestsRef.current) return;
     hasLoadedRequestsRef.current = true;
-    loadAllMedicineRequests();
+    loadAllMedicineRequests({ force: true });
   }, [itemsLoading, loadAllMedicineRequests]);
 
   // Handle new medicine request from patient (real-time via socket)
@@ -617,7 +638,7 @@ const MedicalInventory = () => {
     } catch (err) {
       console.error('Failed to load new request details:', err);
       // Still reload all requests as fallback
-      loadAllMedicineRequests();
+      loadAllMedicineRequests({ force: true });
     }
   }, [enrichRequestItems, enrichRequestsWithPatientNames, loadAllMedicineRequests]);
 
@@ -652,12 +673,6 @@ const MedicalInventory = () => {
     null,                         // onRequestUpdate (not used yet)
     handleRequestStatusChange    // onRequestStatusChange — keeps reservation logic in sync
   );
-
-  // Reload dispense queue when a patient submits a new medicine request via socket
-  useEffect(() => {
-    const unsub = subscribe('medicine:request:new', loadAllMedicineRequests);
-    return unsub;
-  }, [subscribe, loadAllMedicineRequests]);
 
   // Load real patient medicine requests into the dispense queue
   const loadPatientMedicineRequests = async (patientId) => {
@@ -1191,7 +1206,7 @@ const MedicalInventory = () => {
                   location={directReleaseLocation}
                   allRequests={requests}
                   onRelease={async (result) => {
-                    await refreshInventoryAndQueue();
+                    await refreshInventoryItems();
                     recordTransaction({
                       action: 'direct_release',
                       itemId: null,
