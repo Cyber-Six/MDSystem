@@ -71,7 +71,11 @@ export const UpdateRecordStackNavigator: React.FC = () => {
       <Stack.Screen
         name="InitialRecordForm"
         component={InitialRecordFormScreen}
-        options={{ headerShown: false }}
+        options={({ route }) => ({
+          ...sharedOptions,
+          title: route.params?.isUpdate ? 'Update Record' : 'Record Form',
+          headerRight: () => <HeaderMenuButton isDark={isDark} />,
+        })}
       />
     </Stack.Navigator>
   );

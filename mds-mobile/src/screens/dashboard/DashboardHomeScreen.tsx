@@ -12,8 +12,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
-  Dimensions,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,9 +23,9 @@ import { fetchActiveAnnouncements, Announcement } from '../../services/announcem
 import { getAppointmentStatus, ACTIVE_STATUSES } from '../../services/appointment-service';
 import { getCurrentActiveTicket } from '../../services/health-chat-service';
 import { useRecordStatus } from '../../context/RecordStatusContext';
-import type { RecordStatus } from '../../services/emr-service';
 import PendingRecordGate from '../../components/PendingRecordGate';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
+import AnnouncementDetailModal from '../../components/announcements/AnnouncementDetailModal';
 
 interface DashboardHomeScreenProps {
   navigation: any;
@@ -102,12 +100,15 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
   // Real data state
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [announcementIndex, setAnnouncementIndex] = useState(0);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [isAnnouncementTransitioning, setIsAnnouncementTransitioning] = useState(false);
   const [appointmentStatus, setAppointmentStatus] = useState<string | null>(null);
   const [chatStatus, setChatStatus] = useState<string | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
 
   // Auto-rotate announcement carousel
   const carouselTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const carouselTransitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -147,16 +148,58 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
     loadDashboardData();
   }, [loadDashboardData]);
 
+  const goToAnnouncement = useCallback((indexOrUpdater: React.SetStateAction<number>) => {
+    if (announcements.length === 0) {
+      return;
+    }
+
+    setIsAnnouncementTransitioning(true);
+
+    if (carouselTransitionTimer.current) {
+      clearTimeout(carouselTransitionTimer.current);
+      carouselTransitionTimer.current = null;
+    }
+
+    carouselTransitionTimer.current = setTimeout(() => {
+      setAnnouncementIndex((prev) => {
+        const nextIndex = typeof indexOrUpdater === 'function'
+          ? (indexOrUpdater as (value: number) => number)(prev)
+          : indexOrUpdater;
+
+        return ((nextIndex % announcements.length) + announcements.length) % announcements.length;
+      });
+      setIsAnnouncementTransitioning(false);
+      carouselTransitionTimer.current = null;
+    }, 180);
+  }, [announcements.length]);
+
+  useEffect(() => {
+    setAnnouncementIndex((prev) => {
+      if (announcements.length === 0) return 0;
+      return Math.min(prev, announcements.length - 1);
+    });
+  }, [announcements.length]);
+
   // Auto-rotate announcements
   useEffect(() => {
     if (announcements.length <= 1) return;
+
     carouselTimer.current = setInterval(() => {
-      setAnnouncementIndex((prev) => (prev + 1) % announcements.length);
+      goToAnnouncement((prev) => prev + 1);
     }, 5000);
+
     return () => {
       if (carouselTimer.current) clearInterval(carouselTimer.current);
     };
-  }, [announcements.length]);
+  }, [announcements.length, goToAnnouncement]);
+
+  useEffect(() => {
+    return () => {
+      if (carouselTransitionTimer.current) {
+        clearTimeout(carouselTransitionTimer.current);
+      }
+    };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -282,93 +325,6 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
             </View>
             <Text style={{ color: colors.primary[500], fontSize: 20, fontWeight: '600' }}>›</Text>
           </TouchableOpacity>
-        )}
-
-        {/* Announcements Carousel */}
-        {announcements.length > 0 && (
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-          >
-            <View style={styles.cardHeaderRow}>
-              <Text
-                style={[
-                  styles.cardTitle,
-                  { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                ]}
-              >
-                Announcements
-              </Text>
-              <Text
-                style={[
-                  styles.carouselCounter,
-                  { color: isDark ? colors.neutral[500] : colors.neutral[400] },
-                ]}
-              >
-                {announcementIndex + 1}/{announcements.length}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.announcementCard,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(241,197,38,0.06)'
-                    : 'rgba(241,197,38,0.08)',
-                  borderColor: isDark
-                    ? 'rgba(241,197,38,0.15)'
-                    : 'rgba(241,197,38,0.2)',
-                },
-              ]}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
-              <View style={styles.announcementTextContainer}>
-                <Text
-                  style={[
-                    styles.announcementTitle,
-                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {announcements[announcementIndex]?.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.announcementDesc,
-                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {announcements[announcementIndex]?.description}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            {/* Dot indicators */}
-            {announcements.length > 1 && (
-              <View style={styles.dotRow}>
-                {announcements.map((_, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    onPress={() => setAnnouncementIndex(i)}
-                    style={[
-                      styles.dot,
-                      {
-                        backgroundColor:
-                          i === announcementIndex
-                            ? colors.primary[500]
-                            : isDark
-                              ? colors.neutral[700]
-                              : colors.neutral[300],
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
         )}
 
         {/* Quick Actions */}
@@ -618,6 +574,148 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
           </View>
         )}
 
+        {/* Announcements Carousel */}
+        {announcements.length > 0 && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+          >
+            <View style={styles.cardHeaderRow}>
+              <Text
+                style={[
+                  styles.cardTitle,
+                  { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                ]}
+              >
+                Announcements
+              </Text>
+              <Text
+                style={[
+                  styles.carouselCounter,
+                  { color: isDark ? colors.neutral[500] : colors.neutral[400] },
+                ]}
+              >
+                {announcementIndex + 1}/{announcements.length}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.announcementCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(241,197,38,0.06)'
+                    : 'rgba(241,197,38,0.08)',
+                  borderColor: isDark
+                    ? 'rgba(241,197,38,0.15)'
+                    : 'rgba(241,197,38,0.2)',
+                },
+                isAnnouncementTransitioning && styles.announcementCardTransitioning,
+              ]}
+              activeOpacity={0.85}
+              onPress={() => setSelectedAnnouncement(announcements[announcementIndex] ?? null)}
+            >
+              <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
+              <View style={styles.announcementTextContainer}>
+                <Text
+                  style={[
+                    styles.announcementTitle,
+                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {announcements[announcementIndex]?.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.announcementDesc,
+                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {announcements[announcementIndex]?.description}
+                </Text>
+                <Text
+                  style={[
+                    styles.announcementReadMore,
+                    { color: isDark ? colors.primary[400] : colors.primary[500] },
+                  ]}
+                >
+                  Tap to view full details
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {announcements.length > 1 && (
+              <View style={styles.carouselNavRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.carouselNavButton,
+                    {
+                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
+                    },
+                  ]}
+                  onPress={() => goToAnnouncement((prev) => prev - 1)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={16}
+                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
+                  />
+                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Prev</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.carouselNavButton,
+                    {
+                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
+                    },
+                  ]}
+                  onPress={() => goToAnnouncement((prev) => prev + 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Next</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Dot indicators */}
+            {announcements.length > 1 && (
+              <View style={styles.dotRow}>
+                {announcements.map((item, i) => (
+                  <TouchableOpacity
+                    key={item.id ?? `${i}`}
+                    onPress={() => goToAnnouncement(i)}
+                    style={[
+                      styles.dot,
+                      {
+                        width: i === announcementIndex ? 18 : 7,
+                        backgroundColor:
+                          i === announcementIndex
+                            ? colors.primary[500]
+                            : isDark
+                              ? colors.neutral[700]
+                              : colors.neutral[300],
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Go to announcement ${i + 1}`}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* App Info */}
         <View style={styles.footer}>
           <Text
@@ -632,6 +730,12 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
           </Text>
         </View>
       </ScrollView>
+
+      <AnnouncementDetailModal
+        visible={Boolean(selectedAnnouncement)}
+        announcement={selectedAnnouncement}
+        onClose={() => setSelectedAnnouncement(null)}
+      />
     </SafeAreaView>
     </PendingRecordGate>
   );
@@ -753,17 +857,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
   },
-  announcementIcon: { marginRight: 2 },
+  announcementCardTransitioning: { opacity: 0.45 },
   announcementTextContainer: { flex: 1 },
   announcementTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
   announcementDesc: { fontSize: 12, lineHeight: 17 },
+  announcementReadMore: { fontSize: 11, fontWeight: '600', marginTop: 7 },
+  carouselNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  carouselNavButton: {
+    minWidth: 86,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  carouselNavText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   dotRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 6,
     marginTop: 12,
   },
-  dot: { width: 7, height: 7, borderRadius: 4 },
+  dot: { height: 7, borderRadius: 4 },
   // Status rows
   statusRow: {
     flexDirection: 'row',
