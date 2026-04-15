@@ -56,10 +56,16 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
     fetchAnnouncementById(announcement.id)
       .then((fullAnnouncement) => {
         if (cancelled || !fullAnnouncement) return;
-        setAnnouncementDetail((prev) => ({
-          ...prev,
-          ...fullAnnouncement,
-        }));
+        setAnnouncementDetail((prev) => {
+          const previous = prev ?? announcement;
+          return {
+            ...previous,
+            ...fullAnnouncement,
+            // Preserve preview media/details when detail payload omits them.
+            pubmat: fullAnnouncement.pubmat ?? previous.pubmat,
+            description: fullAnnouncement.description ?? previous.description,
+          };
+        });
       })
       .catch(() => {
         // Keep currently available announcement data when detail fetch fails.
