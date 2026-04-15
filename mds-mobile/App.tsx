@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, Text, LogBox, StyleSheet } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { ThemeProvider, useTheme, colors } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -155,19 +156,21 @@ const AppContent: React.FC = () => {
 // Root app component with providers
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <SettingsProvider>
-            <RecordStatusProvider>
-              <BannerProvider>
-                <AppContent />
-              </BannerProvider>
-            </RecordStatusProvider>
-          </SettingsProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <SettingsProvider>
+              <RecordStatusProvider>
+                <BannerProvider>
+                  <AppContent />
+                </BannerProvider>
+              </RecordStatusProvider>
+            </SettingsProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

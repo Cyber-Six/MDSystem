@@ -41,6 +41,7 @@ export const registerSessionExpiredCallback = (cb: SessionExpiredCallback): void
 // React Native has no proxy — always use the absolute backend URL.
 // Reads from EXPO_PUBLIC_API_URL in .env; falls back to production URL.
 const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://www.mdsystemtip.space';
+const IS_DEV_RUNTIME = (globalThis as any).__DEV__ === true;
 
 /**
  * Returns the absolute backend URL.
@@ -88,6 +89,7 @@ export const axiosRequest: AxiosInstance = createAxiosRequestHandler({
   tokenService,
   bannerConfig,
   onShowBanner: (banner: any) => bannerService.showBanner(banner),
+  requestLoggerForceEnabled: IS_DEV_RUNTIME,
 });
 
 // Export convenience methods
