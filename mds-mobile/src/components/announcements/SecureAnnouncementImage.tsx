@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -71,6 +71,25 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
   const { isDark } = useTheme();
   const [source, setSource] = useState<ImageSourcePropType | null>(null);
   const [hasError, setHasError] = useState(false);
+  const [didTryRemoteFallback, setDidTryRemoteFallback] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const applyRemoteFallbackSource = useCallback(async () => {
+    const token = await Promise.resolve(TokenStorage.getAccessToken?.());
+    const uri = `${getApiBaseUrl()}/media/record/announcement/${pubmat}`;
+
+    if (!isMountedRef.current) return;
+
+    setSource(token ? { uri, headers: { Authorization: `Bearer ${token}` } } : { uri });
+    setHasError(false);
+  }, [pubmat]);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +97,7 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
     const loadImage = async () => {
       setSource(null);
       setHasError(false);
+      setDidTryRemoteFallback(false);
 
       try {
         const response = await axiosRequest.get(`/media/record/announcement/${pubmat}`, {
@@ -91,15 +111,9 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
         setSource({ uri: `data:${mimeType};base64,${base64}` });
       } catch {
         try {
-          const token = await Promise.resolve(TokenStorage.getAccessToken?.());
+          setDidTryRemoteFallback(true);
+          await applyRemoteFallbackSource();
           if (cancelled) return;
-
-          const uri = `${getApiBaseUrl()}/media/record/announcement/${pubmat}`;
-          if (token) {
-            setSource({ uri, headers: { Authorization: `Bearer ${token}` } });
-          } else {
-            setSource({ uri });
-          }
         } catch {
           if (!cancelled) {
             setHasError(true);
@@ -147,6 +161,17 @@ export const SecureAnnouncementImage: React.FC<SecureAnnouncementImageProps> = (
       style={style}
       resizeMode={resizeMode}
       onError={() => {
+        if (!didTryRemoteFallback) {
+          setDidTryRemoteFallback(true);
+          void applyRemoteFallbackSource().catch(() => {
+            if (isMountedRef.current) {
+              setHasError(true);
+              setSource(null);
+            }
+          });
+          return;
+        }
+
         setHasError(true);
         setSource(null);
       }}

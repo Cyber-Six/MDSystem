@@ -49,6 +49,32 @@ const HeaderMenuButton: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   );
 };
 
+const HeaderBackButton: React.FC<{ isDark: boolean }> = ({ isDark }) => {
+  const navigation = useNavigation<any>();
+
+  return (
+    <TouchableOpacity
+      style={styles.headerBackButton}
+      onPress={() => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return;
+        }
+        navigation.navigate('MoreMenu');
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="Go back"
+      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+    >
+      <Ionicons
+        name="chevron-back"
+        size={22}
+        color={isDark ? colors.neutral[100] : colors.secondary[900]}
+      />
+    </TouchableOpacity>
+  );
+};
+
 export const MoreStackNavigator: React.FC = () => {
   const { isDark } = useTheme();
 
@@ -60,6 +86,7 @@ export const MoreStackNavigator: React.FC = () => {
     },
     headerTintColor: isDark ? colors.neutral[100] : colors.secondary[900],
     headerShadowVisible: false,
+    headerLeft: () => <HeaderBackButton isDark={isDark} />,
     headerRight: () => <HeaderMenuButton isDark={isDark} />,
   };
 
@@ -88,6 +115,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 4,
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 0,
   },
 });
 

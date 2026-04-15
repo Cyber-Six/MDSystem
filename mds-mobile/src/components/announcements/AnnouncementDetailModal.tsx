@@ -1,16 +1,18 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
-import type { Announcement } from '../../services/announcement-service';
+import { Announcement, fetchAnnouncementById } from '../../services/announcement-service';
 import SecureAnnouncementImage from './SecureAnnouncementImage';
 
 const formatDate = (iso: string): string => {
@@ -37,13 +39,59 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
   onClose,
 }) => {
   const { isDark } = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
+  const [announcementDetail, setAnnouncementDetail] = useState<Announcement | null>(announcement);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  useEffect(() => {
+    setAnnouncementDetail(announcement);
+  }, [announcement]);
+
+  useEffect(() => {
+    if (!visible || !announcement?.id) return;
+
+    let cancelled = false;
+    setIsLoadingDetail(true);
+
+    fetchAnnouncementById(announcement.id)
+      .then((fullAnnouncement) => {
+        if (cancelled || !fullAnnouncement) return;
+        setAnnouncementDetail((prev) => ({
+          ...prev,
+          ...fullAnnouncement,
+        }));
+      })
+      .catch(() => {
+        // Keep currently available announcement data when detail fetch fails.
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingDetail(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, announcement?.id]);
 
   if (!announcement) return null;
 
-  const bg = isDark ? colors.neutral[800] : '#FFFFFF';
+  const activeAnnouncement = announcementDetail ?? announcement;
+  const computedCardStyle = useMemo(
+    () => ({
+      backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+      borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+      maxHeight: windowHeight * 0.88,
+      minHeight: Math.min(windowHeight * 0.55, 380),
+    }),
+    [isDark, windowHeight]
+  );
+
   const titleColor = isDark ? colors.neutral[100] : colors.secondary[900];
   const textColor = isDark ? colors.neutral[300] : colors.neutral[700];
   const borderColor = isDark ? colors.neutral[700] : colors.neutral[200];
+  const backButtonColor = isDark ? colors.neutral[300] : colors.secondary[800];
 
   return (
     <Modal
@@ -55,30 +103,42 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        <View style={[styles.modalCard, { backgroundColor: bg, borderColor }]}>
+        <View style={[styles.modalCard, computedCardStyle]}>
           <View style={[styles.header, { borderBottomColor: borderColor }]}>
-            <View style={styles.headerTextWrap}>
-              <Text style={[styles.title, { color: titleColor }]} numberOfLines={2}>
-                {announcement.label || 'Announcement'}
-              </Text>
-              <Text style={[styles.date, { color: colors.neutral[500] }]}>
-                Posted {formatDate(announcement.created_at)}
-              </Text>
+            <View style={styles.headerTopRow}>
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.backButton}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <Ionicons name="chevron-back" size={18} color={backButtonColor} />
+                <Text style={[styles.backButtonText, { color: backButtonColor }]}>Back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.iconClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close announcement details"
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={isDark ? colors.neutral[300] : colors.neutral[500]}
+                />
+              </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.iconClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close announcement details"
-              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-            >
-              <Ionicons
-                name="close"
-                size={22}
-                color={isDark ? colors.neutral[300] : colors.neutral[500]}
-              />
-            </TouchableOpacity>
+            <View style={styles.headerTextWrap}>
+              <Text style={[styles.title, { color: titleColor }]} numberOfLines={2}>
+                {activeAnnouncement.label || 'Announcement'}
+              </Text>
+              <Text style={[styles.date, { color: colors.neutral[500] }]}> 
+                Posted {formatDate(activeAnnouncement.created_at)}
+              </Text>
+            </View>
           </View>
 
           <ScrollView
@@ -86,13 +146,19 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
             contentContainerStyle={styles.bodyContent}
             showsVerticalScrollIndicator={false}
           >
+            {isLoadingDetail && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={colors.primary[500]} />
+              </View>
+            )}
+
             <Text style={[styles.bodyText, { color: textColor }]}>
-              {announcement.description || 'No description available.'}
+              {activeAnnouncement.description || 'No description available.'}
             </Text>
 
-            {announcement.pubmat ? (
+            {activeAnnouncement.pubmat ? (
               <SecureAnnouncementImage
-                pubmat={announcement.pubmat}
+                pubmat={activeAnnouncement.pubmat}
                 style={styles.image}
                 resizeMode="contain"
               />
@@ -130,14 +196,27 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
     borderBottomWidth: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
-    gap: 12,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 4,
+    paddingRight: 8,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   headerTextWrap: {
     flex: 1,
@@ -165,6 +244,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 20,
+  },
+  loadingContainer: {
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   bodyText: {
     fontSize: 15,
