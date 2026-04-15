@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -10,9 +9,9 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { axiosRequest } from '../../core';
 import { useTheme, colors } from '../../context/ThemeContext';
 import type { Announcement } from '../../services/announcement-service';
+import SecureAnnouncementImage from './SecureAnnouncementImage';
 
 const formatDate = (iso: string): string => {
   try {
@@ -25,42 +24,6 @@ const formatDate = (iso: string): string => {
     return iso;
   }
 };
-
-function SecureAnnouncementImage({ pubmat }: { pubmat: string }) {
-  const [uri, setUri] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    axiosRequest
-      .get(`/media/record/announcement/${pubmat}`, { responseType: 'arraybuffer' })
-      .then((res) => {
-        if (cancelled) return;
-
-        const uint8 = new Uint8Array(res.data as ArrayBuffer);
-        let binary = '';
-        for (let i = 0; i < uint8.length; i += 1) binary += String.fromCharCode(uint8[i]);
-        setUri(`data:image/jpeg;base64,${btoa(binary)}`);
-      })
-      .catch(() => {
-        setUri(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [pubmat]);
-
-  if (!uri) return null;
-
-  return (
-    <Image
-      source={{ uri }}
-      style={styles.image}
-      resizeMode="contain"
-    />
-  );
-}
 
 interface AnnouncementDetailModalProps {
   visible: boolean;
@@ -128,7 +91,11 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
             </Text>
 
             {announcement.pubmat ? (
-              <SecureAnnouncementImage pubmat={announcement.pubmat} />
+              <SecureAnnouncementImage
+                pubmat={announcement.pubmat}
+                style={styles.image}
+                resizeMode="contain"
+              />
             ) : null}
           </ScrollView>
 

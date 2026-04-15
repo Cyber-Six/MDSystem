@@ -26,6 +26,7 @@ import { useRecordStatus } from '../../context/RecordStatusContext';
 import PendingRecordGate from '../../components/PendingRecordGate';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import AnnouncementDetailModal from '../../components/announcements/AnnouncementDetailModal';
+import SecureAnnouncementImage from '../../components/announcements/SecureAnnouncementImage';
 
 interface DashboardHomeScreenProps {
   navigation: any;
@@ -370,7 +371,22 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               activeOpacity={0.85}
               onPress={() => setSelectedAnnouncement(announcements[announcementIndex] ?? null)}
             >
-              <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
+              {announcements[announcementIndex]?.pubmat ? (
+                <SecureAnnouncementImage
+                  pubmat={announcements[announcementIndex].pubmat as string}
+                  style={styles.announcementThumb}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.announcementThumbFallback,
+                    { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] },
+                  ]}
+                >
+                  <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
+                </View>
+              )}
               <View style={styles.announcementTextContainer}>
                 <Text
                   style={[
@@ -858,6 +874,19 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   announcementCardTransitioning: { opacity: 0.45 },
+  announcementThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  announcementThumbFallback: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   announcementTextContainer: { flex: 1 },
   announcementTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
   announcementDesc: { fontSize: 12, lineHeight: 17 },

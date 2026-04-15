@@ -21,6 +21,7 @@ import { Announcement, fetchActiveAnnouncements } from '../../services/announcem
 import { useTheme, colors } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import AnnouncementDetailModal from '../../components/announcements/AnnouncementDetailModal';
+import SecureAnnouncementImage from '../../components/announcements/SecureAnnouncementImage';
 
 const formatDate = (iso: string): string => {
   try {
@@ -118,6 +119,13 @@ export const AnnouncementsScreen: React.FC<AnnouncementsScreenProps> = () => {
             <Text style={[styles.cardBody, { color: textSecondary }]} numberOfLines={3}>
               {item.description}
             </Text>
+            {item.pubmat ? (
+              <SecureAnnouncementImage
+                pubmat={item.pubmat}
+                style={styles.cardImage}
+                resizeMode="cover"
+              />
+            ) : null}
             <Text style={[styles.readMore, { color: colors.primary[500] }]}>Read more →</Text>
           </TouchableOpacity>
         ))}
@@ -149,6 +157,12 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
   cardDate: { fontSize: 12 },
   cardBody: { fontSize: 14, lineHeight: 20 },
+  cardImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
   readMore: { fontSize: 13, fontWeight: '500' },
 });
 
