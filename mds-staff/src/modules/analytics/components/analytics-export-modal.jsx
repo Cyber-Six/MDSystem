@@ -35,7 +35,7 @@ const FORMAT_OPTIONS = [
 ];
 
 const SCOPE_OPTIONS = [
-  { value: 'full-report', label: 'Full Report', description: 'All 15 metrics' },
+  { value: 'full-report', label: 'Full Report', description: `All ${Object.keys(CHART_TYPE_MAP).length} metrics` },
   ...Object.entries(QUERY_CATEGORIES).map(([key, cat]) => ({
     value: key,
     label: cat.label,
@@ -61,6 +61,17 @@ const METRIC_LABELS = {
   'appointments-by-category': 'Appointments by Category',
   'appointments-by-status': 'Appointments by Status',
   'appointments-by-session': 'Appointments by Session',
+  'appointments-accommodated-trends': 'Appointments Accommodated Trends',
+  'female-reproductive-health': 'Female Reproductive Health',
+  'lifestyle-statistics': 'Lifestyle Statistics (Mean / Median / Mode)',
+  'oral-findings-percentages': 'Oral Finding Percentages',
+  'vital-signs-box-plot': 'Vital Signs Box Plot',
+  'patient-credential-status': 'Patient Credential Status',
+  'patient-population-by-branch': 'Patient Population by Branch',
+  'most-consumed-medicine': 'Most Consumed Medicine',
+  'most-consumed-supply': 'Most Consumed Supply',
+  'inventory-consumption-trends': 'Inventory Consumption Trends',
+  'inventory-report-summary': 'Inventory Report Summary',
 };
 
 const ALL_METRIC_KEYS = Object.keys(CHART_TYPE_MAP);

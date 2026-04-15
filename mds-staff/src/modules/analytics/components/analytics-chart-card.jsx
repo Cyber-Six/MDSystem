@@ -1,5 +1,11 @@
 import React, { memo, useState, useCallback } from 'react';
-import { AnalyticsBarChart, AnalyticsLineChart, AnalyticsPieChart } from './analytics-charts';
+import {
+  AnalyticsBarChart,
+  AnalyticsLineChart,
+  AnalyticsStackedAreaChart,
+  AnalyticsBoxPlotChart,
+  AnalyticsPieChart,
+} from './analytics-charts';
 import AnalyticsHeatmap from './analytics-heatmap';
 import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
 
@@ -8,7 +14,7 @@ import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
  * Consistent card wrapper for each analytics chart with title, total, and loading states.
  */
 const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, branch, startDate, endDate, groupBy }) => {
-  const chartType = CHART_TYPE_MAP[dataType] || 'bar';
+  const chartType = CHART_TYPE_MAP[dataType] || data?.data?.chartVariant || 'bar';
   const [exporting, setExporting] = useState(false);
 
   const handleExport = useCallback(async () => {
@@ -30,6 +36,20 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
         value: data.data.values[i] || 0,
       }))
     : [];
+
+  // Transform multi-series payload -> [{ name, <seriesName>: value, ... }]
+  const stackedAreaData = data?.data?.labels && Array.isArray(data?.data?.series)
+    ? data.data.labels.map((label, i) => {
+        const row = { name: label };
+        data.data.series.forEach((entry) => {
+          row[entry.name] = entry.values?.[i] || 0;
+        });
+        return row;
+      })
+    : [];
+
+  const stackedAreaSeries = Array.isArray(data?.data?.series) ? data.data.series : [];
+  const boxPlotData = Array.isArray(data?.data?.boxPlot) ? data.data.boxPlot : [];
 
   const total = data?.data?.total ?? 0;
 
@@ -83,6 +103,10 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
           <AnalyticsBarChart data={chartData} dark={dark} />
         ) : chartType === 'line' ? (
           <AnalyticsLineChart data={chartData} dark={dark} />
+        ) : chartType === 'stacked-area' ? (
+          <AnalyticsStackedAreaChart data={stackedAreaData} series={stackedAreaSeries} dark={dark} />
+        ) : chartType === 'box-plot' ? (
+          <AnalyticsBoxPlotChart data={boxPlotData} />
         ) : chartType === 'heatmap' || chartType === 'grouped-bar' ? (
           <AnalyticsHeatmap data={data?.data} />
         ) : (

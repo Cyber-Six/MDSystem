@@ -29,6 +29,19 @@ const EXPORT_META = {
   'appointments-by-category': { label: 'Appointments by Category',    xAxis: 'Category',      yAxis: 'Count',   chartType: 'pie' },
   'appointments-by-status':   { label: 'Appointments by Status',      xAxis: 'Status',        yAxis: 'Count',   chartType: 'doughnut' },
   'appointments-by-session':  { label: 'Appointments by Session',     xAxis: 'Session',       yAxis: 'Count',   chartType: 'pie' },
+  'appointments-accommodated-trends': { label: 'Appointments Accommodated Trends', xAxis: 'Period', yAxis: 'Count', chartType: 'line', hasSeries: true },
+
+  // EMR / General / Inventory
+  'female-reproductive-health': { label: 'Female Reproductive Health', xAxis: 'Metric', yAxis: 'Count', chartType: 'doughnut' },
+  'lifestyle-statistics':       { label: 'Lifestyle Statistics',       xAxis: 'Metric', yAxis: 'Value', chartType: 'bar', hasSeries: true },
+  'oral-findings-percentages':  { label: 'Oral Finding Percentages',   xAxis: 'Finding', yAxis: 'Percentage', chartType: 'bar' },
+  'vital-signs-box-plot':       { label: 'Vital Signs Box Plot',       xAxis: 'Vital', yAxis: 'Median', chartType: 'bar' },
+  'patient-credential-status':  { label: 'Patient Credential Status',  xAxis: 'Status', yAxis: 'Patients', chartType: 'pie' },
+  'patient-population-by-branch': { label: 'Patient Population by Branch', xAxis: 'Branch', yAxis: 'Patients', chartType: 'bar' },
+  'most-consumed-medicine':     { label: 'Most Consumed Medicine',     xAxis: 'Medicine', yAxis: 'Units', chartType: 'bar' },
+  'most-consumed-supply':       { label: 'Most Consumed Supply',       xAxis: 'Supply', yAxis: 'Units', chartType: 'bar' },
+  'inventory-consumption-trends': { label: 'Inventory Consumption Trends', xAxis: 'Period', yAxis: 'Units', chartType: 'line', hasSeries: true },
+  'inventory-report-summary':   { label: 'Inventory Report Summary',   xAxis: 'Metric', yAxis: 'Value', chartType: 'bar' },
 
   // Demographics
   'patients-by-sex':              { label: 'Patients by Sex',                xAxis: 'Sex',             yAxis: 'Patients', chartType: 'bar' },
@@ -66,13 +79,13 @@ const EXPORT_PRESETS = {
   },
   'vitals': {
     label: 'Vital Signs Report',
-    description: 'BMI and blood pressure trend analysis',
-    dataTypes: ['bmi-trends', 'blood-pressure-trends'],
+    description: 'BMI, blood pressure, and vital-sign distribution analysis',
+    dataTypes: ['bmi-trends', 'blood-pressure-trends', 'vital-signs-box-plot'],
   },
   'appointments': {
     label: 'Appointments Report',
-    description: 'Appointment category, status, and session data',
-    dataTypes: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session'],
+    description: 'Appointment category, status, session, and accommodated trend data',
+    dataTypes: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session', 'appointments-accommodated-trends'],
   },
   'clinical': {
     label: 'Clinical Data Report',
@@ -81,8 +94,23 @@ const EXPORT_PRESETS = {
   },
   'lifestyle': {
     label: 'Lifestyle & Allergies Report',
-    description: 'Lifestyle risk factors and allergy data',
-    dataTypes: ['lifestyle-risks', 'allergy-by-type', 'allergy-by-severity'],
+    description: 'Lifestyle prevalence, statistics, and allergy data',
+    dataTypes: ['lifestyle-risks', 'lifestyle-statistics', 'allergy-by-type', 'allergy-by-severity'],
+  },
+  'emr': {
+    label: 'EMR Report',
+    description: 'Female reproductive, oral findings, lifestyle statistics, and vital-sign distribution analytics',
+    dataTypes: ['female-reproductive-health', 'lifestyle-statistics', 'oral-findings-percentages', 'vital-signs-box-plot'],
+  },
+  'general': {
+    label: 'General Population Report',
+    description: 'Credential status and branch population comparison',
+    dataTypes: ['patient-credential-status', 'patient-population-by-branch'],
+  },
+  'inventory': {
+    label: 'Inventory Report',
+    description: 'Consumption trends, top consumed items, and stock summary',
+    dataTypes: ['most-consumed-medicine', 'most-consumed-supply', 'inventory-consumption-trends', 'inventory-report-summary'],
   },
   'demographics': {
     label: 'Demographics Report',
@@ -361,7 +389,13 @@ async function generateExcel(data, meta) {
  */
 async function generatePDF(data, meta) {
   const sections = [];
-  const isTrendType = (dt) => ['consultation-trends', 'bmi-trends', 'blood-pressure-trends'].includes(dt);
+  const isTrendType = (dt) => [
+    'consultation-trends',
+    'bmi-trends',
+    'blood-pressure-trends',
+    'inventory-consumption-trends',
+    'appointments-accommodated-trends',
+  ].includes(dt);
 
   for (const [dataType, result] of Object.entries(data)) {
     const exportMeta = EXPORT_META[dataType];
@@ -447,7 +481,13 @@ async function generateSingleMetricPDF(dataType, result, meta) {
   const exportMeta = EXPORT_META[dataType];
   if (!exportMeta) throw new Error(`Unknown export type: ${dataType}`);
 
-  const isTrend = ['consultation-trends', 'bmi-trends', 'blood-pressure-trends'].includes(dataType);
+  const isTrend = [
+    'consultation-trends',
+    'bmi-trends',
+    'blood-pressure-trends',
+    'inventory-consumption-trends',
+    'appointments-accommodated-trends',
+  ].includes(dataType);
   const isBP = dataType === 'blood-pressure-trends';
   const groupBy = result.groupBy || meta.groupBy || 'monthly';
   const groupLabel = groupBy.charAt(0).toUpperCase() + groupBy.slice(1);

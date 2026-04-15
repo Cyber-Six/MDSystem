@@ -32,6 +32,18 @@ const QUERY_LABELS = {
   'appointments-by-category': 'By Category',
   'appointments-by-status': 'By Status',
   'appointments-by-session': 'By Session',
+  'appointments-accommodated-trends': 'Accommodated Trends',
+  // EMR / General / Inventory
+  'female-reproductive-health': 'Female Reproductive Health',
+  'lifestyle-statistics': 'Lifestyle Statistics',
+  'oral-findings-percentages': 'Oral Finding Percentages',
+  'vital-signs-box-plot': 'Vital Signs Box Plot',
+  'patient-credential-status': 'Credential Status',
+  'patient-population-by-branch': 'Population by Branch',
+  'most-consumed-medicine': 'Most Consumed Medicine',
+  'most-consumed-supply': 'Most Consumed Supply',
+  'inventory-consumption-trends': 'Consumption Trends',
+  'inventory-report-summary': 'Inventory Report',
   // Demographics
   'patients-by-sex': 'Patients by Sex',
   'consultations-by-sex': 'Consultations by Sex',

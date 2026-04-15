@@ -19,11 +19,11 @@ export const QUERY_CATEGORIES = {
   },
   vitals: {
     label: 'Vital Signs',
-    queries: ['bmi-trends', 'blood-pressure-trends'],
+    queries: ['bmi-trends', 'blood-pressure-trends', 'vital-signs-box-plot'],
   },
   appointments: {
     label: 'Appointments',
-    queries: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session'],
+    queries: ['appointments-by-category', 'appointments-by-status', 'appointments-by-session', 'appointments-accommodated-trends'],
   },
   clinical: {
     label: 'Clinical Data',
@@ -31,7 +31,19 @@ export const QUERY_CATEGORIES = {
   },
   lifestyle: {
     label: 'Lifestyle & Allergies',
-    queries: ['lifestyle-risks', 'allergy-by-type', 'allergy-by-severity'],
+    queries: ['lifestyle-risks', 'lifestyle-statistics', 'allergy-by-type', 'allergy-by-severity'],
+  },
+  emr: {
+    label: 'EMR',
+    queries: ['female-reproductive-health', 'oral-findings-percentages', 'vital-signs-box-plot', 'lifestyle-statistics'],
+  },
+  general: {
+    label: 'General',
+    queries: ['patient-credential-status', 'patient-population-by-branch'],
+  },
+  inventory: {
+    label: 'Inventory',
+    queries: ['most-consumed-medicine', 'most-consumed-supply', 'inventory-consumption-trends', 'inventory-report-summary'],
   },
   demographics: {
     label: 'Demographics',
@@ -62,6 +74,18 @@ export const CHART_TYPE_MAP = {
   'appointments-by-category': 'pie',
   'appointments-by-status': 'doughnut',
   'appointments-by-session': 'pie',
+  'appointments-accommodated-trends': 'stacked-area',
+  // EMR / General / Inventory
+  'female-reproductive-health': 'doughnut',
+  'lifestyle-statistics': 'grouped-bar',
+  'oral-findings-percentages': 'bar',
+  'vital-signs-box-plot': 'box-plot',
+  'patient-credential-status': 'pie',
+  'patient-population-by-branch': 'bar',
+  'most-consumed-medicine': 'bar',
+  'most-consumed-supply': 'bar',
+  'inventory-consumption-trends': 'stacked-area',
+  'inventory-report-summary': 'bar',
   // Demographics
   'patients-by-sex': 'bar',
   'consultations-by-sex': 'bar',
@@ -307,10 +331,13 @@ export const EXPORT_PRESETS = {
   'full-report':    { label: 'Full Analytics Report',       description: 'All analytics metrics combined' },
   'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: type, status, trends' },
   'diagnoses':      { label: 'Diagnoses Report',            description: 'Diagnosis metrics: top ICD-10, type distribution' },
-  'vitals':         { label: 'Vital Signs Report',          description: 'BMI and blood pressure trend analysis' },
-  'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and session data' },
+  'vitals':         { label: 'Vital Signs Report',          description: 'BMI, blood pressure, and distribution analysis' },
+  'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and accommodated trends' },
   'clinical':       { label: 'Clinical Data Report',        description: 'Immunization coverage and dental procedures' },
-  'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors and allergy data' },
+  'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors, statistics, and allergy data' },
+  'emr':            { label: 'EMR Report',                  description: 'Reproductive health, oral findings, and vital-sign analytics' },
+  'general':        { label: 'General Population Report',   description: 'Credential status and branch population comparison' },
+  'inventory':      { label: 'Inventory Report',            description: 'Most consumed items, trends, and stock summary' },
   'demographics':   { label: 'Demographics Report',         description: 'Sex, age group, department, and program analytics' },
 };
 

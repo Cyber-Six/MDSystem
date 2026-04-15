@@ -144,6 +144,98 @@ function dateGroupExpr(groupBy, dateColumn) {
   }
 }
 
+/**
+ * Builds a location filter for inventory/appointment entities where branch values
+ * are Manila | QuezonCity | Both but source locations are Arlegui | Casal | QuezonCity.
+ * @param {string} branch
+ * @param {string} alias - table alias that owns a `location` column
+ * @param {number} paramIndex
+ * @returns {{ clause: string, params: any[] }}
+ */
+function inventoryLocationFilter(branch, alias = 'mb', paramIndex = 3) {
+  if (branch === 'Both') return { clause: '', params: [] };
+  if (branch === 'Manila') {
+    return {
+      clause: `AND ${alias}.location = ANY($${paramIndex}::"LocationDesignation"[])`,
+      params: [['Arlegui', 'Casal']],
+    };
+  }
+  return {
+    clause: `AND ${alias}.location = $${paramIndex}::"LocationDesignation"`,
+    params: ['QuezonCity'],
+  };
+}
+
+function toFiniteNumbers(values = []) {
+  return values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+}
+
+function quantile(sortedValues, q) {
+  if (!Array.isArray(sortedValues) || sortedValues.length === 0) return 0;
+  if (sortedValues.length === 1) return sortedValues[0];
+  const position = (sortedValues.length - 1) * q;
+  const base = Math.floor(position);
+  const rest = position - base;
+  const next = sortedValues[base + 1];
+  if (next !== undefined) {
+    return sortedValues[base] + rest * (next - sortedValues[base]);
+  }
+  return sortedValues[base];
+}
+
+function meanValue(values = []) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function medianValue(values = []) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return quantile(sorted, 0.5);
+}
+
+function modeValue(values = []) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  const counts = new Map();
+  for (const value of values) {
+    const key = String(value);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  let bestValue = null;
+  let bestCount = -1;
+  for (const [key, count] of counts.entries()) {
+    const numeric = Number(key);
+    if (!Number.isFinite(numeric)) continue;
+    if (count > bestCount || (count === bestCount && (bestValue === null || numeric < bestValue))) {
+      bestCount = count;
+      bestValue = numeric;
+    }
+  }
+
+  return bestValue ?? 0;
+}
+
+function roundNumber(value, precision = 2) {
+  if (!Number.isFinite(Number(value))) return 0;
+  return Number(Number(value).toFixed(precision));
+}
+
+function buildBoxSummary(values = [], precision = 2) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    min: roundNumber(sorted[0], precision),
+    q1: roundNumber(quantile(sorted, 0.25), precision),
+    median: roundNumber(quantile(sorted, 0.5), precision),
+    q3: roundNumber(quantile(sorted, 0.75), precision),
+    max: roundNumber(sorted[sorted.length - 1], precision),
+    count: sorted.length,
+  };
+}
+
 // ============================================================
 // QUERY FUNCTIONS - Add your custom queries here
 // ============================================================
@@ -525,6 +617,687 @@ async function consultationTrends(branch, startDate, endDate, options = {}) {
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
   return { labels, values, total, groupBy };
+}
+
+// ============================================================
+// EMR / GENERAL / INVENTORY / ADVANCED APPOINTMENT QUERIES
+// ============================================================
+
+/**
+ * Female reproductive health overview from OB-GYN records.
+ */
+async function femaleReproductiveHealth(branch, startDate, endDate, options = {}) {
+  const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT
+      COUNT(*)::int AS total_records,
+      COUNT(*) FILTER (WHERE oh."hasDysmenorrhea" = true)::int AS dysmenorrhea_count,
+      COUNT(*) FILTER (WHERE oh."hasDysmenorrhea" = false)::int AS no_dysmenorrhea_count,
+      COUNT(*) FILTER (WHERE COALESCE(NULLIF(TRIM(oh.notes), ''), NULL) IS NOT NULL)::int AS with_notes_count,
+      COUNT(*) FILTER (
+        WHERE oh."lastMenstrualPeriod" IS NOT NULL
+          AND oh."lastMenstrualPeriod" >= (CURRENT_DATE - INTERVAL '35 days')
+      )::int AS recent_lmp_count
+    FROM "ObGynHistory" oh
+    INNER JOIN "patientUpdateLog" pul ON pul.id = oh.id
+    INNER JOIN "Patients" p ON p.id = pul."patientId"
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE pul.created_at BETWEEN $1 AND $2
+      AND pul.status = 'Approved'
+      AND LOWER(COALESCE(up.sex::text, '')) = 'female'
+      ${bf.clause} ${pf.clause}
+  `, [...baseParams, ...pf.params]);
+
+  const row = result.rows[0] || {};
+  const labels = [
+    'Has Dysmenorrhea',
+    'No Dysmenorrhea',
+    'With Clinical Notes',
+    'Recent Menstrual Period (<=35d)',
+  ];
+  const values = [
+    parseInt(row.dysmenorrhea_count || 0),
+    parseInt(row.no_dysmenorrhea_count || 0),
+    parseInt(row.with_notes_count || 0),
+    parseInt(row.recent_lmp_count || 0),
+  ];
+  const total = parseInt(row.total_records || 0);
+  return { labels, values, total };
+}
+
+/**
+ * Lifestyle statistical summary (mean, median, mode) for core quantitative fields.
+ * Returns grouped-bar-ready matrix data.
+ */
+async function lifestyleStatistics(branch, startDate, endDate, options = {}) {
+  const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT
+      l.smoker,
+      l."numberOfCigarettesPerDay",
+      l."yearsSmoked",
+      l."vapeUser",
+      l."yearsVaping"
+    FROM "Lifestyle" l
+    INNER JOIN "patientUpdateLog" pul ON l.id = pul.id
+    INNER JOIN "Patients" p ON p.id = pul."patientId"
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE pul.created_at BETWEEN $1 AND $2
+      AND pul.status = 'Approved'
+      ${bf.clause} ${pf.clause}
+  `, [...baseParams, ...pf.params]);
+
+  const cigaretteValues = toFiniteNumbers(
+    result.rows
+      .filter((row) => row.smoker === true)
+      .map((row) => row.numberOfCigarettesPerDay)
+  ).filter((value) => value > 0);
+
+  const yearsSmokedValues = toFiniteNumbers(
+    result.rows
+      .filter((row) => row.smoker === true)
+      .map((row) => row.yearsSmoked)
+  ).filter((value) => value > 0);
+
+  const yearsVapingValues = toFiniteNumbers(
+    result.rows
+      .filter((row) => row.vapeUser === true)
+      .map((row) => row.yearsVaping)
+  ).filter((value) => value > 0);
+
+  const labels = ['Cigarettes/Day', 'Years Smoked', 'Years Vaping'];
+  const series = [
+    {
+      name: 'Mean',
+      values: [
+        roundNumber(meanValue(cigaretteValues), 2),
+        roundNumber(meanValue(yearsSmokedValues), 2),
+        roundNumber(meanValue(yearsVapingValues), 2),
+      ],
+    },
+    {
+      name: 'Median',
+      values: [
+        roundNumber(medianValue(cigaretteValues), 2),
+        roundNumber(medianValue(yearsSmokedValues), 2),
+        roundNumber(medianValue(yearsVapingValues), 2),
+      ],
+    },
+    {
+      name: 'Mode',
+      values: [
+        roundNumber(modeValue(cigaretteValues), 2),
+        roundNumber(modeValue(yearsSmokedValues), 2),
+        roundNumber(modeValue(yearsVapingValues), 2),
+      ],
+    },
+  ];
+
+  return {
+    labels,
+    values: series[0].values,
+    series,
+    total: result.rows.length,
+    chartVariant: 'grouped-bar',
+  };
+}
+
+/**
+ * Oral finding prevalence percentages against selected patient population.
+ */
+async function oralFindingsPercentages(branch, startDate, endDate, options = {}) {
+  const bfPopulation = branchFilter(branch, 'up', 1);
+  const basePopParams = [...bfPopulation.params];
+  const pfPopulation = profileFilterClause(options, 'p.id', basePopParams.length + 1);
+
+  const populationResult = await db.query(`
+    SELECT COUNT(DISTINCT p.id)::int AS total_population
+    FROM "Patients" p
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE 1 = 1 ${bfPopulation.clause} ${pfPopulation.clause}
+  `, [...basePopParams, ...pfPopulation.params]);
+
+  const totalPopulation = parseInt(populationResult.rows[0]?.total_population || 0);
+  if (totalPopulation <= 0) {
+    return { labels: [], values: [], rawCounts: [], total: 0 };
+  }
+
+  const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT ofc.name AS finding, COUNT(DISTINCT dr."patientId")::int AS patient_count
+    FROM "DentalRecord" dr
+    INNER JOIN "oralFindingRecord" ofr ON ofr."dentalRecordId" = dr.id
+    INNER JOIN "oralFindingCatalog" ofc ON ofc.id = ofr."oralFindingId"
+    INNER JOIN "Patients" p ON p.id = dr."patientId"
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE dr.created_at BETWEEN $1 AND $2
+      ${bf.clause} ${pf.clause}
+    GROUP BY ofc.name
+    ORDER BY patient_count DESC, ofc.name ASC
+    LIMIT 12
+  `, [...baseParams, ...pf.params]);
+
+  const labels = result.rows.map((row) => row.finding);
+  const rawCounts = result.rows.map((row) => parseInt(row.patient_count));
+  const values = rawCounts.map((count) => roundNumber((count / totalPopulation) * 100, 2));
+  return { labels, values, rawCounts, total: totalPopulation, unit: 'percentage' };
+}
+
+/**
+ * Vital-sign distribution summaries for box-plot rendering.
+ */
+async function vitalSignsBoxPlot(branch, startDate, endDate, options = {}) {
+  const bf = branchFilter(branch);
+  const baseParams = [startDate, endDate, ...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT
+      vs.blood_pressure,
+      vs.heart_rate,
+      vs.temperature,
+      vs.height_cm,
+      vs.weight_kg
+    FROM "VitalSigns" vs
+    INNER JOIN "Patients" p ON vs."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE vs.created_at BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
+  `, [...baseParams, ...pf.params]);
+
+  const systolic = [];
+  const diastolic = [];
+  const heartRate = [];
+  const temperature = [];
+  const bmi = [];
+
+  for (const row of result.rows) {
+    const bp = String(row.blood_pressure || '').match(/^\s*(\d{2,3})\/(\d{2,3})\s*$/);
+    if (bp) {
+      systolic.push(Number(bp[1]));
+      diastolic.push(Number(bp[2]));
+    }
+
+    if (Number.isFinite(Number(row.heart_rate)) && Number(row.heart_rate) > 0) {
+      heartRate.push(Number(row.heart_rate));
+    }
+
+    if (Number.isFinite(Number(row.temperature)) && Number(row.temperature) > 0) {
+      temperature.push(Number(row.temperature));
+    }
+
+    const height = Number(row.height_cm);
+    const weight = Number(row.weight_kg);
+    if (Number.isFinite(height) && Number.isFinite(weight) && height > 0 && weight > 0) {
+      bmi.push(weight / Math.pow(height / 100, 2));
+    }
+  }
+
+  const summaries = [
+    { name: 'Systolic BP', summary: buildBoxSummary(toFiniteNumbers(systolic), 1) },
+    { name: 'Diastolic BP', summary: buildBoxSummary(toFiniteNumbers(diastolic), 1) },
+    { name: 'Heart Rate', summary: buildBoxSummary(toFiniteNumbers(heartRate), 1) },
+    { name: 'Temperature (C)', summary: buildBoxSummary(toFiniteNumbers(temperature), 2) },
+    { name: 'BMI', summary: buildBoxSummary(toFiniteNumbers(bmi), 2) },
+  ].filter((row) => row.summary);
+
+  const boxPlot = summaries.map((row) => ({ name: row.name, ...row.summary }));
+  const labels = boxPlot.map((row) => row.name);
+  const values = boxPlot.map((row) => row.median);
+
+  return {
+    labels,
+    values,
+    boxPlot,
+    total: result.rows.length,
+    chartVariant: 'box-plot',
+  };
+}
+
+/**
+ * Active vs Inactive credential status distribution for patients.
+ */
+async function patientCredentialStatus(branch, startDate, endDate, options = {}) {
+  const bf = branchFilter(branch, 'up', 1);
+  const baseParams = [...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT uc.credentials_status::text AS status, COUNT(DISTINCT p.id)::int AS count
+    FROM "Patients" p
+    INNER JOIN "UserCredentials" uc ON uc.id = p.id
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE 1 = 1 ${bf.clause} ${pf.clause}
+    GROUP BY uc.credentials_status
+  `, [...baseParams, ...pf.params]);
+
+  const byStatus = new Map(result.rows.map((row) => [String(row.status || ''), parseInt(row.count)]));
+  const active = byStatus.get('Active') || 0;
+  const inactive = byStatus.get('Inactive') || 0;
+  return {
+    labels: ['Active', 'Inactive'],
+    values: [active, inactive],
+    total: active + inactive,
+  };
+}
+
+/**
+ * Total patient population split by branch (Manila vs Quezon City).
+ */
+async function patientPopulationByBranch(branch, startDate, endDate, options = {}) {
+  const bf = branchFilter(branch, 'up', 1);
+  const baseParams = [...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT
+      CASE
+        WHEN up.branch::text = 'QuezonCity' THEN 'Quezon City'
+        WHEN up.branch::text = 'Manila' THEN 'Manila'
+        ELSE up.branch::text
+      END AS campus,
+      COUNT(DISTINCT p.id)::int AS count
+    FROM "Patients" p
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE up.branch::text IN ('Manila', 'QuezonCity') ${bf.clause} ${pf.clause}
+    GROUP BY campus
+  `, [...baseParams, ...pf.params]);
+
+  const byCampus = new Map(result.rows.map((row) => [row.campus, parseInt(row.count)]));
+  const labels = ['Manila', 'Quezon City'];
+  const values = [byCampus.get('Manila') || 0, byCampus.get('Quezon City') || 0];
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Top consumed medicine items by dispensed unit count.
+ */
+async function mostConsumedMedicine(branch, startDate, endDate, options = {}) {
+  const lf = inventoryLocationFilter(branch, 'mb', 3);
+  const baseParams = [startDate, endDate, ...lf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT mi.item_name AS item, COUNT(me.id)::int AS count
+    FROM "MedicineTransactionLog" mtl
+    INNER JOIN "MedicineEntity" me ON me."transactionId" = mtl.id
+    INNER JOIN "MedicineBatch" mb ON mb.id = me."batchId"
+    INNER JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId"
+    INNER JOIN "Patients" p ON p.id = mtl."patientId"
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE mtl.action = 'Issue'
+      AND mtl."issuedAt" BETWEEN $1 AND $2
+      ${lf.clause} ${pf.clause}
+    GROUP BY mi.item_name
+    ORDER BY count DESC, mi.item_name ASC
+    LIMIT 10
+  `, [...baseParams, ...pf.params]);
+
+  const labels = result.rows.map((row) => row.item);
+  const values = result.rows.map((row) => parseInt(row.count));
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Top consumed supply items by issued unit count.
+ * Uses SupplyTransactionLog when available, otherwise falls back to SupplyEntity links.
+ */
+async function mostConsumedSupply(branch, startDate, endDate, options = {}) {
+  const supplyLogCheck = await db.query(`SELECT to_regclass('"SupplyTransactionLog"') AS table_ref`);
+  const hasSupplyLog = Boolean(supplyLogCheck.rows[0]?.table_ref);
+  const lf = inventoryLocationFilter(branch, 'sb', 3);
+
+  let result;
+  if (hasSupplyLog) {
+    result = await db.query(`
+      SELECT mi.item_name AS item, COUNT(se.id)::int AS count
+      FROM "SupplyTransactionLog" stl
+      INNER JOIN "SupplyEntity" se ON se."transactionId" = stl.id
+      INNER JOIN "SupplyBatch" sb ON sb.id = se."batchId"
+      INNER JOIN "MedicalItems" mi ON mi.id = sb."supplyItemId"
+      WHERE stl.action = 'Issue'
+        AND stl."issuedAt" BETWEEN $1 AND $2
+        ${lf.clause}
+      GROUP BY mi.item_name
+      ORDER BY count DESC, mi.item_name ASC
+      LIMIT 10
+    `, [startDate, endDate, ...lf.params]);
+  } else {
+    result = await db.query(`
+      SELECT mi.item_name AS item, COUNT(se.id)::int AS count
+      FROM "SupplyEntity" se
+      INNER JOIN "SupplyBatch" sb ON sb.id = se."batchId"
+      INNER JOIN "MedicalItems" mi ON mi.id = sb."supplyItemId"
+      WHERE se."transactionId" IS NOT NULL
+        AND sb.updated_at BETWEEN $1 AND $2
+        ${lf.clause}
+      GROUP BY mi.item_name
+      ORDER BY count DESC, mi.item_name ASC
+      LIMIT 10
+    `, [startDate, endDate, ...lf.params]);
+  }
+
+  const labels = result.rows.map((row) => row.item);
+  const values = result.rows.map((row) => parseInt(row.count));
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return {
+    labels,
+    values,
+    total,
+    source: hasSupplyLog ? 'SupplyTransactionLog' : 'SupplyEntityFallback',
+  };
+}
+
+/**
+ * Periodic inventory consumption trend (medicine + supply) for stacked-area visualization.
+ */
+async function inventoryConsumptionTrends(branch, startDate, endDate, options = {}) {
+  const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
+  const dgMedicine = dateGroupExpr(groupBy, 'mtl."issuedAt"');
+  const lfMedicine = inventoryLocationFilter(branch, 'mb', 3);
+  const baseMedicineParams = [startDate, endDate, ...lfMedicine.params];
+  const pfMedicine = profileFilterClause(options, 'p.id', baseMedicineParams.length + 1);
+
+  const medicineResult = await db.query(`
+    SELECT ${dgMedicine.expr} AS ${dgMedicine.alias}, COUNT(me.id)::int AS count
+    FROM "MedicineTransactionLog" mtl
+    INNER JOIN "MedicineEntity" me ON me."transactionId" = mtl.id
+    INNER JOIN "MedicineBatch" mb ON mb.id = me."batchId"
+    INNER JOIN "Patients" p ON p.id = mtl."patientId"
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE mtl.action = 'Issue'
+      AND mtl."issuedAt" BETWEEN $1 AND $2
+      ${lfMedicine.clause} ${pfMedicine.clause}
+    GROUP BY ${dgMedicine.expr}
+    ORDER BY ${dgMedicine.alias}
+  `, [...baseMedicineParams, ...pfMedicine.params]);
+
+  const medicineByPeriod = new Map(
+    medicineResult.rows.map((row) => [row.period, parseInt(row.count)])
+  );
+
+  const supplyLogCheck = await db.query(`SELECT to_regclass('"SupplyTransactionLog"') AS table_ref`);
+  const hasSupplyLog = Boolean(supplyLogCheck.rows[0]?.table_ref);
+  const supplyByPeriod = new Map();
+
+  if (hasSupplyLog) {
+    const dgSupply = dateGroupExpr(groupBy, 'stl."issuedAt"');
+    const lfSupply = inventoryLocationFilter(branch, 'sb', 3);
+    const supplyResult = await db.query(`
+      SELECT ${dgSupply.expr} AS ${dgSupply.alias}, COUNT(se.id)::int AS count
+      FROM "SupplyTransactionLog" stl
+      INNER JOIN "SupplyEntity" se ON se."transactionId" = stl.id
+      INNER JOIN "SupplyBatch" sb ON sb.id = se."batchId"
+      WHERE stl.action = 'Issue'
+        AND stl."issuedAt" BETWEEN $1 AND $2
+        ${lfSupply.clause}
+      GROUP BY ${dgSupply.expr}
+      ORDER BY ${dgSupply.alias}
+    `, [startDate, endDate, ...lfSupply.params]);
+
+    for (const row of supplyResult.rows) {
+      supplyByPeriod.set(row.period, parseInt(row.count));
+    }
+  }
+
+  const labels = Array.from(new Set([
+    ...medicineByPeriod.keys(),
+    ...supplyByPeriod.keys(),
+  ])).sort((a, b) => a.localeCompare(b));
+
+  const medicineSeriesValues = labels.map((period) => medicineByPeriod.get(period) || 0);
+  const supplySeriesValues = labels.map((period) => supplyByPeriod.get(period) || 0);
+  const series = [
+    { name: 'Medicine', values: medicineSeriesValues },
+    { name: 'Supply', values: supplySeriesValues },
+  ];
+
+  const total = series
+    .flatMap((entry) => entry.values)
+    .reduce((sum, value) => sum + value, 0);
+
+  return {
+    labels,
+    values: medicineSeriesValues,
+    series,
+    total,
+    groupBy,
+    chartVariant: 'stacked-area',
+  };
+}
+
+/**
+ * Inventory snapshot report summary.
+ */
+async function inventoryReportSummary(branch, startDate, endDate, options = {}) {
+  const medicineLoc = inventoryLocationFilter(branch, 'mb', 1);
+  const supplyLoc = inventoryLocationFilter(branch, 'sb', 1);
+
+  const medicineStockResult = await db.query(`
+    SELECT COUNT(me.id)::int AS count
+    FROM "MedicineEntity" me
+    INNER JOIN "MedicineBatch" mb ON mb.id = me."batchId"
+    WHERE me."transactionId" IS NULL ${medicineLoc.clause}
+  `, [...medicineLoc.params]);
+
+  const supplyStockResult = await db.query(`
+    SELECT COUNT(se.id)::int AS count
+    FROM "SupplyEntity" se
+    INNER JOIN "SupplyBatch" sb ON sb.id = se."batchId"
+    WHERE se."transactionId" IS NULL ${supplyLoc.clause}
+  `, [...supplyLoc.params]);
+
+  const consumedMedicineResult = await db.query(`
+    SELECT COUNT(me.id)::int AS count
+    FROM "MedicineTransactionLog" mtl
+    INNER JOIN "MedicineEntity" me ON me."transactionId" = mtl.id
+    INNER JOIN "MedicineBatch" mb ON mb.id = me."batchId"
+    WHERE mtl.action = 'Issue'
+      AND mtl."issuedAt" BETWEEN $1 AND $2
+      ${inventoryLocationFilter(branch, 'mb', 3).clause}
+  `, [startDate, endDate, ...inventoryLocationFilter(branch, 'mb', 3).params]);
+
+  const supplyLogCheck = await db.query(`SELECT to_regclass('"SupplyTransactionLog"') AS table_ref`);
+  const hasSupplyLog = Boolean(supplyLogCheck.rows[0]?.table_ref);
+  let consumedSupply = 0;
+
+  if (hasSupplyLog) {
+    const supplyConsumptionResult = await db.query(`
+      SELECT COUNT(se.id)::int AS count
+      FROM "SupplyTransactionLog" stl
+      INNER JOIN "SupplyEntity" se ON se."transactionId" = stl.id
+      INNER JOIN "SupplyBatch" sb ON sb.id = se."batchId"
+      WHERE stl.action = 'Issue'
+        AND stl."issuedAt" BETWEEN $1 AND $2
+        ${inventoryLocationFilter(branch, 'sb', 3).clause}
+    `, [startDate, endDate, ...inventoryLocationFilter(branch, 'sb', 3).params]);
+    consumedSupply = parseInt(supplyConsumptionResult.rows[0]?.count || 0);
+  } else {
+    const fallbackSupplyConsumption = await db.query(`
+      SELECT COUNT(se.id)::int AS count
+      FROM "SupplyEntity" se
+      INNER JOIN "SupplyBatch" sb ON sb.id = se."batchId"
+      WHERE se."transactionId" IS NOT NULL
+        AND sb.updated_at BETWEEN $1 AND $2
+        ${inventoryLocationFilter(branch, 'sb', 3).clause}
+    `, [startDate, endDate, ...inventoryLocationFilter(branch, 'sb', 3).params]);
+    consumedSupply = parseInt(fallbackSupplyConsumption.rows[0]?.count || 0);
+  }
+
+  const medicineLocationClause = branch === 'Manila'
+    ? `AND mb.location IN ('Arlegui', 'Casal')`
+    : branch === 'QuezonCity'
+      ? `AND mb.location = 'QuezonCity'`
+      : '';
+
+  const supplyLocationClause = branch === 'Manila'
+    ? `AND sb.location IN ('Arlegui', 'Casal')`
+    : branch === 'QuezonCity'
+      ? `AND sb.location = 'QuezonCity'`
+      : '';
+
+  const lowStockResult = await db.query(`
+    SELECT COUNT(*)::int AS count FROM (
+      SELECT DISTINCT mi.id
+      FROM "MedicalItems" mi
+      WHERE mi.active = true AND mi.category::text = 'Medicine'
+        AND EXISTS (
+          SELECT 1
+          FROM (
+            SELECT mb.location,
+              COALESCE(SUM(CASE WHEN me."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
+            FROM "MedicineBatch" mb
+            LEFT JOIN "MedicineEntity" me ON me."batchId" = mb.id
+            WHERE mb."medicalItemId" = mi.id
+              AND (mb."expiryDate" IS NULL OR mb."expiryDate" > NOW())
+              ${medicineLocationClause}
+            GROUP BY mb.location
+          ) med_stock
+          WHERE med_stock.branch_stock <= 10
+        )
+      UNION
+      SELECT DISTINCT mi.id
+      FROM "MedicalItems" mi
+      WHERE mi.active = true AND mi.category::text = 'Supply'
+        AND EXISTS (
+          SELECT 1
+          FROM (
+            SELECT sb.location,
+              COALESCE(SUM(CASE WHEN se."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
+            FROM "SupplyBatch" sb
+            LEFT JOIN "SupplyEntity" se ON se."batchId" = sb.id
+            WHERE sb."supplyItemId" = mi.id
+              AND (sb."expiryDate" IS NULL OR sb."expiryDate" > NOW())
+              ${supplyLocationClause}
+            GROUP BY sb.location
+          ) sup_stock
+          WHERE sup_stock.branch_stock <= 10
+        )
+    ) low_items
+  `);
+
+  const labels = [
+    'Current Medicine Stock',
+    'Current Supply Stock',
+    'Consumed Medicine Units',
+    'Consumed Supply Units',
+    'Low Stock Items',
+  ];
+
+  const values = [
+    parseInt(medicineStockResult.rows[0]?.count || 0),
+    parseInt(supplyStockResult.rows[0]?.count || 0),
+    parseInt(consumedMedicineResult.rows[0]?.count || 0),
+    consumedSupply,
+    parseInt(lowStockResult.rows[0]?.count || 0),
+  ];
+
+  return {
+    labels,
+    values,
+    total: values.reduce((sum, value) => sum + value, 0),
+    source: hasSupplyLog ? 'SupplyTransactionLog' : 'SupplyEntityFallback',
+  };
+}
+
+/**
+ * Accommodated appointments by period with scheduler-level series.
+ * Designed for stacked-area visualization.
+ */
+async function appointmentsAccommodatedTrends(branch, startDate, endDate, options = {}) {
+  const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
+  const dg = dateGroupExpr(groupBy, 'sde."scheduledDate"::timestamp');
+  const lf = inventoryLocationFilter(branch, 'ss', 3);
+  const baseParams = [startDate, endDate, ...lf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    SELECT
+      ${dg.expr} AS ${dg.alias},
+      COALESCE(ss.label, 'Unlabeled Scheduler') AS scheduler_label,
+      COUNT(*)::int AS count
+    FROM "patientSlot" ps
+    INNER JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+    INNER JOIN "slotScheduler" ss ON ss.id = sde."slotId"
+    INNER JOIN "Patients" p ON p.id = ps."patientId"
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    WHERE sde."scheduledDate" BETWEEN $1 AND $2
+      AND (ps.status IN ('InProgress', 'Completed') OR ps.arrived_at IS NOT NULL)
+      ${lf.clause} ${pf.clause}
+    GROUP BY ${dg.expr}, scheduler_label
+    ORDER BY ${dg.alias}, scheduler_label
+  `, [...baseParams, ...pf.params]);
+
+  const periodSet = new Set();
+  const schedulerTotals = new Map();
+  const schedulerPeriodMap = new Map();
+
+  for (const row of result.rows) {
+    const period = row.period;
+    const scheduler = row.scheduler_label;
+    const count = parseInt(row.count);
+
+    periodSet.add(period);
+    schedulerTotals.set(scheduler, (schedulerTotals.get(scheduler) || 0) + count);
+
+    if (!schedulerPeriodMap.has(scheduler)) {
+      schedulerPeriodMap.set(scheduler, new Map());
+    }
+    const periodMap = schedulerPeriodMap.get(scheduler);
+    periodMap.set(period, (periodMap.get(period) || 0) + count);
+  }
+
+  const labels = Array.from(periodSet).sort((a, b) => a.localeCompare(b));
+  const topSchedulers = Array.from(schedulerTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name]) => name);
+
+  const topSet = new Set(topSchedulers);
+  const hasOtherSchedulers = schedulerTotals.size > topSchedulers.length;
+
+  const series = topSchedulers.map((scheduler) => {
+    const periodMap = schedulerPeriodMap.get(scheduler) || new Map();
+    return {
+      name: scheduler,
+      values: labels.map((period) => periodMap.get(period) || 0),
+    };
+  });
+
+  if (hasOtherSchedulers) {
+    const otherByPeriod = new Map();
+    for (const [scheduler, periodMap] of schedulerPeriodMap.entries()) {
+      if (topSet.has(scheduler)) continue;
+      for (const [period, count] of periodMap.entries()) {
+        otherByPeriod.set(period, (otherByPeriod.get(period) || 0) + count);
+      }
+    }
+    series.push({
+      name: 'Other Schedulers',
+      values: labels.map((period) => otherByPeriod.get(period) || 0),
+    });
+  }
+
+  const total = result.rows.reduce((sum, row) => sum + parseInt(row.count), 0);
+  const values = series[0]?.values || [];
+  return {
+    labels,
+    values,
+    series,
+    total,
+    groupBy,
+    chartVariant: 'stacked-area',
+  };
 }
 
 // ============================================================
@@ -1129,6 +1902,53 @@ const QUERY_HANDLERS = {
   'appointments-by-session': {
     handler: appointmentsBySession,
     description: 'Appointments grouped by session (Morning/Afternoon)',
+  },
+
+  // ── EMR / GENERAL / INVENTORY / ADVANCED APPOINTMENTS ───
+
+  'female-reproductive-health': {
+    handler: femaleReproductiveHealth,
+    description: 'Female reproductive health summary from OB-GYN records',
+  },
+  'lifestyle-statistics': {
+    handler: lifestyleStatistics,
+    description: 'Lifestyle statistics (mean, median, mode) for smoking/vaping metrics',
+  },
+  'oral-findings-percentages': {
+    handler: oralFindingsPercentages,
+    description: 'Oral finding prevalence percentages across the selected patient population',
+  },
+  'vital-signs-box-plot': {
+    handler: vitalSignsBoxPlot,
+    description: 'Vital-sign distribution summaries for box-plot visualization',
+  },
+  'patient-credential-status': {
+    handler: patientCredentialStatus,
+    description: 'Patient credential status distribution (Active vs Inactive)',
+  },
+  'patient-population-by-branch': {
+    handler: patientPopulationByBranch,
+    description: 'Patient population split by Manila vs Quezon City',
+  },
+  'most-consumed-medicine': {
+    handler: mostConsumedMedicine,
+    description: 'Top consumed medicine items by dispensed unit count',
+  },
+  'most-consumed-supply': {
+    handler: mostConsumedSupply,
+    description: 'Top consumed supply items by issued unit count',
+  },
+  'inventory-consumption-trends': {
+    handler: inventoryConsumptionTrends,
+    description: 'Medicine and supply consumption trends over time',
+  },
+  'inventory-report-summary': {
+    handler: inventoryReportSummary,
+    description: 'Inventory summary report with stock, consumption, and low-stock counts',
+  },
+  'appointments-accommodated-trends': {
+    handler: appointmentsAccommodatedTrends,
+    description: 'Accommodated appointments by period with scheduler-level breakdown',
   },
 
   // ── DEMOGRAPHICS ──────────────────────────────────────────
