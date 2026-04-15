@@ -17,8 +17,9 @@ interface ChatInputProps {
   onSend: () => void;
   // Media attachment
   onPickImage?: () => void;
-  pendingImage?: { uri: string } | null;
-  onClearPendingImage?: () => void;
+  onPickFile?: () => void;
+  pendingAttachment?: { uri: string; name: string; type: string; kind: 'image' | 'file' } | null;
+  onClearPendingAttachment?: () => void;
   isUploading?: boolean;
 }
 
@@ -30,8 +31,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onChangeText,
   onSend,
   onPickImage,
-  pendingImage,
-  onClearPendingImage,
+  onPickFile,
+  pendingAttachment,
+  onClearPendingAttachment,
   isUploading = false,
 }) => {
   const { isDark } = useTheme();
@@ -39,7 +41,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const isPending = ticketStatus === 'Open';
   const isActive = ticketStatus === 'Ongoing';
   const canSend = isActive && !isLoading && !isUploading;
-  const hasPendingContent = Boolean(inputValue.trim()) || Boolean(pendingImage);
+  const hasPendingContent = Boolean(inputValue.trim()) || Boolean(pendingAttachment);
+  const isPendingImage = pendingAttachment?.kind === 'image';
+  const isPendingVideo = pendingAttachment?.type?.startsWith('video/');
 
   // Frozen state
   if (isFrozen) {
@@ -124,8 +128,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         },
       ]}
     >
-      {/* Pending image preview strip */}
-      {pendingImage && (
+      {/* Pending attachment preview strip */}
+      {pendingAttachment && (
         <View
           style={[
             styles.previewStrip,
@@ -135,14 +139,30 @@ const ChatInput: React.FC<ChatInputProps> = ({
             },
           ]}
         >
-          <Image source={{ uri: pendingImage.uri }} style={styles.previewThumb} resizeMode="cover" />
+          {isPendingImage ? (
+            <Image source={{ uri: pendingAttachment.uri }} style={styles.previewThumb} resizeMode="cover" />
+          ) : (
+            <View
+              style={[
+                styles.filePreviewIcon,
+                { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[200] },
+              ]}
+            >
+              <Ionicons
+                name={isPendingVideo ? 'videocam' : 'document-text'}
+                size={18}
+                color={isDark ? colors.primary[300] : colors.primary[700]}
+              />
+            </View>
+          )}
           <Text
             style={[styles.previewLabel, { color: isDark ? colors.neutral[300] : colors.secondary[700] }]}
+            numberOfLines={1}
           >
-            Image ready to send
+            {isPendingImage ? 'Image ready to send' : `File ready: ${pendingAttachment.name}`}
           </Text>
           <TouchableOpacity
-            onPress={onClearPendingImage}
+            onPress={onClearPendingAttachment}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
             <Ionicons
@@ -155,7 +175,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       )}
 
       <View style={styles.inputRow}>
-        {/* Attachment button */}
+        {/* Attach image button */}
         {onPickImage && (
           <TouchableOpacity
             style={[
@@ -168,9 +188,35 @@ const ChatInput: React.FC<ChatInputProps> = ({
             onPress={onPickImage}
             disabled={!canSend}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Attach image"
           >
             <Ionicons
-              name="attach"
+              name="image"
+              size={18}
+              color={isDark ? colors.neutral[300] : colors.neutral[500]}
+            />
+          </TouchableOpacity>
+        )}
+
+        {/* Attach file button */}
+        {onPickFile && (
+          <TouchableOpacity
+            style={[
+              styles.attachButton,
+              {
+                backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
+                borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+              },
+            ]}
+            onPress={onPickFile}
+            disabled={!canSend}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Attach file"
+          >
+            <Ionicons
+              name="document-attach"
               size={18}
               color={isDark ? colors.neutral[300] : colors.neutral[500]}
             />
@@ -180,7 +226,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         <TextInput
           value={inputValue}
           onChangeText={onChangeText}
-          placeholder={pendingImage ? 'Add a caption (optional)...' : 'Type a message...'}
+          placeholder={pendingAttachment ? 'Add a caption (optional)...' : 'Type a message...'}
           placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
           multiline
           style={[
@@ -287,6 +333,13 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 8,
+  },
+  filePreviewIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   previewLabel: {
     flex: 1,

@@ -55,6 +55,7 @@ interface AuthImageProps {
 const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) => {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const [uri, setUri] = useState<string | null>(null);
+  const [contentType, setContentType] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -73,9 +74,15 @@ const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) =>
           binary += String.fromCharCode(bytes[i]);
         }
         const base64 = btoa(binary);
-        const contentType =
-          (response.headers as Record<string, string>)['content-type'] || 'image/jpeg';
-        setUri(`data:${contentType};base64,${base64}`);
+        const resolvedType =
+          ((response.headers as Record<string, string>)['content-type'] || '').toLowerCase();
+        setContentType(resolvedType);
+
+        if (resolvedType.startsWith('image/')) {
+          setUri(`data:${resolvedType};base64,${base64}`);
+        } else {
+          setUri(null);
+        }
       })
       .catch(() => {
         if (!cancelled) setHasError(true);
@@ -94,6 +101,9 @@ const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) =>
     : isDark
     ? colors.neutral[700]
     : colors.neutral[100];
+  const isImage = contentType.startsWith('image/');
+  const isPdf = contentType === 'application/pdf';
+  const isVideo = contentType.startsWith('video/');
 
   if (loading) {
     return (
@@ -107,6 +117,31 @@ const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) =>
   }
 
   if (hasError || !uri) {
+    if (!hasError && !isImage && contentType) {
+      return (
+        <View style={[styles.fileAttachmentPreview, { backgroundColor: placeholderBg }]}>
+          <Ionicons
+            name={isPdf ? 'document-text' : isVideo ? 'videocam' : 'document'}
+            size={18}
+            color={isPatient ? colors.secondary[700] : isDark ? colors.neutral[300] : colors.neutral[600]}
+          />
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '500',
+              color: isPatient
+                ? colors.secondary[700]
+                : isDark
+                ? colors.neutral[300]
+                : colors.neutral[600],
+            }}
+          >
+            {isPdf ? 'PDF attachment' : isVideo ? 'Video attachment' : 'File attachment'}
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.imagePlaceholder, { backgroundColor: placeholderBg }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -171,7 +206,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const { isDark } = useTheme();
   const isPatient = message.userType === 'Patient';
   const isSystem = message.promptType === 'system';
-  const hasImage = Boolean(message.filename);
+  const hasAttachment = Boolean(message.filename);
 
   // System event pill
   if (isSystem) {
@@ -259,8 +294,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
           {/* Bubble */}
           {isPatient ? (
-            <View style={[styles.patientBubble, getPatientRadius(), hasImage && styles.imageBubble]}>
-              {hasImage && (
+            <View style={[styles.patientBubble, getPatientRadius(), hasAttachment && styles.imageBubble]}>
+              {hasAttachment && (
                 <AuthImage
                   filename={message.filename!}
                   isPatient={isPatient}
@@ -268,7 +303,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 />
               )}
               {message.text ? (
-                <Text style={[styles.patientText, hasImage && styles.imageCaption]}>
+                <Text style={[styles.patientText, hasAttachment && styles.imageCaption]}>
                   {message.text}
                 </Text>
               ) : null}
@@ -282,10 +317,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
                   borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
                 },
-                hasImage && styles.imageBubble,
+                hasAttachment && styles.imageBubble,
               ]}
             >
-              {hasImage && (
+              {hasAttachment && (
                 <AuthImage
                   filename={message.filename!}
                   isPatient={isPatient}
@@ -297,7 +332,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   style={[
                     styles.staffText,
                     { color: isDark ? colors.neutral[100] : colors.secondary[800] },
-                    hasImage && styles.imageCaption,
+                    hasAttachment && styles.imageCaption,
                   ]}
                 >
                   {message.text}
@@ -433,6 +468,15 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: 220,
     height: 155,
+  },
+  fileAttachmentPreview: {
+    width: 220,
+    minHeight: 70,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   imageCaption: {
     paddingHorizontal: 12,
