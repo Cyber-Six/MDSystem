@@ -185,7 +185,7 @@ function isLikelyCode(value) {
   const trimmed = value.trim();
   // ICD codes must contain at least one number (e.g. A01, CA40, 8A61.41)
   // Plain words like "fever" should NOT match
-  return /^[A-Z0-9]{1,3}[\dA-Z.\-]*$/i.test(trimmed) && /\d/.test(trimmed);
+  return /^[A-Z0-9]{1,3}[\dA-Z.-]*$/i.test(trimmed) && /\d/.test(trimmed);
 }
 
 function codeFromDiagnosis(item) {
@@ -196,7 +196,13 @@ function titleFromDiagnosis(item) {
   return item?.title || item?.diagnosisName || item?.diagnosis || '';
 }
 
-export default function PatientConsultationTab({ patient, consultations = [], onSaveConsultation }) {
+export default function PatientConsultationTab({
+  patient,
+  consultations = [],
+  onSaveConsultation,
+  canSetVitalSigns = false,
+  canSetDentalRecord = false,
+}) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [icdQuery, setIcdQuery] = useState('');
   const [icdResults, setIcdResults] = useState([]);
@@ -226,6 +232,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
   // Fetch oral finding catalogs when dental type is selected (lazy load once)
   useEffect(() => {
     if (form.type !== 'Dental') return;
+    if (!canSetDentalRecord) return;
     if (dentalCatalogs.length > 0) return;
     let ignore = false;
     setDentalCatalogsLoading(true);
@@ -240,7 +247,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
       .catch(() => {})
       .finally(() => { if (!ignore) setDentalCatalogsLoading(false); });
     return () => { ignore = true; };
-  }, [form.type, dentalCatalogs.length]);
+  }, [form.type, canSetDentalRecord, dentalCatalogs.length]);
 
   useEffect(() => {
     let ignore = false;
@@ -370,11 +377,15 @@ export default function PatientConsultationTab({ patient, consultations = [], on
   // Update diagnosis field when primary diagnosis changes
   useEffect(() => {
     const primary = selectedDiagnoses.find((entry) => entry.diagnosisType === 'Primary');
-    if (primary) {
-      setField('diagnosis', `${primary.code} - ${primary.title}`);
-    } else if (selectedDiagnoses.length === 0) {
-      setField('diagnosis', '');
-    }
+    const nextDiagnosis = primary
+      ? `${primary.code} - ${primary.title}`
+      : selectedDiagnoses.length === 0
+        ? ''
+        : null;
+
+    if (nextDiagnosis == null) return;
+
+    setForm((prev) => (prev.diagnosis === nextDiagnosis ? prev : { ...prev, diagnosis: nextDiagnosis }));
   }, [selectedDiagnoses]);
 
   const handleSave = () => {
@@ -436,7 +447,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
             treatments: validTreatments,
             diagnoses: normalizedDiagnoses.map(mapToBackendDiagnosis),
           },
-          vitalSignsData: form.type !== 'Dental' ? (() => {
+          vitalSignsData: form.type !== 'Dental' && canSetVitalSigns ? (() => {
             const vs = form.vitalSigns;
             const h = parseFloat(vs.height_cm);
             const w = parseFloat(vs.weight_kg);
@@ -450,7 +461,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
             }
             return null;
           })() : null,
-          dentalGradingData: form.type === 'Dental' && dentalGradingOpen ? (() => {
+          dentalGradingData: form.type === 'Dental' && canSetDentalRecord && dentalGradingOpen ? (() => {
             const allTeeth = [
               ...TOOTH_LAYOUT.upper.right, ...TOOTH_LAYOUT.upper.left,
               ...TOOTH_LAYOUT.lower.right, ...TOOTH_LAYOUT.lower.left,
@@ -492,7 +503,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
       >
         <div className="space-y-4">
           {/* ── VITAL SIGNS (Medical) or DENTAL GRADING (Dental) ── */}
-          {form.type !== 'Dental' ? (
+          {form.type !== 'Dental' && canSetVitalSigns && (
             <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden flex flex-col">
               <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-green-50 dark:bg-green-900/10">
                 <span className="text-sm font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
@@ -539,7 +550,9 @@ export default function PatientConsultationTab({ patient, consultations = [], on
                 />
               </div>
             </div>
-          ) : (
+          )}
+
+          {form.type === 'Dental' && canSetDentalRecord && (
             <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
               <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-blue-50 dark:bg-blue-900/10 flex items-center justify-between">
                 <div>

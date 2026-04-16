@@ -1127,6 +1127,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
             patient={patient}
             consultations={consultations}
             onSaveConsultation={handleSaveConsultation}
+            canSetVitalSigns={canSetVitalSigns}
+            canSetDentalRecord={canSetDentalRecord}
           />
         ) : (
           <PatientConsultationHistoryTab
