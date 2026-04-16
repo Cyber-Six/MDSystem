@@ -400,8 +400,12 @@ function granularToTemplatePerms(granularPerms, branch = 'Both') {
  */
 function templatePermsToGranular(branchPermissions) {
   const flat = {};
-  for (const p of branchPermissions) {
-    flat[p.key] = p.enabled;
+  for (const p of (branchPermissions || [])) {
+    const key = typeof p?.key === 'string' ? p.key.trim() : '';
+    if (!key) continue;
+
+    const enabled = Boolean(p?.enabled);
+    flat[key] = Boolean(flat[key]) || enabled;
   }
   return flat;
 }

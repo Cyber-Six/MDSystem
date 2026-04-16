@@ -44,7 +44,7 @@ const formatShortDate = (value) => {
  * Dynamically fetches and displays key metrics, recent patients, and pending requests.
  */
 const StaffDashboard = () => {
-  const { hasPermission, isAdmin, modules, isLoading: permLoading } = usePermissions();
+  const { hasPermission, hasSearchPatientAccess, isAdmin, modules, isLoading: permLoading } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -58,7 +58,7 @@ const StaffDashboard = () => {
 
   // ── Permission-gated section flags (sourced from usePermissions / module map) ─
   const showAnnouncements    = isAdmin || hasPermission('announcements');
-  const canSearchPatient     = isAdmin || hasPermission('patientSearch')  || hasPermission('medicalRecords') || hasPermission('dentalRecords');
+  const canSearchPatient     = hasSearchPatientAccess;
   const canViewPendingModule = isAdmin || hasPermission('pendingRequests');
   const canStartConsult      = isAdmin || hasPermission('medicalRecords');
 

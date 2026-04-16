@@ -1,15 +1,34 @@
 /**
  * Role Permission Constants & Helpers
  * Granular permission keys grouped by modules, with default templates.
- * Keep MODULE_PERMISSION_MAP in sync with Backend/services/permit.js
+ * Backend has its own module map; this frontend map is a UI projection for
+ * template editing sections and can be more granular than backend modules.
  */
 
 // ─── Module → Granular Key Mapping ───────────────────────────────────────
 export const MODULE_PERMISSION_MAP = {
-  patientSearch: ['profile_allow_view', 'emr_allow_view', 'profile_allow_update_email_identifier'],
-  pendingRequests: ['emr_allow_approval', 'profile_allow_approval', 'appointment_allow_approval', 'medicine_request_allow_approve'],
-  medicalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_edit_catalogs', 'emr_allow_set_vital_sign', 'consultation_allow_view', 'consultation_allow_edit', 'profile_allow_view', 'profile_allow_edit'],
-  dentalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_set_dental_record', 'consultation_allow_view', 'consultation_allow_edit'],
+  patientSearch: [
+    'profile_allow_view',
+    'emr_allow_view',
+    'consultation_allow_view',
+    'appointment_allow_view_records',
+    'inventory_allow_manage_requests',
+    'document_allow_view',
+  ],
+  pendingRequests: [
+    'emr_allow_approval',
+    'appointment_allow_approval',
+    'medicine_request_allow_approve',
+  ],
+  personalRecords: [
+    'profile_allow_approval',
+    'profile_allow_view',
+    'profile_allow_edit',
+    'profile_allow_update_email_identifier',
+  ],
+  medicalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_edit_catalogs', 'emr_allow_set_vital_sign'],
+  dentalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_set_dental_record'],
+  consultation: ['consultation_allow_view', 'consultation_allow_edit'],
   appointments: ['appointment_allow_approval', 'appointment_allow_view_records', 'appointment_allow_view_configuration', 'appointment_allow_edit_configuration'],
   inventory: ['inventory_allow_view', 'inventory_allow_edit', 'inventory_allow_dispense', 'inventory_allow_manage_requests', 'inventory_allow_prescribe', 'inventory_allow_configure'],
   announcements: ['announcement_allow_crud'],
@@ -62,12 +81,21 @@ export const PERMISSION_KEY_LABELS = {
   // role_management keys excluded — admin-only
 };
 
+// Per-module label overrides for clearer UX in specific sections.
+export const MODULE_PERMISSION_LABEL_OVERRIDES = {
+  patientSearch: {
+    emr_allow_view: 'View Medical & Dental Records',
+  },
+};
+
 // ─── Module Definitions (for UI layout) ──────────────────────────────────
 export const PERMISSION_MODULES = [
   { id: 'patientSearch', label: 'Search Patient', description: 'Search and view patient profiles and medical identifiers', icon: 'search' },
   { id: 'pendingRequests', label: 'Pending Requests', description: 'Approve or reject appointment, medicine, and record update requests', icon: 'pending' },
+  { id: 'personalRecords', label: 'Personal Records', description: 'Profile approvals and profile record access controls', icon: 'profile' },
   { id: 'medicalRecords', label: 'Medical Records', description: 'View, edit, add consultation notes and set vital signs', icon: 'medical' },
   { id: 'dentalRecords', label: 'Dental Records', description: 'View, edit, and add notes to dental records', icon: 'dental' },
+  { id: 'consultation', label: 'Consultation', description: 'View and edit consultation notes and outcomes', icon: 'consultation' },
   { id: 'appointments', label: 'Appointments', description: 'Queue, confirm, cancel, no-show, and complete appointments', icon: 'calendar' },
   { id: 'inventory', label: 'Inventory', description: 'View stock, add/restock items, dispense and configure medicine', icon: 'inventory' },
   { id: 'announcements', label: 'Announcements', description: 'Create, edit, and delete announcements visible to all users', icon: 'bell' },
@@ -162,8 +190,8 @@ export const DEFAULT_ROLE_TEMPLATES = [
     color: 'accent',
     locked: false,
     permissions: expandModulePermissions({
-      patientSearch: true, pendingRequests: true, medicalRecords: true,
-      dentalRecords: false, appointments: true, inventory: false,
+      patientSearch: true, pendingRequests: true, personalRecords: true, medicalRecords: true,
+      dentalRecords: false, consultation: true, appointments: true, inventory: false,
       announcements: false, healthChat: false, sendNotification: false, analytics: false, documents: false,
       superiorAccess: false,
     }),
@@ -175,8 +203,8 @@ export const DEFAULT_ROLE_TEMPLATES = [
     color: 'primary',
     locked: false,
     permissions: expandModulePermissions({
-      patientSearch: true, pendingRequests: true, medicalRecords: false,
-      dentalRecords: true, appointments: true, inventory: false,
+      patientSearch: true, pendingRequests: true, personalRecords: true, medicalRecords: false,
+      dentalRecords: true, consultation: true, appointments: true, inventory: false,
       announcements: false, healthChat: false, sendNotification: false, analytics: false, documents: false,
       superiorAccess: false,
     }),
@@ -188,8 +216,8 @@ export const DEFAULT_ROLE_TEMPLATES = [
     color: 'success',
     locked: false,
     permissions: expandModulePermissions({
-      patientSearch: true, pendingRequests: true, medicalRecords: true,
-      dentalRecords: false, appointments: true, inventory: true,
+      patientSearch: true, pendingRequests: true, personalRecords: true, medicalRecords: true,
+      dentalRecords: false, consultation: true, appointments: true, inventory: true,
       announcements: false, healthChat: false, sendNotification: false, analytics: false, documents: false,
       superiorAccess: false,
     }),
@@ -222,3 +250,14 @@ export const detectRole = (staffPerms) => {
 
 // ─── Available role colors ───────────────────────────────────────────────
 export const ROLE_COLORS = ['error', 'accent', 'primary', 'success', 'purple', 'warning'];
+
+// ─── Normalize granular permissions into a stable boolean map ─────────────
+export const normalizePermissions = (perms = {}, defaultValue = false) => {
+  const normalized = allKeys(defaultValue);
+
+  for (const [key, value] of Object.entries(perms || {})) {
+    normalized[key] = Boolean(value);
+  }
+
+  return normalized;
+};

@@ -21,7 +21,13 @@ const TabLoader = () => (
 
 export default function SearchPatientView() {
   const { tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs } = usePatientTabs();
-  const { branch: roleBranch, isLoading: permissionsLoading, hasPermission, isAdmin } = usePermissions();
+  const {
+    branch: roleBranch,
+    isLoading: permissionsLoading,
+    hasPermission,
+    isAdmin,
+    searchPatientPermissionFlags,
+  } = usePermissions();
   const { showBanner } = useBanner();
 
   // ── Search state ────────────────────────────────────────────────────────────
@@ -65,6 +71,18 @@ export default function SearchPatientView() {
   // ── Open patient record directly in a tab ─────────────────────────────────
   const canViewSuperiorDetails = isAdmin || hasPermission('superiorAccess');
 
+  const patientTabPermissions = searchPatientPermissionFlags;
+
+  const defaultPatientRecordSection = useMemo(() => {
+    if (patientTabPermissions.profile_allow_view) return 'personal';
+    if (patientTabPermissions.emr_allow_view) return 'medical';
+    if (patientTabPermissions.consultation_allow_view) return 'consultation';
+    if (patientTabPermissions.appointment_allow_view_records) return 'appointments';
+    if (patientTabPermissions.inventory_allow_manage_requests) return 'medicines';
+    if (patientTabPermissions.document_allow_view) return 'documents';
+    return null;
+  }, [patientTabPermissions]);
+
   const handleSelectPatient = useCallback((patient) => {
     if (!canExpandPatientDetails(patient, canViewSuperiorDetails)) {
       showBanner({
@@ -75,8 +93,17 @@ export default function SearchPatientView() {
       return;
     }
 
-    openTab(patient, 'personal');
-  }, [openTab, showBanner, canViewSuperiorDetails]);
+    if (!defaultPatientRecordSection) {
+      showBanner({
+        type: 'error',
+        message: 'No patient record tabs are enabled for your account. Contact an administrator.',
+        duration: 5000,
+      });
+      return;
+    }
+
+    openTab(patient, defaultPatientRecordSection);
+  }, [openTab, showBanner, canViewSuperiorDetails, defaultPatientRecordSection]);
 
   // ── Debounced search (shows loader immediately, waits before API call) ────
   useEffect(() => {
@@ -301,6 +328,7 @@ export default function SearchPatientView() {
                 patientId={tab.patientId}
                 initialTab={tab.section}
                 embedded
+                permissions={patientTabPermissions}
               />
             </Suspense>
           </div>

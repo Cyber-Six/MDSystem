@@ -13,7 +13,7 @@ import { useStaffProfile } from '../../hooks/use-staff-profile';
 const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const location = useLocation();
   const pendingChatCount = useHealthChatBadge();
-  const { hasPermission, isAdmin, isLoading } = usePermissions();
+  const { hasPermission, hasSearchPatientAccess, isAdmin, isLoading } = usePermissions();
   const { settings } = useSettings();
   const showBadges = settings.showBadges;
   const { profile } = useStaffProfile();
@@ -25,7 +25,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
 
   const allNavItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
-    { path: '/search', icon: 'search', label: 'Search Patient', moduleId: 'patientSearch' },
+    { path: '/search', icon: 'search', label: 'Search Patient', requiresSearchPatientAccess: true },
     { path: '/pending', icon: 'pending', label: 'Pending Requests', moduleId: 'pendingRequests' },
     { path: '/appointments', icon: 'calendar', label: 'Appointments', moduleId: 'appointments' },
     { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
@@ -37,13 +37,14 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   ];
 
   const navItems = useMemo(() => {
-    if (isLoading) return allNavItems.filter((item) => !item.moduleId && !item.adminOnly);
+    if (isLoading) return allNavItems.filter((item) => !item.moduleId && !item.adminOnly && !item.requiresSearchPatientAccess);
     return allNavItems.filter((item) => {
       if (item.adminOnly) return isAdmin;
+      if (item.requiresSearchPatientAccess) return hasSearchPatientAccess;
       if (item.moduleId) return hasPermission(item.moduleId);
       return true; // Dashboard always visible
     });
-  }, [isLoading, isAdmin, hasPermission]);
+  }, [isLoading, isAdmin, hasPermission, hasSearchPatientAccess]);
 
   const icons = {
     dashboard: (
