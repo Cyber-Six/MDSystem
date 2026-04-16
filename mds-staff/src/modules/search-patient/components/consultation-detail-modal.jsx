@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as consultationService from '../consultation-service';
 import ConsultationPrescriptionModal from './consultation-prescription-modal';
 
@@ -29,7 +29,7 @@ const STATUS_STYLES = {
 
 function isLikelyCode(value) {
   const trimmed = value.trim();
-  return /^[A-Z0-9]{1,3}[\dA-Z.\-]*$/i.test(trimmed) && /\d/.test(trimmed);
+  return /^[A-Z0-9]{1,3}[\dA-Z.-]*$/i.test(trimmed) && /\d/.test(trimmed);
 }
 
 function MultiInputField({ label, values, onChange, placeholder, isTextarea = false }) {
@@ -205,7 +205,14 @@ function OutcomeCard({ outcome, index, total }) {
   );
 }
 
-export default function ConsultationDetailModal({ consultation, patient, onClose, onRefresh }) {
+export default function ConsultationDetailModal({
+  consultation,
+  patient,
+  onClose,
+  onRefresh,
+  canEditConsultation = true,
+  canGenerateDocuments = true,
+}) {
   const [outcomes, setOutcomes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -229,7 +236,19 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
   const [icdLoading, setIcdLoading] = useState(false);
   const [icdError, setIcdError] = useState('');
 
-  const canReopen = ['Completed', 'Referred', 'Monitored', 'ReOpen'].includes(consultation?.status);
+  const canReopen = Boolean(canEditConsultation);
+
+  useEffect(() => {
+    if (!canEditConsultation && showReopenForm) {
+      setShowReopenForm(false);
+    }
+  }, [canEditConsultation, showReopenForm]);
+
+  useEffect(() => {
+    if (!canGenerateDocuments && showPrescription) {
+      setShowPrescription(false);
+    }
+  }, [canGenerateDocuments, showPrescription]);
 
   useEffect(() => {
     if (!consultation?.id) return;
@@ -290,7 +309,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
           setIcdResults(cleaned);
           setIcdError('');
         }
-      } catch (err) {
+      } catch {
         setIcdError('ICD search failed. Please try again.');
         setIcdResults([]);
       } finally {
@@ -716,7 +735,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                 Close
               </button>
               <div className="flex items-center gap-2">
-                {patient && (
+                {patient && canGenerateDocuments && (
                   <button
                     onClick={() => setShowPrescription(true)}
                     className="px-3.5 py-2 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors inline-flex items-center gap-2"

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import PatientSectionCard from './section-card';
 import ConsultationDetailModal from './consultation-detail-modal';
-import * as consultationService from '../consultation-service';
 
 const TYPE_STYLES = {
   Medical: 'bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 border border-accent-200 dark:border-accent-800/50',
@@ -62,7 +61,13 @@ function getPrimaryDiagnosis(consult) {
   };
 }
 
-export default function PatientConsultationHistoryTab({ patient, consultations: consultationEntries, onRefreshConsultations }) {
+export default function PatientConsultationHistoryTab({
+  patient,
+  consultations: consultationEntries,
+  onRefreshConsultations,
+  canEditConsultation = true,
+  canGenerateDocuments = true,
+}) {
   const consultations = consultationEntries || patient?.history?.consultations || [];
   const [filter, setFilter] = useState('All');
   const [selectedConsultation, setSelectedConsultation] = useState(null);
@@ -186,6 +191,8 @@ export default function PatientConsultationHistoryTab({ patient, consultations: 
           patient={patient}
           onClose={handleCloseModal}
           onRefresh={handleRefresh}
+          canEditConsultation={canEditConsultation}
+          canGenerateDocuments={canGenerateDocuments}
         />
       )}
     </>

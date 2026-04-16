@@ -1,7 +1,7 @@
 const db = require("../../../config/query.js");
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
-const { permissions, isMedicalPermittedPatientBased } = require("../../../services/permit.js");
+const { permissions, isMedicalPermittedPatientBased, isMedicalPermittedPatientBasedMulti } = require("../../../services/permit.js");
 const { getPatientIdFromvitalSignsId, getPatientIdFromDentalRecordId } = require("./helper.js");
 
 const Query = {
@@ -11,7 +11,9 @@ const Query = {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
 
-    const isPermitted = await isMedicalPermittedPatientBased(user.id, permissions.emr_allow_set_vital_sign, patientId);
+    const isPermitted = await isMedicalPermittedPatientBasedMulti(user.id, 
+      [permissions.emr_allow_set_vital_sign, permissions.emr_allow_view], 
+      patientId);
     if (!isPermitted) {
       throwGraphQLError(res).status(403).message("Forbidden: insufficient permissions to view this patient's details.").throw();
     }
@@ -40,7 +42,9 @@ const Query = {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
 
-    const isPermitted = await isMedicalPermittedPatientBased(user.id, permissions.emr_allow_set_dental_record, patientId);
+    const isPermitted = await isMedicalPermittedPatientBasedMulti(user.id, 
+      [permissions.emr_allow_set_dental_record, permissions.emr_allow_view], 
+      patientId);
     if (!isPermitted) {
       throwGraphQLError(res).status(403).message("Forbidden: insufficient permissions to view this patient's details.").throw();
     }
@@ -92,7 +96,10 @@ const Query = {
     }
 
     const patientId = await getPatientIdFromvitalSignsId(id);
-    const isPermitted = await isMedicalPermittedPatientBased(user.id, permissions.emr_allow_set_vital_sign, patientId);
+    const isPermitted = await isMedicalPermittedPatientBasedMulti(user.id, 
+      [permissions.emr_allow_set_vital_sign, permissions.emr_allow_view], 
+      patientId
+    );
     if (!isPermitted) {
       throwGraphQLError(res).status(403).message("Forbidden: insufficient permissions to view this patient's details.").throw();
     }
@@ -111,7 +118,10 @@ const Query = {
     }
 
     const patientId = getPatientIdFromDentalRecordId(id);
-    const isPermitted = await isMedicalPermittedPatientBased(user.id, permissions.emr_allow_set_dental_record, patientId);
+    const isPermitted = await isMedicalPermittedPatientBasedMulti(user.id, 
+      [permissions.emr_allow_set_dental_record, permissions.emr_allow_view], 
+      patientId
+    );
     if (!isPermitted) {
       throwGraphQLError(res).status(403).message("Forbidden: insufficient permissions to view this patient's details.").throw();
     }

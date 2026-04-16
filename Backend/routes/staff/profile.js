@@ -164,10 +164,15 @@ router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
         const searchPatientPermissions = {
             profile_allow_view: Boolean(granularByKey.profile_allow_view),
             emr_allow_view: Boolean(granularByKey.emr_allow_view),
+            emr_allow_set_vital_sign: Boolean(granularByKey.emr_allow_set_vital_sign),
+            emr_allow_set_dental_record: Boolean(granularByKey.emr_allow_set_dental_record),
             consultation_allow_view: Boolean(granularByKey.consultation_allow_view),
+            consultation_allow_edit: Boolean(granularByKey.consultation_allow_edit),
             appointment_allow_view_records: Boolean(granularByKey.appointment_allow_view_records),
             inventory_allow_manage_requests: Boolean(granularByKey.inventory_allow_manage_requests),
             document_allow_view: Boolean(granularByKey.document_allow_view),
+            document_allow_manage: Boolean(granularByKey.document_allow_manage),
+            document_allow_generate: Boolean(granularByKey.document_allow_generate),
         };
 
         res.json({

@@ -484,10 +484,15 @@ const getActiveSubTabLabel = (mainTab, subTabState) => {
 const DEFAULT_TAB_PERMISSIONS = Object.freeze({
   profile_allow_view: true,
   emr_allow_view: true,
+  emr_allow_set_vital_sign: false,
+  emr_allow_set_dental_record: false,
   consultation_allow_view: true,
+  consultation_allow_edit: false,
   appointment_allow_view_records: true,
   inventory_allow_manage_requests: true,
   document_allow_view: true,
+  document_allow_manage: false,
+  document_allow_generate: false,
 });
 
 export default function PatientRecordView({ patientId, initialTab: initialTabProp, embedded = false, onBack, permissions = null }) {
@@ -539,10 +544,15 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
   const canViewPersonal = Boolean(tabPermissions.profile_allow_view);
   const canViewMedical = Boolean(tabPermissions.emr_allow_view);
+  const canSetVitalSigns = Boolean(tabPermissions.emr_allow_set_vital_sign);
+  const canSetDentalRecord = Boolean(tabPermissions.emr_allow_set_dental_record);
   const canViewConsultation = Boolean(tabPermissions.consultation_allow_view);
+  const canEditConsultation = Boolean(tabPermissions.consultation_allow_edit);
   const canViewAppointments = Boolean(tabPermissions.appointment_allow_view_records);
   const canViewMedicineRequests = Boolean(tabPermissions.inventory_allow_manage_requests);
   const canViewDocuments = Boolean(tabPermissions.document_allow_view);
+  const canManageDocuments = Boolean(tabPermissions.document_allow_manage);
+  const canGenerateDocuments = Boolean(tabPermissions.document_allow_generate);
   const hasAnyTabPermission = canViewPersonal
     || canViewMedical
     || canViewConsultation
@@ -563,7 +573,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     // Keep backward compatibility for old links/tabs that still use `vital-signs`.
     if (requestedTab === 'vital-signs') {
       setActiveTab('medical');
-      setMedicalSubTab('vital-signs');
+      setMedicalSubTab(canSetVitalSigns ? 'vital-signs' : 'medical-record');
       return;
     }
 
@@ -574,9 +584,27 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     }
 
     if (requestedTab === 'consultation') {
-      setConsultationSubTab('consultation-form');
+      setConsultationSubTab(canEditConsultation ? 'consultation-form' : 'consultation-history');
     }
-  }, [initialTab]);
+  }, [initialTab, canSetVitalSigns, canEditConsultation]);
+
+  useEffect(() => {
+    if (!canSetVitalSigns && medicalSubTab === 'vital-signs') {
+      setMedicalSubTab('medical-record');
+    }
+  }, [canSetVitalSigns, medicalSubTab]);
+
+  useEffect(() => {
+    if (!canSetDentalRecord && dentalSubTab === 'dental-grading') {
+      setDentalSubTab('dental-record');
+    }
+  }, [canSetDentalRecord, dentalSubTab]);
+
+  useEffect(() => {
+    if (!canEditConsultation && consultationSubTab === 'consultation-form') {
+      setConsultationSubTab('consultation-history');
+    }
+  }, [canEditConsultation, consultationSubTab]);
 
   useEffect(() => {
     if (!patientId) return;
@@ -607,60 +635,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       };
     }
 
-    const seedMinimalRecord = () => ({
-      getPatientBasicInfo: {
-        id: String(patientId),
-        access_denied: false,
-      },
-      getUserUpdateTicket: null,
-    });
-
-    const shouldLoadEmrRecord = canViewMedical;
-    const shouldLoadStaffMedicalDetails = canViewMedical;
-
-    if (!shouldLoadEmrRecord && !canViewPersonal) {
-      setRecordData(seedMinimalRecord());
-      setProfileData(null);
-      setVitalsData(null);
-      setLoadError(null);
-      setIsLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!shouldLoadEmrRecord && canViewPersonal) {
-      const loadProfileOnly = async () => {
-        try {
-          const profileResult = await axiosRequest.post('/profile/medical', {
-            query: GQL_PERSONAL_PROFILE,
-            variables: { userId: patientId },
-          });
-
-          if (cancelled) return;
-
-          setRecordData(seedMinimalRecord());
-          setProfileData(profileResult?.data?.data || null);
-          setVitalsData(null);
-          setLoadError(null);
-        } catch (err) {
-          if (cancelled) return;
-          const profilePartial = err?.response?.data?.data;
-          setRecordData(seedMinimalRecord());
-          setProfileData(profilePartial || null);
-          setVitalsData(null);
-          setLoadError(err?.message || 'Failed to load patient profile.');
-        } finally {
-          if (!cancelled) setIsLoading(false);
-        }
-      };
-
-      loadProfileOnly();
-
-      return () => {
-        cancelled = true;
-      };
-    }
+    const shouldLoadFullEmrRecord = canViewMedical;
+    const shouldLoadStaffVitals = canViewMedical || canSetVitalSigns;
+    const shouldLoadStaffDentalDetails = canSetDentalRecord;
 
     const loadRecord = async () => {
       try {
@@ -688,7 +665,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         // Load only the record slices needed by currently-allowed tabs.
         const [emrResult, profileResult, vitalsResult, staffDentalResult] = await Promise.allSettled([
           axiosRequest.post('/emr/medical', {
-            query: shouldLoadEmrRecord ? GQL_FULL_RECORD : GQL_BASIC_RECORD_FALLBACK,
+            query: shouldLoadFullEmrRecord ? GQL_FULL_RECORD : GQL_BASIC_RECORD_FALLBACK,
             variables: { userId: patientId },
           }),
           canViewPersonal
@@ -697,7 +674,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
               variables: { userId: patientId },
             })
             : Promise.resolve(null),
-          shouldLoadStaffMedicalDetails
+          shouldLoadStaffVitals
             ? axiosRequest.post('/staff/emr', {
               query: `query GetVitals($patientId: ID!) {
                 getPatientVitalSigns(patientId: $patientId, limit: 1) {
@@ -707,7 +684,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
               variables: { patientId },
             })
             : Promise.resolve(null),
-          shouldLoadStaffMedicalDetails
+          shouldLoadStaffDentalDetails
             ? axiosRequest.post('/staff/emr', {
               query: `query GetStaffDentalData($patientId: ID!) {
                 getPatientDentalRecord(patientId: $patientId, limit: 50) {
@@ -735,7 +712,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         }
 
         // Merge dental record and oral finding catalogs from /staff/emr into the payload
-        if (shouldLoadStaffMedicalDetails && staffDentalResult.status === 'fulfilled' && staffDentalResult.value) {
+        if (shouldLoadStaffDentalDetails && staffDentalResult.status === 'fulfilled' && staffDentalResult.value) {
           const staffDentalData = staffDentalResult.value.data?.data;
           if (staffDentalData?.getPatientDentalRecord) {
             payload.getUserDentalRecord = staffDentalData.getPatientDentalRecord;
@@ -758,9 +735,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         }
 
         // VitalSigns is optional — set if available (fetched from /staff/emr)
-        if (shouldLoadStaffMedicalDetails && vitalsResult.status === 'fulfilled' && vitalsResult.value) {
+        if (shouldLoadStaffVitals && vitalsResult.status === 'fulfilled' && vitalsResult.value) {
           setVitalsData(vitalsResult.value.data?.data?.getPatientVitalSigns || null);
-        } else if (!shouldLoadStaffMedicalDetails) {
+        } else if (!shouldLoadStaffVitals) {
           setVitalsData(null);
         } else {
           console.warn('[PatientRecordView] VitalSigns fetch failed:', vitalsResult.reason?.message);
@@ -814,6 +791,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     hasAnyTabPermission,
     canViewPersonal,
     canViewMedical,
+    canSetVitalSigns,
+    canSetDentalRecord,
   ]);
 
   const loadMedicineRequests = useCallback(async () => {
@@ -1138,12 +1117,12 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
             : <VitalSignsTab patient={patient} />;
       case 'dental':
         return dentalSubTab === 'dental-record'
-          ? <PatientDentalRecordTab patient={patient} />
+          ? <PatientDentalRecordTab patient={patient} canSetDentalRecord={canSetDentalRecord} />
           : dentalSubTab === 'dental-grade-history'
-            ? <PatientDentalGradeHistoryTab patient={patient} />
+            ? <PatientDentalGradeHistoryTab patient={patient} canSetDentalRecord={canSetDentalRecord} />
             : <DentalGradingTab patient={patient} />;
       case 'consultation':
-        return consultationSubTab === 'consultation-form' ? (
+        return consultationSubTab === 'consultation-form' && canEditConsultation ? (
           <PatientConsultationTab
             patient={patient}
             consultations={consultations}
@@ -1154,6 +1133,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
             patient={patient}
             consultations={consultations}
             onRefreshConsultations={handleRefreshConsultations}
+            canEditConsultation={canEditConsultation}
+            canGenerateDocuments={canGenerateDocuments}
           />
         );
       case 'appointments':
@@ -1169,7 +1150,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           />
         );
       case 'documents':
-        return <PatientDocumentsTab patient={patient} />;
+        return <PatientDocumentsTab patient={patient} canManageDocuments={canManageDocuments} />;
       case 'obgyne':
         return <PatientObgyneTab patient={patient} />;
       default:
@@ -1324,7 +1305,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
               {[
                 { id: 'medical-record', label: 'Medical Record' },
                 { id: 'medical-record-history', label: 'History' },
-                { id: 'vital-signs', label: 'Vital Signs' },
+                ...(canSetVitalSigns ? [{ id: 'vital-signs', label: 'Vital Signs' }] : []),
               ].map((sub) => (
                 <button
                   key={sub.id}
@@ -1348,7 +1329,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
               {[
                 { id: 'dental-record', label: 'Dental Record' },
                 { id: 'dental-grade-history', label: 'History' },
-                { id: 'dental-grading', label: 'Grading' },
+                ...(canSetDentalRecord ? [{ id: 'dental-grading', label: 'Grading' }] : []),
               ].map((sub) => (
                 <button
                   key={sub.id}
@@ -1370,7 +1351,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
             <div className="flex gap-2 flex-wrap">
               {[
-                { id: 'consultation-form', label: 'New Consultation' },
+                ...(canEditConsultation ? [{ id: 'consultation-form', label: 'New Consultation' }] : []),
                 { id: 'consultation-history', label: 'History' },
               ].map((sub) => (
                 <button

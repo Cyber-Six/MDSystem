@@ -13,6 +13,20 @@ const PermissionsContext = createContext(null);
 const SEARCH_PATIENT_PERMISSION_KEYS = Object.freeze([
   'profile_allow_view',
   'emr_allow_view',
+  'emr_allow_set_vital_sign',
+  'emr_allow_set_dental_record',
+  'consultation_allow_view',
+  'consultation_allow_edit',
+  'appointment_allow_view_records',
+  'inventory_allow_manage_requests',
+  'document_allow_view',
+  'document_allow_manage',
+  'document_allow_generate',
+]);
+
+const SEARCH_PATIENT_ACCESS_PERMISSION_KEYS = Object.freeze([
+  'profile_allow_view',
+  'emr_allow_view',
   'consultation_allow_view',
   'appointment_allow_view_records',
   'inventory_allow_manage_requests',
@@ -46,7 +60,7 @@ function isPermissionDeniedError(error) {
 }
 
 function hasSearchPatientGranularSnapshot(permissionMap = {}) {
-  return SEARCH_PATIENT_PERMISSION_KEYS.every((key) => Object.prototype.hasOwnProperty.call(permissionMap, key));
+  return SEARCH_PATIENT_ACCESS_PERMISSION_KEYS.every((key) => Object.prototype.hasOwnProperty.call(permissionMap, key));
 }
 
 async function probeGraphQLPermission(endpoint, query, variables = {}) {
@@ -175,7 +189,7 @@ function toSearchPatientEntangledPermissionMap(rawFlags = {}) {
 }
 
 async function fetchSearchPatientPermissionProbeMap({ branch, existingPermissions = {} }) {
-  const missingKeys = SEARCH_PATIENT_PERMISSION_KEYS.filter(
+  const missingKeys = SEARCH_PATIENT_ACCESS_PERMISSION_KEYS.filter(
     (key) => !Object.prototype.hasOwnProperty.call(existingPermissions, key)
   );
 
@@ -313,12 +327,17 @@ const MODULE_ROUTE_MAP = {
 // If granular keys are available from the entangled permission payload,
 // those are used as the source of truth instead of these fallbacks.
 const SEARCH_PATIENT_PERMISSION_FALLBACK_MODULES = Object.freeze({
-  profile_allow_view: Object.freeze(['patientSearch', 'medicalRecords']),
-  emr_allow_view: Object.freeze(['medicalRecords', 'dentalRecords']),
-  consultation_allow_view: Object.freeze(['medicalRecords', 'dentalRecords']),
-  appointment_allow_view_records: Object.freeze(['appointments']),
-  inventory_allow_manage_requests: Object.freeze(['inventory']),
-  document_allow_view: Object.freeze(['documents']),
+  profile_allow_view: Object.freeze(['patientSearch', 'personalRecords', 'medicalRecords']),
+  emr_allow_view: Object.freeze(['patientSearch', 'medicalRecords', 'dentalRecords']),
+  emr_allow_set_vital_sign: Object.freeze(['medicalRecords']),
+  emr_allow_set_dental_record: Object.freeze(['dentalRecords']),
+  consultation_allow_view: Object.freeze(['patientSearch', 'consultation']),
+  consultation_allow_edit: Object.freeze(['consultation']),
+  appointment_allow_view_records: Object.freeze(['patientSearch', 'appointments']),
+  inventory_allow_manage_requests: Object.freeze(['patientSearch', 'inventory']),
+  document_allow_view: Object.freeze(['patientSearch', 'documents']),
+  document_allow_manage: Object.freeze(['documents']),
+  document_allow_generate: Object.freeze(['documents']),
 });
 
 /**
@@ -462,10 +481,15 @@ export const PermissionsProvider = ({ children }) => {
   const searchPatientPermissionFlags = useMemo(() => ({
     profile_allow_view: resolveSearchPatientPermission('profile_allow_view'),
     emr_allow_view: resolveSearchPatientPermission('emr_allow_view'),
+    emr_allow_set_vital_sign: resolveSearchPatientPermission('emr_allow_set_vital_sign'),
+    emr_allow_set_dental_record: resolveSearchPatientPermission('emr_allow_set_dental_record'),
     consultation_allow_view: resolveSearchPatientPermission('consultation_allow_view'),
+    consultation_allow_edit: resolveSearchPatientPermission('consultation_allow_edit'),
     appointment_allow_view_records: resolveSearchPatientPermission('appointment_allow_view_records'),
     inventory_allow_manage_requests: resolveSearchPatientPermission('inventory_allow_manage_requests'),
     document_allow_view: resolveSearchPatientPermission('document_allow_view'),
+    document_allow_manage: resolveSearchPatientPermission('document_allow_manage'),
+    document_allow_generate: resolveSearchPatientPermission('document_allow_generate'),
   }), [resolveSearchPatientPermission]);
 
   const hasSearchPatientAccess = useMemo(() => (

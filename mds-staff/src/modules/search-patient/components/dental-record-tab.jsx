@@ -164,8 +164,8 @@ const GQL_CREATE_DENTAL_RECORD = `
   }
 `;
 
-export default function PatientDentalRecordTab({ patient }) {
-  const dental = patient.dental || {};
+export default function PatientDentalRecordTab({ patient, canSetDentalRecord = true }) {
+  const dental = useMemo(() => patient?.dental || {}, [patient?.dental]);
 
   // Memoize so the reference stays stable across re-renders triggered by onStateChange.
   // A new object reference every render would fire the useEffect in ToothChart and reset
@@ -178,7 +178,6 @@ export default function PatientDentalRecordTab({ patient }) {
     if (chart?.decayed) chart.decayed.forEach(tooth => { states[tooth] = 'C'; });
     if (chart?.states)  Object.assign(states, chart.states);
     return states;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dental]);
 
   // Oral finding catalogs from backend
@@ -226,6 +225,7 @@ export default function PatientDentalRecordTab({ patient }) {
   };
 
   const handleGradeStart = () => {
+    if (!canSetDentalRecord) return;
     setGradeError(null);
     setGradeSuccess(false);
     setIsGrading(true);
@@ -241,6 +241,7 @@ export default function PatientDentalRecordTab({ patient }) {
   };
 
   const handleGradeSave = async () => {
+    if (!canSetDentalRecord) return;
     setIsSaving(true);
     setGradeError(null);
     try {
@@ -468,7 +469,7 @@ export default function PatientDentalRecordTab({ patient }) {
                 {Object.values(currentToothStates).filter(s => s !== '✓').length} conditions marked
               </span>
             )}
-            {!isGrading ? (
+            {!isGrading && canSetDentalRecord ? (
               <button
                 onClick={handleGradeStart}
                 className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md transition-colors flex items-center gap-1.5"
@@ -478,7 +479,7 @@ export default function PatientDentalRecordTab({ patient }) {
                 </svg>
                 Grade
               </button>
-            ) : (
+            ) : isGrading ? (
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleGradeCancel}
@@ -505,7 +506,7 @@ export default function PatientDentalRecordTab({ patient }) {
                   Save Grade
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         }
       >

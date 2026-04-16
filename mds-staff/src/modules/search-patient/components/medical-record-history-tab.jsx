@@ -134,7 +134,7 @@ function fmtDateTime(dateStr) {
 /* ─── SnapshotBlock: one full Medical Record layout per snapshot index ─── */
 // index=0 (current) starts expanded; older snapshots start collapsed.
 
-function SnapshotBlock({ index, isCurrent, snapshotDate, children }) {
+function SnapshotBlock({ isCurrent, snapshotDate, children }) {
   const [open, setOpen] = useState(isCurrent);
   const { date, time } = fmtDateTime(snapshotDate);
 
@@ -176,17 +176,14 @@ function SnapshotBlock({ index, isCurrent, snapshotDate, children }) {
 
 export default function PatientMedicalRecordHistoryTab({ patient }) {
   const [historyData, setHistoryData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!patient?.id) {
-      setLoading(false);
       return;
     }
+    const currentPatientId = String(patient.id);
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     axiosRequest.post('/emr/medical', {
       query: GQL_MEDICAL_RECORD_HISTORY,
@@ -194,39 +191,47 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     })
       .then((emrRes) => {
         if (cancelled) return;
-        setHistoryData(emrRes.data?.data || {});
+        setHistoryData({
+          _patientId: currentPatientId,
+          ...(emrRes.data?.data || {}),
+        });
+        setError(null);
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(
-          err?.response?.data?.errors?.[0]?.message ||
+        setError({
+          patientId: currentPatientId,
+          message:
+            err?.response?.data?.errors?.[0]?.message ||
             err?.message ||
-            'Failed to load medical record history.'
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+            'Failed to load medical record history.',
+        });
       });
 
     return () => { cancelled = true; };
   }, [patient?.id]);
 
+  const activePatientId = patient?.id ? String(patient.id) : null;
+  const activeHistoryData = historyData && String(historyData._patientId) === activePatientId ? historyData : null;
+  const activeError = error && error.patientId === activePatientId ? error.message : null;
+  const loading = Boolean(activePatientId) && !activeHistoryData && !activeError;
+
   const catalogs = useMemo(() => {
-    if (!historyData) return {};
+    if (!activeHistoryData) return {};
     const allergenMap = {};
-    (historyData.allergenCatalogs || []).forEach((c) => { allergenMap[c.id] = c; });
+    (activeHistoryData.allergenCatalogs || []).forEach((c) => { allergenMap[c.id] = c; });
     const conditionMap = {};
-    (historyData.conditionCatalogs || []).forEach((c) => { conditionMap[c.id] = c.name; });
+    (activeHistoryData.conditionCatalogs || []).forEach((c) => { conditionMap[c.id] = c.name; });
     const immunizationMap = {};
-    (historyData.immunizationCatalogs || []).forEach((c) => { immunizationMap[c.id] = c.name; });
+    (activeHistoryData.immunizationCatalogs || []).forEach((c) => { immunizationMap[c.id] = c.name; });
     const operationMap = {};
-    (historyData.operationCatalogs || []).forEach((c) => { operationMap[c.id] = c.name; });
+    (activeHistoryData.operationCatalogs || []).forEach((c) => { operationMap[c.id] = c.name; });
     const hospitalizationMap = {};
-    (historyData.hospitalizationCatalogs || []).forEach((c) => { hospitalizationMap[c.id] = c.name; });
+    (activeHistoryData.hospitalizationCatalogs || []).forEach((c) => { hospitalizationMap[c.id] = c.name; });
     const medicationMap = {};
-    (historyData.medicationCatalogs || []).forEach((c) => { medicationMap[c.id] = c.name; });
+    (activeHistoryData.medicationCatalogs || []).forEach((c) => { medicationMap[c.id] = c.name; });
     return { allergenMap, conditionMap, immunizationMap, operationMap, hospitalizationMap, medicationMap };
-  }, [historyData]);
+  }, [activeHistoryData]);
 
   if (loading) {
     return (
@@ -240,22 +245,22 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     );
   }
 
-  if (error) {
+  if (activeError) {
     return (
       <div className="px-3 py-4 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-700 dark:text-error-400">
-        {error}
+        {activeError}
       </div>
     );
   }
 
-  const medicalHistory      = historyData?.getUserMedicalHistory      ?? [];
-  const allergyProfiles     = historyData?.getUserAllergyProfile      ?? [];
-  const medicationProfiles  = historyData?.getUserMedicationProfile   ?? [];
-  const immunizationProfiles= historyData?.getUserImmunizationProfile ?? [];
-  const hospitalizationProfiles = historyData?.getUserHospitalizationProfile ?? [];
-  const operationProfiles   = historyData?.getUserOperationProfile    ?? [];
-  const lifestyleProfiles   = historyData?.getUserLifestyle           ?? [];
-  const visualAcuityProfiles= historyData?.getUserVisualAcuityProfile ?? [];
+  const medicalHistory      = activeHistoryData?.getUserMedicalHistory      ?? [];
+  const allergyProfiles     = activeHistoryData?.getUserAllergyProfile      ?? [];
+  const medicationProfiles  = activeHistoryData?.getUserMedicationProfile   ?? [];
+  const immunizationProfiles= activeHistoryData?.getUserImmunizationProfile ?? [];
+  const hospitalizationProfiles = activeHistoryData?.getUserHospitalizationProfile ?? [];
+  const operationProfiles   = activeHistoryData?.getUserOperationProfile    ?? [];
+  const lifestyleProfiles   = activeHistoryData?.getUserLifestyle           ?? [];
+  const visualAcuityProfiles= activeHistoryData?.getUserVisualAcuityProfile ?? [];
 
   const { allergenMap, conditionMap, immunizationMap, operationMap, hospitalizationMap, medicationMap } = catalogs;
 
@@ -265,13 +270,15 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     lifestyleProfiles, visualAcuityProfiles,
   ].some((arr) => arr.length > 0);
 
-  if (!hasAnyData) {
-    return (
-      <PatientSectionCard title="Medical Record History">
-        <p className="text-sm text-secondary-400 dark:text-neutral-500">No medical record history found.</p>
-      </PatientSectionCard>
-    );
-  }
+  const vitals = patient?.medical?.vitalSigns || {};
+  const vitalItems = [
+    { label: 'Height',      value: vitals.height ? `${vitals.height} cm` : null },
+    { label: 'Weight',      value: vitals.weight ? `${vitals.weight} kg` : null },
+    { label: 'BMI',         value: vitals.bmi || null },
+    { label: 'Blood Press', value: vitals.bp || null },
+    { label: 'Heart Rate',  value: vitals.heartRate ? `${vitals.heartRate} bpm` : null },
+    { label: 'Temp',        value: vitals.temperature ? `${vitals.temperature} °C` : null },
+  ];
 
   /* ── Medical History content (same as Medical Record tab) ── */
   const renderMedHistoryEntry = (r) => {
@@ -488,7 +495,35 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
 
   return (
     <div className="space-y-3">
-      {Array.from({ length: maxCount }, (_, i) => {
+      <PatientSectionCard
+        title="Vital Signs"
+        right={
+          vitals.lastChecked && (
+            <span className="text-xs text-secondary-400 dark:text-neutral-500">
+              Last checked: {vitals.lastChecked}
+            </span>
+          )
+        }
+      >
+        <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-neutral-200 dark:divide-neutral-700 -mx-3 -mb-3 border-t border-neutral-100 dark:border-neutral-700/60">
+          {vitalItems.map(({ label, value }) => (
+            <div key={label} className="px-3 py-3 text-center">
+              <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none mb-1.5">{label}</p>
+              {value ? (
+                <p className="text-base font-semibold text-secondary-800 dark:text-white leading-none">{value}</p>
+              ) : (
+                <p className="text-sm text-secondary-300 dark:text-neutral-600">—</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </PatientSectionCard>
+
+      {!hasAnyData ? (
+        <PatientSectionCard title="Medical Record History">
+          <p className="text-sm text-secondary-400 dark:text-neutral-500">No medical record history found.</p>
+        </PatientSectionCard>
+      ) : Array.from({ length: maxCount }, (_, i) => {
         const mh  = medicalHistory[i]             ?? null;
         const ap  = allergyProfiles[i]            ?? null;
         const mp  = medicationProfiles[i]         ?? null;
@@ -503,7 +538,7 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
           [mh, ap, mp, ip, hp, op, lf, vap].find(Boolean)?.created_at ?? null;
 
         return (
-          <SnapshotBlock key={i} index={i} isCurrent={i === 0} snapshotDate={snapshotDate}>
+          <SnapshotBlock key={i} isCurrent={i === 0} snapshotDate={snapshotDate}>
             {/* Two-column grid (same layout as Medical Record tab) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
               {/* ── LEFT COLUMN ── */}
