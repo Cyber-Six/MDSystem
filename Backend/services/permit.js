@@ -1042,14 +1042,14 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
 
   // Find all staff with this role
   const staffResult = await db.query(
-    `SELECT mp.id, mp.designation
+    `SELECT mp.id, mp.designation, mp.is_active
      FROM "MedicalPersonnel" mp
      WHERE mp.role = $1`,
     [roleLabel]
   );
 
   if (staffResult.rows.length === 0) {
-    return { affectedCount: 0 };
+    return { affectedCount: 0, affectedStaff: [] };
   }
 
   // Pre-compute enabled permissions from template (exclude is_staff — added per-staff with correct branch)
@@ -1058,6 +1058,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
     .map(p => ({ key: p.key, enabled: true, branch: p.branch }));
 
   let affectedCount = 0;
+  const affectedStaff = [];
   for (const staff of staffResult.rows) {
     const branch = staff.designation || 'Both';
 
@@ -1083,10 +1084,15 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
     });
 
     affectedCount++;
+    affectedStaff.push({
+      userId: String(staff.id),
+      branch,
+      status: staff.is_active ? 'Active' : 'Suspended',
+    });
   }
 
   logger.info(`Template permissions propagated: templateId=${templateId}, role="${roleLabel}", affectedStaff=${affectedCount}`);
-  return { affectedCount };
+  return { affectedCount, affectedStaff };
 }
 
 // ─── MODULE-LEVEL PERMISSION MAP ─────────────────────────────────────────────

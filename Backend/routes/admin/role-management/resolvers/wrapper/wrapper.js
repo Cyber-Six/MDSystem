@@ -2333,11 +2333,20 @@ const Mutation = {
       const statusChanged = String(updatedStatus) !== (targetUser.is_active ? 'Active' : 'Suspended');
 
       if (roleChanged || branchChanged || statusChanged) {
+        const reason = roleChanged
+          ? 'roleChanged'
+          : branchChanged
+            ? 'branchChanged'
+            : statusChanged
+              ? 'statusChanged'
+              : 'accountUpdated';
+
         const payload = {
           userId: String(userId),
           newRole: updatedRole,
           newBranch: updatedBranch,
           newStatus: updatedStatus,
+          reason,
           timestamp: new Date().toISOString(),
         };
 
@@ -3128,10 +3137,13 @@ const Mutation = {
       try {
         await client.query('BEGIN');
 
+        const labelChanged = label !== undefined && label !== null && label !== existingTemplate.label;
+        const finalRoleLabel = label || existingTemplate.label;
         let affectedStaffCount = 0;
+        let affectedStaffForReload = [];
 
         // If label changed, update MedicalPersonnel.role for all linked staff first
-        if (label !== undefined && label !== null && label !== existingTemplate.label) {
+        if (labelChanged) {
           await client.query(
             `UPDATE "MedicalPersonnel" SET role = $1 WHERE role = $2`,
             [label, existingTemplate.label]
@@ -3141,14 +3153,31 @@ const Mutation = {
 
         // If permissions changed, propagate to all staff with this role
         if (normalizedPermissionsList && normalizedPermissionsList.length > 0) {
-          const roleLabel = label || existingTemplate.label;
           const propagation = await propagateTemplatePermissions({
             templateId,
-            roleLabel,
+            roleLabel: finalRoleLabel,
             assignedBy: user.id,
             client  // Pass client for transaction participation
           });
           affectedStaffCount = propagation.affectedCount;
+          affectedStaffForReload = Array.isArray(propagation.affectedStaff)
+            ? propagation.affectedStaff
+            : [];
+        } else if (labelChanged) {
+          // Label-only updates still change the staff-visible role and must trigger reloads.
+          const affectedStaffResult = await client.query(
+            `SELECT id, designation AS branch, is_active
+               FROM "MedicalPersonnel"
+              WHERE role = $1`,
+            [finalRoleLabel]
+          );
+
+          affectedStaffForReload = affectedStaffResult.rows.map((row) => ({
+            userId: String(row.id),
+            branch: row.branch || 'Both',
+            status: row.is_active ? 'Active' : 'Suspended',
+          }));
+          affectedStaffCount = affectedStaffForReload.length;
         }
 
         await client.query('COMMIT');
@@ -3165,6 +3194,27 @@ const Mutation = {
           templateLabel: template?.label || label || existingTemplate?.label,
           changeSummary: documentChangeSummary,
         });
+
+        if (affectedStaffForReload.length > 0 && (labelChanged || hasPermissionPayload)) {
+          const timestamp = new Date().toISOString();
+
+          for (const staff of affectedStaffForReload) {
+            const payload = {
+              userId: String(staff.userId),
+              newRole: finalRoleLabel,
+              newBranch: staff.branch || 'Both',
+              newStatus: staff.status || 'Active',
+              reason: 'templatePermissionsChanged',
+              timestamp,
+            };
+
+            emitToUser(payload.userId, 'accountUpdated', payload);
+          }
+
+          logger.info(
+            `accountUpdated emitted for templateId=${templateId} to ${affectedStaffForReload.length} staff (reason=templatePermissionsChanged)`
+          );
+        }
 
         logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}, affectedStaff=${affectedStaffCount}`);
 
@@ -3223,7 +3273,7 @@ const Mutation = {
   _applyTemplateToStaff: async (_, { userId, templateId }, { user, res }) => {
     // Verify user exists and is Medical staff - also get their branch designation
     const userResult = await db.query(
-      `SELECT uc.id, uc.identity, mp.id AS "medicalId", mp.designation AS branch
+      `SELECT uc.id, uc.identity, mp.id AS "medicalId", mp.designation AS branch, mp.role, mp.is_active
        FROM "UserCredentials" uc
        LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1
@@ -3258,6 +3308,15 @@ const Mutation = {
         templateId,
         assignedBy: user.id,
         staffBranch: targetUser.branch  // Use the staff's branch - all permissions inherit this
+      });
+
+      emitToUser(String(userId), 'accountUpdated', {
+        userId: String(userId),
+        newRole: targetUser.role || null,
+        newBranch: targetUser.branch || 'Both',
+        newStatus: targetUser.is_active ? 'Active' : 'Suspended',
+        reason: 'templatePermissionsChanged',
+        timestamp: new Date().toISOString(),
       });
 
       logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, staffBranch=${targetUser.branch}, by adminId=${user.id}`);
