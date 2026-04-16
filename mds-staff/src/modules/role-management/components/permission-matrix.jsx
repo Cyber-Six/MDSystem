@@ -21,9 +21,15 @@ const PermissionMatrix = ({ permissions, onChange, readOnly = false }) => {
     onChange(setModuleKeys(permissions, moduleId, state !== 'on'));
   };
 
-  const handleToggleKey = (key) => {
+  const handleToggleKey = (key, checked) => {
     if (readOnly) return;
-    onChange({ ...permissions, [key]: !permissions[key] });
+
+    if (key === 'document_allow_view') {
+      onChange({ ...permissions, document_allow_view: Boolean(checked) });
+      return;
+    }
+
+    onChange({ ...permissions, [key]: Boolean(checked) });
   };
 
   const handleToggleExpand = (moduleId) => {
@@ -98,7 +104,7 @@ const PermissionMatrix = ({ permissions, onChange, readOnly = false }) => {
               <input
                 type="checkbox"
                 checked={keyEnabled}
-                onChange={() => !isKeyDisabled && handleToggleKey(key)}
+                onChange={(event) => !isKeyDisabled && handleToggleKey(key, event.target.checked)}
                 disabled={isKeyDisabled}
                 className={`w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500 flex-shrink-0 ${isKeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               />

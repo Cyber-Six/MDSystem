@@ -371,6 +371,24 @@ const GQL_CONFIRM_ADMIN_TRANSFER = `
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
+const DOCUMENT_TEMPLATE_PERMISSION_KEYS = Object.freeze([
+  'document_allow_view',
+  'document_allow_manage',
+  'document_allow_generate',
+]);
+
+function ensureDocumentTemplateKeys(granularPerms = {}) {
+  const normalized = { ...(granularPerms || {}) };
+
+  for (const key of DOCUMENT_TEMPLATE_PERMISSION_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(normalized, key)) {
+      normalized[key] = false;
+    }
+  }
+
+  return normalized;
+}
+
 /**
  * Convert backend Permissions { permissions: [{ key, enabled }] } to flat { key: boolean }.
  */
@@ -388,7 +406,9 @@ function toGranularPermissions(permsResponse) {
  * Convert flat { key: boolean } to ExtendedPermissionInput[] for template mutations.
  */
 function granularToTemplatePerms(granularPerms, branch = 'Both') {
-  return Object.entries(granularPerms).map(([key, enabled]) => ({
+  const normalizedPerms = ensureDocumentTemplateKeys(granularPerms);
+
+  return Object.entries(normalizedPerms).map(([key, enabled]) => ({
     key,
     enabled: Boolean(enabled),
     branch,

@@ -452,6 +452,7 @@ export function StaffNotificationProvider({ children }) {
             const incomingRole = data?.newRole ?? null;
             const incomingBranch = data?.newBranch ?? null;
             const incomingStatus = data?.newStatus ?? null;
+            const updateReason = typeof data?.reason === 'string' ? data.reason : null;
 
             const roleChanged =
               currentRole != null && incomingRole != null && String(currentRole) !== String(incomingRole);
@@ -460,17 +461,19 @@ export function StaffNotificationProvider({ children }) {
             const statusChanged =
               incomingStatus != null && String(incomingStatus).toLowerCase() === 'suspended';
 
-            if (incomingStatus === 'Suspended') {
+            if (updateReason === 'templatePermissionsChanged') {
+              accountUpdateMessage = 'Your role permissions have changed. Reloading...';
+            } else if (incomingStatus === 'Suspended') {
               accountUpdateMessage = 'Your account has been suspended. The page will reload.';
-            } else if (roleChanged) {
+            } else if (roleChanged || updateReason === 'roleChanged') {
               accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
-            } else if (branchChanged) {
+            } else if (branchChanged || updateReason === 'branchChanged') {
               accountUpdateMessage = 'Your branch assignment has been updated. The page will reload to apply changes.';
-            } else if (statusChanged) {
+            } else if (statusChanged || updateReason === 'statusChanged') {
               accountUpdateMessage = 'Your account status has been updated. The page will reload to apply changes.';
             } else {
               // Fallback when local profile/permissions are stale or still loading.
-              accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
+              accountUpdateMessage = 'Your role permissions have changed. Reloading...';
             }
           }
 
@@ -493,7 +496,7 @@ export function StaffNotificationProvider({ children }) {
                 .finally(() => {
                   window.setTimeout(() => {
                     window.location.reload();
-                  }, 4000);
+                  }, 2000);
                 });
             }
           }

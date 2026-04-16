@@ -6,6 +6,8 @@ export const MODULE_ENTANGLED_PERMISSION_MAP = {
   patientSearch: 'SEARCH_PATIENT',
 };
 
+const PERMISSION_DENIED_MESSAGE_REGEX = /unauthorized|forbidden|not permitted|insufficient permissions|admin access required/i;
+
 const STAFF_PERMISSION_QUERY = `
   query GetStaffPermissions($userId: ID!) {
     getStaffPermissions(userId: $userId) {
@@ -43,6 +45,25 @@ function decodeJwtPayload(token) {
   }
 }
 
+function isPermissionDeniedMessage(message) {
+  if (typeof message !== 'string') return false;
+  return PERMISSION_DENIED_MESSAGE_REGEX.test(message);
+}
+
+function isUnauthorizedError(error) {
+  const status = Number(error?.status || error?.response?.status || 0);
+  if (status === 401 || status === 403) return true;
+
+  const message = String(
+    error?.response?.data?.message
+    || error?.response?.data?.error
+    || error?.message
+    || ''
+  );
+
+  return isPermissionDeniedMessage(message);
+}
+
 async function getCurrentUserId() {
   const accessToken = await Promise.resolve(TokenStorage.getAccessToken());
   const payload = decodeJwtPayload(accessToken);
@@ -77,16 +98,36 @@ function toPermissionMap(records = []) {
 }
 
 async function sendGraphQL(endpoint, query, variables = {}) {
-  const response = await axiosRequest.post(endpoint, { query, variables });
+  let response;
+
+  try {
+    response = await axiosRequest.post(endpoint, { query, variables });
+  } catch (error) {
+    const wrappedError = new Error(
+      error?.response?.data?.errors?.[0]?.message
+      || error?.response?.data?.message
+      || error?.message
+      || 'GraphQL request failed'
+    );
+    wrappedError.status = error?.response?.status;
+    throw wrappedError;
+  }
 
   if (Array.isArray(response?.data?.errors) && response.data.errors.length > 0) {
-    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+    const message = response.data.errors[0]?.message || 'GraphQL error occurred';
+    const error = new Error(message);
+    if (isPermissionDeniedMessage(message)) {
+      error.status = 403;
+    }
+    throw error;
   }
 
   return response?.data?.data || null;
 }
 
-async function fetchFromEndpoint(endpoint) {
+async function fetchFromEndpoint(endpoint, options = {}) {
+  if (!options?.isAdmin) return {};
+
   const userId = await getCurrentUserId();
   if (!userId) return {};
 
@@ -116,14 +157,20 @@ export function mergeEntangledPermissionMaps(baseMap = {}, overrideMap = {}) {
   };
 }
 
-export async function fetchEntangledPermissions() {
+export async function fetchEntangledPermissions(options = {}) {
+  if (!options?.isAdmin) return {};
+
   let lastError = null;
 
   for (const endpoint of GRAPHQL_ENDPOINTS) {
     try {
-      const map = await fetchFromEndpoint(endpoint);
+      const map = await fetchFromEndpoint(endpoint, options);
       if (Object.keys(map).length > 0) return map;
     } catch (error) {
+      if (isUnauthorizedError(error)) {
+        return {};
+      }
+
       lastError = error;
     }
   }

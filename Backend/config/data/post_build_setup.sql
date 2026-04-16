@@ -422,11 +422,23 @@ CREATE TABLE IF NOT EXISTS "UsersPreferences" (
 CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id);
 
 -- Missing rolesTable entries (idempotent — safe to re-run)
-INSERT INTO "rolesTable" (label, data) VALUES
-('ALLOW_TO_SET_VITAL_SIGN',                'Permission to set vital signs'),
-('ALLOW_TO_CONFIGURE_INVENTORY',           'Permission to configure inventory settings and thresholds'),
-('ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS', 'Permission to send push notifications and alerts to patients')
-ON CONFLICT (label) DO NOTHING;
+-- Uses NOT EXISTS instead of ON CONFLICT because some environments do not
+-- enforce a unique constraint on rolesTable.label.
+INSERT INTO "rolesTable" (label, data)
+SELECT v.label, v.data
+FROM (VALUES
+  ('ALLOW_TO_SET_VITAL_SIGN',                'Permission to set vital signs'),
+  ('ALLOW_TO_CONFIGURE_INVENTORY',           'Permission to configure inventory settings and thresholds'),
+  ('ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS', 'Permission to send push notifications and alerts to patients'),
+  ('ALLOW_TO_VIEW_DOCUMENTS',                'Permission to view documents'),
+  ('ALLOW_TO_MANAGE_DOCUMENTS',              'Permission to manage (create/edit/delete) documents'),
+  ('ALLOW_TO_GENERATE_DOCUMENTS',            'Permission to generate documents')
+) AS v(label, data)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM "rolesTable" r
+  WHERE r.label = v.label
+);
 
 -- Student programs (added post-initial build)
 INSERT INTO student_programs (label)

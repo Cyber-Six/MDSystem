@@ -163,6 +163,17 @@ function toEntangledRecord(code, enabled) {
   };
 }
 
+function toSearchPatientEntangledPermissionMap(rawFlags = {}) {
+  const map = {};
+
+  for (const key of SEARCH_PATIENT_PERMISSION_KEYS) {
+    if (typeof rawFlags?.[key] !== 'boolean') continue;
+    map[key] = toEntangledRecord(key, rawFlags[key]);
+  }
+
+  return map;
+}
+
 async function fetchSearchPatientPermissionProbeMap({ branch, existingPermissions = {} }) {
   const missingKeys = SEARCH_PATIENT_PERMISSION_KEYS.filter(
     (key) => !Object.prototype.hasOwnProperty.call(existingPermissions, key)
@@ -302,9 +313,9 @@ const MODULE_ROUTE_MAP = {
 // If granular keys are available from the entangled permission payload,
 // those are used as the source of truth instead of these fallbacks.
 const SEARCH_PATIENT_PERMISSION_FALLBACK_MODULES = Object.freeze({
-  profile_allow_view: Object.freeze(['personalRecords']),
+  profile_allow_view: Object.freeze(['patientSearch', 'medicalRecords']),
   emr_allow_view: Object.freeze(['medicalRecords', 'dentalRecords']),
-  consultation_allow_view: Object.freeze(['consultation']),
+  consultation_allow_view: Object.freeze(['medicalRecords', 'dentalRecords']),
   appointment_allow_view_records: Object.freeze(['appointments']),
   inventory_allow_manage_requests: Object.freeze(['inventory']),
   document_allow_view: Object.freeze(['documents']),
@@ -345,12 +356,21 @@ export const PermissionsProvider = ({ children }) => {
 
       let resolvedEntangled = derivedEntangled;
 
-      try {
-        const fetchedEntangled = await fetchEntangledPermissions();
-        resolvedEntangled = mergeEntangledPermissionMaps(derivedEntangled, fetchedEntangled);
-      } catch (entangledError) {
-        // Keep derived entangled states so existing flows remain stable if GraphQL entangled fetch fails.
-        console.warn('Failed to fetch entangled permissions:', entangledError);
+      if (!nextIsAdmin) {
+        const serverSearchPatientFlags = toSearchPatientEntangledPermissionMap(data.searchPatientPermissions || {});
+        if (Object.keys(serverSearchPatientFlags).length > 0) {
+          resolvedEntangled = mergeEntangledPermissionMaps(resolvedEntangled, serverSearchPatientFlags);
+        }
+      }
+
+      if (nextIsAdmin) {
+        try {
+          const fetchedEntangled = await fetchEntangledPermissions({ isAdmin: true });
+          resolvedEntangled = mergeEntangledPermissionMaps(derivedEntangled, fetchedEntangled);
+        } catch (entangledError) {
+          // Fall back to /staff/me/permissions-derived states when admin entangled fetch fails.
+          console.warn('Failed to fetch entangled permissions:', entangledError);
+        }
       }
 
       if (!nextIsAdmin && !hasSearchPatientGranularSnapshot(resolvedEntangled)) {
@@ -448,10 +468,14 @@ export const PermissionsProvider = ({ children }) => {
     document_allow_view: resolveSearchPatientPermission('document_allow_view'),
   }), [resolveSearchPatientPermission]);
 
-  const hasSearchPatientAccess = useMemo(
-    () => Object.values(searchPatientPermissionFlags).some(Boolean),
-    [searchPatientPermissionFlags]
-  );
+  const hasSearchPatientAccess = useMemo(() => (
+    searchPatientPermissionFlags.profile_allow_view
+    || searchPatientPermissionFlags.emr_allow_view
+    || searchPatientPermissionFlags.consultation_allow_view
+    || searchPatientPermissionFlags.appointment_allow_view_records
+    || searchPatientPermissionFlags.inventory_allow_manage_requests
+    || searchPatientPermissionFlags.document_allow_view
+  ), [searchPatientPermissionFlags]);
 
   /**
    * Check if the user can access a specific route path.

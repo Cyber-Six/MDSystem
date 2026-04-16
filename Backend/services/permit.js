@@ -175,6 +175,32 @@ function normalizeTemplatePermissionsInput({ permissionsList = [], permissionGro
   return Array.from(merged.values());
 }
 
+async function assertRoleLabelsExist(labels = [], queryClient = db) {
+  const normalizedLabels = [...new Set(
+    (labels || [])
+      .map((label) => String(label || '').trim())
+      .filter(Boolean)
+  )];
+
+  if (normalizedLabels.length === 0) {
+    return;
+  }
+
+  const result = await queryClient.query(
+    `SELECT label
+       FROM "rolesTable"
+      WHERE label = ANY($1::text[])`,
+    [normalizedLabels]
+  );
+
+  const existing = new Set(result.rows.map((row) => row.label));
+  const missing = normalizedLabels.filter((label) => !existing.has(label));
+
+  if (missing.length > 0) {
+    throw new Error(`rolesTable is missing permission label(s): ${missing.join(', ')}`);
+  }
+}
+
 async function isMedicalAdmin(userId) {
   return await findMedicalPermit(userId, permissions.is_admin);;
 }
@@ -223,6 +249,8 @@ async function setMedicalPermit({ personnelId, assignedBy, roledata = [] }) {
       throw new Error(`Invalid role label: ${role.label}`);
     }
   }
+
+  await assertRoleLabelsExist(roledata.map((role) => role.label), db);
 
   // Build VALUES placeholders: ($1, $2), ($3, $4), ...
   const values = [];
@@ -363,6 +391,8 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
 
   // Insert/upsert permissions set to true (each with its own branch)
   if (toInsert.length > 0) {
+    await assertRoleLabelsExist(toInsert.map((entry) => entry.label), queryClient);
+
     const values = [];
     const params = [personnelId, assignedBy];
     let i = params.length + 1;
@@ -635,6 +665,8 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
 
     // Insert template permissions
     if (toInsert.length > 0) {
+      await assertRoleLabelsExist(toInsert.map((entry) => entry.label), client);
+
       const values = [];
       const params = [templateId];
       let i = params.length + 1;
@@ -862,6 +894,8 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
 
       // Insert new permissions
       if (toInsert.length > 0) {
+        await assertRoleLabelsExist(toInsert.map((entry) => entry.label), client);
+
         const values = [];
         const params = [templateId];
         let i = params.length + 1;
