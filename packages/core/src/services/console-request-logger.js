@@ -129,6 +129,20 @@ export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL 
     });
   };
 
+  const summarizeGraphQLErrors = (payload) => {
+    const errors = Array.isArray(payload?.errors) ? payload.errors.filter(Boolean) : [];
+    if (errors.length === 0) return [];
+
+    return errors.map((error, index) => {
+      const message = error?.message || 'Unknown GraphQL error';
+      const path = Array.isArray(error?.path) && error.path.length > 0
+        ? ` @ ${error.path.join('.')}`
+        : '';
+      const status = error?.extensions?.status ? ` (status ${error.extensions.status})` : '';
+      return `${index + 1}. ${message}${path}${status}`;
+    });
+  };
+
   /**
    * Log error details to console for debugging
    * 
@@ -138,11 +152,31 @@ export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL 
     if (!shouldLog()) return;
 
     if (error.response) {
+      const responseData = error.response.data;
+      const graphQLErrors = summarizeGraphQLErrors(responseData);
+
+      if (graphQLErrors.length > 0) {
+        const dataKeys = responseData?.data && typeof responseData.data === 'object'
+          ? Object.keys(responseData.data)
+          : [];
+
+        console.error('🔴 Axios Error Response:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          url: error.config?.url,
+          graphQLErrorCount: graphQLErrors.length,
+          graphQLErrors,
+          hasData: dataKeys.length > 0,
+          dataKeys,
+        });
+        return;
+      }
+
       console.error('🔴 Axios Error Response:', {
         status: error.response.status,
         statusText: error.response.statusText,
         url: error.config?.url,
-        data: error.response.data,
+        data: responseData,
       });
     } else if (error.request) {
       console.error('🔴 Axios Network Error:', {

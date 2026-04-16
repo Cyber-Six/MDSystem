@@ -35,7 +35,7 @@ const InitialRecordFormScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { isDark } = useTheme();
-  const { refreshRecordStatus } = useRecordStatus();
+  const { refreshRecordStatus, recordStatus, isRecordLoading } = useRecordStatus();
   const scrollRef = useRef<ScrollView>(null);
 
   const isRevision = route.params?.isRevision ?? false;
@@ -65,6 +65,12 @@ const InitialRecordFormScreen: React.FC = () => {
   // Load revision/update data if applicable
   useEffect(() => {
     if (!isRevision && !isUpdate) return;
+
+    // Reactivation update flow can legitimately have no active EMR profile yet.
+    // Skip prefill request to avoid expected 404 GraphQL "No active profile found" errors.
+    if (isRecordLoading) return;
+    if (isUpdate && recordStatus?.credentialStatus === 'Inactive') return;
+
     fetchRevisionPrefill()
       .then(data => {
         if (data) {
@@ -79,7 +85,7 @@ const InitialRecordFormScreen: React.FC = () => {
         }
       })
       .catch(err => console.warn('[RecordForm] Prefill failed:', err.message));
-  }, [isRevision, isUpdate]);
+  }, [isRevision, isUpdate, isRecordLoading, recordStatus?.credentialStatus]);
 
   const isFemale = formData.personalInfo.gender === 'Female';
 
@@ -312,9 +318,7 @@ const InitialRecordFormScreen: React.FC = () => {
     <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
-          <Text style={{ color: colors.primary[500], fontSize: 16 }}>← Back</Text>
-        </TouchableOpacity>
+        <View style={styles.headerBackBtn} />
         <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
           {isUpdate
             ? `Update ${recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Medical & Dental'} Record`
