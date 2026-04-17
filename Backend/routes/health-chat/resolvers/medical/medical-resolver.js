@@ -174,7 +174,7 @@ const Query = {
     return await Wrapper.Query._getMessages(_, { chatId, offset, limit }, { user, res });
   },
 
-  getPatientConversations: async (_, { location='Both', statuses, offset, limit}, { user, res }) => {
+  getPatientConversations: async (_, { location='Both', statuses, searchTerm, offset, limit}, { user, res }) => {
     const { permitted, branch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
     if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
@@ -189,7 +189,7 @@ const Query = {
       throwGraphQLError(res).message("Access denied by branch scope").status(403).throw();
     }
 
-    return await Wrapper.Query._getPatientConversations(_, { location: effectiveLoc, statuses, offset, limit}, { user, res });
+    return await Wrapper.Query._getPatientConversations(_, { location: effectiveLoc, statuses, searchTerm, offset, limit}, { user, res });
   },
 
   getPatientMessages: async (_, args, { user, res }) => {

@@ -553,10 +553,10 @@ export const extendSession = async (chatId) => {
 /**
  * Get patient conversations grouped by patient (1 row per patient)
  */
-export const getPatientConversations = async (statuses = null, offset = 0, limit = 50, location = 'Both') => {
+export const getPatientConversations = async (statuses = null, offset = 0, limit = 50, location = 'Both', searchTerm = null) => {
   const query = `
-    query GetPatientConversations($location: Designation, $statuses: [ChatStatus], $offset: Int, $limit: Int) {
-      getPatientConversations(location: $location, statuses: $statuses, offset: $offset, limit: $limit) {
+    query GetPatientConversations($location: Designation, $statuses: [ChatStatus], $searchTerm: String, $offset: Int, $limit: Int) {
+      getPatientConversations(location: $location, statuses: $statuses, searchTerm: $searchTerm, offset: $offset, limit: $limit) {
         conversations {
           patientId
           patient {
@@ -565,6 +565,7 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
             lastName
             email
             identifier
+            profileType
             branch
             dateOfBirth
             sex
@@ -615,7 +616,7 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
     }
   `;
 
-  const data = await sendGraphQL(query, { location, statuses, offset, limit });
+  const data = await sendGraphQL(query, { location, statuses, searchTerm: searchTerm || null, offset, limit });
   return data.getPatientConversations;
 };
 

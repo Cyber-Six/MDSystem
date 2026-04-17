@@ -73,6 +73,7 @@ type ChatParticipant {
   lastName: String
   email: String
   identifier: Int
+  profileType: String
   branch: String
   dateOfBirth: String
   sex: String
@@ -150,7 +151,7 @@ type MedicalQuery {
   getAllTickets(location: Designation, status: ChatStatus, offset: Int, limit: Int): HealthChatList!
   getTicket(chatId: ID!): HealthChat
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
-  getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
+  getPatientConversations(location: Designation, statuses: [ChatStatus], searchTerm: String, offset: Int, limit: Int): PatientConversationList!
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
   getTransferCandidates(chatId: ID!): [ChatParticipant!]!
 }
@@ -168,7 +169,7 @@ type Query {
   getAllTickets(location: Designation, status: ChatStatus, offset: Int, limit: Int): HealthChatList!
   getTicket(chatId: ID!): HealthChat
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
-  getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
+  getPatientConversations(location: Designation, statuses: [ChatStatus], searchTerm: String, offset: Int, limit: Int): PatientConversationList!
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
   getTransferCandidates(chatId: ID!): [ChatParticipant!]!
 }

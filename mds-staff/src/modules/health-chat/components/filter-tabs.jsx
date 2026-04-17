@@ -29,7 +29,7 @@ const FilterTabs = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search patients…"
+            placeholder="Search by name, email, or student/employee ID…"
             className="w-full pl-8 pr-7 py-2 text-xs rounded-lg transition-all duration-150
                        bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700
                        text-secondary-800 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500

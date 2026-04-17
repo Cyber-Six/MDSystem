@@ -436,7 +436,7 @@ const Query = {
    * Get conversations grouped by patient (1 row per patient), filtered by location
    * Returns patients with their latest ticket and last message info
    */
-  _getPatientConversations: async (_, { location = 'Both', statuses, offset, limit }, { user, res }) => {
+  _getPatientConversations: async (_, { location = 'Both', statuses, searchTerm, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -452,6 +452,48 @@ const Query = {
     if (statuses && statuses.length > 0) {
       whereConditions.push(`status = ANY($${params.length + 1})`);
       params.push(statuses);
+    }
+
+    const normalizedSearchTerm = typeof searchTerm === 'string' ? searchTerm.trim() : '';
+    const hasSearchTerm = normalizedSearchTerm.length >= 2;
+    if (hasSearchTerm) {
+      const prefixTerm = `${normalizedSearchTerm}%`;
+      const anyTerm = `%${normalizedSearchTerm}%`;
+      const tokens = normalizedSearchTerm.split(/\s+/).filter(Boolean);
+      const hasTwoTokens = tokens.length >= 2;
+      const token1Any = hasTwoTokens ? `%${tokens[0]}%` : null;
+      const token2Any = hasTwoTokens ? `%${tokens[1]}%` : null;
+      const baseIndex = params.length + 1;
+
+      whereConditions.push(`EXISTS (
+        SELECT 1
+        FROM "UsersPersonal" up
+        JOIN "UserCredentials" uc ON uc.id = up.id
+        LEFT JOIN LATERAL (
+          SELECT l.first_name, l.last_name
+          FROM "UsersPersonalLog" l
+          WHERE l.user_id = up.id
+          ORDER BY l.created_at DESC
+          LIMIT 1
+        ) upl ON true
+        WHERE up.id = "HealthChat"."patientId"
+          AND (
+            up.identifier::text ILIKE $${baseIndex}
+            OR (COALESCE(upl.first_name, up.first_name, '') || ' ' || COALESCE(upl.last_name, up.last_name, '')) ILIKE $${baseIndex + 1}
+            OR (COALESCE(upl.last_name, up.last_name, '') || ', ' || COALESCE(upl.first_name, up.first_name, '')) ILIKE $${baseIndex + 1}
+            OR COALESCE(upl.first_name, up.first_name, '') ILIKE $${baseIndex + 1}
+            OR COALESCE(upl.last_name, up.last_name, '') ILIKE $${baseIndex + 1}
+            OR COALESCE(uc.email, '') ILIKE $${baseIndex + 1}
+            OR (
+              $${baseIndex + 4}::boolean = true AND (
+                (COALESCE(upl.first_name, up.first_name, '') ILIKE $${baseIndex + 2} AND COALESCE(upl.last_name, up.last_name, '') ILIKE $${baseIndex + 3})
+                OR
+                (COALESCE(upl.last_name, up.last_name, '') ILIKE $${baseIndex + 2} AND COALESCE(upl.first_name, up.first_name, '') ILIKE $${baseIndex + 3})
+              )
+            )
+          )
+      )`);
+      params.push(prefixTerm, anyTerm, token1Any, token2Any, hasTwoTokens);
     }
 
     if (location && location !== 'Both') {
