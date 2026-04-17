@@ -7,6 +7,7 @@ import { getLocationsByBranch } from '../../../utils/branch-utils';
 
 const PAGE_SIZE = 15;
 const SEARCH_DEBOUNCE_MS = 500;
+const QUEUE_GRID_COLS = 'grid-cols-[minmax(260px,_1.4fr)_minmax(220px,_1.1fr)_140px_170px_minmax(180px,_1fr)]';
 
 const STATUS_STYLES = {
   Pending:             'bg-warning-100 dark:bg-warning-900/40 text-warning-800 dark:text-warning-300',
@@ -458,12 +459,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             {/* Headers */}
             {/* Column alignment: Patient (text-left) | Scheduled (text-left) | Session (text-center) | Status (text-center) | Purpose (text-right) */}
             {/* To change positions: edit className text-left/text-center/text-right in each header div */}
-            <div className="sticky top-0 z-10 bg-neutral-50/60 dark:bg-neutral-700/30 grid grid-cols-[180px_1fr_110px_140px_1fr] gap-4 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
+            <div className={`sticky top-0 z-10 bg-neutral-50/60 dark:bg-neutral-700/30 grid ${QUEUE_GRID_COLS} gap-4 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700`}>
               <div className="text-left text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Patient</div>
               <div className="text-left text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Scheduled</div>
-              <div className="text-center text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Session</div>
-              <div className="text-center text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Status</div>
-              <div className="text-center text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Purpose</div>
+              <div className="text-left text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Session</div>
+              <div className="text-left text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Status</div>
+              <div className="text-left text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider">Purpose</div>
             </div>
 
             {/* Rows */}
@@ -479,7 +480,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                 <div
                   key={apt.id}
                   onClick={() => onViewDetails?.(apt)}
-                  className="hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors grid grid-cols-[180px_1fr_110px_140px_1fr] gap-4 items-center px-4 py-2 border-b border-neutral-100 dark:border-neutral-700/40"
+                  className={`hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors grid ${QUEUE_GRID_COLS} gap-4 items-center px-4 py-2 border-b border-neutral-100 dark:border-neutral-700/40`}
                 >
                   {/* Avatar + Patient Info */}
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -525,22 +526,22 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                     )}
                   </div>
 
-                  {/* Session - Change position: flex justify-center → flex justify-start (left) / justify-end (right) */}
-                  <div className="flex justify-center">
+                  {/* Session - Change position: flex justify-start (left) / justify-center (center) / justify-end (right) */}
+                  <div className="flex justify-start">
                     <span className={`inline-block px-3 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200'}`}>
                       {apt.session}
                     </span>
                   </div>
 
-                  {/* Status - Change position: flex justify-center → flex justify-start (left) / justify-end (right) */}
-                  <div className="flex justify-center">
+                  {/* Status - Change position: flex justify-start (left) / justify-center (center) / justify-end (right) */}
+                  <div className="flex justify-start">
                     <span className={`inline-block px-3 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-700'}`}>
                       {apt.status}
                     </span>
                   </div>
 
                   {/* Purpose - Change position: text-center (center) → text-left (left) / text-right (right) */}
-                  <div className="text-xs text-secondary-800 dark:text-neutral-200 truncate text-center">
+                  <div className="text-xs text-secondary-800 dark:text-neutral-200 truncate text-left">
                     {apt.purpose ? (
                       <span title={apt.purpose}>{apt.purpose.length > 40 ? apt.purpose.slice(0, 40) + '…' : apt.purpose}</span>
                     ) : '—'}

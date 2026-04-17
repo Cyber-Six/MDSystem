@@ -130,14 +130,14 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
       {/* Modal */}
       <div className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-xl shadow-2xl flex flex-col max-h-[85vh] animate-fade-in">
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+        <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-[#F1C526] flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
               {staff.name.split(' ').map((n) => n[0]).join('').substring(0, 2)}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-secondary-900 dark:text-white truncate">{staff.name}</h3>
+                <h3 className="text-sm font-semibold text-secondary-900 dark:text-white truncate" style={{ lineHeight: 1.2, margin: 0 }}>{staff.name}</h3>
                 {isPending ? (
                   <span className="text-[9px] px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium flex-shrink-0">
                     Pending
@@ -148,7 +148,7 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate" style={{ lineHeight: 1.2, margin: 0 }}>
                 {isPending ? 'No role assigned yet' : (role || 'No role')} · {staff.email}
               </p>
             </div>
@@ -164,7 +164,7 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0.5 px-5 pt-1.5 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
+        <div className="flex gap-0.5 px-4 pt-1 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -181,16 +181,16 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto px-5 py-3">
+        <div className="flex-1 overflow-y-auto px-4 py-2.5">
           {/* ── Info Tab ── */}
           {activeTab === 'info' && (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {/* Account Details */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
                   <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Details</h4>
                 </div>
-                <div className="p-3 grid grid-cols-2 gap-3">
+                <div className="p-3 grid grid-cols-2 gap-2.5">
                   <div>
                     <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Full Name</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.name}</p>
@@ -231,7 +231,7 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
 
               {/* Role Assignment */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
                   <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Role Assignment</h4>
                 </div>
                 <div className="p-3">
@@ -265,7 +265,7 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
 
               {/* Account Status */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
                   <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Status</h4>
                 </div>
                 <div className="p-3">
@@ -273,12 +273,14 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
                     <p className="text-xs text-secondary-500 dark:text-neutral-400">
                       This account is <span className="font-semibold text-warning-600 dark:text-warning-400">pending</span>. Assign a role and save to grant staff portal access.
                     </p>
+                  ) : isAdmin ? (
+                    <div className="flex items-start gap-2">
                   ) : isTargetAdmin ? (
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-success-500 flex-shrink-0" />
-                      <div>
-                        <p className="text-xs font-medium text-secondary-800 dark:text-white">Admin Account — Always Active</p>
-                        <p className="text-xs text-secondary-400 dark:text-neutral-500">Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-secondary-800 dark:text-white" style={{ lineHeight: 1.2, margin: 0 }}>Admin Account — Always Active</p>
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5" style={{ lineHeight: 1.2, margin: 0 }}>Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
                       </div>
                     </div>
                   ) : (
@@ -344,7 +346,7 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
 
         {/* Footer — Save / Cancel */}
         {(hasChanges || saveError) && (
-          <div className="px-5 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800/50 rounded-b-xl">
+          <div className="px-4 py-2 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800/50 rounded-b-xl">
             <div className="flex-1 min-w-0">
               {saveError && (
                 <p className="text-xs text-error-600 dark:text-error-400 truncate">{saveError}</p>

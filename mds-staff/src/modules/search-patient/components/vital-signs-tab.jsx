@@ -67,13 +67,13 @@ function VitalGrid({ record }) {
     { label: 'Temp',        value: record.temperature    ? `${record.temperature} °C` : null },
   ];
   return (
-    <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-neutral-200 dark:divide-neutral-700 -mx-3 border-t border-neutral-100 dark:border-neutral-700/60">
+    <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-neutral-200 dark:divide-neutral-700 border-t border-neutral-100 dark:border-neutral-700/60">
       {items.map(({ label, value }) => (
-        <div key={label} className="px-3 py-3 text-center">
-          <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none mb-1.5">{label}</p>
+        <div key={label} className="px-2 py-2 text-center">
+          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mb-1" style={{ lineHeight: 1.2, margin: 0 }}>{label}</p>
           {value
-            ? <p className="text-base font-semibold text-secondary-800 dark:text-white leading-none">{value}</p>
-            : <p className="text-sm text-secondary-300 dark:text-neutral-600">—</p>
+            ? <p className="text-sm font-semibold text-secondary-800 dark:text-white" style={{ lineHeight: 1.2, margin: 0 }}>{value}</p>
+            : <p className="text-xs text-secondary-300 dark:text-neutral-600" style={{ lineHeight: 1.2, margin: 0 }}>—</p>
           }
         </div>
       ))}
@@ -86,35 +86,35 @@ function HistoryBlock({ index, isCurrent, record }) {
   const { date, time } = fmtDateTime(record.created_at);
 
   return (
-    <div className="border border-neutral-200 dark:border-neutral-700 rounded-xl overflow-hidden">
+    <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-neutral-50 dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors text-left"
+        className="w-full flex items-center justify-between px-3 py-2 bg-neutral-50 dark:bg-neutral-800/40 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors text-left"
       >
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {isCurrent && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 uppercase">
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 uppercase" style={{ lineHeight: 1.2 }}>
               Current
             </span>
           )}
-          <span className="text-sm font-semibold text-secondary-800 dark:text-white">{date}</span>
-          {time && <span className="text-xs text-secondary-400 dark:text-neutral-500">{time}</span>}
+          <span className="text-sm font-semibold text-secondary-800 dark:text-white" style={{ lineHeight: 1.2 }}>{date}</span>
+          {time && <span className="text-[11px] text-secondary-400 dark:text-neutral-500" style={{ lineHeight: 1.2 }}>{time}</span>}
         </div>
         <svg
-          className={`w-4 h-4 text-secondary-400 dark:text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`w-3.5 h-3.5 text-secondary-400 dark:text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`}
           fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
       {open && (
-        <div className="p-4 space-y-3">
+        <div className="p-3 space-y-2">
           <VitalGrid record={record} />
           {record.notes && (
-            <div className="pt-2">
-              <p className="text-[11px] font-semibold text-secondary-400 dark:text-neutral-500 uppercase tracking-wider mb-1">Notes</p>
-              <p className="text-sm text-secondary-700 dark:text-neutral-300">{record.notes}</p>
+            <div className="pt-1">
+              <p className="text-[10px] font-semibold text-secondary-400 dark:text-neutral-500 uppercase tracking-wider mb-0.5" style={{ lineHeight: 1.2 }}>Notes</p>
+              <p className="text-xs text-secondary-700 dark:text-neutral-300" style={{ lineHeight: 1.3 }}>{record.notes}</p>
             </div>
           )}
         </div>
@@ -594,7 +594,7 @@ export default function VitalSignsTab({ patient }) {
           ) : history.length === 0 ? (
             <p className="text-sm text-secondary-400 dark:text-neutral-500">No vital signs recorded yet.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {history.map((record, i) => (
                 <HistoryBlock key={record.id} index={i} isCurrent={i === 0} record={record} />
               ))}

@@ -279,13 +279,13 @@ const StaffDashboard = () => {
       </div>
 
       {/* Two Column Layout */}
-      <div className="grid lg:grid-cols-2 gap-3 items-start">
+      <div className="grid lg:grid-cols-2 gap-3 items-stretch">
         {/* Recent Patients - Show if user has permission */}
         {canViewPatients && (
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Recent Patients</h3>
-              <Link to="/search" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+          <div className="h-full bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+            <div className="px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-secondary-800 dark:text-white" style={{ lineHeight: 1.2, margin: 0 }}>Recent Patients</h3>
+              <Link to="/search" className="text-sm text-primary-600 dark:text-primary-400 hover:underline" style={{ lineHeight: 1.2 }}>
                 View all
               </Link>
             </div>
@@ -299,18 +299,18 @@ const StaffDashboard = () => {
                   <Link
                     key={patient.id}
                     to={`/patient/${patient.id}`}
-                    className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                    className="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 flex-shrink-0 bg-neutral-200 dark:bg-neutral-600 rounded-xl flex items-center justify-center text-[10px] font-semibold text-secondary-600 dark:text-neutral-300">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 flex-shrink-0 bg-[#F1C526] rounded-full flex items-center justify-center text-[10px] font-semibold text-white">
                         {patient.name?.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2)}
                       </div>
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <p className="text-xs font-semibold leading-tight text-secondary-800 dark:text-white truncate">{patient.name}</p>
-                        <p className="text-[10px] leading-tight text-secondary-500 dark:text-neutral-400 truncate">{patient.identifier || '—'} • {patient.program}</p>
+                      <div className="flex flex-col min-w-0" style={{ gap: '2px' }}>
+                        <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate" style={{ lineHeight: 1.2, margin: 0 }}>{patient.name}</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate" style={{ lineHeight: 1.2, margin: 0 }}>{patient.identifier || '—'} • {patient.program}</p>
                       </div>
                     </div>
-                    <span className="text-[10px] leading-tight whitespace-nowrap text-secondary-400 dark:text-neutral-500">
+                    <span className="text-xs whitespace-nowrap text-secondary-400 dark:text-neutral-500" style={{ lineHeight: 1.2 }}>
                       {formatShortDate(patient.lastVisit)}
                     </span>
                   </Link>
@@ -322,10 +322,10 @@ const StaffDashboard = () => {
 
         {/* Pending Requests - Show if user has permission */}
         {canViewRequests && (
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-            <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Pending Requests</h3>
-              <Link to="/pending" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+          <div className="h-full bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+            <div className="px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-secondary-800 dark:text-white" style={{ lineHeight: 1.2, margin: 0 }}>Pending Requests</h3>
+              <Link to="/pending" className="text-sm text-primary-600 dark:text-primary-400 hover:underline" style={{ lineHeight: 1.2 }}>
                 View all
               </Link>
             </div>
@@ -336,15 +336,15 @@ const StaffDashboard = () => {
                 <div className="p-3 text-center text-xs text-secondary-400 dark:text-neutral-500">No pending requests</div>
               ) : (
                 pendingRequests.map((request) => (
-                  <div key={request.id} className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700/40 transition-colors">
-                    <div className="min-w-0 flex flex-col gap-0.5">
-                      <p className="text-xs font-semibold leading-tight text-secondary-800 dark:text-white truncate">{request.name}</p>
-                      <p className="text-[10px] leading-tight text-secondary-500 dark:text-neutral-400 truncate">
+                  <div key={request.id} className="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/40 transition-colors">
+                    <div className="min-w-0 flex flex-col" style={{ gap: '2px' }}>
+                      <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate" style={{ lineHeight: 1.2, margin: 0 }}>{request.name}</p>
+                      <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate" style={{ lineHeight: 1.2, margin: 0 }}>
                         {request.type} • {formatShortDate(request.submitted)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-[10px] leading-tight font-semibold rounded-md whitespace-nowrap">
+                      <span className="px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-xs font-semibold rounded-md whitespace-nowrap" style={{ lineHeight: 1.2 }}>
                         {request.status}
                       </span>
                       <Link
