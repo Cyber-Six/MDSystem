@@ -297,6 +297,10 @@ export function HealthChatProvider({ children }) {
     // to avoid a double-fetch race condition.
   }, []);
 
+  const refreshConversationList = useCallback(async () => {
+    await refreshMultipleFilters(selectedFilters);
+  }, [refreshMultipleFilters, selectedFilters]);
+
   // Load tickets when selectedFilters changes
   useEffect(() => {
     refreshMultipleFilters(selectedFilters);
@@ -1054,22 +1058,15 @@ export function HealthChatProvider({ children }) {
     try {
       const result = await transferTicketService(chatId, toMedicalId);
       if (result.success) {
-        // If current user is no longer the assignee, remove the conversation
-        // (The socket event will also trigger this for the previous staff)
-        // Refresh to reflect the change
-        await refreshMultipleFilters(selectedFilters);
-        // Reload messages to show the system message
-        if (selectedPatientId) {
-          const fetchedMessages = await getPatientMessages(Number(selectedPatientId), { limit: 50 });
-          setMessages(fetchedMessages || []);
-        }
+        // Refresh list from source of truth so ownership changes apply immediately.
+        await refreshConversationList();
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to transfer ticket:', err);
       throw err;
     }
-  }, [selectedFilters, refreshMultipleFilters, selectedPatientId]);
+  }, [refreshConversationList]);
 
   /**
    * Admin takeover: assume control of an ongoing ticket
@@ -1119,6 +1116,7 @@ export function HealthChatProvider({ children }) {
     ticketsTotal,
     ticketsLoading,
     refreshTickets,
+    refreshConversationList,
 
     // Selected patient/chat
     selectedPatientId,

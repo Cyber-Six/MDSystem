@@ -495,29 +495,33 @@ export const takeoverOngoingTicket = async (chatId) => {
 
 /**
  * Get staff accounts for transfer dropdown
- * Reuses the role-management listStaffAccounts query
+ * Uses health chat transfer-candidate filtering (permission + branch scoped)
  */
-export const getHealthChatStaff = async () => {
+export const getHealthChatStaff = async (chatId) => {
+  if (!chatId) return [];
+
   const query = `
-    query ListStaffAccounts {
-      listStaffAccounts {
-        staff {
+    query GetTransferCandidates($chatId: ID!) {
+      getTransferCandidates(chatId: $chatId) {
           id
-          name
+          firstName
+          lastName
           email
           role
           branch
         }
-        count
       }
     }
   `;
 
-  const response = await axiosRequest.post('/rolemanagement/admin', { query });
-  if (response.data.errors) {
-    throw new Error(response.data.errors[0]?.message || 'Failed to load staff list');
-  }
-  return response.data.data.listStaffAccounts.staff || [];
+  const data = await sendGraphQL(query, { chatId });
+  return (data.getTransferCandidates || []).map((staff) => ({
+    id: Number(staff.id),
+    name: `${staff.firstName || ''} ${staff.lastName || ''}`.trim() || staff.email || `Staff ${staff.id}`,
+    email: staff.email || '',
+    role: staff.role || null,
+    branch: staff.branch || null,
+  }));
 };
 
 // ==================== FILE HANDLING ====================

@@ -32,15 +32,12 @@ export function useHealthChatSocket() {
     activeTicketId,
     addMessage,
     addTicket,
-    updateTicketStatus,
     updateConversationForNewMessage,
-    removeTicket,
     removeConversation,
     setUserTyping,
-    refreshTickets,
+    refreshConversationList,
     setSocketError,
     markTicketClosed,
-    filter,
     tickets,
     updateTicketExpiresAt
   } = useHealthChat();
@@ -49,15 +46,12 @@ export function useHealthChatSocket() {
   // This is critical to prevent duplicate event listeners
   const addMessageRef = useRef(addMessage);
   const addTicketRef = useRef(addTicket);
-  const updateTicketStatusRef = useRef(updateTicketStatus);
   const updateConversationForNewMessageRef = useRef(updateConversationForNewMessage);
   const setUserTypingRef = useRef(setUserTyping);
   const setSocketErrorRef = useRef(setSocketError);
-  const refreshTicketsRef = useRef(refreshTickets);
-  const removeTicketRef = useRef(removeTicket);
+  const refreshConversationListRef = useRef(refreshConversationList);
   const removeConversationRef = useRef(removeConversation);
   const markTicketClosedRef = useRef(markTicketClosed);
-  const filterRef = useRef(filter);
   const ticketsRef = useRef(tickets);
   const updateTicketExpiresAtRef = useRef(updateTicketExpiresAt);
 
@@ -65,18 +59,15 @@ export function useHealthChatSocket() {
   useEffect(() => {
     addMessageRef.current = addMessage;
     addTicketRef.current = addTicket;
-    updateTicketStatusRef.current = updateTicketStatus;
     updateConversationForNewMessageRef.current = updateConversationForNewMessage;
     setUserTypingRef.current = setUserTyping;
     setSocketErrorRef.current = setSocketError;
-    refreshTicketsRef.current = refreshTickets;
-    removeTicketRef.current = removeTicket;
+    refreshConversationListRef.current = refreshConversationList;
     removeConversationRef.current = removeConversation;
     markTicketClosedRef.current = markTicketClosed;
-    filterRef.current = filter;
     ticketsRef.current = tickets;
     updateTicketExpiresAtRef.current = updateTicketExpiresAt;
-  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, removeConversation, markTicketClosed, filter, tickets, updateTicketExpiresAt]);
+  }, [addMessage, addTicket, updateConversationForNewMessage, setUserTyping, setSocketError, refreshConversationList, removeConversation, markTicketClosed, tickets, updateTicketExpiresAt]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -110,8 +101,12 @@ export function useHealthChatSocket() {
       setIsConnected(true);
       setSocketErrorRef.current(false);
 
+      // Join branch-scoped notification rooms used by health chat ticket events.
+      socketService.emit('notification:join-branch', {});
+
       // Handle reconnection - rejoin all tracked rooms
       socketService.getSocket()?.on('reconnect', () => {
+        socketService.emit('notification:join-branch', {});
         joinedRoomsRef.current.forEach(roomId => {
           socketService.emit('healthchat:join-room', { chatId: roomId });
         });
@@ -193,14 +188,8 @@ export function useHealthChatSocket() {
       // Listen for ticket status changes by other staff (approve/reject)
       socketService.on('healthchat:ticket-status-changed', (data) => {
         if (data.chatId && data.status) {
-          // Route through addTicket which handles in-place updates for known patients
-          // and only does a full refresh for genuinely new entries. This avoids the
-          // legacy refreshTickets() which overwrites read state.
-          addTicketRef.current({
-            id: data.chatId,
-            patientId: data.patientId,
-            status: data.status,
-          });
+          // Pull source-of-truth data so ownership changes are reflected immediately.
+          refreshConversationListRef.current();
         }
       });
 
@@ -216,9 +205,8 @@ export function useHealthChatSocket() {
         if (data.chatId && data.patientId) {
           // Remove the conversation with slide-out animation
           removeConversationRef.current(String(data.patientId));
-          // Refresh to get updated list
-          refreshTicketsRef.current();
         }
+        refreshConversationListRef.current();
       });
 
       // Listen for ticket taken over by admin
@@ -226,9 +214,8 @@ export function useHealthChatSocket() {
         if (data.chatId && data.patientId) {
           // Remove the conversation with slide-out animation
           removeConversationRef.current(String(data.patientId));
-          // Refresh to get updated list
-          refreshTicketsRef.current();
         }
+        refreshConversationListRef.current();
       });
     }).catch((err) => {
       if (!isMounted) return;

@@ -73,7 +73,7 @@ const notificationHandlers = {
    * Safe to call multiple times — socket.io deduplicates room membership.
    *
    * Rooms joined depend on the staff member's branch AND module permissions:
-   *   notif:healthchat              — health chat events (requires health_chat_allow_access)
+   *   notif:healthchat:{branch}     — health chat events (requires health_chat_allow_access)
    *   branch:{loc}:appointments     — appointment submissions (requires appointment_allow_view_records)
    *   branch:{loc}:inventory        — medicine/inventory requests (requires inventory_allow_view)
    *   {branch}::staff               — record update tickets (requires emr_allow_approval)
@@ -124,10 +124,12 @@ const notificationHandlers = {
         }
       }
 
-      // Join health chat notification room (not branch-scoped — tickets are global)
+      // Join branch-scoped health chat room.
+      // Server-side health chat emitters route to eligible branches based on patient branch.
       if (healthChatPerm.permitted) {
-        socket.join('notif:healthchat');
-        joinedRooms.push('notif:healthchat');
+        const healthChatRoom = `notif:healthchat:${branch}`;
+        socket.join(healthChatRoom);
+        joinedRooms.push(healthChatRoom);
       }
 
       // EMR mutations emit updateTicket to role:${patientBranch}::staff rooms.
