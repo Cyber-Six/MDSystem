@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Info, File, Image, Film, Loader2 } from 'lucide-react';
 import { getFileUrl } from '../health-chat-service';
 import { useAuthFile } from '../hooks/use-auth-file';
-import MediaViewer from '../../../components/ui/MediaViewer';
+import MediaLightbox from '../../../components/modals/MediaLightbox';
 
 /**
  * Staff-side MessageBubble
@@ -253,7 +253,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
 
       {/* Media Viewer */}
       {lightboxOpen && blobUrl && (
-        <MediaViewer
+        <MediaLightbox
           url={blobUrl}
           filename={message.filename}
           contentType={normalizedContentType}
