@@ -178,6 +178,58 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
 
   const notes = ticket?.notes ?? recordStatus?.notes ?? null;
 
+  // Inactive patients who already submitted must wait for approval — block re-submission.
+  // Matches mds-patient where Record Update is also disabled after submission.
+  const hasSubmittedInactiveUpdate = isInactiveCredential
+    && (currentStatus === 'Pending' || currentStatus === 'RevisionSubmitted');
+
+  if (hasSubmittedInactiveUpdate && !isLoadingTicket) {
+    return (
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
+        edges={['bottom']}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={[styles.stateCard, {
+            backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+            borderColor: isDark ? 'rgba(241,197,38,0.3)' : colors.primary[200],
+          }]}>
+            <View style={[styles.stateIcon, { backgroundColor: isDark ? 'rgba(241,197,38,0.15)' : colors.primary[100] }]}>
+              <Ionicons name="time" size={24} color={isDark ? colors.primary[300] : colors.primary[700]} />
+            </View>
+            <Text style={[styles.stateTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+              Medical and Dental Update Submitted
+            </Text>
+            <Text style={[styles.stateBody, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>
+              Your update is pending staff review. Your account remains inactive until approval.
+              You cannot submit another update while one is already under review.
+            </Text>
+
+            <View style={[styles.infoCard, {
+              backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+              borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+            }]}>
+              <Ionicons name="information-circle" size={20} color={colors.primary[500]} style={{ marginTop: 1 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.infoTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>What happens next?</Text>
+                <Text style={[styles.infoBody, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+                  Medical and dental sections will be reviewed by clinic staff. Your account stays inactive until staff approves the submitted update. Please visit the clinic for in-person checking after submission.
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.statusBadge, { backgroundColor: isDark ? 'rgba(241,197,38,0.1)' : colors.primary[50] }]}>
+              <Ionicons name="time" size={14} color={isDark ? colors.primary[300] : colors.primary[700]} />
+              <Text style={{ color: isDark ? colors.primary[300] : colors.primary[700], fontSize: 13, fontWeight: '600' }}>
+                Status: Pending Inactive Review
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView
       style={[
@@ -506,6 +558,16 @@ const styles = StyleSheet.create({
   infoBody: {
     fontSize: 12,
     lineHeight: 18,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
 });
 
