@@ -2,7 +2,6 @@ const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
 const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
-const { isMedicalPermitted, permissions: medPermissions } = require("../../../../services/permit.js");
 const logger = require("../../../../utils/logger.js");
 const {
   calculateExpiryDate,
@@ -1055,58 +1054,6 @@ const Mutation = {
       success: true,
       chat,
       message: "Ticket closed successfully."
-    };
-  },
-
-  /**
-   * Delete an archived ticket (admin only)
-   */
-  _deleteArchivedTicket: async (_, { chatId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    // Check if user is admin
-    const { permitted } = await isMedicalPermitted(user.id, medPermissions.is_admin);
-    if (!permitted) {
-      throwGraphQLError(res).message("Only administrators can delete archived tickets").status(403).throw();
-    }
-
-    // Verify ticket exists and is archived (Closed or Expired)
-    const ticketCheck = await db.query(
-      `SELECT status FROM "HealthChat" WHERE id = $1`,
-      [chatId]
-    );
-
-    if (ticketCheck.rowCount === 0) {
-      throwGraphQLError(res).message("Ticket not found").status(404).throw();
-    }
-
-    const { status } = ticketCheck.rows[0];
-    if (!['Closed', 'Expired'].includes(status)) {
-      throwGraphQLError(res).message("Only archived tickets (Closed or Expired) can be deleted").status(400).throw();
-    }
-
-    // Delete messages first (due to foreign key constraint)
-    await db.query(
-      `DELETE FROM "HealthChatPrompt" WHERE "consultationVirtualId" = $1`,
-      [chatId]
-    );
-
-    // Delete the ticket
-    const result = await db.query(
-      `DELETE FROM "HealthChat" WHERE id = $1 RETURNING *`,
-      [chatId]
-    );
-
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to delete ticket").status(500).throw();
-    }
-
-    return {
-      success: true,
-      chat: null,
-      message: "Ticket deleted successfully."
     };
   },
 

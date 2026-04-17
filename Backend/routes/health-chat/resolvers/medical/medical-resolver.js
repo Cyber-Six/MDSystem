@@ -130,15 +130,6 @@ const Mutation = {
     return await Wrapper.Mutation._closeTicket(_, args, { user, res });
   },
 
-  deleteArchivedTicket: async (_, args, { user, res }) => {
-    const patientId = await getPatientIdFromChatId(args.chatId);
-    const isPermitted = await isMedicalPermittedPatientBased(user.id, permissions.health_chat_allow_access, patientId);
-    if (!isPermitted) {
-      throwGraphQLError(res).message("Access denied").status(403).throw();
-    }
-    return await Wrapper.Mutation._deleteArchivedTicket(_, args, { user, res });
-  },
-
   transferTicket: async (_, { chatId, toMedicalId }, { user, res }) => {
     const patientId = await getPatientIdFromChatId(chatId);
     const isPermitted = await isMedicalPermittedPatientBased(user.id, permissions.health_chat_allow_access, patientId);
