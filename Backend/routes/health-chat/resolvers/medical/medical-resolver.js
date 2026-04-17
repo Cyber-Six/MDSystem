@@ -74,18 +74,32 @@ const Query = {
   },
 
   getPatientMessages: async (_, args, { user, res }) => {
-    // Use the non-patient-based check: health chat is globally accessible to any
-    // staff with health_chat_allow_access. The branch restriction is already
-    // enforced at the conversation-list level (getPatientConversations uses
-    // clampLocationAsync) so an extra branch cross-match here would produce false
-    // 403s when, e.g., a patient's UsersPersonal.branch differs from the staff's
-    // rolesMap.branch (e.g. staff=Manila permission, patient assigned to Both).
-    const { permitted } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
-    if (!permitted) {
+    const isPermitted = await isMedicalPermittedPatientBased(
+      user.id,
+      permissions.health_chat_allow_access,
+      args.patientId
+    );
+    if (!isPermitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
 
     return await Wrapper.Query._getPatientMessages(_, args, { user, res });
+  },
+
+  getTransferCandidates: async (_, { chatId }, { user, res }) => {
+    const patientId = await getPatientIdFromChatId(chatId);
+    if (patientId) {
+      const isPermitted = await isMedicalPermittedPatientBased(
+        user.id,
+        permissions.health_chat_allow_access,
+        patientId
+      );
+      if (!isPermitted) {
+        throwGraphQLError(res).message("Access denied").status(403).throw();
+      }
+    }
+
+    return await Wrapper.Query._getTransferCandidates(_, { chatId }, { user, res });
   }
 };
 

@@ -152,6 +152,7 @@ type MedicalQuery {
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
   getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
+  getTransferCandidates(chatId: ID!): [ChatParticipant!]!
 }
 
 # Unified queries exposed to appropriate role
@@ -169,6 +170,7 @@ type Query {
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
   getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
+  getTransferCandidates(chatId: ID!): [ChatParticipant!]!
 }
 
 # Mutations
