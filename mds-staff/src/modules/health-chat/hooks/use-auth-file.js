@@ -1,6 +1,27 @@
 import { useState, useEffect } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter';
 
+const normalizeContentType = (contentType = '') => (
+  String(contentType).split(';')[0].trim().toLowerCase()
+);
+
+const sniffPdfMimeType = async (blob) => {
+  try {
+    const header = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+    const isPdf =
+      header.length === 5 &&
+      header[0] === 0x25 && // %
+      header[1] === 0x50 && // P
+      header[2] === 0x44 && // D
+      header[3] === 0x46 && // F
+      header[4] === 0x2d;   // -
+
+    return isPdf ? 'application/pdf' : '';
+  } catch {
+    return '';
+  }
+};
+
 /**
  * Hook that fetches a JWT-protected file and returns a blob URL for display.
  * The media endpoint requires JWT auth, so we can't use plain <img src="/media/...">.
@@ -40,10 +61,26 @@ export function useAuthFile(url) {
 
         if (revoked) return;
 
-        const ct = response.headers?.['content-type'] || '';
-        setContentType(ct);
+        const responseBlob = response.data;
+        const headerContentType = normalizeContentType(response.headers?.['content-type'] || '');
+        let resolvedContentType = headerContentType || normalizeContentType(responseBlob?.type || '');
 
-        objectUrl = URL.createObjectURL(response.data);
+        // Some proxies return generic octet-stream for PDFs; sniff file signature as a safe fallback.
+        if (!resolvedContentType || resolvedContentType === 'application/octet-stream') {
+          const sniffedType = await sniffPdfMimeType(responseBlob);
+          if (sniffedType) {
+            resolvedContentType = sniffedType;
+          }
+        }
+
+        setContentType(resolvedContentType);
+
+        const blobForPreview =
+          resolvedContentType && normalizeContentType(responseBlob.type) !== resolvedContentType
+            ? responseBlob.slice(0, responseBlob.size, resolvedContentType)
+            : responseBlob;
+
+        objectUrl = URL.createObjectURL(blobForPreview);
         setBlobUrl(objectUrl);
       } catch (err) {
         if (revoked) return;

@@ -132,9 +132,10 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
   const { blobUrl, loading: fileLoading, error: fileError, contentType } = useAuthFile(fileUrl);
   // Use the server-supplied Content-Type for reliable type detection.
   // message.filename is stored as a UUID without extension, so extension sniffing fails.
-  const isImage = contentType.startsWith('image/');
-  const isPdf   = contentType === 'application/pdf';
-  const isVideo = contentType.startsWith('video/');
+  const normalizedContentType = String(contentType || '').split(';')[0].trim().toLowerCase();
+  const isImage = normalizedContentType.startsWith('image/');
+  const isPdf   = normalizedContentType === 'application/pdf' || message.filename?.toLowerCase().endsWith('.pdf');
+  const isVideo = normalizedContentType.startsWith('video/');
 
   const Icon = isImage ? Image : isVideo ? Film : File;
   const displayUrl = blobUrl || fileUrl;
@@ -255,7 +256,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
         <MediaViewer
           url={blobUrl}
           filename={message.filename}
-          contentType={contentType}
+          contentType={normalizedContentType}
           onClose={() => setLightboxOpen(false)}
         />
       )}

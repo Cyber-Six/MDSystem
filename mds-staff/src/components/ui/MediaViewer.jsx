@@ -5,11 +5,17 @@ const MIN_SCALE = 0.25;
 const MAX_SCALE = 8;
 const ZOOM_STEP = 0.3;
 
+function normalizeContentType(contentType) {
+  return String(contentType || '').split(';')[0].trim().toLowerCase();
+}
+
 function deriveMediaType(contentType, filename) {
-  if (contentType) {
-    if (contentType.startsWith('image/')) return 'image';
-    if (contentType === 'application/pdf') return 'pdf';
-    if (contentType.startsWith('video/')) return 'video';
+  const normalizedContentType = normalizeContentType(contentType);
+
+  if (normalizedContentType) {
+    if (normalizedContentType.startsWith('image/')) return 'image';
+    if (normalizedContentType === 'application/pdf') return 'pdf';
+    if (normalizedContentType.startsWith('video/')) return 'video';
   }
   const ext = (filename || '').split('.').pop()?.toLowerCase() || '';
   if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return 'image';
