@@ -300,6 +300,13 @@ type SystemAuditLogEntry {
   changedBy: String!
 }
 
+type SystemAuditLogPage {
+  entries: [SystemAuditLogEntry!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+}
+
 # ─── INPUT TYPES ───────────────────────────────────────────────────────────────
 
 input CreateMedicalPersonnelInput {
@@ -373,7 +380,16 @@ type Query {
   # Medical Personnel
   listMedicalPersonnel(role: String, designation: Designation, isActive: Boolean): MedicalPersonnelList!
   getMedicalPersonnel(userId: ID!): MedicalPersonnel
-  getSystemAuditLog(medicalId: ID!): [SystemAuditLogEntry!]!
+  getSystemAuditLog(
+    medicalId: ID!
+    page: Int = 1
+    pageSize: Int = 10
+    sortDirection: String = "DESC"
+    eventType: String
+    actionKeyword: String
+    dateFrom: String
+    dateTo: String
+  ): SystemAuditLogPage!
 
   # Permissions - Returns all permissions with enabled status AND branch designation
   getStaffPermissions(userId: ID!): Permissions!
