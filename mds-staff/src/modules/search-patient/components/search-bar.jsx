@@ -1,9 +1,9 @@
 import React from 'react';
 
-const SearchBar = ({ searchTerm, onSearchTermChange, searchType, onSearchTypeChange, isLoading, resultCount, onKeyDown, inputRef }) => {
+const SearchBar = ({ searchTerm, onSearchTermChange, isLoading, resultCount, onKeyDown, inputRef }) => {
   return (
     <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col gap-2">
         {/* Input */}
         <div className="flex-1 relative">
           {isLoading ? (
@@ -21,23 +21,17 @@ const SearchBar = ({ searchTerm, onSearchTermChange, searchType, onSearchTypeCha
             value={searchTerm}
             onChange={(e) => onSearchTermChange(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search by name, student/employee ID, or email…"
-            autoComplete="off"
+            placeholder="Search patient by name or student/employee ID…"
+            name="patient-search-input"
+            autoComplete="new-password"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            inputMode="search"
+            data-lpignore="true"
             className="w-full pl-9 pr-3 py-1.5 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
-
-        {/* Type filter */}
-        <select
-          value={searchType}
-          onChange={(e) => onSearchTypeChange(e.target.value)}
-          className="px-3 py-1.5 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
-        >
-          <option value="all">All Types</option>
-          <option value="student">Students</option>
-          <option value="employee">Employees</option>
-          <option value="superior">Superior</option>
-        </select>
       </div>
 
       {/* Hint */}

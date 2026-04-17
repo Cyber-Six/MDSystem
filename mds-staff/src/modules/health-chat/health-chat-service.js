@@ -510,7 +510,6 @@ export const getHealthChatStaff = async (chatId) => {
           role
           branch
         }
-      }
     }
   `;
 

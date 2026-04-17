@@ -39,16 +39,10 @@ export default function SearchPatientView() {
   const [enforcedBranch, setEnforcedBranch] = useState(null);
   const [hasFired, setHasFired]     = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(-1);
-  const [searchType, setSearchType] = useState('all');
   const inputRef = useRef(null);
   const listRef  = useRef(null);
 
-  const selectedIdentities = useMemo(() => {
-    if (searchType === 'student') return ['Student'];
-    if (searchType === 'employee') return ['Employee'];
-    if (searchType === 'superior') return ['Superior'];
-    return null;
-  }, [searchType]);
+  const selectedIdentities = null;
 
   // Resolve authoritative branch from authenticated RoleManagement context.
   useEffect(() => {
@@ -276,8 +270,6 @@ export default function SearchPatientView() {
             <SearchBar
               searchTerm={searchTerm}
               onSearchTermChange={setSearchTerm}
-              searchType={searchType}
-              onSearchTypeChange={setSearchType}
               isLoading={isLoading}
               resultCount={filtered.length}
               onKeyDown={handleKeyDown}
