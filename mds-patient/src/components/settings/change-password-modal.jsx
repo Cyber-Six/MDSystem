@@ -90,7 +90,14 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Change Password" size="md">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Change Password"
+      size="md"
+      backdropBlur={4}
+      backdropOpacity={0.72}
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         <PasswordInput
           label="Current Password"

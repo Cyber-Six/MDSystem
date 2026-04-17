@@ -273,8 +273,6 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
                     <p className="text-xs text-secondary-500 dark:text-neutral-400">
                       This account is <span className="font-semibold text-warning-600 dark:text-warning-400">pending</span>. Assign a role and save to grant staff portal access.
                     </p>
-                  ) : isAdmin ? (
-                    <div className="flex items-start gap-2">
                   ) : isTargetAdmin ? (
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-success-500 flex-shrink-0" />

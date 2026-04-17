@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
 import SettingsContext, { DEFAULT_SETTINGS as DEFAULT_PATIENT_SETTINGS } from '../../context/settings-context.jsx';
+import { playNotificationSound } from '../../utils/notification-sound';
 
 /**
  * Patient notification events emitted by the backend to this user.
@@ -175,6 +176,16 @@ const EVENT_MODULE_MAP = {
 const STORAGE_KEY = 'patient_notifications';
 const MAX_NOTIFICATIONS = 50;
 
+// Maps notification.type -> soundByModule key.
+const TYPE_TO_SOUND_MODULE = {
+  chat: 'healthChat',
+  appointment: 'appointments',
+  medicine: 'medicineRequests',
+  document: 'general',
+  record: 'general',
+  general: 'general',
+};
+
 function loadPersistedNotifications() {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -232,6 +243,15 @@ export function PatientNotificationProvider({ children }) {
       persistNotifications(next);
       return next;
     });
+
+    // Play notification sound honoring patient volume and per-module settings.
+    const s = settingsRef.current ?? DEFAULT_PATIENT_SETTINGS;
+    const moduleKey = EVENT_MODULE_MAP[event] || TYPE_TO_SOUND_MODULE[notif.type] || 'general';
+    if (s.soundEnabled && s.soundByModule?.[moduleKey] !== false) {
+      const soundId = s.soundFileByModule?.[moduleKey] || s.notificationSound || 'synthesis';
+      const fallbackId = s.notificationSound || 'synthesis';
+      playNotificationSound(s.soundVolume, soundId, fallbackId);
+    }
   }, [isWebNotificationEnabled]);
 
   const markAsRead = useCallback((id) => {

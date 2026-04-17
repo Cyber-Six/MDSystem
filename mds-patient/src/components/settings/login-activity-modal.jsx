@@ -129,7 +129,14 @@ const LoginActivityModal = ({ isOpen, onClose }) => {
   }, [isOpen, fetchLoginActivity]);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Login Activity" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Login Activity"
+      size="lg"
+      backdropBlur={4}
+      backdropOpacity={0.72}
+    >
       <div className="space-y-4">
         <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700">
           <p className="text-sm text-gray-700 dark:text-gray-300">
