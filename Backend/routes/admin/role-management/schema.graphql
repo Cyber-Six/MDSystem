@@ -289,6 +289,13 @@ type UserSessionPage {
   totalCount: Int!
 }
 
+type SystemAuditLogEntry {
+  timestamp: String!
+  action: String!
+  actorId: ID!
+  changedBy: String!
+}
+
 # ─── INPUT TYPES ───────────────────────────────────────────────────────────────
 
 input CreateMedicalPersonnelInput {
@@ -362,6 +369,7 @@ type Query {
   # Medical Personnel
   listMedicalPersonnel(role: String, designation: Designation, isActive: Boolean): MedicalPersonnelList!
   getMedicalPersonnel(userId: ID!): MedicalPersonnel
+  getSystemAuditLog(medicalId: ID!): [SystemAuditLogEntry!]!
 
   # Permissions - Returns all permissions with enabled status AND branch designation
   getStaffPermissions(userId: ID!): Permissions!
@@ -396,6 +404,7 @@ type Mutation {
   createMedicalPersonnel(input: CreateMedicalPersonnelInput!): MedicalPersonnelMutationResult!
   updateMedicalPersonnel(userId: ID!, input: UpdateMedicalPersonnelInput!): MedicalPersonnelMutationResult!
   deleteMedicalPersonnel(userId: ID!, revertIdentity: Boolean): DeleteMedicalPersonnelResult!
+  deleteMedicalStaff(medicalId: ID!): DeleteMedicalPersonnelResult!
 
   # Permissions - Standard (umbrella branch for all permissions)
   # Use this when all permissions should have the same branch designation.

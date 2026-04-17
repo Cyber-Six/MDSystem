@@ -44,6 +44,11 @@ const Query = {
     return await Wrapper.Query._getMedicalPersonnel(_, args, context);
   },
 
+  getSystemAuditLog: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._getSystemAuditLog(_, args, context);
+  },
+
   getStaffPermissions: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._getStaffPermissions(_, args, context);
@@ -136,6 +141,11 @@ const Mutation = {
   deleteMedicalPersonnel: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._deleteMedicalPersonnel(_, args, context);
+  },
+
+  deleteMedicalStaff: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._deleteMedicalStaff(_, args, context);
   },
 
   setStaffPermissionsStandard: async (_, args, context) => {

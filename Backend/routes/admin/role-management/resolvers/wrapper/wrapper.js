@@ -573,6 +573,24 @@ function buildUserInfo(row) {
   };
 }
 
+async function getMedicalPersonnelRecordById(medicalId, queryClient = db) {
+  const normalizedMedicalId = String(medicalId || '').trim();
+  if (!normalizedMedicalId) {
+    return null;
+  }
+
+  const result = await queryClient.query(
+    `SELECT mp.id::text AS id, uc.email
+     FROM "MedicalPersonnel" mp
+     LEFT JOIN "UserCredentials" uc ON uc.id = mp.id
+     WHERE mp.id::text = $1
+     LIMIT 1`,
+    [normalizedMedicalId]
+  );
+
+  return result.rows?.[0] || null;
+}
+
 function toTimestampMs(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
@@ -1067,6 +1085,68 @@ const Query = {
       isActive: row.is_active,
       user: buildUserInfo(row)
     };
+  },
+
+  _getSystemAuditLog: async (_, { medicalId }, { user, res }) => {
+    const normalizedMedicalId = String(medicalId || '').trim();
+    if (!normalizedMedicalId) {
+      throwGraphQLError(res).message('medicalId is required.').status(400).throw();
+    }
+
+    try {
+      const medicalRecord = await getMedicalPersonnelRecordById(normalizedMedicalId);
+      if (!medicalRecord) {
+        throwGraphQLError(res)
+          .message(`No medical personnel record exists for medicalId ${normalizedMedicalId}.`)
+          .status(404)
+          .throw();
+      }
+
+      const result = await db.query(
+        `SELECT
+           "createdAt" AS created_at,
+           "action" AS action,
+           "actorId"::text AS actor_id,
+           "changedBy"::text AS changed_by
+         FROM "SystemAuditLog"
+         WHERE "actorId"::text = $1
+           AND "changedBy"::text = 'Medical'
+         ORDER BY "createdAt" DESC`,
+        [normalizedMedicalId]
+      );
+
+      const auditEntries = result.rows.map((row) => ({
+        timestamp: row.created_at
+          ? new Date(row.created_at).toISOString()
+          : new Date(0).toISOString(),
+        action: row.action || 'UNKNOWN_ACTION',
+        actorId: String(row.actor_id || normalizedMedicalId),
+        changedBy: row.changed_by || 'Medical',
+      }));
+
+      logger.info('System audit log fetched for medical personnel', {
+        requestorId: String(user?.id || ''),
+        medicalId: normalizedMedicalId,
+        entryCount: auditEntries.length,
+      });
+
+      return auditEntries;
+    } catch (error) {
+      if (error?.name === 'GraphQLError') {
+        throw error;
+      }
+
+      logger.error('Failed to fetch system audit log for medical personnel', {
+        requestorId: String(user?.id || ''),
+        medicalId: normalizedMedicalId,
+        error: error.message,
+      });
+
+      throwGraphQLError(res)
+        .message('Failed to fetch system audit log entries.')
+        .status(500)
+        .throw();
+    }
   },
 
   _getStaffPermissions: async (_, { userId }, { user, res }) => {
@@ -2011,6 +2091,89 @@ const Mutation = {
       await client.query('ROLLBACK');
       logger.error(`Error deleting MedicalPersonnel: ${error.message}`);
       throwGraphQLError(res).message(error.message || 'Failed to delete MedicalPersonnel record.').status(500).throw();
+    } finally {
+      client.release();
+    }
+  },
+
+  _deleteMedicalStaff: async (_, { medicalId }, { user, res }) => {
+    const normalizedMedicalId = String(medicalId || '').trim();
+    if (!normalizedMedicalId) {
+      throwGraphQLError(res).message('medicalId is required.').status(400).throw();
+    }
+
+    const client = await db.db().connect();
+    try {
+      await client.query('BEGIN');
+
+      const medicalRecord = await getMedicalPersonnelRecordById(normalizedMedicalId, client);
+      if (!medicalRecord) {
+        throwGraphQLError(res)
+          .message(`No medical personnel record exists for medicalId ${normalizedMedicalId}.`)
+          .status(404)
+          .throw();
+      }
+
+      await clearMedicalPermits(normalizedMedicalId, client);
+
+      const deleteResult = await client.query(
+        `DELETE FROM "MedicalPersonnel"
+         WHERE id::text = $1
+         RETURNING id::text AS id`,
+        [normalizedMedicalId]
+      );
+
+      if (!deleteResult.rowCount) {
+        throwGraphQLError(res)
+          .message(`No medical personnel record exists for medicalId ${normalizedMedicalId}.`)
+          .status(404)
+          .throw();
+      }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: 'DELETE_MEDICAL_STAFF',
+        actorId: normalizedMedicalId,
+        actorType: 'Staff',
+        targetId: normalizedMedicalId,
+        action: 'DELETE_MEDICAL_STAFF',
+        details: JSON.stringify({
+          medicalId: normalizedMedicalId,
+          deletedBy: String(user?.id || ''),
+          timestamp: new Date().toISOString(),
+        }),
+        changedBy: 'Medical',
+      });
+
+      await client.query('COMMIT');
+
+      logger.info('Medical staff record deleted', {
+        medicalId: normalizedMedicalId,
+        deletedBy: String(user?.id || ''),
+      });
+
+      return {
+        ok: true,
+        message: 'Medical staff record deleted successfully.',
+        identityReverted: false,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+
+      if (error?.name === 'GraphQLError') {
+        throw error;
+      }
+
+      logger.error('Failed to delete medical staff record', {
+        medicalId: normalizedMedicalId,
+        deletedBy: String(user?.id || ''),
+        error: error.message,
+      });
+
+      throwGraphQLError(res)
+        .message(error.message || 'Failed to delete medical staff record.')
+        .status(500)
+        .throw();
     } finally {
       client.release();
     }
