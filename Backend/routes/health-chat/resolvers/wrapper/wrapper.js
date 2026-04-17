@@ -49,6 +49,10 @@ function getHealthChatRoomsByPatientBranch(patientBranch) {
   return HEALTH_CHAT_ROOMS_BY_PATIENT_BRANCH[patientBranch] || HEALTH_CHAT_ROOMS_BY_PATIENT_BRANCH.Both;
 }
 
+function branchAllowsPatient(staffBranch, patientBranch) {
+  return staffBranch === 'Both' || patientBranch === 'Both' || staffBranch === patientBranch;
+}
+
 async function emitHealthChatStaffEventByPatient(patientId, eventName, payload) {
   let rooms;
 
@@ -715,6 +719,18 @@ const Query = {
       throwGraphQLError(res).message("You are not allowed to transfer this ticket").status(403).throw();
     }
 
+    const patientResult = await db.query(
+      `SELECT up.branch, p.profile AS identity
+       FROM "UsersPersonal" up
+       LEFT JOIN "Patients" p ON p.id = up.id
+       WHERE up.id = $1
+       LIMIT 1`,
+      [chat.patientId]
+    );
+
+    const patientBranch = patientResult.rows[0]?.branch || 'Both';
+    const patientIdentity = patientResult.rows[0]?.identity || null;
+
     const staffResult = await db.query(
       `SELECT
          mp.id,
@@ -727,37 +743,63 @@ const Query = {
        JOIN "UsersPersonal" up ON up.id = mp.id
        JOIN "UserCredentials" uc ON uc.id = mp.id
        WHERE uc.credentials_status = 'Active'
-       ORDER BY up.first_name ASC, up.last_name ASC, mp.id ASC`
+         AND mp.id <> $1
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM "rolesMap" rm
+             JOIN "rolesTable" rt ON rt.id = rm."rolesId"
+             WHERE rm."personnelId" = mp.id
+               AND rt.label = $2
+           )
+           OR (
+             EXISTS (
+               SELECT 1
+               FROM "rolesMap" rm
+               JOIN "rolesTable" rt ON rt.id = rm."rolesId"
+               WHERE rm."personnelId" = mp.id
+                 AND rt.label = $3
+                 AND (rm.branch = 'Both' OR $4 = 'Both' OR rm.branch = $4)
+             )
+             AND (mp.designation = 'Both' OR $4 = 'Both' OR mp.designation = $4)
+           )
+         )
+         AND (
+           $5::text <> 'Superior'
+           OR EXISTS (
+             SELECT 1
+             FROM "rolesMap" rm
+             JOIN "rolesTable" rt ON rt.id = rm."rolesId"
+             WHERE rm."personnelId" = mp.id
+               AND rt.label = $2
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM "rolesMap" rm
+             JOIN "rolesTable" rt ON rt.id = rm."rolesId"
+             WHERE rm."personnelId" = mp.id
+               AND rt.label = $6
+           )
+         )
+       ORDER BY up.first_name ASC, up.last_name ASC, mp.id ASC`,
+      [
+        chat.medicalId,
+        permissions.is_admin,
+        permissions.health_chat_allow_access,
+        patientBranch,
+        patientIdentity,
+        permissions.privileged_to_perform_on_superior,
+      ]
     );
 
-    const candidates = await Promise.all(
-      staffResult.rows.map(async (staff) => {
-        if (Number(staff.id) === Number(chat.medicalId)) {
-          return null;
-        }
-
-        const permitted = await isMedicalPermittedPatientBased(
-          staff.id,
-          permissions.health_chat_allow_access,
-          chat.patientId
-        );
-
-        if (!permitted) {
-          return null;
-        }
-
-        return {
-          id: staff.id,
-          firstName: staff.first_name || null,
-          lastName: staff.last_name || null,
-          email: staff.email || null,
-          branch: staff.branch || null,
-          role: staff.role || null,
-        };
-      })
-    );
-
-    return candidates.filter(Boolean);
+    return staffResult.rows.map((staff) => ({
+      id: staff.id,
+      firstName: staff.first_name || null,
+      lastName: staff.last_name || null,
+      email: staff.email || null,
+      branch: staff.branch || null,
+      role: staff.role || null,
+    }));
   }
 };
 
@@ -1324,6 +1366,42 @@ const Mutation = {
 
     if (Number(toMedicalId) === Number(fromMedicalId)) {
       throwGraphQLError(res).message("Ticket is already assigned to this staff member").status(400).throw();
+    }
+
+    const [targetStaffResult, patientBranch, isTargetPermitted] = await Promise.all([
+      db.query(
+        `SELECT mp.designation, uc.credentials_status
+         FROM "MedicalPersonnel" mp
+         JOIN "UserCredentials" uc ON uc.id = mp.id
+         WHERE mp.id = $1
+         LIMIT 1`,
+        [toMedicalId]
+      ),
+      getPatientBranch(chat.patientId),
+      isMedicalPermittedPatientBased(
+        toMedicalId,
+        permissions.health_chat_allow_access,
+        chat.patientId
+      ),
+    ]);
+
+    if (targetStaffResult.rowCount === 0 || targetStaffResult.rows[0]?.credentials_status !== 'Active') {
+      throwGraphQLError(res).message("Target staff account is not active").status(400).throw();
+    }
+
+    if (!isTargetPermitted) {
+      throwGraphQLError(res)
+        .message("Target staff lacks health chat permission for this patient branch")
+        .status(403)
+        .throw();
+    }
+
+    const targetDesignation = targetStaffResult.rows[0]?.designation || 'Both';
+    if (!branchAllowsPatient(targetDesignation, patientBranch)) {
+      throwGraphQLError(res)
+        .message("Target staff designation does not match the patient's branch scope")
+        .status(403)
+        .throw();
     }
 
     // Update the medicalId to the new medical staff

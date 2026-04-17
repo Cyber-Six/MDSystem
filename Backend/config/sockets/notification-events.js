@@ -20,6 +20,36 @@ const BRANCH_TO_LOCATIONS = {
   Both: ['Arlegui', 'Casal', 'QuezonCity'],
 };
 
+const branchToSet = (branch = 'Both') => {
+  if (branch === 'Manila') return new Set(['Manila']);
+  if (branch === 'QuezonCity') return new Set(['QuezonCity']);
+  return new Set(['Manila', 'QuezonCity']);
+};
+
+const setToBranch = (branchSet) => {
+  const hasManila = branchSet.has('Manila');
+  const hasQuezon = branchSet.has('QuezonCity');
+
+  if (hasManila && hasQuezon) return 'Both';
+  if (hasManila) return 'Manila';
+  if (hasQuezon) return 'QuezonCity';
+  return null;
+};
+
+const intersectBranches = (...branches) => {
+  if (!branches.length) return null;
+
+  const [first, ...rest] = branches;
+  let intersection = branchToSet(first || 'Both');
+
+  for (const branch of rest) {
+    const branchSet = branchToSet(branch || 'Both');
+    intersection = new Set([...intersection].filter((item) => branchSet.has(item)));
+  }
+
+  return setToBranch(intersection);
+};
+
 /**
  * Notification Socket Events
  *
@@ -94,11 +124,12 @@ const notificationHandlers = {
       const locations = BRANCH_TO_LOCATIONS[branch] || [branch];
 
       // Check module permissions in parallel (isMedicalPermitted already bypasses for admins)
-      const [appointmentPerm, inventoryPerm, healthChatPerm, pendingPerm] = await Promise.all([
+      const [appointmentPerm, inventoryPerm, healthChatPerm, pendingPerm, adminPerm] = await Promise.all([
         isMedicalPermitted(socket.userId, permKeys.appointment_allow_view_records),
         isMedicalPermitted(socket.userId, permKeys.inventory_allow_view),
         isMedicalPermitted(socket.userId, permKeys.health_chat_allow_access),
         isMedicalPermitted(socket.userId, permKeys.emr_allow_approval),
+        isMedicalPermitted(socket.userId, permKeys.is_admin),
       ]);
 
       const joinedRooms = [];
@@ -127,9 +158,19 @@ const notificationHandlers = {
       // Join branch-scoped health chat room.
       // Server-side health chat emitters route to eligible branches based on patient branch.
       if (healthChatPerm.permitted) {
-        const healthChatRoom = `notif:healthchat:${branch}`;
-        socket.join(healthChatRoom);
-        joinedRooms.push(healthChatRoom);
+        const healthChatScope = adminPerm.permitted
+          ? 'Both'
+          : intersectBranches(branch, healthChatPerm.branch);
+
+        if (healthChatScope) {
+          const healthChatRoom = `notif:healthchat:${healthChatScope}`;
+          socket.join(healthChatRoom);
+          joinedRooms.push(healthChatRoom);
+        } else {
+          logger.warn(
+            `[NOTIF-EVENTS] user:${socket.userId} has health chat permission but no overlapping designation/permission branch scope`
+          );
+        }
       }
 
       // EMR mutations emit updateTicket to role:${patientBranch}::staff rooms.
