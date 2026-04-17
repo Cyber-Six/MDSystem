@@ -15,6 +15,7 @@ import {
   setUserSessionRevoked,
   setUserSuperiorStatus,
 } from '../staff-service';
+import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50];
 const LOGIN_HISTORY_LIMIT_OPTIONS = [10, 20, 50];
@@ -197,6 +198,7 @@ const UserManagement = () => {
   const [lockingAccount, setLockingAccount] = useState(false);
   const [settingSuperior, setSettingSuperior] = useState(false);
   const [superiorActionUserId, setSuperiorActionUserId] = useState(null);
+  const [accountActionConfirm, setAccountActionConfirm] = useState(null);
 
   const [selectedSessionUser, setSelectedSessionUser] = useState(null);
   const [userSessionRows, setUserSessionRows] = useState([]);
@@ -1119,6 +1121,7 @@ const UserManagement = () => {
 
   const closePatientDetail = useCallback(() => {
     setSelectedPatient(null);
+    setAccountActionConfirm(null);
     setLoginHistoryRows([]);
     setLoginHistoryOffset(0);
     setLoginHistoryHasMore(false);
@@ -2365,17 +2368,33 @@ const UserManagement = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="patient-detail-title">
           <div className="absolute inset-0 bg-black/40" onClick={closePatientDetail} aria-hidden="true" />
           <div className="relative w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
-              <div>
-                <h3 id="patient-detail-title" className="text-sm font-semibold text-secondary-900 dark:text-white">User Account Controls and Login History</h3>
-                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{selectedPatient.name} ({selectedPatient.email})</p>
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="min-w-0">
+                <div id="patient-detail-title" className="flex flex-col" style={{ gap: '2px' }}>
+                  <h3 className="text-sm font-semibold text-secondary-900 dark:text-white" style={{ lineHeight: 1.2, margin: 0 }}>User Account Controls</h3>
+                  <p className="text-[11px] font-medium text-secondary-500 dark:text-neutral-400" style={{ lineHeight: 1.2, margin: 0 }}>Login History</p>
+                </div>
+                <div className="flex items-center gap-3 mt-2.5 pt-2 border-t border-neutral-200 dark:border-neutral-700 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-[#F1C526] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                    {String(selectedPatient.name || '')
+                      .split(' ')
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()}
+                  </div>
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate" style={{ lineHeight: 1.2, margin: 0 }}>
+                    {selectedPatient.name} ({selectedPatient.email})
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    void handleToggleLockAccount();
+                    setAccountActionConfirm({ type: 'lock' });
                   }}
                   disabled={lockingAccount || settingSuperior || isRateLimited}
                   className="px-2.5 py-1 text-xs rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2388,7 +2407,7 @@ const UserManagement = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    void handleSetSuperiorAccount();
+                    setAccountActionConfirm({ type: 'superior' });
                   }}
                   disabled={settingSuperior || lockingAccount || isRateLimited || superiorActionUserId === String(selectedPatient.id)}
                   className="px-2.5 py-1 text-xs rounded border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2409,28 +2428,28 @@ const UserManagement = () => {
               </div>
             </div>
 
-            <div className="p-4 overflow-auto max-h-[calc(85vh-64px)] space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+            <div className="p-3 overflow-auto max-h-[calc(85vh-64px)] space-y-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-1.5">
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-1.5">
                   <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Type</p>
-                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{selectedPatient.type}</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-0.5">{selectedPatient.type}</p>
                 </div>
-                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-1.5">
                   <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Account Status</p>
-                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{formatStatusLabel(selectedPatient.status)}</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-0.5">{formatStatusLabel(selectedPatient.status)}</p>
                   {getStatusKey(selectedPatient.status) === 'inactive' && (
-                    <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mt-1">
+                    <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mt-0.5" style={{ lineHeight: 1.2, marginBottom: 0 }}>
                       Update window ends: {formatDateTime(selectedPatient.inactiveExpiresAt)}
                     </p>
                   )}
                 </div>
-                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-1.5">
                   <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Branch</p>
-                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{selectedPatient.branch}</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-0.5">{selectedPatient.branch}</p>
                 </div>
-                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-2">
+                <div className="rounded border border-neutral-200 dark:border-neutral-700 px-2.5 py-1.5">
                   <p className="text-[11px] uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Last Login</p>
-                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-1">{formatDateTime(selectedPatient.lastLogin)}</p>
+                  <p className="text-xs font-medium text-secondary-900 dark:text-white mt-0.5">{formatDateTime(selectedPatient.lastLogin)}</p>
                 </div>
               </div>
 
@@ -2472,10 +2491,10 @@ const UserManagement = () => {
                             const attemptStatus = normalizeText(attempt.status) === 'success' ? 'active' : 'unknown';
                             return (
                               <tr key={attempt.rowId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0">
-                                <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{formatDateTime(attempt.timestamp)}</td>
-                                <td className="py-2.5 px-3 text-xs font-mono text-secondary-600 dark:text-neutral-300">{attempt.ip}</td>
-                                <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{attempt.device}</td>
-                                <td className="py-2.5 px-3">
+                                <td className="py-2 px-3 text-xs text-secondary-600 dark:text-neutral-300">{formatDateTime(attempt.timestamp)}</td>
+                                <td className="py-2 px-3 text-xs font-mono text-secondary-600 dark:text-neutral-300">{attempt.ip}</td>
+                                <td className="py-2 px-3 text-xs text-secondary-600 dark:text-neutral-300">{attempt.device}</td>
+                                <td className="py-2 px-3">
                                   <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
                                     <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[attemptStatus] || STATUS_DOT_CLASS.unknown}`} />
                                     {attempt.status}
@@ -2489,7 +2508,7 @@ const UserManagement = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <p className="text-xs text-secondary-500 dark:text-neutral-400">{loginHistoryRangeLabel}</p>
 
                     <div className="flex items-center gap-2">
@@ -2540,6 +2559,43 @@ const UserManagement = () => {
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={!!accountActionConfirm}
+        onClose={() => setAccountActionConfirm(null)}
+        onConfirm={async () => {
+          const actionType = accountActionConfirm?.type;
+          setAccountActionConfirm(null);
+
+          if (actionType === 'lock') {
+            await handleToggleLockAccount();
+            return;
+          }
+
+          if (actionType === 'superior') {
+            await handleSetSuperiorAccount();
+          }
+        }}
+        title={
+          accountActionConfirm?.type === 'lock'
+            ? `Verify ${getStatusKey(selectedPatient?.status) === 'locked' ? 'Unlock' : 'Lock'} Action`
+            : `Verify ${normalizeText(selectedPatient?.type) === 'superior' ? 'Unset' : 'Set'} Superior`
+        }
+        message={
+          accountActionConfirm?.type === 'lock'
+            ? `Please verify: ${getStatusKey(selectedPatient?.status) === 'locked' ? 'unlock' : 'lock'} this account.`
+            : `Please verify: ${normalizeText(selectedPatient?.type) === 'superior' ? 'unset' : 'set'} Superior for this account.`
+        }
+        description={selectedPatient ? `${selectedPatient.name} (${selectedPatient.email})` : 'Verify this action before continuing.'}
+        confirmText={
+          accountActionConfirm?.type === 'lock'
+            ? `Verify & ${getStatusKey(selectedPatient?.status) === 'locked' ? 'Unlock' : 'Lock'}`
+            : `Verify & ${normalizeText(selectedPatient?.type) === 'superior' ? 'Unset' : 'Set'} Superior`
+        }
+        cancelText="Cancel"
+        variant={accountActionConfirm?.type === 'lock' ? 'danger' : 'primary'}
+        isLoading={accountActionConfirm?.type === 'lock' ? lockingAccount : settingSuperior}
+      />
 
       {selectedSessionUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="user-session-title">
