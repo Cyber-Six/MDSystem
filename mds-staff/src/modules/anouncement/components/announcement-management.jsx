@@ -810,7 +810,7 @@ const AnnouncementManagement = () => {
                       className="flex items-start gap-3 px-4 py-3 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500"
                     >
                       {/* Status dot */}
-                      <div className="mt-1 shrink-0" style={{ marginTop: 0 }}>
+                      <div className="shrink-0 mt-0.5">
                         <span className={`block w-2 h-2 rounded-full ${announcementDetails.isActive ? 'bg-success-500' : 'bg-neutral-300 dark:bg-neutral-600'}`} />
                       </div>
 

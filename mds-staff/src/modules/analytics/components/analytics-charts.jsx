@@ -15,6 +15,18 @@ const CHART_COLORS = [
 const DARK_GRID = '#404040';
 const LIGHT_GRID = '#e5e7eb';
 
+// ── Truncate text to max words with ellipsis ─────────────────────────────────
+
+const truncateText = (text, maxWords = 2, maxChars = 20) => {
+  const str = String(text);
+  const words = str.split(' ');
+  let result = words.length > maxWords ? words.slice(0, maxWords).join(' ') : str;
+  if (result.length > maxChars) {
+    result = result.substring(0, maxChars);
+  }
+  return result.length < str.length ? result.trim() + '...' : result;
+};
+
 // ── Shared tooltip style ─────────────────────────────────────────────────────
 
 const tooltipStyle = {
@@ -27,6 +39,22 @@ const tooltipStyle = {
 
 // ── Bar Chart ────────────────────────────────────────────────────────────────
 
+const CustomBarTick = ({ x, y, payload, fill, dark }) => (
+  <g transform={`translate(${x},${y})`}>
+    <text
+      x={0}
+      y={0}
+      dy={4}
+      textAnchor="middle"
+      fill={fill}
+      fontSize="11"
+      title={payload.value}
+    >
+      {truncateText(payload.value, 2, 18)}
+    </text>
+  </g>
+);
+
 const AnalyticsBarChart = memo(({ data, dark = false }) => {
   if (!data?.length) return <EmptyState />;
 
@@ -36,7 +64,7 @@ const AnalyticsBarChart = memo(({ data, dark = false }) => {
         <CartesianGrid strokeDasharray="3 3" stroke={dark ? DARK_GRID : LIGHT_GRID} />
         <XAxis
           dataKey="name"
-          tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}
+          tick={<CustomBarTick fill={dark ? '#a3a3a3' : '#6b7280'} dark={dark} />}
           axisLine={false}
           tickLine={false}
           interval={0}
