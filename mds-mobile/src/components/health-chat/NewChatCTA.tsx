@@ -3,7 +3,7 @@
  * Shows previous conversation preview + start new consultation button
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -28,6 +28,17 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
   const hasPreviousTicket = !!(ticket && ['Closed', 'Expired'].includes(ticket.status));
   const hasPreviousConvo = hasPreviousTicket && messages.length > 0;
   const closedAt = ticket?.session_end ?? ticket?.archived_at ?? ticket?.expiresAt;
+  const previewScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (!hasPreviousConvo || isHistoryLoading) return;
+
+    const timer = setTimeout(() => {
+      previewScrollRef.current?.scrollToEnd({ animated: false });
+    }, 60);
+
+    return () => clearTimeout(timer);
+  }, [hasPreviousConvo, isHistoryLoading, messages.length, ticket?.id]);
 
   return (
     <ScrollView style={styles.flex1} contentContainerStyle={styles.scrollContent}>
@@ -72,6 +83,7 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
               </View>
             ) : hasPreviousConvo ? (
               <ScrollView
+                ref={previewScrollRef}
                 nestedScrollEnabled
                 style={styles.previewScroll}
                 contentContainerStyle={styles.previewScrollContent}
