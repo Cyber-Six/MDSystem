@@ -220,6 +220,17 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
     setSelectedStaff(null);
   };
 
+  const handleDeleteStaff = useCallback((deletedStaffId) => {
+    const normalizedId = String(deletedStaffId || '').trim();
+    if (!normalizedId) {
+      setSelectedStaff(null);
+      return;
+    }
+
+    setStaffList((prev) => prev.filter((s) => String(s.id) !== normalizedId));
+    setSelectedStaff(null);
+  }, []);
+
   return (
     <div>
       {/* Search + Filter Bar */}
@@ -502,6 +513,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
           staff={selectedStaff}
           onClose={() => setSelectedStaff(null)}
           onSave={handleSaveStaff}
+          onDelete={handleDeleteStaff}
         />
       )}
 
