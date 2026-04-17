@@ -3,7 +3,8 @@ import { X, FileText } from 'lucide-react';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
-const ZOOM_STEP = 0.25;
+const ZOOM_MULTIPLIER = 1.1;
+const WHEEL_ZOOM_MULTIPLIER = 1.08;
 
 function normalizeContentType(contentType) {
   return String(contentType || '').split(';')[0].trim().toLowerCase();
@@ -58,12 +59,12 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
   }, []);
 
   const zoomIn = useCallback(() => {
-    setScale((previousScale) => clampScale(previousScale + ZOOM_STEP));
+    setScale((previousScale) => clampScale(previousScale * ZOOM_MULTIPLIER));
   }, [clampScale]);
 
   const zoomOut = useCallback(() => {
     setScale((previousScale) => {
-      const nextScale = clampScale(previousScale - ZOOM_STEP);
+      const nextScale = clampScale(previousScale / ZOOM_MULTIPLIER);
       if (nextScale <= 1) {
         setPan({ x: 0, y: 0 });
       }
@@ -118,9 +119,9 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
     }
 
     event.preventDefault();
-    const delta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+    const wheelMultiplier = event.deltaY < 0 ? WHEEL_ZOOM_MULTIPLIER : 1 / WHEEL_ZOOM_MULTIPLIER;
     setScale((previousScale) => {
-      const nextScale = clampScale(previousScale + delta);
+      const nextScale = clampScale(previousScale * wheelMultiplier);
       if (nextScale <= 1) {
         setPan({ x: 0, y: 0 });
       }
@@ -239,8 +240,8 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
                 onContextMenu={(e) => e.preventDefault()}
                 draggable={false}
                 style={{
-                  maxWidth: scale > 1 ? 'none' : '100%',
-                  maxHeight: scale > 1 ? 'none' : '100%',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
                   transform: `scale(${scale}) translate(${pan.x / scale}px, ${pan.y / scale}px)`,
                   transformOrigin: 'center center',
                   transition: isDragging ? 'none' : 'transform 120ms ease-out',
