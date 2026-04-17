@@ -10,7 +10,6 @@ import {
   rejectTicket as rejectTicketService,
   sendMessage as sendMessageService,
   closeTicket as closeTicketService,
-  deleteArchivedTicket as deleteArchivedTicketService,
   extendSession as extendSessionService,
   transferTicket as transferTicketService,
   takeoverOngoingTicket as takeoverOngoingTicketService
@@ -985,29 +984,6 @@ export function HealthChatProvider({ children }) {
   }, [updateTicketStatus, tickets, selectedPatientId, selectedChatId, markTicketClosed]);
 
   /**
-   * Delete an archived ticket (admin only)
-   */
-  const deleteTicket = useCallback(async (chatId) => {
-    try {
-      const result = await deleteArchivedTicketService(chatId);
-      if (result.success) {
-        // Remove from list
-        removeTicket(chatId);
-        // Deselect if it was selected
-        if (String(chatId) === String(selectedChatId)) {
-          setSelectedChatId(null);
-          setSelectedTicket(null);
-          setMessages([]);
-        }
-      }
-      return result;
-    } catch (err) {
-      console.error('[HealthChatContext] Failed to delete ticket:', err);
-      throw err;
-    }
-  }, [removeTicket, selectedChatId]);
-
-  /**
    * Extend session for a ticket (+1 day)
    */
   const extendSessionChat = useCallback(async (chatId) => {
@@ -1178,7 +1154,6 @@ export function HealthChatProvider({ children }) {
     rejectTicket,
     sendMessage,
     closeTicket,
-    deleteTicket,
     transferTicket,
     takeoverTicket,
     extendSessionChat,

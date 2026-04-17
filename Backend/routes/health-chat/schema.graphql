@@ -186,7 +186,6 @@ type Mutation {
   rejectTicket(chatId: ID!, reason: String): TicketResult!
   sendMedicalMessage(input: SendMessageInput!): MessageResult!
   closeTicket(input: CloseTicketInput!): TicketResult!
-  deleteArchivedTicket(chatId: ID!): TicketResult!
 
   transferTicket(chatId: ID!, toMedicalId: Int!): TicketResult!
   takeoverOngoingTicket(chatId: ID!): TicketResult! # for admin only

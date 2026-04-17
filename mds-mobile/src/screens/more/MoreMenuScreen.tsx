@@ -33,11 +33,15 @@ interface MenuItem {
   description?: string;
 }
 
+const SHOW_LOGIN_ACTIVITY_IN_MORE = false;
+
 const menuItems: MenuItem[] = [
   { iconName: 'person', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
   { iconName: 'megaphone', label: 'Announcements', screen: 'Announcements', description: 'Clinic news and announcements' },
   { iconName: 'folder-open-outline', label: 'My Documents', screen: 'MyDocuments', description: 'View your uploaded files' },
-  { iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
+  ...(SHOW_LOGIN_ACTIVITY_IN_MORE
+    ? [{ iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' }]
+    : []),
   { iconName: 'help-circle', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
   { iconName: 'settings', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
 ];
