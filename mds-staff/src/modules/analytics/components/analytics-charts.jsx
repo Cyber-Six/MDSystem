@@ -15,6 +15,18 @@ const CHART_COLORS = [
 const DARK_GRID = '#404040';
 const LIGHT_GRID = '#e5e7eb';
 
+// ── Truncate text to max words with ellipsis ─────────────────────────────────
+
+const truncateText = (text, maxWords = 2, maxChars = 20) => {
+  const str = String(text);
+  const words = str.split(' ');
+  let result = words.length > maxWords ? words.slice(0, maxWords).join(' ') : str;
+  if (result.length > maxChars) {
+    result = result.substring(0, maxChars);
+  }
+  return result.length < str.length ? result.trim() + '...' : result;
+};
+
 // ── Shared tooltip style ─────────────────────────────────────────────────────
 
 const tooltipStyle = {
@@ -32,17 +44,18 @@ const AnalyticsBarChart = memo(({ data, dark = false }) => {
 
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 4, right: 16, left: -8, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 4, right: 16, left: -8, bottom: 6 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={dark ? DARK_GRID : LIGHT_GRID} />
         <XAxis
           dataKey="name"
           tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}
+          tickFormatter={(value) => truncateText(value, 2, 18)}
           axisLine={false}
           tickLine={false}
           interval={0}
-          angle={data.length > 6 ? -35 : 0}
-          textAnchor={data.length > 6 ? 'end' : 'middle'}
-          height={data.length > 6 ? 60 : 30}
+          angle={-35}
+          textAnchor="end"
+          height={64}
         />
         <YAxis
           tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}

@@ -36,6 +36,17 @@ function clamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
 }
 
+// Truncate text to max words with ellipsis
+function truncateText(text, maxWords = 2, maxChars = 20) {
+  const str = String(text);
+  const words = str.split(' ');
+  let result = words.length > maxWords ? words.slice(0, maxWords).join(' ') : str;
+  if (result.length > maxChars) {
+    result = result.substring(0, maxChars);
+  }
+  return result.length < str.length ? result.trim() + '...' : result;
+}
+
 // ──────────────────────────────────────────────────────────────
 // Heatmap
 // ──────────────────────────────────────────────────────────────
@@ -123,19 +134,31 @@ function GroupedBarChart({ labels, series }) {
 
       {/* Grouped bars */}
       <div className="overflow-x-auto">
-        <div className="flex items-end gap-3 min-w-max px-1 pb-1">
+        <div className="flex items-end gap-4 min-w-max px-1 pb-1">
           {labels.map((label, li) => (
-            <div key={label} className="flex flex-col items-center gap-1 min-w-[56px]">
+            <div key={label} className="flex flex-col items-center gap-2 min-w-[80px]">
+              {/* Value labels row */}
+              <div className="flex justify-center gap-1 w-full">
+                {series.map((s, si) => {
+                  const val = s.values[li];
+                  return (
+                    <div key={s.name} className="text-[10px] font-medium text-gray-400 w-5 text-center">
+                      {val > 0 ? val.toLocaleString() : ''}
+                    </div>
+                  );
+                })}
+              </div>
               {/* Group of bars */}
-              <div className="flex items-end gap-0.5 h-28">
+              <div className="flex items-end gap-1 h-48">
                 {series.map((s, si) => {
                   const pct = maxVal > 0 ? (s.values[li] / maxVal) * 100 : 0;
+                  const val = s.values[li];
                   return (
                     <div
                       key={s.name}
-                      className={`w-4 rounded-t-sm flex-shrink-0 ${BAR_COLORS[si % BAR_COLORS.length]} transition-all`}
+                      className={`w-5 rounded-t-sm flex-shrink-0 ${BAR_COLORS[si % BAR_COLORS.length]} transition-all`}
                       style={{ height: `${Math.max(pct, 2)}%` }}
-                      title={`${s.name}: ${s.values[li]?.toLocaleString()}`}
+                      title={`${s.name}: ${val?.toLocaleString()}`}
                     />
                   );
                 })}
@@ -144,8 +167,9 @@ function GroupedBarChart({ labels, series }) {
               <span
                 className="text-[10px] text-gray-500 text-center leading-tight mt-0.5 max-w-[72px]"
                 style={{ wordBreak: 'break-word' }}
+                title={label}
               >
-                {label}
+                {truncateText(label, 2, 18)}
               </span>
             </div>
           ))}

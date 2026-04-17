@@ -94,7 +94,7 @@ const SearchResultsList = ({ patients, hasFired, isLoading, error, searchTerm, f
                       : 'hover:bg-neutral-50 dark:hover:bg-neutral-700/50'}`}
               >
                 {/* Avatar */}
-                <PatientInitialBadge initials={getPatientInitials(p)} />
+                <PatientInitialBadge initials={getPatientInitials(p)} appearance="solidYellow" />
 
                 {/* Name + meta */}
                 <div className="min-w-0 flex flex-col" style={{ gap: '2px' }}>

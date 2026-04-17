@@ -207,9 +207,9 @@ const SendNotificationView = () => {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 max-w-2xl mx-auto">
+    <div className="px-4 pt-0 pb-4 max-w-2xl mx-auto">
       {/* Page header — consistent with other module headers */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-1">
         <div>
           <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Send Notification</h1>
           <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mt-0.5">Broadcast a message to staff or patients.</p>

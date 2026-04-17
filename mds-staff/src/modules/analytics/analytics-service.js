@@ -89,7 +89,7 @@ export const CHART_TYPE_MAP = {
   // Demographics
   'patients-by-sex': 'bar',
   'consultations-by-sex': 'bar',
-  'top-diagnoses-by-sex': 'grouped-bar',
+  'top-diagnoses-by-sex': 'bar',
   'patients-by-age-group': 'bar',
   'consultations-by-age-group': 'bar',
   'bmi-by-age-group': 'bar',
