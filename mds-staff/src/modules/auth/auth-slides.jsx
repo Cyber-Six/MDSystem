@@ -8,269 +8,203 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
   const [touchEnd, setTouchEnd] = useState(null);
   const [slideProgress, setSlideProgress] = useState(0);
 
-  // Slider data
   const slides = [
     {
-      id: 1,
-      icon: Shield,
-      headline: "Welcome to MDS Healthcare",
-      description: "Comprehensive healthcare management platform designed for modern medical institutions.",
-      color: "primary"
+      id: 1, icon: Shield, color: 'primary',
+      headline: 'Welcome to MDS Healthcare',
+      description: 'Comprehensive healthcare management platform designed for modern medical institutions.',
     },
     {
-      id: 2,
-      icon: FileText,
-      headline: "Centralized Medical Records",
-      description: "Organized, secure, and accessible patient records at your fingertips.",
-      color: "accent"
+      id: 2, icon: FileText, color: 'accent',
+      headline: 'Centralized Medical Records',
+      description: 'Organized, secure, and accessible patient records at your fingertips.',
     },
     {
-      id: 3,
-      icon: Lock,
-      headline: "Enterprise-Grade Security",
-      description: "Your data is protected with advanced encryption and role-based access control.",
-      color: "success"
+      id: 3, icon: Lock, color: 'success',
+      headline: 'Enterprise-Grade Security',
+      description: 'Your data is protected with advanced encryption and role-based access control.',
     },
     {
-      id: 4,
-      icon: Zap,
-      headline: "Fast & Accessible Anywhere",
-      description: "High-performance system accessible from any device, anytime, anywhere.",
-      color: "warning"
-    }
+      id: 4, icon: Zap, color: 'warning',
+      headline: 'Fast & Accessible Anywhere',
+      description: 'High-performance system accessible from any device, anytime, anywhere.',
+    },
   ];
 
-  // Auto-slide effect with progress
+  // Auto-slide with progress
   useEffect(() => {
     if (isHovered) return;
-
     const progressInterval = setInterval(() => {
-      setSlideProgress((prev) => {
-        if (prev >= 100) return 0;
-        return prev + (100 / 55); // Update every 100ms for 5500ms total
-      });
+      setSlideProgress((prev) => (prev >= 100 ? 0 : prev + (100 / 55)));
     }, 100);
-
     const slideInterval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
       setSlideProgress(0);
     }, 5500);
-
-    return () => {
-      clearInterval(progressInterval);
-      clearInterval(slideInterval);
-    };
+    return () => { clearInterval(progressInterval); clearInterval(slideInterval); };
   }, [isHovered, slides.length]);
 
-  // Reset progress when slide changes manually
-  useEffect(() => {
-    setSlideProgress(0);
-  }, [currentSlide]);
+  useEffect(() => { setSlideProgress(0); }, [currentSlide]);
 
-  // Touch swipe handlers
+  // Touch swipe
   const minSwipeDistance = 50;
-
-  const onTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
+  const onTouchStart = (e) => { setTouchEnd(null); setTouchStart(e.targetTouches[0].clientX); };
+  const onTouchMove = (e) => setTouchEnd(e.targetTouches[0].clientX);
   const onTouchEnd = () => {
     if (!touchStart || !touchEnd) return;
-    
     const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    
-    if (isLeftSwipe) {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
-    } else if (isRightSwipe) {
-      setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
-    }
+    if (distance > minSwipeDistance)  setCurrentSlide((p) => (p + 1) % slides.length);
+    if (distance < -minSwipeDistance) setCurrentSlide((p) => (p - 1 + slides.length) % slides.length);
   };
 
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (activeView === 'register' || isPanelOpen) return;
-      
-      if (e.key === 'ArrowLeft') {
-        setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
-      } else if (e.key === 'ArrowRight') {
-        setCurrentSlide((prev) => (prev + 1) % slides.length);
-      }
+      if (e.key === 'ArrowLeft')  setCurrentSlide((p) => (p - 1 + slides.length) % slides.length);
+      if (e.key === 'ArrowRight') setCurrentSlide((p) => (p + 1) % slides.length);
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeView, isPanelOpen, slides.length]);
 
-  const goToSlide = (index) => {
-    setCurrentSlide(index);
-  };
-
-  const getIconColor = (color) => {
-    const colors = {
-      primary: 'text-primary-400',
-      accent: 'text-accent-400',
-      success: 'text-success-400',
-      warning: 'text-warning-400'
-    };
-    return colors[color] || 'text-primary-400';
+  const iconColorMap = {
+    primary: 'text-primary-400',
+    accent:  'text-accent-400',
+    success: 'text-success-400',
+    warning: 'text-warning-400',
   };
 
   return (
-    <div 
+    <div
       className={`fixed top-0 left-0 w-full h-screen z-[1] transition-all duration-300 ${activeView === 'register' ? 'blur-sm' : ''}`}
-      style={{
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)'
-      }}
+      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)' }}
     >
-      <div 
-        className="absolute top-0 left-0 w-full h-full"
-        style={{
-          background: 'radial-gradient(circle at 20% 50%, rgba(245, 158, 11, 0.1) 0%, transparent 50%)'
-        }}
+      {/* Ambient glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: 'radial-gradient(circle at 20% 50%, rgba(245, 158, 11, 0.08) 0%, transparent 60%)' }}
+      />
+
+      {/* Slider */}
+      <div
+        className="h-full flex items-center justify-center px-6 sm:px-10 lg:px-14 py-10"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
-        {/* Hero Slider */}
-        <div 
-          className="h-full flex items-center justify-center px-6 sm:px-8 lg:px-12 py-8"
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-        >
-          <div className="w-full max-w-5xl">
-            {/* Desktop & Tablet Layout */}
-            <div className="hidden md:block">
-              <div className="relative overflow-hidden">
-                {/* Slides Wrapper */}
-                <div 
-                  className="flex transition-transform duration-500 ease-out"
-                  style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-                >
-                  {slides.map((slide) => {
-                    const Icon = slide.icon;
-                    return (
-                      <div 
-                        key={slide.id}
-                        className="min-w-full flex items-center gap-8 lg:gap-12"
-                      >
-                        {/* Text Content - Left Side */}
-                        <div className="flex-1 space-y-4">
-                          <h2 className={`font-heading font-bold text-white transition-all duration-300 animate-slide-in-left ${
-                            isPanelOpen 
-                              ? 'text-2xl lg:text-3xl' 
-                              : 'text-3xl lg:text-4xl'
-                          }`}>
-                            {slide.headline}
-                          </h2>
-                          <p className={`text-neutral-300 leading-relaxed transition-all duration-300 animate-fade-in-up ${
-                            isPanelOpen 
-                              ? 'text-sm lg:text-base' 
-                              : 'text-base lg:text-lg'
-                          }`}>
-                            {slide.description}
-                          </p>
-                        </div>
+        <div className="w-full max-w-2xl">
+          {/* Desktop */}
+          <div className="hidden md:block">
+            <div className="relative overflow-hidden">
+              <div
+                className="flex transition-transform duration-500 ease-out"
+                style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+              >
+                {slides.map((slide) => {
+                  const Icon = slide.icon;
+                  return (
+                    <div key={slide.id} className="min-w-full flex items-center gap-10 lg:gap-14">
+                      {/* Text */}
+                      <div className="flex-1 space-y-3">
+                        <h2 className={`font-heading font-bold text-white leading-snug transition-all duration-300
+                          ${isPanelOpen ? 'text-2xl lg:text-3xl' : 'text-3xl lg:text-4xl'}`}>
+                          {slide.headline}
+                        </h2>
+                        <p className={`text-slate-400 leading-relaxed transition-all duration-300
+                          ${isPanelOpen ? 'text-sm lg:text-base' : 'text-base lg:text-lg'}`}>
+                          {slide.description}
+                        </p>
+                      </div>
 
-                        {/* Icon/Visual - Right Side (Hidden when login panel open on smaller screens) */}
-                        <div className={`transition-all duration-300 ${
-                          isPanelOpen ? 'hidden xl:flex' : 'flex'
-                        } items-center justify-center flex-shrink-0`}>
-                          <div className={`bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl p-8 lg:p-12 transition-all duration-300 animate-scale-in ${
-                            isPanelOpen ? 'w-32 h-32 lg:w-40 lg:h-40' : 'w-48 h-48 lg:w-56 lg:h-56'
-                          }`}>
-                            <Icon className={`w-full h-full ${getIconColor(slide.color)} transition-all duration-300`} strokeWidth={1.5} />
-                          </div>
+                      {/* Icon card */}
+                      <div className={`transition-all duration-300 flex-shrink-0
+                        ${isPanelOpen ? 'hidden xl:flex' : 'flex'} items-center justify-center`}>
+                        <div className={`rounded-2xl border border-white/10
+                          bg-white/[0.04] backdrop-blur-sm transition-all duration-300
+                          flex items-center justify-center
+                          ${isPanelOpen ? 'w-28 h-28 lg:w-36 lg:h-36' : 'w-40 h-40 lg:w-52 lg:h-52'}`}>
+                          <Icon
+                            className={`${iconColorMap[slide.color]} transition-all duration-300
+                              ${isPanelOpen ? 'w-12 h-12 lg:w-16 lg:h-16' : 'w-20 h-20 lg:w-24 lg:h-24'}`}
+                            strokeWidth={1.25}
+                          />
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile Layout */}
-            <div className="md:hidden">
-              <div className="relative overflow-hidden">
-                <div 
-                  className="flex transition-transform duration-500 ease-out"
-                  style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-                >
-                  {slides.map((slide) => {
-                    const Icon = slide.icon;
-                    return (
-                      <div 
-                        key={slide.id}
-                        className="min-w-full flex flex-col items-center text-center space-y-6"
-                      >
-                        {/* Icon at Top */}
-                        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 w-32 h-32 animate-scale-in">
-                          <Icon className={`w-full h-full ${getIconColor(slide.color)}`} strokeWidth={1.5} />
-                        </div>
-
-                        {/* Text Content */}
-                        <div className="space-y-3">
-                          <h2 className="font-heading font-bold text-white text-xl sm:text-2xl animate-fade-in-up">
-                            {slide.headline}
-                          </h2>
-                          <p className="text-neutral-300 leading-relaxed text-sm animate-fade-in-up">
-                            {slide.description}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Dot Navigation with Progress */}
-            <div className="flex flex-col items-center gap-4 mt-8 lg:mt-12">
-              <div className="flex items-center justify-center gap-2">
-                {slides.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => goToSlide(index)}
-                    aria-label={`Go to slide ${index + 1}`}
-                    className="relative group"
-                  >
-                    <div className={`transition-all duration-300 rounded-full ${
-                      currentSlide === index 
-                        ? 'bg-primary-500 w-8 h-2' 
-                        : 'bg-white/30 hover:bg-white/50 w-2 h-2'
-                    }`} />
-                    {currentSlide === index && (
-                      <div 
-                        className="absolute top-0 left-0 h-full bg-primary-300 rounded-full transition-all duration-100"
-                        style={{ width: `${(slideProgress / 100) * 32}px` }}
-                      />
-                    )}
-                  </button>
-                ))}
-              </div>
-              <div className="text-neutral-400 text-xs">
-                {currentSlide + 1} / {slides.length}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
 
-          {/* Touch Swipe Indicator (Mobile Only) */}
-          <div className="md:hidden absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-neutral-400 text-xs">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-            </svg>
-            <span>Swipe to navigate</span>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
+          {/* Mobile */}
+          <div className="md:hidden">
+            <div className="relative overflow-hidden">
+              <div
+                className="flex transition-transform duration-500 ease-out"
+                style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+              >
+                {slides.map((slide) => {
+                  const Icon = slide.icon;
+                  return (
+                    <div key={slide.id} className="min-w-full flex flex-col items-center text-center space-y-5">
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 w-24 h-24 flex items-center justify-center">
+                        <Icon className={`w-full h-full ${iconColorMap[slide.color]}`} strokeWidth={1.25} />
+                      </div>
+                      <div className="space-y-2">
+                        <h2 className="font-heading font-bold text-white text-xl sm:text-2xl">{slide.headline}</h2>
+                        <p className="text-slate-400 text-sm leading-relaxed">{slide.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+
+          {/* Dot navigation */}
+          <div className="flex flex-col items-center gap-3 mt-10 lg:mt-12">
+            <div className="flex items-center gap-2">
+              {slides.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => { setCurrentSlide(index); setSlideProgress(0); }}
+                  aria-label={`Go to slide ${index + 1}`}
+                  className="relative"
+                >
+                  <div className={`transition-all duration-300 rounded-full
+                    ${currentSlide === index
+                      ? 'bg-primary-500 w-7 h-1.5'
+                      : 'bg-white/25 hover:bg-white/40 w-1.5 h-1.5'
+                    }`}
+                  />
+                  {currentSlide === index && (
+                    <div
+                      className="absolute top-0 left-0 h-full bg-primary-300 rounded-full transition-all duration-100"
+                      style={{ width: `${(slideProgress / 100) * 28}px` }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+            <span className="text-slate-500 text-xs tabular-nums">
+              {currentSlide + 1} / {slides.length}
+            </span>
+          </div>
+        </div>
+
+        {/* Swipe hint — mobile only */}
+        <div className="md:hidden absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-slate-500 text-xs">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+          </svg>
+          <span>Swipe to navigate</span>
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+          </svg>
         </div>
       </div>
     </div>
