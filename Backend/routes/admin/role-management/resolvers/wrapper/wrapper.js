@@ -61,6 +61,7 @@ const USER_LIST_STATUS_VALUES = ['Unverified', 'Active', 'Inactive', 'Locked'];
 const PATIENT_IDENTITY_VALUES = ['Student', 'Employee', 'Superior'];
 const PATIENT_DELETION_MAX_BATCH = 500;
 const PATIENT_DELETION_MAX_LIMIT = 200;
+const AUDIT_LOG_MAX_PAGE_SIZE = 100;
 
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
@@ -591,6 +592,45 @@ async function getMedicalPersonnelRecordById(medicalId, queryClient = db) {
   return result.rows?.[0] || null;
 }
 
+function toAuditPayloadString(payload) {
+  if (payload === null || payload === undefined) {
+    return null;
+  }
+
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return String(payload);
+  }
+}
+
+function buildTargetInitials({ targetId, firstName, middleName, lastName }) {
+  const normalizedTargetId = String(targetId || '').trim();
+  if (!normalizedTargetId) {
+    return '----';
+  }
+
+  const normalizedLastName = String(lastName || '').trim().replace(/\s+/g, '');
+  const firstInitial = String(firstName || '').trim().charAt(0).toUpperCase();
+  const middleInitial = String(middleName || '').trim().charAt(0).toUpperCase();
+  const targetInitials = `${normalizedLastName}${firstInitial}${middleInitial}`.trim();
+
+  if (targetInitials) {
+    return targetInitials;
+  }
+
+  const compactTargetId = normalizedTargetId.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (!compactTargetId) {
+    return '----';
+  }
+
+  return compactTargetId.slice(0, 12);
+}
+
 function toTimestampMs(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
@@ -1087,11 +1127,92 @@ const Query = {
     };
   },
 
-  _getSystemAuditLog: async (_, { medicalId }, { user, res }) => {
+  _getSystemAuditLog: async (
+    _,
+    {
+      medicalId,
+      page = 1,
+      pageSize = 10,
+      sortDirection = 'DESC',
+      eventType,
+      actionKeyword,
+      dateFrom,
+      dateTo,
+    },
+    { user, res }
+  ) => {
     const normalizedMedicalId = String(medicalId || '').trim();
     if (!normalizedMedicalId) {
       throwGraphQLError(res).message('medicalId is required.').status(400).throw();
     }
+
+    const parsedPage = Number.parseInt(page, 10);
+    const normalizedPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+
+    const parsedPageSize = Number.parseInt(pageSize, 10);
+    const normalizedPageSize = Number.isFinite(parsedPageSize) && parsedPageSize > 0
+      ? Math.min(parsedPageSize, AUDIT_LOG_MAX_PAGE_SIZE)
+      : 10;
+
+    const normalizedSortDirection = String(sortDirection || 'DESC').trim().toUpperCase() === 'ASC'
+      ? 'ASC'
+      : 'DESC';
+
+    const normalizedEventType = typeof eventType === 'string' && eventType.trim()
+      ? eventType.trim()
+      : null;
+
+    const normalizedActionKeyword = typeof actionKeyword === 'string' && actionKeyword.trim()
+      ? `%${actionKeyword.trim()}%`
+      : null;
+
+    const normalizeDateInput = (rawValue, endOfDay = false) => {
+      if (typeof rawValue !== 'string') {
+        return null;
+      }
+
+      const trimmed = rawValue.trim();
+      if (!trimmed) {
+        return null;
+      }
+
+      const normalized = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+        ? `${trimmed}${endOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z'}`
+        : trimmed;
+
+      const parsed = new Date(normalized);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+
+      return parsed.toISOString();
+    };
+
+    const normalizedDateFrom = normalizeDateInput(dateFrom, false);
+    const normalizedDateTo = normalizeDateInput(dateTo, true);
+
+    if (typeof dateFrom === 'string' && dateFrom.trim() && !normalizedDateFrom) {
+      throwGraphQLError(res)
+        .message('dateFrom must be a valid ISO date/date-time string.')
+        .status(400)
+        .throw();
+    }
+
+    if (typeof dateTo === 'string' && dateTo.trim() && !normalizedDateTo) {
+      throwGraphQLError(res)
+        .message('dateTo must be a valid ISO date/date-time string.')
+        .status(400)
+        .throw();
+    }
+
+    if (normalizedDateFrom && normalizedDateTo && new Date(normalizedDateFrom) > new Date(normalizedDateTo)) {
+      throwGraphQLError(res)
+        .message('dateFrom cannot be later than dateTo.')
+        .status(400)
+        .throw();
+    }
+
+    const offset = (normalizedPage - 1) * normalizedPageSize;
 
     try {
       const medicalRecord = await getMedicalPersonnelRecordById(normalizedMedicalId);
@@ -1102,17 +1223,50 @@ const Query = {
           .throw();
       }
 
+      const queryParams = [
+        normalizedMedicalId,
+        normalizedEventType,
+        normalizedActionKeyword,
+        normalizedDateFrom,
+        normalizedDateTo,
+      ];
+
+      const countResult = await db.query(
+        `SELECT COUNT(*)::int AS total_count
+         FROM "SystemAuditLog" sal
+         WHERE sal."actorId"::text = $1
+           AND sal."changedBy"::text = 'Medical'
+           AND ($2::text IS NULL OR LOWER(COALESCE(sal."event_type"::text, '')) = LOWER($2))
+           AND ($3::text IS NULL OR sal."action"::text ILIKE $3)
+           AND ($4::timestamptz IS NULL OR sal."createdAt" >= $4::timestamptz)
+           AND ($5::timestamptz IS NULL OR sal."createdAt" <= $5::timestamptz)`,
+        queryParams
+      );
+
       const result = await db.query(
         `SELECT
-           "createdAt" AS created_at,
-           "action" AS action,
-           "actorId"::text AS actor_id,
-           "changedBy"::text AS changed_by
-         FROM "SystemAuditLog"
-         WHERE "actorId"::text = $1
-           AND "changedBy"::text = 'Medical'
-         ORDER BY "createdAt" DESC`,
-        [normalizedMedicalId]
+           sal."createdAt" AS created_at,
+           sal."action" AS action,
+           sal."event_type" AS event_type,
+           sal."actorId"::text AS actor_id,
+           sal."changedBy"::text AS changed_by,
+           sal."targetId"::text AS target_id,
+           sal."details" AS payload,
+           up.first_name AS target_first_name,
+           up.middle_name AS target_middle_name,
+           up.last_name AS target_last_name
+         FROM "SystemAuditLog" sal
+         LEFT JOIN "UsersPersonal" up ON up.id::text = sal."targetId"::text
+         WHERE sal."actorId"::text = $1
+           AND sal."changedBy"::text = 'Medical'
+           AND ($2::text IS NULL OR LOWER(COALESCE(sal."event_type"::text, '')) = LOWER($2))
+           AND ($3::text IS NULL OR sal."action"::text ILIKE $3)
+           AND ($4::timestamptz IS NULL OR sal."createdAt" >= $4::timestamptz)
+           AND ($5::timestamptz IS NULL OR sal."createdAt" <= $5::timestamptz)
+         ORDER BY sal."createdAt" ${normalizedSortDirection}
+         OFFSET $6
+         LIMIT $7`,
+        [...queryParams, offset, normalizedPageSize]
       );
 
       const auditEntries = result.rows.map((row) => ({
@@ -1120,17 +1274,43 @@ const Query = {
           ? new Date(row.created_at).toISOString()
           : new Date(0).toISOString(),
         action: row.action || 'UNKNOWN_ACTION',
+        event_type: row.event_type || 'UNKNOWN_EVENT',
+        target_initials: buildTargetInitials({
+          targetId: row.target_id,
+          firstName: row.target_first_name,
+          middleName: row.target_middle_name,
+          lastName: row.target_last_name,
+        }),
+        target_id: row.target_id || null,
+        payload: toAuditPayloadString(row.payload),
         actorId: String(row.actor_id || normalizedMedicalId),
         changedBy: row.changed_by || 'Medical',
       }));
+
+      const totalCount = Number(countResult.rows?.[0]?.total_count) || 0;
 
       logger.info('System audit log fetched for medical personnel', {
         requestorId: String(user?.id || ''),
         medicalId: normalizedMedicalId,
         entryCount: auditEntries.length,
+        totalCount,
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+        sortDirection: normalizedSortDirection,
+        filters: {
+          eventType: normalizedEventType,
+          actionKeyword: normalizedActionKeyword,
+          dateFrom: normalizedDateFrom,
+          dateTo: normalizedDateTo,
+        },
       });
 
-      return auditEntries;
+      return {
+        entries: auditEntries,
+        totalCount,
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+      };
     } catch (error) {
       if (error?.name === 'GraphQLError') {
         throw error;

@@ -96,6 +96,17 @@ const GQL_GET_STAFF_ACCOUNT = `
   }
 `;
 
+const GQL_GET_SYSTEM_AUDIT_LOG = `
+  query GetSystemAuditLog($medicalId: ID!) {
+    getSystemAuditLog(medicalId: $medicalId) {
+      timestamp
+      action
+      actorId
+      changedBy
+    }
+  }
+`;
+
 const GQL_COUNT_ACTIVE_REFRESH_TOKENS = `
   query CountActiveRefreshTokens {
     countActiveRefreshTokens
@@ -288,6 +299,16 @@ const GQL_UPDATE_STAFF_ACCOUNT = `
   }
 `;
 
+const GQL_DELETE_MEDICAL_STAFF = `
+  mutation DeleteMedicalStaff($medicalId: ID!) {
+    deleteMedicalStaff(medicalId: $medicalId) {
+      ok
+      message
+      identityReverted
+    }
+  }
+`;
+
 const GQL_LIST_TEMPLATES = `
   query ListPermissionTemplates {
     listPermissionTemplates {
@@ -471,6 +492,14 @@ export const fetchStaffAccount = async (userId) => {
 };
 
 /**
+ * Fetch role-management audit logs for a medical staff record.
+ */
+export const fetchSystemAuditLog = async (medicalId) => {
+  const data = await sendGraphQL(GQL_GET_SYSTEM_AUDIT_LOG, { medicalId });
+  return Array.isArray(data.getSystemAuditLog) ? data.getSystemAuditLog : [];
+};
+
+/**
  * Save staff role, status, and/or branch designation changes.
  * Permissions are always derived from role templates — no per-staff overrides.
  * @param {string} userId
@@ -484,6 +513,14 @@ export const updateStaffAccount = async (userId, status, role, templateId, desig
   const result = data.updateStaffAccount;
   if (result.staff) result.staff = enrichStaff(result.staff);
   return result;
+};
+
+/**
+ * Delete a medical staff record by its medical personnel ID.
+ */
+export const deleteMedicalStaff = async (medicalId) => {
+  const data = await sendGraphQL(GQL_DELETE_MEDICAL_STAFF, { medicalId });
+  return data.deleteMedicalStaff || { ok: false, message: 'Failed to delete medical staff record.' };
 };
 
 // ─── USER MANAGEMENT (READ-ONLY) ─────────────────────────────────────────────
