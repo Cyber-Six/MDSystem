@@ -7,7 +7,7 @@
  * - Inactive users are forced to submit Both update for reactivation
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -76,18 +76,40 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
   const { recordStatus } = useRecordStatus();
   const [ticket, setTicket] = useState<UpdateTicket | null>(null);
   const [isLoadingTicket, setIsLoadingTicket] = useState(true);
+  const hasAutoRedirected = useRef(false);
+
+  const mapScopeToRecordType = (scope?: string): Choice['id'] | undefined => {
+    if (!scope) return undefined;
+    const normalized = scope.toLowerCase();
+    if (normalized === 'medical') return 'medical';
+    if (normalized === 'dental') return 'dental';
+    if (normalized === 'both') return 'both';
+    return undefined;
+  };
 
   const loadTicketStatus = useCallback(async () => {
     setIsLoadingTicket(true);
+    hasAutoRedirected.current = false;
     try {
       const currentTicket = await getUpdateTicketStatus();
       setTicket(currentTicket);
+
+      // Auto-redirect: if revision is active, go straight to the form with the revision scope
+      if (currentTicket?.status === 'Revision') {
+        const revisionScope = mapScopeToRecordType(currentTicket.scope) ?? 'both';
+        hasAutoRedirected.current = true;
+        navigation.navigate('InitialRecordForm', {
+          isUpdate: true,
+          isRevision: true,
+          recordType: revisionScope,
+        });
+      }
     } catch {
       setTicket(null);
     } finally {
       setIsLoadingTicket(false);
     }
-  }, []);
+  }, [navigation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -102,15 +124,6 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
   const pendingStatuses = new Set(['Pending', 'UnderReview', 'In Review', 'RevisionSubmitted']);
   const isPending = currentStatus ? pendingStatuses.has(currentStatus) : false;
   const isRevision = currentStatus === 'Revision';
-
-  const mapScopeToRecordType = (scope?: string): Choice['id'] | undefined => {
-    if (!scope) return undefined;
-    const normalized = scope.toLowerCase();
-    if (normalized === 'medical') return 'medical';
-    if (normalized === 'dental') return 'dental';
-    if (normalized === 'both') return 'both';
-    return undefined;
-  };
 
   const disabledChoiceIds = new Set<Choice['id']>();
   if (isInactiveCredential) {

@@ -37,6 +37,7 @@ module.exports = ({ config }) => ({
       backgroundColor: '#ffffff',
     },
     edgeToEdgeEnabled: true,
+    softwareKeyboardLayoutMode: 'pan',
     predictiveBackGestureEnabled: false,
     package: 'com.mdsystem.mdsmobile',
   },
