@@ -68,19 +68,39 @@ const FAQsModal = ({ isOpen, onClose }) => {
             <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-400 flex-shrink-0" />
           )}
         </button>
-        {isOpen && (
-          <div className="px-4 py-3 bg-gray-50 dark:bg-neutral-700 border-t border-gray-200 dark:border-neutral-700 animate-slide-down">
-            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-              {faq.answer}
-            </p>
+        <div
+          className="grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out"
+          style={{
+            gridTemplateRows: isOpen ? '1fr' : '0fr',
+            opacity: isOpen ? 1 : 0,
+          }}
+          aria-hidden={!isOpen}
+        >
+          <div className="min-h-0">
+            <div className={`bg-gray-50 dark:bg-neutral-700 border-t transition-colors duration-200 ${
+              isOpen
+                ? 'border-gray-200 dark:border-neutral-700 px-4 py-3'
+                : 'border-transparent px-4 py-0'
+            }`}>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                {faq.answer}
+              </p>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     );
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Frequently Asked Questions" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Frequently Asked Questions"
+      size="lg"
+      backdropBlur={4}
+      backdropOpacity={0.72}
+    >
       <div className="space-y-4">
         {/* Info Banner */}
         <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700">

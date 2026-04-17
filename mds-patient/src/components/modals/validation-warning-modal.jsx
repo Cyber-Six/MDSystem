@@ -60,6 +60,11 @@ const ValidationWarningModal = ({
   }, {});
 
   const sectionIcons = {
+    'Personal Info': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
     'Personal Information': (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -109,57 +114,57 @@ const ValidationWarningModal = ({
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[640px] max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className={`flex items-center gap-3 px-6 py-4 border-b ${colorScheme.border} ${colorScheme.bg} rounded-t-2xl`}>
-          <div className={`flex items-center justify-center w-10 h-10 ${colorScheme.iconBg} rounded-full`}>
+        <div className={`flex items-start gap-2.5 px-5 py-3.5 border-b ${colorScheme.border} ${colorScheme.bg} rounded-t-2xl`}>
+          <div className={`flex items-center justify-center w-9 h-9 ${colorScheme.iconBg} rounded-full flex-shrink-0`}>
             {isError ? (
-              <svg className={`w-6 h-6 ${colorScheme.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-5 h-5 ${colorScheme.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             ) : (
-              <svg className={`w-6 h-6 ${colorScheme.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-5 h-5 ${colorScheme.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
             )}
           </div>
-          <div>
-            <h3 className={`text-lg font-heading font-bold ${colorScheme.titleColor}`}>
+          <div className="min-w-0">
+            <h3 style={{ margin: 0, lineHeight: 1.2 }} className={`text-2xl font-heading font-bold ${colorScheme.titleColor}`}>
               {title || 'Incomplete Form'}
             </h3>
-            <p className={`text-sm ${colorScheme.subtitleColor}`}>
+            <p style={{ margin: 0, lineHeight: 1.35 }} className={`mt-1 text-[14px] ${colorScheme.subtitleColor}`}>
               {subtitle || `Please fix the following ${errors.length} ${errors.length === 1 ? 'issue' : 'issues'} before submitting`}
             </p>
           </div>
           <button 
             onClick={onClose}
-            className={`ml-auto p-1 ${colorScheme.closeColor} rounded-lg transition-colors`}
+            className={`ml-auto p-1 ${colorScheme.closeColor} rounded-lg transition-colors flex-shrink-0`}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto px-6 py-4 space-y-4">
+        <div className="overflow-y-auto px-5 py-3 space-y-3">
           {Object.entries(grouped).map(([section, { sectionIndex, items }]) => (
-            <div key={section} className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 text-secondary-800">
+            <div key={section} className="bg-gray-50 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-1.5 gap-3">
+                <div className="flex items-center gap-2 text-secondary-800 min-w-0">
                   <span className="text-amber-600">
                     {sectionIcons[section] || (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     )}
                   </span>
-                  <h4 className="font-semibold text-sm">{section}</h4>
+                  <h4 style={{ margin: 0, lineHeight: 1.2 }} className="font-semibold text-sm truncate">{section}</h4>
                 </div>
                 {sectionIndex !== undefined && sectionIndex !== null && onGoToSection && (
                   <button
                     onClick={() => handleGoToSection(sectionIndex)}
-                    className={`text-xs ${colorScheme.sectionLink} font-semibold flex items-center gap-1 transition-colors`}
+                    className={`text-xs ${colorScheme.sectionLink} font-semibold flex items-center gap-1 transition-colors whitespace-nowrap`}
                   >
                     Go to section
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,13 +173,13 @@ const ValidationWarningModal = ({
                   </button>
                 )}
               </div>
-              <ul className="space-y-1.5">
+              <ul className="space-y-1">
                 {items.map((msg, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-secondary-700">
-                    <svg className={`w-4 h-4 ${colorScheme.bulletColor} mt-0.5 flex-shrink-0`} fill="currentColor" viewBox="0 0 20 20">
+                    <svg className={`w-3.5 h-3.5 ${colorScheme.bulletColor} mt-1 flex-shrink-0`} fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
-                    <span>{msg}</span>
+                    <span style={{ lineHeight: 1.35 }}>{msg}</span>
                   </li>
                 ))}
               </ul>
@@ -183,10 +188,10 @@ const ValidationWarningModal = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
+        <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
           <button
             onClick={onClose}
-            className={`w-full py-2.5 px-4 ${colorScheme.btnBg} text-white font-semibold rounded-xl transition-colors text-sm`}
+            className={`w-full py-2 px-4 ${colorScheme.btnBg} text-white font-semibold rounded-xl transition-colors text-sm`}
           >
             {isError ? 'OK, I will fix it' : 'I understand, let me fix it'}
           </button>

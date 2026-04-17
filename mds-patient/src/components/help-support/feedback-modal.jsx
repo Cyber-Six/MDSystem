@@ -60,7 +60,14 @@ const FeedbackModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Submit Feedback" size="md">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Submit Feedback"
+      size="md"
+      backdropBlur={4}
+      backdropOpacity={0.72}
+    >
       <div className="space-y-4">
         {/* Info Banner */}
         <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700">

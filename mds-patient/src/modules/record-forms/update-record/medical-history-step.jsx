@@ -621,7 +621,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           <div className="space-y-6">
             {/* Smoker Section */}
             <div className="border-l-4 border-warning-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Smoker</h4>
+              <h4 className="font-semibold text-secondary-700 dark:text-neutral-200 mb-3">Smoker</h4>
               <div className="flex gap-4 mb-4">
                 <RadioButton label="No" name="smoker" value="no" checked={formData.smoker === 'no'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
                 <RadioButton label="Yes" name="smoker" value="yes" checked={formData.smoker === 'yes'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
@@ -648,7 +648,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
 
             {/* Alcohol Section */}
             <div className="border-l-4 border-accent-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Alcohol Drinker</h4>
+              <h4 className="font-semibold text-secondary-700 dark:text-neutral-200 mb-3">Alcohol Drinker</h4>
               <div className="flex gap-4 mb-4">
                 <RadioButton label="No" name="alcoholDrinker" value="no" checked={formData.alcoholDrinker === 'no'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
                 <RadioButton label="Yes" name="alcoholDrinker" value="yes" checked={formData.alcoholDrinker === 'yes'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
@@ -665,7 +665,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
 
             {/* Vaper Section */}
             <div className="border-l-4 border-primary-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Vaper</h4>
+              <h4 className="font-semibold text-secondary-700 dark:text-neutral-200 mb-3">Vaper</h4>
               <div className="flex gap-4 mb-4">
                 <RadioButton label="No" name="vaper" value="no" checked={formData.vaper === 'no'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
                 <RadioButton label="Yes" name="vaper" value="yes" checked={formData.vaper === 'yes'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
