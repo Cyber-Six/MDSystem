@@ -32,6 +32,8 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
 	const mediaType = useMemo(() => getMediaType(contentType, filename), [contentType, filename]);
 	const isImage = mediaType === 'image';
 	const isPdf = mediaType === 'pdf';
+	const useTallViewport = isImage || isPdf;
+	const shouldLockContentOverflow = isImage || isPdf;
 	const [scale, setScale] = useState(1);
 	const [pan, setPan] = useState({ x: 0, y: 0 });
 	const [isDragging, setIsDragging] = useState(false);
@@ -146,18 +148,14 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
 		dragOriginRef.current = null;
 	}, []);
 
-	useEffect(() => {
-		resetView();
-	}, [url, mediaType, resetView]);
-
 	return createPortal(
 		<div
-			className="fixed inset-0 z-[12000] flex items-center justify-center bg-black/80 p-4"
+			className="fixed inset-0 z-[12000] flex items-center justify-center bg-black/80 p-2 md:p-4"
 			onClick={handleBackdropClick}
 		>
 			<div
 				className={`w-full max-w-5xl rounded-xl bg-white shadow-2xl dark:bg-neutral-900 ${
-					isPdf ? 'h-[92vh]' : 'max-h-[92vh]'
+					useTallViewport ? 'h-[94vh]' : 'max-h-[92vh]'
 				} flex flex-col overflow-hidden`}
 				onClick={(event) => event.stopPropagation()}
 			>
@@ -208,10 +206,10 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
 					</button>
 				</div>
 
-				<div className={`min-h-0 flex-1 bg-neutral-100 dark:bg-neutral-800 ${isPdf ? 'overflow-hidden' : 'overflow-auto'}`}>
+				<div className={`min-h-0 flex-1 bg-neutral-100 dark:bg-neutral-800 ${shouldLockContentOverflow ? 'overflow-hidden' : 'overflow-auto'}`}>
 					{isImage ? (
 						<div
-							className="flex min-h-full items-center justify-center overflow-hidden p-4"
+							className="flex h-full w-full items-center justify-center overflow-hidden p-2 sm:p-4"
 							onWheel={handleWheel}
 							onMouseDown={handleMouseDown}
 							onMouseMove={handleMouseMove}

@@ -18,8 +18,8 @@ function normalizeContentType(contentType) {
  * @param {function} onClose - Callback when the lightbox is closed
  */
 const MediaLightbox = ({ url, filename, contentType, onClose }) => {
-  // Determine media type from contentType or filename extension
-  const getMediaType = () => {
+  const mediaType = useMemo(() => {
+    // Determine media type from contentType or filename extension
     const normalizedContentType = normalizeContentType(contentType);
 
     if (normalizedContentType) {
@@ -28,17 +28,19 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
       if (normalizedContentType.startsWith('video/')) return 'video';
       return 'file';
     }
+
     // Fallback to extension
     const ext = filename?.split('.').pop()?.toLowerCase() || '';
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return 'image';
     if (ext === 'pdf') return 'pdf';
     if (['mp4', 'mov', 'webm', 'ogg', 'avi'].includes(ext)) return 'video';
     return 'file';
-  };
+  }, [contentType, filename]);
 
-  const mediaType = useMemo(getMediaType, [contentType, filename]);
   const isImage = mediaType === 'image';
   const isPdf = mediaType === 'pdf';
+  const useTallViewport = isImage || isPdf;
+  const shouldLockContentOverflow = isImage || isPdf;
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -155,19 +157,15 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
     dragOriginRef.current = null;
   }, []);
 
-  useEffect(() => {
-    resetView();
-  }, [url, mediaType, resetView]);
-
   return (
     <div
       className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-[60]"
-      style={{ padding: isPdf ? '0.5rem' : '1rem' }}
+      style={{ padding: useTallViewport ? '0.5rem' : '1rem' }}
       onClick={handleBackdropClick}
     >
       <div
         className={`bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden ${
-          isPdf ? 'h-[calc(100vh-1rem)]' : 'max-h-[90vh]'
+          useTallViewport ? 'h-[94vh]' : 'max-h-[90vh]'
         }`}
       >
         {/* Header */}
@@ -220,11 +218,11 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
 
         {/* Content */}
         <div className={`flex-1 bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center min-h-0 ${
-          isPdf ? 'overflow-hidden' : 'overflow-auto'
+          shouldLockContentOverflow ? 'overflow-hidden' : 'overflow-auto'
         }`}>
           {isImage ? (
             <div
-              className="flex min-h-full w-full items-center justify-center overflow-hidden p-4"
+              className="flex h-full w-full items-center justify-center overflow-hidden p-2 sm:p-4"
               onWheel={handleWheel}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
