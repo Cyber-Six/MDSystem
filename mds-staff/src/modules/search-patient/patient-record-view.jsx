@@ -1251,7 +1251,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   aria-controls={`tabpanel-${tab.id}`}
                   className={`px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 whitespace-nowrap ${
                     activeTab === tab.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 shadow-sm'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-white shadow-sm'
                       : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1290,7 +1290,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setPersonalSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     personalSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-white'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1314,7 +1314,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setMedicalSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     medicalSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-white'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1338,7 +1338,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setDentalSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     dentalSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-white'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
@@ -1361,7 +1361,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                   onClick={() => setConsultationSubTab(sub.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
                     consultationSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900'
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-white'
                       : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
