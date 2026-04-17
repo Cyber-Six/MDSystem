@@ -292,6 +292,10 @@ type UserSessionPage {
 type SystemAuditLogEntry {
   timestamp: String!
   action: String!
+  event_type: String!
+  target_initials: String!
+  target_id: String
+  payload: String
   actorId: ID!
   changedBy: String!
 }

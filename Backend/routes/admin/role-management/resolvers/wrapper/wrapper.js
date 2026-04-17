@@ -591,6 +591,43 @@ async function getMedicalPersonnelRecordById(medicalId, queryClient = db) {
   return result.rows?.[0] || null;
 }
 
+function toAuditPayloadString(payload) {
+  if (payload === null || payload === undefined) {
+    return null;
+  }
+
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return String(payload);
+  }
+}
+
+function buildTargetInitials({ targetId, firstName, lastName }) {
+  const normalizedTargetId = String(targetId || '').trim();
+  if (!normalizedTargetId) {
+    return '----';
+  }
+
+  const firstInitial = String(firstName || '').trim().charAt(0);
+  const lastInitial = String(lastName || '').trim().charAt(0);
+  const nameInitials = `${firstInitial}${lastInitial}`.toUpperCase();
+  if (nameInitials) {
+    return nameInitials;
+  }
+
+  const compactTargetId = normalizedTargetId.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (!compactTargetId) {
+    return '----';
+  }
+
+  return compactTargetId.slice(0, 4);
+}
+
 function toTimestampMs(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
@@ -1104,14 +1141,20 @@ const Query = {
 
       const result = await db.query(
         `SELECT
-           "createdAt" AS created_at,
-           "action" AS action,
-           "actorId"::text AS actor_id,
-           "changedBy"::text AS changed_by
-         FROM "SystemAuditLog"
-         WHERE "actorId"::text = $1
-           AND "changedBy"::text = 'Medical'
-         ORDER BY "createdAt" DESC`,
+           sal."createdAt" AS created_at,
+           sal."action" AS action,
+           sal."event_type" AS event_type,
+           sal."actorId"::text AS actor_id,
+           sal."changedBy"::text AS changed_by,
+           sal."targetId"::text AS target_id,
+           sal."details" AS payload,
+           up.first_name AS target_first_name,
+           up.last_name AS target_last_name
+         FROM "SystemAuditLog" sal
+         LEFT JOIN "UsersPersonal" up ON up.id::text = sal."targetId"::text
+         WHERE sal."actorId"::text = $1
+           AND sal."changedBy"::text = 'Medical'
+         ORDER BY sal."createdAt" DESC`,
         [normalizedMedicalId]
       );
 
@@ -1120,6 +1163,14 @@ const Query = {
           ? new Date(row.created_at).toISOString()
           : new Date(0).toISOString(),
         action: row.action || 'UNKNOWN_ACTION',
+        event_type: row.event_type || 'UNKNOWN_EVENT',
+        target_initials: buildTargetInitials({
+          targetId: row.target_id,
+          firstName: row.target_first_name,
+          lastName: row.target_last_name,
+        }),
+        target_id: row.target_id || null,
+        payload: toAuditPayloadString(row.payload),
         actorId: String(row.actor_id || normalizedMedicalId),
         changedBy: row.changed_by || 'Medical',
       }));
