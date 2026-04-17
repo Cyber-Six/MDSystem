@@ -6,6 +6,8 @@
 
 import { axiosRequest } from '../../packages-core-adapter';
 
+const INVENTORY_BATCH_QUERY_CHUNK = 25;
+
 // ── Helper ──────────────────────────────────────────────────────────────────
 
 const sendGraphQL = async (query, variables = {}) => {
@@ -21,17 +23,68 @@ const sendGraphQL = async (query, variables = {}) => {
   return response.data.data;
 };
 
-const sendInventoryGraphQL = async (query, variables = {}) => {
-  const response = await axiosRequest.post('/medical-inventory/medical', {
-    query,
-    variables,
-  });
+const normalizeInventoryItemIds = (ids = []) => {
+  const normalized = ids
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return [...new Set(normalized)];
+};
 
-  if (response.data.errors) {
-    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+const chunkArray = (array, chunkSize) => {
+  const chunks = [];
+  for (let index = 0; index < array.length; index += chunkSize) {
+    chunks.push(array.slice(index, index + chunkSize));
+  }
+  return chunks;
+};
+
+const fetchBatchAvailabilityMap = async (itemIds = [], location = null) => {
+  const normalizedItemIds = normalizeInventoryItemIds(itemIds);
+  if (normalizedItemIds.length === 0) {
+    return new Map();
   }
 
-  return response.data.data;
+  const availabilityByBatchId = new Map();
+  const itemChunks = chunkArray(normalizedItemIds, INVENTORY_BATCH_QUERY_CHUNK);
+
+  for (const chunk of itemChunks) {
+    const fields = chunk
+      .map((itemId) => (
+        `item_${itemId}: getMedicalSupply(medicalItemId: ${itemId}, location: $location) {
+          id
+          availableQuantity
+        }`
+      ))
+      .join('\n');
+
+    const query = `query BatchMedicalSupply($location: LocationDesignation) {
+      ${fields}
+    }`;
+
+    const response = await axiosRequest.post('/medical-inventory/medical', {
+      query,
+      variables: { location },
+    });
+
+    if (Array.isArray(response.data?.errors) && response.data.errors.length > 0) {
+      // Keep partial success payload and continue instead of failing all rows.
+      console.warn('[Prescription] Partial GraphQL errors in batched supply fetch:', response.data.errors.map((error) => error.message));
+    }
+
+    const data = response.data?.data || {};
+    for (const itemId of chunk) {
+      const key = `item_${itemId}`;
+      const batches = Array.isArray(data[key]) ? data[key] : [];
+      batches.forEach((batch) => {
+        const batchId = String(batch?.id || '').trim();
+        if (!batchId) return;
+
+        availabilityByBatchId.set(batchId, Number(batch?.availableQuantity) || 0);
+      });
+    }
+  }
+
+  return availabilityByBatchId;
 };
 
 // ── Queries ──────────────────────────────────────────────────────────────────
@@ -114,62 +167,16 @@ export const fetchAvailableMedicineWithQuantities = async (location = null, offs
     // Fetch available medicines from prescription endpoint
     const medicines = await fetchAvailableMedicine(location, offset, limit);
     
-    // Group by medicalItemId (the id field)
-    const medicinsByItemId = {};
-    medicines.forEach((med) => {
-      if (!medicinsByItemId[med.id]) {
-        medicinsByItemId[med.id] = [];
-      }
-      medicinsByItemId[med.id].push(med);
+    const uniqueItemIds = normalizeInventoryItemIds(medicines.map((medicine) => medicine?.id));
+    const availabilityByBatchId = await fetchBatchAvailabilityMap(uniqueItemIds, location);
+
+    return medicines.map((medicine) => {
+      const batchId = String(medicine?.batchId || '').trim();
+      return {
+        ...medicine,
+        availableQuantity: batchId ? (availabilityByBatchId.get(batchId) || 0) : 0,
+      };
     });
-    
-    // Fetch batch details for each item to get exact quantities
-    // ALWAYS include location filter to prevent unauthorized access
-    const enrichedMedicines = [];
-    for (const itemId of Object.keys(medicinsByItemId)) {
-      try {
-        const batches = await sendInventoryGraphQL(
-          `query GetMedicalSupply($medicalItemId: Int!, $location: LocationDesignation) {
-            getMedicalSupply(medicalItemId: $medicalItemId, location: $location) {
-              id
-              availableQuantity
-              expiryDate
-              batchNumber
-            }
-          }`,
-          { medicalItemId: parseInt(itemId, 10), location },
-        );
-        
-        // Map availability data to medicines
-        const batchMap = {};
-        if (batches.getMedicalSupply) {
-          batches.getMedicalSupply.forEach((batch) => {
-            batchMap[batch.id] = {
-              availableQuantity: batch.availableQuantity,
-            };
-          });
-        }
-        
-        // Add quantity info to each medicine
-        medicinsByItemId[itemId].forEach((med) => {
-          enrichedMedicines.push({
-            ...med,
-            availableQuantity: batchMap[med.batchId]?.availableQuantity || 0,
-          });
-        });
-      } catch (err) {
-        // If batch fetch fails, add medicines without quantities
-        console.warn(`Failed to fetch batches for item ${itemId}:`, err.message);
-        medicinsByItemId[itemId].forEach((med) => {
-          enrichedMedicines.push({
-            ...med,
-            availableQuantity: 0,
-          });
-        });
-      }
-    }
-    
-    return enrichedMedicines;
   } catch (err) {
     console.error('Error fetching medicines with quantities:', err);
     // Fallback to medicines without quantities
