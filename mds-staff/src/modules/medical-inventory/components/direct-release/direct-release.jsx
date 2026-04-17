@@ -3,7 +3,7 @@ import { fetchAvailableMedicineWithQuantities } from '../../prescription-service
 import { issuePrescription } from '../../prescription-service';
 import { searchPatientsForInventory } from '../../services/inventory-patient-search';
 import { useStaffProfile } from '../../../../hooks/use-staff-profile';
-import { formatBatchDisplay, formatDateDisplay } from '../../medical-inventory-service';
+import { formatBatchDisplay } from '../../medical-inventory-service';
 import BatchSelectionModal from './batch-selection-modal';
 
 /**
@@ -18,6 +18,10 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
   const { profile, isLoading: isProfileLoading } = useStaffProfile();
   const searchCacheRef = useRef(new Map());
   const latestSearchTokenRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const medicinesLoadTokenRef = useRef(0);
+  const medicinesLoadPromiseRef = useRef(null);
+  const onShowErrorRef = useRef(onShowError);
 
   // Patient search state
   const [searchInput, setSearchInput] = useState('');
@@ -56,6 +60,20 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
 
   // Notes viewing modal state
   const [viewNotesData, setViewNotesData] = useState(null); // { notes, medicineName, patientName }
+
+  useEffect(() => {
+    onShowErrorRef.current = onShowError;
+  }, [onShowError]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      medicinesLoadTokenRef.current += 1;
+      medicinesLoadPromiseRef.current = null;
+    };
+  }, []);
 
   // Patient search function — uses staff REST endpoints (no EMR permission needed)
   const handlePatientSearch = useCallback(async (query) => {
@@ -141,22 +159,59 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
 
   // Load medicines for the current location
   const loadMedicines = useCallback(async () => {
-    if (!location) return;
-
-    setLoadingMedicines(true);
-    try {
-      const availableMedicines = await fetchAvailableMedicineWithQuantities(location, 0, 100);
-      setMedicines(availableMedicines || []);
-    } catch (err) {
-      console.error('Failed to load medicines:', err);
-      onShowError('Failed to load available medicines');
-    } finally {
-      setLoadingMedicines(false);
+    const normalizedLocation = String(location || '').trim();
+    if (!normalizedLocation) {
+      if (isMountedRef.current) {
+        setMedicines([]);
+        setLoadingMedicines(false);
+      }
+      return [];
     }
-  }, [location, onShowError]);
+
+    if (medicinesLoadPromiseRef.current) {
+      return medicinesLoadPromiseRef.current;
+    }
+
+    const requestToken = ++medicinesLoadTokenRef.current;
+    if (isMountedRef.current) {
+      setLoadingMedicines(true);
+    }
+
+    const loadPromise = (async () => {
+      try {
+        const availableMedicines = await fetchAvailableMedicineWithQuantities(normalizedLocation, 0, 100);
+        if (isMountedRef.current && requestToken === medicinesLoadTokenRef.current) {
+          setMedicines(Array.isArray(availableMedicines) ? availableMedicines : []);
+        }
+        return availableMedicines;
+      } catch (err) {
+        console.error('Failed to load medicines:', err);
+        if (isMountedRef.current && requestToken === medicinesLoadTokenRef.current) {
+          setMedicines([]);
+          if (typeof onShowErrorRef.current === 'function') {
+            onShowErrorRef.current('Failed to load available medicines');
+          }
+        }
+        return [];
+      } finally {
+        if (isMountedRef.current && requestToken === medicinesLoadTokenRef.current) {
+          setLoadingMedicines(false);
+          medicinesLoadPromiseRef.current = null;
+        }
+      }
+    })();
+
+    medicinesLoadPromiseRef.current = loadPromise;
+    return loadPromise;
+  }, [location]);
 
   useEffect(() => {
     loadMedicines();
+
+    return () => {
+      medicinesLoadTokenRef.current += 1;
+      medicinesLoadPromiseRef.current = null;
+    };
   }, [loadMedicines]);
 
   // Handle patient selection
@@ -829,7 +884,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {historyPagination.paginatedHistory.map((record, idx) => {
+                {historyPagination.paginatedHistory.map((record) => {
                   const date = new Date(record.timestamp);
                   const dateStr = date.toLocaleDateString();
                   const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

@@ -97,12 +97,39 @@ const GQL_GET_STAFF_ACCOUNT = `
 `;
 
 const GQL_GET_SYSTEM_AUDIT_LOG = `
-  query GetSystemAuditLog($medicalId: ID!) {
-    getSystemAuditLog(medicalId: $medicalId) {
-      timestamp
-      action
-      actorId
-      changedBy
+  query GetSystemAuditLog(
+    $medicalId: ID!
+    $page: Int
+    $pageSize: Int
+    $sortDirection: String
+    $eventType: String
+    $actionKeyword: String
+    $dateFrom: String
+    $dateTo: String
+  ) {
+    getSystemAuditLog(
+      medicalId: $medicalId
+      page: $page
+      pageSize: $pageSize
+      sortDirection: $sortDirection
+      eventType: $eventType
+      actionKeyword: $actionKeyword
+      dateFrom: $dateFrom
+      dateTo: $dateTo
+    ) {
+      entries {
+        timestamp
+        action
+        event_type
+        target_initials
+        target_id
+        payload
+        actorId
+        changedBy
+      }
+      totalCount
+      page
+      pageSize
     }
   }
 `;
@@ -494,9 +521,64 @@ export const fetchStaffAccount = async (userId) => {
 /**
  * Fetch role-management audit logs for a medical staff record.
  */
-export const fetchSystemAuditLog = async (medicalId) => {
-  const data = await sendGraphQL(GQL_GET_SYSTEM_AUDIT_LOG, { medicalId });
-  return Array.isArray(data.getSystemAuditLog) ? data.getSystemAuditLog : [];
+export const fetchSystemAuditLog = async (medicalId, options = {}) => {
+  const normalizedPage = Number.isFinite(Number(options.page)) && Number(options.page) > 0
+    ? Number.parseInt(options.page, 10)
+    : 1;
+
+  const normalizedPageSize = Number.isFinite(Number(options.pageSize)) && Number(options.pageSize) > 0
+    ? Number.parseInt(options.pageSize, 10)
+    : 10;
+
+  const normalizedSortDirection = String(options.sortDirection || 'DESC').trim().toUpperCase() === 'ASC'
+    ? 'ASC'
+    : 'DESC';
+
+  const normalizedEventType = typeof options.eventType === 'string' && options.eventType.trim()
+    ? options.eventType.trim()
+    : null;
+
+  const normalizedActionKeyword = typeof options.actionKeyword === 'string' && options.actionKeyword.trim()
+    ? options.actionKeyword.trim()
+    : null;
+
+  const normalizedDateFrom = typeof options.dateFrom === 'string' && options.dateFrom.trim()
+    ? options.dateFrom.trim()
+    : null;
+
+  const normalizedDateTo = typeof options.dateTo === 'string' && options.dateTo.trim()
+    ? options.dateTo.trim()
+    : null;
+
+  const data = await sendGraphQL(GQL_GET_SYSTEM_AUDIT_LOG, {
+    medicalId,
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    sortDirection: normalizedSortDirection,
+    eventType: normalizedEventType,
+    actionKeyword: normalizedActionKeyword,
+    dateFrom: normalizedDateFrom,
+    dateTo: normalizedDateTo,
+  });
+
+  const pageResult = data.getSystemAuditLog || {};
+  const rows = Array.isArray(pageResult.entries) ? pageResult.entries : [];
+
+  return {
+    entries: rows.map((row) => ({
+      timestamp: row?.timestamp || null,
+      action: row?.action || 'UNKNOWN_ACTION',
+      event_type: row?.event_type || 'UNKNOWN_EVENT',
+      target_initials: row?.target_initials || '----',
+      target_id: row?.target_id || null,
+      payload: row?.payload || null,
+      actorId: row?.actorId || null,
+      changedBy: row?.changedBy || 'Medical',
+    })),
+    totalCount: Number(pageResult.totalCount) || 0,
+    page: Number(pageResult.page) || normalizedPage,
+    pageSize: Number(pageResult.pageSize) || normalizedPageSize,
+  };
 };
 
 /**
