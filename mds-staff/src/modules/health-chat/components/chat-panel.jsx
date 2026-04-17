@@ -49,6 +49,18 @@ const ChatPanel = ({ emitTyping }) => {
   const prevScrollHeightRef = useRef(0);
   const isLoadingOlderRef = useRef(false);
 
+  const scrollToBottom = useCallback((behavior = 'auto') => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    if (behavior === 'smooth') {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }, []);
+
   // Load older messages when scrolling to top
   const handleScroll = useCallback(async () => {
     const container = scrollContainerRef.current;
@@ -56,6 +68,7 @@ const ChatPanel = ({ emitTyping }) => {
 
     // Trigger load when scrolled near the top (within 80px)
     if (container.scrollTop < 80) {
+      let shouldRestoreScrollPosition = false;
       try {
         setLoadingOlder(true);
         isLoadingOlderRef.current = true;
@@ -68,7 +81,9 @@ const ChatPanel = ({ emitTyping }) => {
 
         if (!olderMessages || olderMessages.length === 0) {
           setHasMoreMessages(false);
+          isLoadingOlderRef.current = false;
         } else {
+          shouldRestoreScrollPosition = true;
           // Prepend older messages (they come in ASC order)
           setMessages(prev => {
             const existingIds = new Set(prev.map(m => String(m.id)));
@@ -89,7 +104,12 @@ const ChatPanel = ({ emitTyping }) => {
         }
       } catch (err) {
         console.error('[ChatPanel] Failed to load older messages:', err);
+        isLoadingOlderRef.current = false;
       } finally {
+        // Keep the guard active only while we are preserving scroll after prepending.
+        if (!shouldRestoreScrollPosition) {
+          isLoadingOlderRef.current = false;
+        }
         setLoadingOlder(false);
       }
     }
@@ -189,16 +209,13 @@ const ChatPanel = ({ emitTyping }) => {
   // Skip when loading older messages (pagination) to preserve scroll position
   useEffect(() => {
     if (isLoadingOlderRef.current) return;
-    const scrollToBottom = () => {
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (isLoadingOlderRef.current) return;
-          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-        });
+        if (isLoadingOlderRef.current) return;
+        scrollToBottom('auto');
       });
-    };
-    scrollToBottom();
-  }, [messages, isPatientTyping, selectedChatId]);
+    });
+  }, [messages, isPatientTyping, selectedChatId, scrollToBottom]);
 
   const formatTime = (dateStr) => {
     if (!dateStr) return '';
