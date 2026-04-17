@@ -9,7 +9,10 @@ const Modal = ({
   children, 
   size = 'md', 
   showCloseButton = true,
-  className = '' 
+  className = '',
+  contentClassName = '',
+  backdropBlur = 12,
+  backdropOpacity = 0.85,
 }) => {
   const modalRef = useRef(null);
 
@@ -84,9 +87,9 @@ const Modal = ({
       aria-modal="true"
       aria-labelledby="modal-title"
       style={{ 
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)'
+        backgroundColor: `rgba(0, 0, 0, ${backdropOpacity})`,
+        backdropFilter: `blur(${backdropBlur}px)`,
+        WebkitBackdropFilter: `blur(${backdropBlur}px)`
       }}
     >
       <div 
@@ -95,6 +98,7 @@ const Modal = ({
           relative w-full ${sizeClasses[size]} 
           bg-white dark:bg-neutral-900
           rounded-lg shadow-xl
+          max-h-[90vh] flex flex-col
           animate-slide-in
           ${className}
         `}
@@ -129,7 +133,7 @@ const Modal = ({
         )}
 
         {/* Content */}
-        <div className="px-6 py-4">
+        <div className={`px-6 py-4 overflow-y-auto min-h-0 ${contentClassName}`}>
           {children}
         </div>
       </div>

@@ -67,7 +67,16 @@ const ContactSupportModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Contact Support" size="lg">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Contact Support"
+      size="lg"
+      className="max-h-[88vh]"
+      contentClassName="pr-1"
+      backdropBlur={4}
+      backdropOpacity={0.72}
+    >
       <div className="space-y-4">
         {/* Contact Info */}
         <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700">

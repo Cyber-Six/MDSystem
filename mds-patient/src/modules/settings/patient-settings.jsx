@@ -9,7 +9,7 @@ import ChangePasswordSettings from './change-password-settings';
  */
 const DiscardDialog = ({ onDiscard, onApply, onCancel }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-    <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl border border-neutral-200 dark:border-neutral-700 w-full max-w-sm mx-4 p-5">
+    <div className="bg-white dark:bg-[#171311] rounded-xl shadow-xl border border-neutral-200 dark:border-[#2a2420] w-full max-w-sm mx-4 p-5">
       <div className="flex items-center gap-3 mb-3">
         <div className="p-2 rounded-full bg-warning-100 dark:bg-warning-900/30">
           <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -24,7 +24,7 @@ const DiscardDialog = ({ onDiscard, onApply, onCancel }) => (
       <div className="flex items-center justify-end gap-2">
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+          className="px-4 py-2 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-[#221d1a] transition-colors"
         >
           Stay
         </button>
@@ -57,7 +57,7 @@ const Toggle = ({ checked, onChange, disabled }) => (
     onClick={() => onChange(!checked)}
     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500/40 ${
       disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
-    } ${checked ? 'bg-primary-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
+    } ${checked ? 'bg-primary-500' : 'bg-neutral-300 dark:bg-[#5a5148]'}`}
   >
     <span
       className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
@@ -67,23 +67,43 @@ const Toggle = ({ checked, onChange, disabled }) => (
   </button>
 );
 
+// Separate style tokens so section header and setting rows can be tuned independently.
+const SECTION_HEADER_STYLES = {
+  container: 'px-5 py-2 border-b border-neutral-100 dark:border-[#2a2420]/70',
+  icon: 'text-secondary-500 dark:text-neutral-400 flex-shrink-0',
+  textWrap: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  title: 'text-sm font-semibold text-secondary-800 dark:text-white',
+  description: 'text-xs text-secondary-500 dark:text-neutral-400',
+  titleStyle: { lineHeight: 1.25, margin: 0 },
+  descriptionStyle: { lineHeight: 1.35, margin: 0 },
+};
+
+const SETTING_ROW_STYLES = {
+  rowBase: 'flex items-center justify-between gap-4 py-1',
+  labelBase: 'text-sm font-medium text-secondary-700 dark:text-neutral-200',
+  labelIndented: 'text-xs',
+  description: 'text-xs text-secondary-400 dark:text-neutral-500',
+  labelStyle: { lineHeight: 1.2, margin: 0 },
+  descriptionStyle: { marginTop: '2px', lineHeight: 1.25, marginBottom: 0 },
+};
+
 /**
  * Section wrapper
  */
 const Section = ({ icon, title, description, children }) => (
-  <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-    <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+  <div className="bg-white dark:bg-[#171311] rounded-xl border border-neutral-200 dark:border-[#2a2420] overflow-hidden">
+    <div className={SECTION_HEADER_STYLES.container}>
       <div className="flex items-center gap-2.5">
-        <span className="text-secondary-500 dark:text-neutral-400">{icon}</span>
-        <div>
-          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">{title}</h3>
+        <span className={SECTION_HEADER_STYLES.icon}>{icon}</span>
+        <div style={SECTION_HEADER_STYLES.textWrap}>
+          <h3 style={SECTION_HEADER_STYLES.titleStyle} className={SECTION_HEADER_STYLES.title}>{title}</h3>
           {description && (
-            <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{description}</p>
+            <p style={SECTION_HEADER_STYLES.descriptionStyle} className={SECTION_HEADER_STYLES.description}>{description}</p>
           )}
         </div>
       </div>
     </div>
-    <div className="px-5 py-3 divide-y divide-neutral-100 dark:divide-neutral-700/50">
+    <div className="px-5 py-1 divide-y divide-neutral-100 dark:divide-[#2a2420]/70">
       {children}
     </div>
   </div>
@@ -93,11 +113,11 @@ const Section = ({ icon, title, description, children }) => (
  * Settings row
  */
 const SettingRow = ({ label, description, children, indent }) => (
-  <div className={`flex items-center justify-between gap-4 py-3 ${indent ? 'pl-6' : ''}`}>
+  <div className={`${SETTING_ROW_STYLES.rowBase} ${indent ? 'pl-6' : ''}`}>
     <div className="flex-1 min-w-0">
-      <p className={`text-sm font-medium text-secondary-700 dark:text-neutral-200 ${indent ? 'text-xs' : ''}`}>{label}</p>
+      <p style={SETTING_ROW_STYLES.labelStyle} className={`${SETTING_ROW_STYLES.labelBase} ${indent ? SETTING_ROW_STYLES.labelIndented : ''}`}>{label}</p>
       {description && (
-        <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">{description}</p>
+        <p className={SETTING_ROW_STYLES.description} style={SETTING_ROW_STYLES.descriptionStyle}>{description}</p>
       )}
     </div>
     <div className="flex-shrink-0">{children}</div>
@@ -319,13 +339,15 @@ const PatientSettings = () => {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
 
+  const showSaveBar = hasChanges || saved;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className={`max-w-2xl mx-auto space-y-3 transition-all duration-200 ${hasChanges ? 'pb-24' : 'pb-4'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-secondary-800 dark:text-white">Settings</h2>
-          <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
+      <div className="flex items-center justify-between px-0.5">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-lg font-bold text-secondary-800 dark:text-white">Settings</h2>
+          <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">
             Customize your patient portal experience. Stored locally on this device.
           </p>
         </div>
@@ -359,18 +381,25 @@ const PatientSettings = () => {
           label="Sound volume"
           indent
         >
-          <div className="flex items-center gap-2 w-36">
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={draft.soundVolume}
-              onChange={(e) => set('soundVolume', parseFloat(e.target.value))}
-              disabled={!draft.soundEnabled}
-              className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-neutral-200 dark:bg-neutral-600 accent-primary-500 disabled:opacity-40"
-            />
-            <span className="text-xs text-secondary-500 dark:text-neutral-400 w-8 text-right tabular-nums">
+          <div className="flex items-center gap-2.5 w-40">
+            {(() => {
+              const volume = Number.isFinite(draft.soundVolume) ? draft.soundVolume : 1;
+              const clamped = Math.min(1, Math.max(0, volume));
+              const pct = Math.round(clamped * 100);
+              return (
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={pct}
+                  onChange={(e) => set('soundVolume', Number(e.target.value) / 100)}
+                  disabled={!draft.soundEnabled}
+                  className="settings-volume-slider w-full cursor-pointer disabled:opacity-40"
+                />
+              );
+            })()}
+            <span className="text-sm text-secondary-500 dark:text-neutral-300 w-10 text-right tabular-nums font-medium">
               {Math.round(draft.soundVolume * 100)}%
             </span>
           </div>
@@ -380,7 +409,7 @@ const PatientSettings = () => {
         <button
           type="button"
           onClick={() => setExpandedSoundModules(!expandedSoundModules)}
-          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 rounded transition-colors"
+          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-[#221d1a]/70 rounded transition-colors"
         >
           <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
             By Module
@@ -399,7 +428,7 @@ const PatientSettings = () => {
 
         {/* Sound module toggles — hidden by default */}
         {expandedSoundModules && (
-          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-700/50">
+          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-[#2a2420]/70">
             {Object.entries(MODULE_LABELS).map(([key, label]) => (
               <SettingRow key={key} label={label}>
                 <Toggle
@@ -478,7 +507,7 @@ const PatientSettings = () => {
               value={draft.bannerDismissDelay}
               onChange={(e) => set('bannerDismissDelay', parseInt(e.target.value, 10))}
               disabled={!draft.showBanners || !draft.bannerAutoDismiss}
-              className="text-sm px-2 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40"
+              className="text-sm px-2 py-1 rounded-md border border-neutral-300 dark:border-[#3a322c] bg-white dark:bg-[#201b18] text-secondary-700 dark:text-neutral-200 disabled:opacity-40"
             >
               {[3, 5, 8, 10, 15].map((s) => (
                 <option key={s} value={s}>{s}s</option>
@@ -530,7 +559,7 @@ const PatientSettings = () => {
         <button
           type="button"
           onClick={() => setExpandedModuleChannels(!expandedModuleChannels)}
-          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 rounded transition-colors"
+          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-[#221d1a]/70 rounded transition-colors"
         >
           <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
             By Module
@@ -549,7 +578,7 @@ const PatientSettings = () => {
 
         {/* Module settings — hidden by default */}
         {expandedModuleChannels && (
-          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-700/50">
+          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-[#2a2420]/70">
             {Object.entries(CHANNEL_MODULE_LABELS).map(([key, label]) => (
               <div key={key} className="py-3 pl-0">
                 <p className="text-xs font-medium text-secondary-700 dark:text-neutral-200 mb-2">{label}</p>
@@ -559,7 +588,7 @@ const PatientSettings = () => {
                       type="checkbox"
                       checked={draft.moduleChannels[key]?.web ?? true}
                       onChange={(e) => setModuleChannel(key, 'web', e.target.checked)}
-                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                      className="rounded border-neutral-300 dark:border-[#3a322c] text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
                     />
                     Web
                   </label>
@@ -568,7 +597,7 @@ const PatientSettings = () => {
                       type="checkbox"
                       checked={draft.moduleChannels[key]?.email ?? false}
                       onChange={(e) => setModuleChannel(key, 'email', e.target.checked)}
-                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                      className="rounded border-neutral-300 dark:border-[#3a322c] text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
                     />
                     Email
                   </label>
@@ -577,7 +606,7 @@ const PatientSettings = () => {
                       type="checkbox"
                       checked={draft.moduleChannels[key]?.emailFallback ?? true}
                       onChange={(e) => setModuleChannel(key, 'emailFallback', e.target.checked)}
-                      className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                      className="rounded border-neutral-300 dark:border-[#3a322c] text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
                     />
                     Email fallback
                   </label>
@@ -603,7 +632,7 @@ const PatientSettings = () => {
           label="Color theme"
           description="Choose light, dark, or follow your system preference"
         >
-          <div className="flex items-center rounded-lg border border-neutral-200 dark:border-neutral-600 overflow-hidden">
+          <div className="flex items-center rounded-lg border border-neutral-200 dark:border-[#3a322c] overflow-hidden">
             {[
               { value: 'light', label: 'Light', icon: (
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -627,7 +656,7 @@ const PatientSettings = () => {
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
                   draft.themeMode === opt.value
                     ? 'bg-primary-500 text-white'
-                    : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                    : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-[#221d1a]'
                 }`}
               >
                 {opt.icon}
@@ -640,7 +669,7 @@ const PatientSettings = () => {
           label="Font size"
           description="Adjust the base font size across the portal"
         >
-          <div className="flex items-center rounded-lg border border-neutral-200 dark:border-neutral-600 overflow-hidden">
+          <div className="flex items-center rounded-lg border border-neutral-200 dark:border-[#3a322c] overflow-hidden">
             {FONT_SIZE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -648,7 +677,7 @@ const PatientSettings = () => {
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                   draft.fontSize === opt.value
                     ? 'bg-primary-500 text-white'
-                    : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                    : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-[#221d1a]'
                 }`}
               >
                 {opt.label}
@@ -677,19 +706,18 @@ const PatientSettings = () => {
         <TotpSettings />
         <ChangePasswordSettings />
       </Section>
-      <div
-        className={`sticky bottom-0 bg-white/80 dark:bg-neutral-800/80 backdrop-blur-md rounded-xl border transition-all duration-200 ${
-          hasChanges
-            ? 'border-primary-300 dark:border-primary-700 shadow-lg'
-            : 'border-neutral-200 dark:border-neutral-700'
-        }`}
-      >
-        <div className="flex items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-2">
+      {/* ── Save Bar ── */}
+      <div className={`sticky bottom-2 z-30 bg-white/95 dark:bg-[#171311]/95 backdrop-blur-md rounded-xl border border-primary-300 dark:border-primary-700 shadow-xl ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300 ${
+        showSaveBar
+          ? 'opacity-100 scale-y-100 translate-y-0'
+          : 'opacity-0 scale-y-95 translate-y-full pointer-events-none'
+      }`}>
+        <div className="flex items-center justify-between gap-4 px-5 py-2.5">
+          <div className="flex min-h-10 items-center gap-2">
             {hasChanges && (
               <>
                 <span className="w-2 h-2 rounded-full bg-warning-500 animate-pulse" />
-                <p className="text-xs font-medium text-warning-600 dark:text-warning-400">You have unsaved changes</p>
+                <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs font-medium text-warning-600 dark:text-warning-400">You have unsaved changes</p>
               </>
             )}
             {saved && !hasChanges && (
@@ -697,30 +725,27 @@ const PatientSettings = () => {
                 <svg className="w-4 h-4 text-success-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <p className="text-xs font-medium text-success-600 dark:text-success-400">Settings saved</p>
+                <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs font-medium text-success-600 dark:text-success-400">Settings saved</p>
               </>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2 self-center">
             {hasChanges && (
-              <button
-                onClick={handleCancelBar}
-                className="px-4 py-2 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-              >
-                Cancel
-              </button>
+              <>
+                <button
+                  onClick={handleCancelBar}
+                  className="h-10 px-4 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-[#221d1a] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="h-10 px-5 text-sm font-semibold rounded-lg transition-colors bg-primary-500 text-white hover:bg-primary-600 shadow-sm"
+                >
+                  Save Changes
+                </button>
+              </>
             )}
-            <button
-              onClick={handleSave}
-              disabled={!hasChanges}
-              className={`px-5 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                hasChanges
-                  ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-sm'
-                  : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
-              }`}
-            >
-              Save Changes
-            </button>
           </div>
         </div>
       </div>

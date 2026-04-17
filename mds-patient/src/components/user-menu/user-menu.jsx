@@ -206,20 +206,28 @@ const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
           ">
             {/* Main Panel */}
             <div className={`
-              transition-transform duration-300 ease-in-out
+              transition-transform duration-300 ease-in-out bg-white dark:bg-neutral-900
               ${currentPanel === 'main' ? 'translate-x-0 relative' : '-translate-x-full absolute top-0 left-0 w-full opacity-0 pointer-events-none'}
             `}>
               {/* User Info Header */}
-              <div className="px-3 py-2.5 border-b border-gray-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2">
+              <div className="px-3 py-2 border-b border-gray-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-                    {userData.name.charAt(0)}
+                    {(userData.name?.charAt(0) || userData.email?.charAt(0) || 'U').toUpperCase()}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  <div className="flex-1 min-w-0 flex flex-col" style={{ gap: '3px' }}>
+                    <p
+                      className="text-[13px] font-semibold text-gray-900 dark:text-white truncate m-0"
+                      style={{ lineHeight: 1.2, margin: 0 }}
+                      title={userData.name}
+                    >
                       {userData.name}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    <p
+                      className="text-[11px] text-gray-500 dark:text-gray-400 truncate m-0"
+                      style={{ lineHeight: 1.2, margin: 0 }}
+                      title={userData.email}
+                    >
                       {userData.email}
                     </p>
                   </div>
