@@ -37,10 +37,14 @@ const HealthChat = () => {
   const previousConversationEndRef = useRef(null);
   const inputRef = useRef(null);
   const hasInitialized = useRef(false);
+  const pendingBottomSnapRef = useRef(true);
 
   // Load messages for a ticket (defined early for use in callbacks)
-  const loadMessages = useCallback(async (chatId) => {
+  const loadMessages = useCallback(async (chatId, { snapToBottom = true } = {}) => {
     try {
+      if (snapToBottom) {
+        pendingBottomSnapRef.current = true;
+      }
       const fetchedMessages = await getTicketMessages(chatId);
       setMessages(fetchedMessages || []);
     } catch (err) {
@@ -49,17 +53,29 @@ const HealthChat = () => {
     }
   }, []);
 
+  const appendMessageIfMissing = useCallback((nextMessage) => {
+    if (!nextMessage) return;
+
+    setMessages(prev => {
+      const nextId = nextMessage.id != null ? String(nextMessage.id) : null;
+      if (nextId && prev.some(msg => String(msg.id) === nextId)) {
+        return prev;
+      }
+      return [...prev, nextMessage];
+    });
+  }, []);
+
   // Socket event handlers (must be defined before useHealthChatSocket)
   // Handle new message from socket
   const handleNewMessage = useCallback((newMessage) => {
-    setMessages(prev => [...prev, newMessage]);
+    appendMessageIfMissing(newMessage);
     // Clear typing indicator when message received
     setIsStaffTyping(false);
     // Reset expiry timer: each new message resets the 3-day inactivity clock
     const newExpiry = new Date();
     newExpiry.setDate(newExpiry.getDate() + 3);
     setTicket(prev => prev && prev.status === 'Ongoing' ? { ...prev, expiresAt: newExpiry.toISOString() } : prev);
-  }, []);
+  }, [appendMessageIfMissing]);
 
   // Handle typing indicator from socket
   const handleTypingIndicator = useCallback((isTyping) => {
@@ -136,11 +152,19 @@ const HealthChat = () => {
     onStaffChanged: handleStaffChanged,
   });
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = useCallback((behavior = 'smooth') => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior });
+      });
+    });
   }, []);
 
-  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+  useEffect(() => {
+    const behavior = pendingBottomSnapRef.current ? 'auto' : 'smooth';
+    pendingBottomSnapRef.current = false;
+    scrollToBottom(behavior);
+  }, [messages, scrollToBottom]);
 
   // Auto-scroll previous conversation to bottom when displayed
   useEffect(() => {
@@ -217,7 +241,7 @@ const HealthChat = () => {
 
     const pollInterval = setInterval(async () => {
       try {
-        await loadMessages(ticket.id);
+        await loadMessages(ticket.id, { snapToBottom: false });
       } catch (err) {
         console.error('[HealthChat] Message polling failed:', err);
       }
@@ -327,14 +351,14 @@ const HealthChat = () => {
       if (hasFile) {
         const result = await sendMessage(ticket.id, null, attachedFile.fileId, 'file');
         if (result.success && result.message) {
-          setMessages(prev => [...prev, result.message]);
+          appendMessageIfMissing(result.message);
           setAttachedFile(null);
         }
       }
       if (hasText) {
         const result = await sendMessage(ticket.id, inputValue.trim(), null, 'text');
         if (result.success && result.message) {
-          setMessages(prev => [...prev, result.message]);
+          appendMessageIfMissing(result.message);
           setInputValue('');
         }
       }

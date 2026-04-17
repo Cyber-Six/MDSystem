@@ -113,6 +113,7 @@ export const HealthChatScreen: React.FC = () => {
 
   const flatListRef = useRef<FlatList>(null);
   const hasInitialized = useRef(false);
+  const pendingBottomSnapRef = useRef(true);
 
   // ── Previous tickets history (for landing view) ───────────────────────────
   const [previousTickets, setPreviousTickets] = useState<Ticket[]>([]);
@@ -123,8 +124,11 @@ export const HealthChatScreen: React.FC = () => {
   const [isExtendingSession, setIsExtendingSession] = useState(false);
 
   // ── Data loading ──────────────────────────────────────────────────────────
-  const loadMessages = useCallback(async (chatId: string) => {
+  const loadMessages = useCallback(async (chatId: string, options?: { snapToBottom?: boolean }) => {
     try {
+      if (options?.snapToBottom !== false) {
+        pendingBottomSnapRef.current = true;
+      }
       const fetchedMessages = await getTicketMessages(chatId);
       setMessages(fetchedMessages || []);
     } catch (err) {
@@ -191,14 +195,18 @@ export const HealthChatScreen: React.FC = () => {
     }, []),
   });
 
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 150);
+  const scrollToBottom = useCallback((animated: boolean = true) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated });
+      });
+    });
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    const shouldSnap = pendingBottomSnapRef.current;
+    pendingBottomSnapRef.current = false;
+    scrollToBottom(!shouldSnap);
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
@@ -685,7 +693,7 @@ export const HealthChatScreen: React.FC = () => {
             data={groupedMessages}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.messagesContent}
-            onContentSizeChange={scrollToBottom}
+            onContentSizeChange={() => scrollToBottom(false)}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}

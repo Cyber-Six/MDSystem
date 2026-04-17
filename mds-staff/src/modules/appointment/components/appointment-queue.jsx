@@ -75,7 +75,8 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
+      const trimmed = search.trim();
+      setDebouncedSearch(trimmed.length >= 2 ? trimmed : '');
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
@@ -99,7 +100,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   }, []);
 
   /* Fetch appointments (first page or fresh load) */
-  const fetchAppointments = useCallback(async (status, date, schedulerId, location) => {
+  const fetchAppointments = useCallback(async (status, date, schedulerId, location, searchTerm = '') => {
     // Bump generation — any in-flight fetch from a previous call will see a
     // mismatch and discard its result, preventing stale overwrites.
     const gen = ++fetchGenRef.current;
@@ -107,7 +108,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     setHasMore(false);
     setOffset(0);
     try {
-      const data = await searchByStatus(status, 0, PAGE_SIZE, { date: date || null, schedulerId: schedulerId || null, location: location || null });
+      const data = await searchByStatus(status, 0, PAGE_SIZE, {
+        date: date || null,
+        schedulerId: schedulerId || null,
+        location: location || null,
+        searchTerm: searchTerm || null,
+      });
       if (gen !== fetchGenRef.current) return; // stale response — discard
       setAppointments(data || []);
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
@@ -144,10 +150,10 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       refreshCounts(filterDate, filterSchedulerId, filterLocation);
     },
     refresh: () => {
-      fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation);
+      fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation, debouncedSearch);
       refreshCounts(filterDate, filterSchedulerId, filterLocation);
     },
-  }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId, filterLocation]);
+  }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId, filterLocation, debouncedSearch]);
 
   /* Load scheduler list once on mount — independent of the batched query so a
      permission hiccup on one doesn't block the other. */
@@ -195,7 +201,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         const result = await loadInitialQueueData(
           activeTab,
           PAGE_SIZE,
-          { date: filterDate || null, schedulerId: filterSchedulerId || null, location: filterLocation || null }
+          {
+            date: filterDate || null,
+            schedulerId: filterSchedulerId || null,
+            location: filterLocation || null,
+            searchTerm: debouncedSearch || null,
+          }
         );
         if (cancelled || gen !== fetchGenRef.current) return;
         setTabCounts(result.counts);
@@ -230,9 +241,9 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       isInitialLoad.current = false;
       return;
     }
-    fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation);
+    fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation, debouncedSearch);
     refreshCounts(filterDate, filterSchedulerId, filterLocation);
-  }, [filterDate, filterSchedulerId, filterLocation, refreshCounts, fetchAppointments]);
+  }, [filterDate, filterSchedulerId, filterLocation, debouncedSearch, refreshCounts, fetchAppointments]);
 
   /* Re-fetch appointments when tab changes (after initial mount) */
   useEffect(() => {
@@ -240,7 +251,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       isInitialTabRender.current = false;
       return;
     }
-    fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation);
+    fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation, debouncedSearch);
   }, [activeTab, filterDate, filterSchedulerId, filterLocation, fetchAppointments]);
 
   /* Load next page — called automatically by IntersectionObserver */
@@ -251,7 +262,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     setLoadingMore(true);
     const nextOffset = offset + PAGE_SIZE;
     try {
-      const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE, { date: filterDate || null, schedulerId: filterSchedulerId || null, location: filterLocation || null });
+      const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE, {
+        date: filterDate || null,
+        schedulerId: filterSchedulerId || null,
+        location: filterLocation || null,
+        searchTerm: debouncedSearch || null,
+      });
       setAppointments((prev) => [...prev, ...(data || [])]);
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
       setOffset(nextOffset);
@@ -261,7 +277,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [activeTab, offset, hasMore, filterDate, filterSchedulerId, filterLocation]);
+  }, [activeTab, offset, hasMore, filterDate, filterSchedulerId, filterLocation, debouncedSearch]);
 
   /* IntersectionObserver — auto-trigger next page when sentinel enters viewport */
   useEffect(() => {
@@ -275,24 +291,13 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     return () => observer.disconnect();
   }, [handleLoadMore]);
 
-  /* Client-side search filter on patientIdentifier / name / email */
-  const rows = useMemo(() => {
-    if (!debouncedSearch.trim()) return appointments;
-    const q = debouncedSearch.toLowerCase();
-    return appointments.filter((a) =>
-      String(a.patientIdentifier ?? '').includes(q) ||
-      String(a.patientId ?? '').includes(q) ||
-      (a.patientName ?? '').toLowerCase().includes(q) ||
-      (a.patientEmail ?? '').toLowerCase().includes(q) ||
-      (a.id ?? '').toLowerCase().includes(q)
-    );
-  }, [appointments, debouncedSearch]);
+  const rows = appointments;
 
   /* Allow clicking the active tab to refresh data */
   const handleTabChange = (key) => {
     if (key === activeTab) {
       // Same tab clicked — force refresh
-      fetchAppointments(key, filterDate, filterSchedulerId, filterLocation);
+      fetchAppointments(key, filterDate, filterSchedulerId, filterLocation, debouncedSearch);
       refreshCounts(filterDate, filterSchedulerId, filterLocation);
     } else {
       setActiveTab(key);
@@ -490,6 +495,17 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                           {apt.patientName}
                         </p>
                       )}
+                          {apt.patientProfileType && (
+                            <span className={`mt-0.5 inline-flex w-fit px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                              apt.patientProfileType === 'Student'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                : apt.patientProfileType === 'Employee'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                            }`}>
+                              {apt.patientProfileType}
+                            </span>
+                          )}
                     </div>
                   </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, ArrowRightLeft, Loader2, Search } from 'lucide-react';
 import { getHealthChatStaff } from '../health-chat-service';
 
-const TransferModal = ({ isOpen, onClose, onTransfer, currentMedicalEmail }) => {
+const TransferModal = ({ isOpen, onClose, onTransfer, currentMedicalEmail, chatId }) => {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(false);
   const [transferring, setTransferring] = useState(false);
@@ -17,9 +17,15 @@ const TransferModal = ({ isOpen, onClose, onTransfer, currentMedicalEmail }) => 
     setError(null);
 
     const fetchStaff = async () => {
+      if (!chatId) {
+        setStaff([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        const result = await getHealthChatStaff();
+        const result = await getHealthChatStaff(chatId);
         // Filter out current staff member
         const filtered = result.filter(s => s.email !== currentMedicalEmail);
         setStaff(filtered);
@@ -30,7 +36,7 @@ const TransferModal = ({ isOpen, onClose, onTransfer, currentMedicalEmail }) => 
       }
     };
     fetchStaff();
-  }, [isOpen, currentMedicalEmail]);
+  }, [isOpen, currentMedicalEmail, chatId]);
 
   if (!isOpen) return null;
 

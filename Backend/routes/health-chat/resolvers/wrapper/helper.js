@@ -76,6 +76,7 @@ async function getParticipantInfo(userId) {
     lastName: row.last_name || 'User',
     email: row.email,
     identifier: row.identifier,
+    profileType: row.profile || null,
     branch: row.profile || row.branch || null,
     dateOfBirth: formattedDOB,
     sex: row.sex || null
@@ -286,6 +287,7 @@ async function getParticipantInfoBatch(userIds) {
       lastName: row.last_name || 'User',
       email: row.email,
       identifier: row.identifier,
+      profileType: row.profile || null,
       branch: row.profile || row.branch || null,
       dateOfBirth: formattedDOB,
       sex: row.sex || null

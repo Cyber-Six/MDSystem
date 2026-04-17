@@ -318,15 +318,25 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _searchAppointmentStatuses: async (_, { status, location, staffBranch = 'Both', date, schedulerId, offset, limit }, { user, res }) => {
+  _searchAppointmentStatuses: async (_, { status, location, staffBranch = 'Both', date, schedulerId, searchTerm, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    const normalizedSearchTerm = typeof searchTerm === 'string' ? searchTerm.trim() : '';
+    const hasSearchTerm = normalizedSearchTerm.length >= 2;
+    const prefixTerm = hasSearchTerm ? `${normalizedSearchTerm}%` : null;
+    const anyTerm = hasSearchTerm ? `%${normalizedSearchTerm}%` : null;
+    const tokens = hasSearchTerm ? normalizedSearchTerm.split(/\s+/).filter(Boolean) : [];
+    const hasTwoTokens = tokens.length >= 2;
+    const token1Any = hasTwoTokens ? `%${tokens[0]}%` : null;
+    const token2Any = hasTwoTokens ? `%${tokens[1]}%` : null;
 
     const query = `
       SELECT ps.*, ss.location, ss.label AS "schedulerLabel",
         sde."scheduledDate",
         up."identifier" AS "patientIdentifier",
+        p.profile AS "patientProfileType",
         CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, '')) AS "patientName",
         uc.email AS "patientEmail",
         CONCAT(staff.first_name, ' ', staff.last_name) AS "approvedBy"
@@ -334,6 +344,7 @@ const Query = {
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
+      LEFT JOIN "Patients" p ON p.id = ps."patientId"
       LEFT JOIN "UserCredentials" uc ON uc.id = ps."patientId"
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
@@ -346,13 +357,30 @@ const Query = {
       AND ss.location = COALESCE($4::"LocationDesignation", ss.location)
       AND ($5::date IS NULL OR sde."scheduledDate"::date = $5::date)
       AND ($6::integer IS NULL OR ss.id = $6::integer)
+      AND (
+        $8::boolean = false
+        OR up.identifier::text ILIKE $9
+        OR (COALESCE(up.first_name, '') || ' ' || COALESCE(up.last_name, '')) ILIKE $10
+        OR (COALESCE(up.last_name, '') || ', ' || COALESCE(up.first_name, '')) ILIKE $10
+        OR COALESCE(up.first_name, '') ILIKE $10
+        OR COALESCE(up.last_name, '') ILIKE $10
+        OR COALESCE(uc.email, '') ILIKE $10
+        OR (
+          $13::boolean = true AND (
+            (COALESCE(up.first_name, '') ILIKE $11 AND COALESCE(up.last_name, '') ILIKE $12)
+            OR
+            (COALESCE(up.last_name, '') ILIKE $11 AND COALESCE(up.first_name, '') ILIKE $12)
+          )
+        )
+      )
       ORDER BY sde."scheduledDate" ASC, ps.id DESC
       LIMIT $2 OFFSET $3;
     `;
 
     const result = await db.query(query,
       [status, limit || 10,
-       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null, staffBranch]);
+       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null, staffBranch,
+       hasSearchTerm, prefixTerm, anyTerm, token1Any, token2Any, hasTwoTokens]);
     const slots = result.rows;
 
     if (slots.length === 0) return slots;

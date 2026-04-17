@@ -117,7 +117,7 @@ const Query = {
     return await Wrapper.Query._listAllAppointmentRequirements(_, { schedulerId, offset, limit, isActive: null }, { user, res });
   },
 
-  searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
+  searchAppointmentStatuses: async (_, { status, location, date, schedulerId, searchTerm, offset, limit }, { user, res }) => {
     const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -127,7 +127,7 @@ const Query = {
     if (location && !isLocationInBranch(staffBranch, location)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._searchAppointmentStatuses(_, { status, location, staffBranch, date, schedulerId, offset, limit }, { user, res });
+    return await Wrapper.Query._searchAppointmentStatuses(_, { status, location, staffBranch, date, schedulerId, searchTerm, offset, limit }, { user, res });
   },
 
   getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {

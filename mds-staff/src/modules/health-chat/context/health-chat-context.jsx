@@ -18,6 +18,8 @@ import { usePermissions } from '../../../context/permissions-context';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
 
 const HealthChatContext = createContext(null);
+const CONVERSATIONS_PAGE_SIZE = 30;
+const SEARCH_DEBOUNCE_MS = 400;
 
 /**
  * Get the effective timestamp for chronological sorting based on ticket status.
@@ -46,6 +48,9 @@ export function HealthChatProvider({ children }) {
   const [conversations, setConversations] = useState([]);
   const [conversationsTotal, setConversationsTotal] = useState(0);
   const [conversationsLoading, setConversationsLoading] = useState(false);
+  const [conversationsOffset, setConversationsOffset] = useState(0);
+  const [conversationsHasMore, setConversationsHasMore] = useState(false);
+  const [conversationsLoadingMore, setConversationsLoadingMore] = useState(false);
 
   // Legacy tickets state (for backward compatibility)
   const [tickets, setTickets] = useState([]);
@@ -79,6 +84,11 @@ export function HealthChatProvider({ children }) {
   const ticketsRef = useRef([]);
   useEffect(() => { ticketsRef.current = tickets; }, [tickets]);
 
+  const conversationsRef = useRef([]);
+  const conversationsOffsetRef = useRef(0);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+  useEffect(() => { conversationsOffsetRef.current = conversationsOffset; }, [conversationsOffset]);
+
   // Typing indicators (patientId -> { userId, isTyping })
   const [typingUsers, setTypingUsers] = useState({});
 
@@ -97,6 +107,7 @@ export function HealthChatProvider({ children }) {
   // Filter state
   const [filter, setFilter] = useState('active'); // 'active' | 'pending' | 'archive' (kept for backward compatibility)
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
   // Multiple filter selection state (persisted in localStorage)
   const [selectedFilters, setSelectedFilters] = useState(() => {
@@ -112,6 +123,20 @@ export function HealthChatProvider({ children }) {
   const [error, setError] = useState(null);
   const [socketError, setSocketError] = useState(false);
   const [isExtendingSession, setIsExtendingSession] = useState(false);
+
+  useEffect(() => {
+    const trimmed = searchTerm.trim();
+    if (trimmed.length < 2) {
+      setDebouncedSearchTerm('');
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(trimmed);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   /**
    * Refresh messages for current patient (manual refresh via HTTP)
@@ -170,18 +195,63 @@ export function HealthChatProvider({ children }) {
    * Load patient conversations from multiple selected filters
    * Uses getPatientConversations to group by patient (1 patient = 1 row)
    */
-  const refreshMultipleFilters = useCallback(async (filters) => {
+  const toTicketLikeItems = useCallback((conversationItems = []) => {
+    const now = Date.now();
+    return conversationItems.map((conv) => {
+      const rawStatus = conv.latestTicket?.status;
+      const effectiveStatus =
+        rawStatus === 'Ongoing' && conv.latestTicket?.expiresAt && new Date(conv.latestTicket.expiresAt).getTime() < now
+          ? 'Expired'
+          : rawStatus;
+
+      return {
+        id: conv.patientId,
+        patientId: conv.patientId,
+        patient: conv.patient,
+        purpose: conv.latestTicket?.purpose,
+        status: effectiveStatus,
+        medicalId: conv.latestTicket?.medicalId,
+        medical: conv.latestTicket?.medical,
+        session_start: conv.latestTicket?.session_start,
+        session_end: conv.latestTicket?.session_end,
+        archived_at: conv.latestTicket?.archived_at,
+        expiresAt: conv.latestTicket?.expiresAt,
+        closedBy: conv.latestTicket?.closedBy,
+        lastMessage: conv.lastMessage,
+        lastMessageAt: conv.lastMessageAt,
+        unreadCount: conv.unreadCount,
+        activeTicketCount: conv.activeTicketCount,
+        totalTicketCount: conv.totalTicketCount,
+        tickets: conv.tickets,
+        _isConversation: true
+      };
+    });
+  }, []);
+
+  const refreshMultipleFilters = useCallback(async (filters, { append = false, offsetOverride = null } = {}) => {
     if (!filters || filters.length === 0) {
       setConversations([]);
       setConversationsTotal(0);
+      setConversationsOffset(0);
+      setConversationsHasMore(false);
       setTickets([]); // Legacy
       setTicketsTotal(0);
       return;
     }
 
+    const requestOffset = Number.isInteger(offsetOverride)
+      ? offsetOverride
+      : append
+        ? conversationsOffsetRef.current + CONVERSATIONS_PAGE_SIZE
+        : 0;
+
     try {
-      setConversationsLoading(true);
-      setTicketsLoading(true);
+      if (append) {
+        setConversationsLoadingMore(true);
+      } else {
+        setConversationsLoading(true);
+        setTicketsLoading(true);
+      }
       setError(null);
 
       const location = profile?.branch || 'Both';
@@ -196,8 +266,14 @@ export function HealthChatProvider({ children }) {
       // Collect all statuses from selected filters
       const allStatuses = filters.flatMap(f => statusMap[f] || []);
 
-      // Fetch patient conversations with combined statuses and location
-      const result = await getPatientConversations(allStatuses, 0, 100, location);
+      // Fetch patient conversations with combined statuses, search term, and pagination.
+      const result = await getPatientConversations(
+        allStatuses,
+        requestOffset,
+        CONVERSATIONS_PAGE_SIZE,
+        location,
+        debouncedSearchTerm || null,
+      );
 
       if (result?.conversations) {
         // Apply local read timestamps to compute effective unread count
@@ -239,53 +315,51 @@ export function HealthChatProvider({ children }) {
           return Number(b.latestTicket?.id || 0) - Number(a.latestTicket?.id || 0);
         });
 
-        setConversations(conversationsWithReadState);
-        setConversationsTotal(result.total || 0);
+        const existingConversations = conversationsRef.current;
+        const mergedConversations = append
+          ? [
+              ...existingConversations,
+              ...conversationsWithReadState.filter(
+                (conv) => !existingConversations.some((existing) => String(existing.patientId) === String(conv.patientId))
+              ),
+            ]
+          : conversationsWithReadState;
 
-        // Also populate legacy tickets array for backward compatibility
-        // Transform conversations to ticket-like objects
-        const now = Date.now();
-        const ticketLikeItems = conversationsWithReadState.map(conv => {
-          const rawStatus = conv.latestTicket?.status;
-          // Treat as Expired client-side if expiresAt has passed even if DB hasn't flipped yet
-          const effectiveStatus =
-            rawStatus === 'Ongoing' && conv.latestTicket?.expiresAt && new Date(conv.latestTicket.expiresAt).getTime() < now
-              ? 'Expired'
-              : rawStatus;
-          return {
-            id: conv.patientId, // Use patientId as the ID for selection
-            patientId: conv.patientId,
-            patient: conv.patient,
-            purpose: conv.latestTicket?.purpose,
-            status: effectiveStatus,
-            medicalId: conv.latestTicket?.medicalId,
-            medical: conv.latestTicket?.medical,
-            session_start: conv.latestTicket?.session_start,
-            session_end: conv.latestTicket?.session_end,
-            archived_at: conv.latestTicket?.archived_at,
-            expiresAt: conv.latestTicket?.expiresAt,
-            closedBy: conv.latestTicket?.closedBy,
-            lastMessage: conv.lastMessage,
-            lastMessageAt: conv.lastMessageAt,
-            unreadCount: conv.unreadCount,
-            activeTicketCount: conv.activeTicketCount,
-            totalTicketCount: conv.totalTicketCount,
-            tickets: conv.tickets, // Array of all tickets for this patient
-            _isConversation: true // Flag to identify this is a patient conversation
-          };
-        });
+        const total = Number(result.total || 0);
+
+        setConversations(mergedConversations);
+        conversationsRef.current = mergedConversations;
+        setConversationsTotal(total);
+        setConversationsOffset(requestOffset);
+        conversationsOffsetRef.current = requestOffset;
+        setConversationsHasMore(mergedConversations.length < total);
+
+        const ticketLikeItems = toTicketLikeItems(mergedConversations);
 
         setTickets(ticketLikeItems);
-        setTicketsTotal(result.total || 0);
+        setTicketsTotal(total);
+      } else if (!append) {
+        setConversations([]);
+        conversationsRef.current = [];
+        setConversationsTotal(0);
+        setConversationsOffset(0);
+        conversationsOffsetRef.current = 0;
+        setConversationsHasMore(false);
+        setTickets([]);
+        setTicketsTotal(0);
       }
     } catch (err) {
       console.error('[HealthChatContext] Failed to load patient conversations:', err);
       setError(err.message || 'Failed to load conversations');
     } finally {
-      setConversationsLoading(false);
-      setTicketsLoading(false);
+      if (append) {
+        setConversationsLoadingMore(false);
+      } else {
+        setConversationsLoading(false);
+        setTicketsLoading(false);
+      }
     }
-  }, [profile?.branch]); // Re-fetch when staff location changes
+  }, [profile?.branch, debouncedSearchTerm, toTicketLikeItems]); // Re-fetch when staff location/search changes
 
   /**
    * Update selected filters and persist to localStorage
@@ -297,10 +371,27 @@ export function HealthChatProvider({ children }) {
     // to avoid a double-fetch race condition.
   }, []);
 
-  // Load tickets when selectedFilters changes
+  const refreshConversationList = useCallback(async () => {
+    await refreshMultipleFilters(selectedFilters, { append: false, offsetOverride: 0 });
+  }, [refreshMultipleFilters, selectedFilters]);
+
+  const loadMoreConversations = useCallback(async () => {
+    if (conversationsLoading || conversationsLoadingMore || !conversationsHasMore) return;
+    const nextOffset = conversationsOffset + CONVERSATIONS_PAGE_SIZE;
+    await refreshMultipleFilters(selectedFilters, { append: true, offsetOverride: nextOffset });
+  }, [
+    conversationsLoading,
+    conversationsLoadingMore,
+    conversationsHasMore,
+    conversationsOffset,
+    refreshMultipleFilters,
+    selectedFilters,
+  ]);
+
+  // Load tickets when selectedFilters or search term changes
   useEffect(() => {
-    refreshMultipleFilters(selectedFilters);
-  }, [selectedFilters, refreshMultipleFilters]);
+    refreshMultipleFilters(selectedFilters, { append: false, offsetOverride: 0 });
+  }, [selectedFilters, debouncedSearchTerm, refreshMultipleFilters]);
 
   // Keep selectedTicket/selectedConversation in sync with data (e.g., after refresh)
   useEffect(() => {
@@ -664,6 +755,17 @@ export function HealthChatProvider({ children }) {
    */
   const addTicketDebounceRef = useRef(null);
   const addTicket = useCallback((ticket) => {
+    if (debouncedSearchTerm) {
+      if (addTicketDebounceRef.current) {
+        clearTimeout(addTicketDebounceRef.current);
+      }
+      addTicketDebounceRef.current = setTimeout(() => {
+        refreshMultipleFilters(selectedFilters, { append: false, offsetOverride: 0 });
+        addTicketDebounceRef.current = null;
+      }, 500);
+      return;
+    }
+
     const shouldShow =
       (selectedFilters.includes('pending') && ticket.status === 'Open') ||
       (selectedFilters.includes('active') && ticket.status === 'Ongoing') ||
@@ -775,7 +877,7 @@ export function HealthChatProvider({ children }) {
       refreshMultipleFilters(selectedFilters);
       addTicketDebounceRef.current = null;
     }, 500);
-  }, [selectedFilters, refreshMultipleFilters]);
+  }, [selectedFilters, refreshMultipleFilters, debouncedSearchTerm]);
 
   /**
    * Remove a ticket from list (e.g., when approved moves from pending to active)
@@ -1054,22 +1156,15 @@ export function HealthChatProvider({ children }) {
     try {
       const result = await transferTicketService(chatId, toMedicalId);
       if (result.success) {
-        // If current user is no longer the assignee, remove the conversation
-        // (The socket event will also trigger this for the previous staff)
-        // Refresh to reflect the change
-        await refreshMultipleFilters(selectedFilters);
-        // Reload messages to show the system message
-        if (selectedPatientId) {
-          const fetchedMessages = await getPatientMessages(Number(selectedPatientId), { limit: 50 });
-          setMessages(fetchedMessages || []);
-        }
+        // Refresh list from source of truth so ownership changes apply immediately.
+        await refreshConversationList();
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to transfer ticket:', err);
       throw err;
     }
-  }, [selectedFilters, refreshMultipleFilters, selectedPatientId]);
+  }, [refreshConversationList]);
 
   /**
    * Admin takeover: assume control of an ongoing ticket
@@ -1096,29 +1191,21 @@ export function HealthChatProvider({ children }) {
     }
   }, [selectedFilters, refreshMultipleFilters, selectedPatientId]);
 
-  /**
-   * Get filtered tickets by search term
-   */
-  const filteredTickets = searchTerm
-    ? tickets.filter(t => {
-        const name = `${t.patient?.firstName || ''} ${t.patient?.lastName || ''}`.toLowerCase();
-        const purpose = (t.purpose || '').toLowerCase();
-        const term = searchTerm.toLowerCase();
-        return name.includes(term) || purpose.includes(term);
-      })
-    : tickets;
-
   const value = {
     // Patient Conversations (new patient-grouped approach)
     conversations,
     conversationsTotal,
     conversationsLoading,
+    conversationsHasMore,
+    conversationsLoadingMore,
+    loadMoreConversations,
 
     // Tickets (legacy compatibility - now contains patient-grouped data)
-    tickets: filteredTickets,
+    tickets,
     ticketsTotal,
     ticketsLoading,
     refreshTickets,
+    refreshConversationList,
 
     // Selected patient/chat
     selectedPatientId,

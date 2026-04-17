@@ -322,6 +322,7 @@ const ChatHeader = () => {
         onClose={() => setShowTransferModal(false)}
         onTransfer={(toMedicalId) => transferTicket(activeTicketId, toMedicalId)}
         currentMedicalEmail={profile?.email}
+        chatId={activeTicketId}
       />
     </>
   );
