@@ -39,38 +39,23 @@ const tooltipStyle = {
 
 // ── Bar Chart ────────────────────────────────────────────────────────────────
 
-const CustomBarTick = ({ x, y, payload, fill, dark }) => (
-  <g transform={`translate(${x},${y})`}>
-    <text
-      x={0}
-      y={0}
-      dy={4}
-      textAnchor="middle"
-      fill={fill}
-      fontSize="11"
-      title={payload.value}
-    >
-      {truncateText(payload.value, 2, 18)}
-    </text>
-  </g>
-);
-
 const AnalyticsBarChart = memo(({ data, dark = false }) => {
   if (!data?.length) return <EmptyState />;
 
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 4, right: 16, left: -8, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 4, right: 16, left: -8, bottom: 6 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={dark ? DARK_GRID : LIGHT_GRID} />
         <XAxis
           dataKey="name"
-          tick={<CustomBarTick fill={dark ? '#a3a3a3' : '#6b7280'} dark={dark} />}
+          tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}
+          tickFormatter={(value) => truncateText(value, 2, 18)}
           axisLine={false}
           tickLine={false}
           interval={0}
-          angle={data.length > 6 ? -35 : 0}
-          textAnchor={data.length > 6 ? 'end' : 'middle'}
-          height={data.length > 6 ? 60 : 30}
+          angle={-35}
+          textAnchor="end"
+          height={64}
         />
         <YAxis
           tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}
