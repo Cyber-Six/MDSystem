@@ -330,7 +330,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                   >
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-[#F1C526] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">
                           {s.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()}
                         </div>
                         <div className="flex items-center gap-1.5 min-w-0">
