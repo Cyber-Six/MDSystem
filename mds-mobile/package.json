@@ -5,9 +5,9 @@
   "scripts": {
     "start": "expo start",
     "start:clear": "expo start --clear",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "android:clear": "expo start --android --clear",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
     "ios:clear": "expo start --ios --clear",
     "web": "expo start --web",
     "test": "jest --passWithNoTests",
