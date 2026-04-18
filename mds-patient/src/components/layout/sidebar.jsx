@@ -71,13 +71,13 @@ const Sidebar = ({
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 bg-white dark:bg-neutral-800 transform transition-all duration-300 ease-in-out shadow-2xl border-r border-neutral-200 dark:border-neutral-700 w-72 md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 bg-primary-500 dark:bg-neutral-900 transform transition-all duration-300 ease-in-out shadow-2xl w-72 md:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } md:w-32`}
       >
         <div className="flex flex-col h-full">
           {/* Logo Section */}
-          <div className="flex items-center justify-center border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800" style={{height: '60px'}}>
+          <div className="flex items-center justify-center border-b border-neutral-800/10 dark:border-white/10 bg-primary-500 dark:bg-neutral-900" style={{height: '60px'}}>
             <button
               type="button"
               onClick={handleLogoClick}
@@ -102,10 +102,10 @@ const Sidebar = ({
                   : 'flex-col justify-center space-y-1.5 py-4'
               } ${
                 isDisabled
-                  ? 'opacity-40 cursor-not-allowed text-secondary-500 dark:text-neutral-500'
+                  ? 'opacity-40 cursor-not-allowed text-white dark:text-white/70'
                   : isActive
-                    ? 'bg-primary-100 dark:bg-primary-900/30 text-secondary-700 dark:text-primary-400 border-l-4 border-primary-500 dark:border-primary-400 font-semibold'
-                    : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-secondary-700 dark:hover:text-neutral-100'
+                    ? 'bg-white dark:bg-neutral-800 text-primary-500 dark:text-yellow-400 border-l-4 border-primary-500 dark:border-yellow-400 font-semibold'
+                    : 'text-white dark:text-white/70 hover:bg-white/10 dark:hover:bg-neutral-800 hover:text-white dark:hover:text-white'
               }`;
 
               const itemContent = (
@@ -139,8 +139,8 @@ const Sidebar = ({
           </nav>
 
           {/* Footer */}
-          <div className="p-3 border-t border-neutral-200 dark:border-neutral-700">
-            <p className="text-[10px] text-neutral-700 dark:text-neutral-400 text-center leading-tight">
+          <div className="p-3 border-t border-neutral-800/10 dark:border-white/10">
+            <p className="text-[10px] text-neutral-700 dark:text-white/50 text-center leading-tight">
               © 2026 mdsystem
             </p>
           </div>
