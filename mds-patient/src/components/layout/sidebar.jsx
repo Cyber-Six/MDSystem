@@ -158,7 +158,7 @@ const Sidebar = ({
           {/* Footer */}
           <div className="p-3 border-t border-neutral-800/10 dark:border-white/10">
             <p className="text-[8px] text-neutral-700 dark:text-white/50 text-center leading-tight">
-              © 2025 TIP
+              © 2026 mdsystem
             </p>
           </div>
         </div>
