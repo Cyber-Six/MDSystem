@@ -568,7 +568,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {currentStep === 'credentials' && (
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                <Ionicons name="medkit" size={40} color="#FFFFFF" />
+                <Image
+                  source={require('../../../assets/MDSystem.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[
                 styles.title,
@@ -621,13 +625,15 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logoContainer: {
-    width: 80,
+    width: 180,
     height: 80,
-    backgroundColor: colors.primary[500],
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   logoEmoji: {
     // unused
