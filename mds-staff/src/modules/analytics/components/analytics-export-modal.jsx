@@ -87,6 +87,12 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const groupByLabel = groupBy
+    ? `${groupBy.charAt(0).toUpperCase()}${groupBy.slice(1)}`
+    : 'Default';
+  const departmentLabel = department || 'All Departments';
+  const sexLabel = sex || 'All Sex';
+
   const toggleMetric = useCallback((metric) => {
     setSelectedMetrics(prev =>
       prev.includes(metric) ? prev.filter(m => m !== metric) : [...prev, metric]
@@ -235,6 +241,18 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
               <span className="font-medium text-secondary-700 dark:text-neutral-200">
                 {FORMAT_OPTIONS.find(f => f.value === format)?.label}
               </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Grouping</span>
+              <span className="font-medium text-secondary-700 dark:text-neutral-200">{groupByLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Department</span>
+              <span className="font-medium text-secondary-700 dark:text-neutral-200">{departmentLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Sex</span>
+              <span className="font-medium text-secondary-700 dark:text-neutral-200">{sexLabel}</span>
             </div>
           </div>
 
