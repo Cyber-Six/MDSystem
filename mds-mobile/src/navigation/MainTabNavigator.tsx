@@ -51,16 +51,29 @@ const TabIcon: React.FC<{
 
 const TabLabel: React.FC<{
   label: string;
+  secondLine?: string;
   color: string;
-}> = ({ label, color }) => (
-  <Text
-    style={[styles.tabLabel, { color }]}
-    numberOfLines={2}
-    adjustsFontSizeToFit
-    minimumFontScale={0.85}
-  >
-    {label}
-  </Text>
+}> = ({ label, secondLine, color }) => (
+  <View style={styles.tabLabelContainer}>
+    <Text
+      style={[styles.tabLabel, { color }]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.85}
+    >
+      {label}
+    </Text>
+    {secondLine ? (
+      <Text
+        style={[styles.tabLabel, { color }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+      >
+        {secondLine}
+      </Text>
+    ) : null}
+  </View>
 );
 
 export const MainTabNavigator: React.FC = () => {
@@ -134,7 +147,7 @@ export const MainTabNavigator: React.FC = () => {
         name="UpdateRecord"
         component={UpdateRecordStackNavigator}
         options={{
-          tabBarLabel: ({ color }) => <TabLabel label="Update\nRecord" color={color} />,
+          tabBarLabel: ({ color }) => <TabLabel label="Update" secondLine="Record" color={color} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'create' : 'create-outline'} focused={focused} color={color} />
           ),
@@ -160,7 +173,7 @@ export const MainTabNavigator: React.FC = () => {
           ...(isDomainAccessRestricted
             ? { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }
             : {}),
-          tabBarLabel: ({ color }) => <TabLabel label="Health\nChat" color={color} />,
+          tabBarLabel: ({ color }) => <TabLabel label="Health" secondLine="Chat" color={color} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} focused={focused} color={color} />
           ),
@@ -210,6 +223,10 @@ const styles = StyleSheet.create({
   },
   iconContainerFocused: {
     backgroundColor: 'rgba(241,197,38,0.12)',
+  },
+  tabLabelContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabLabel: {
     fontSize: 10,
