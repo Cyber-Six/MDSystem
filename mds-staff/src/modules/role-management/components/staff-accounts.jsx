@@ -4,6 +4,7 @@ import { fetchStaffAccounts as fetchStaffAccountsAPI, searchUsers, createMedical
 import StaffDetail from './staff-detail';
 import { useBanner } from '../../../context/use-banner';
 import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 /**
  * Staff Accounts Component
@@ -220,6 +221,17 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
     setSelectedStaff(null);
   };
 
+  const handleDeleteStaff = useCallback((deletedStaffId) => {
+    const normalizedId = String(deletedStaffId || '').trim();
+    if (!normalizedId) {
+      setSelectedStaff(null);
+      return;
+    }
+
+    setStaffList((prev) => prev.filter((s) => String(s.id) !== normalizedId));
+    setSelectedStaff(null);
+  }, []);
+
   return (
     <div>
       {/* Search + Filter Bar */}
@@ -330,7 +342,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                   >
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-[#F1C526] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">
                           {s.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()}
                         </div>
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -395,7 +407,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                         <span className="text-xs text-secondary-500 dark:text-neutral-400">—</span>
                       ) : isStaffAdmin ? (
                         <span className="text-xs text-secondary-500 dark:text-neutral-400">
-                          {s.branch === 'QuezonCity' ? 'Quezon City' : s.branch === 'Both' || !s.branch ? 'MLA & QC (Both)' : s.branch}
+                          {formatBranchLabel(s.branch, { fallback: 'MLA & QC' })}
                         </span>
                       ) : (
                         <>
@@ -408,7 +420,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                               <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
                             ) : (
                               <>
-                                {s.branch === 'QuezonCity' ? 'Quezon City' : s.branch === 'Both' ? 'MLA & QC (Both)' : (s.branch || '—')}
+                                {formatBranchLabel(s.branch, { fallback: '—' })}
                                 <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                               </>
                             )}
@@ -425,7 +437,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                                   }}
                                 className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                               >
-                                  {b === 'QuezonCity' ? 'Quezon City' : b === 'Both' ? 'MLA & QC (Both)' : b}
+                                  {formatBranchLabel(b)}
                                 </button>
                               ))}
                             </div>,
@@ -502,6 +514,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
           staff={selectedStaff}
           onClose={() => setSelectedStaff(null)}
           onSave={handleSaveStaff}
+          onDelete={handleDeleteStaff}
         />
       )}
 
@@ -670,7 +683,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                       onChange={(e) => setAddForm(prev => ({ ...prev, designation: e.target.value }))}
                       className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                     >
-                      <option value="Both">MLA & QC (Both)</option>
+                      <option value="Both">MLA & QC</option>
                       <option value="Manila">Manila</option>
                       <option value="QuezonCity">Quezon City</option>
                     </select>

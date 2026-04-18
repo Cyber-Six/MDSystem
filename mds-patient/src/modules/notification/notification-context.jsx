@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
 import SettingsContext, { DEFAULT_SETTINGS as DEFAULT_PATIENT_SETTINGS } from '../../context/settings-context.jsx';
+import { playNotificationSound } from '../../utils/notification-sound';
 
 /**
  * Patient notification events emitted by the backend to this user.
@@ -232,6 +233,12 @@ export function PatientNotificationProvider({ children }) {
       persistNotifications(next);
       return next;
     });
+
+    // Play notification sound honoring global patient sound settings.
+    const s = settingsRef.current ?? DEFAULT_PATIENT_SETTINGS;
+    if (s.soundEnabled) {
+      playNotificationSound(s.soundVolume, s.notificationSound || 'synthesis');
+    }
   }, [isWebNotificationEnabled]);
 
   const markAsRead = useCallback((id) => {

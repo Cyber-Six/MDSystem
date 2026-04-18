@@ -17,6 +17,7 @@ const Auth = () => {
   
   const [activeView, setActiveView] = useState(getViewFromPath());
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isVerificationView, setIsVerificationView] = useState(false);
 
   // Blur button when panel closes to remove focus styling
   useEffect(() => {
@@ -92,24 +93,28 @@ const Auth = () => {
           </button>
 
           <div className="flex-1 flex flex-col">
-            {/* Welcome Header */}
-            <div className="text-center mb-3 sm:mb-6 pt-4 sm:pt-8">
-              <img 
-                src="/MDSystem.png" 
-                alt="MDSystem Logo" 
-                className="h-16 w-16 sm:h-24 sm:w-24 mx-auto mb-2 sm:mb-4"
-              />
-              <h1 className="text-xl sm:text-2xl font-bold text-secondary-900 font-heading mb-1">
-                Welcome Back
-              </h1>
-              <p className="text-xs text-neutral-600">
-                Sign in to your account to continue
-              </p>
-            </div>
+            {/* Auth branding */}
+            {!isVerificationView && (
+              <div className="text-center mb-3 sm:mb-4 pt-4 sm:pt-6" style={{ gap: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <img
+                  src="/MDSystem.png"
+                  alt="MDSystem Logo"
+                  className="h-14 w-14 sm:h-20 sm:w-20 mx-auto"
+                />
+                <div style={{ marginTop: '4px' }}>
+                  <h1 className="text-xl sm:text-2xl font-bold text-secondary-900 font-heading" style={{ lineHeight: 1.3, margin: 0 }}>
+                    Patient Portal
+                  </h1>
+                  <p className="text-xs sm:text-sm text-neutral-600" style={{ lineHeight: 1.3, margin: '3px 0 0 0' }}>
+                    Sign in to your patient account
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Centered Login Form */}
             <div className="flex-1">
-              <Login />
+              <Login onVerificationViewChange={setIsVerificationView} />
             </div>
             
             {/* Register Link - Always show for patient portal */}

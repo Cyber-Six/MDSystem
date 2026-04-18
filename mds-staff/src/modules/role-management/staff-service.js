@@ -96,6 +96,44 @@ const GQL_GET_STAFF_ACCOUNT = `
   }
 `;
 
+const GQL_GET_SYSTEM_AUDIT_LOG = `
+  query GetSystemAuditLog(
+    $medicalId: ID!
+    $page: Int
+    $pageSize: Int
+    $sortDirection: String
+    $eventType: String
+    $actionKeyword: String
+    $dateFrom: String
+    $dateTo: String
+  ) {
+    getSystemAuditLog(
+      medicalId: $medicalId
+      page: $page
+      pageSize: $pageSize
+      sortDirection: $sortDirection
+      eventType: $eventType
+      actionKeyword: $actionKeyword
+      dateFrom: $dateFrom
+      dateTo: $dateTo
+    ) {
+      entries {
+        timestamp
+        action
+        event_type
+        target_initials
+        target_id
+        payload
+        actorId
+        changedBy
+      }
+      totalCount
+      page
+      pageSize
+    }
+  }
+`;
+
 const GQL_COUNT_ACTIVE_REFRESH_TOKENS = `
   query CountActiveRefreshTokens {
     countActiveRefreshTokens
@@ -288,6 +326,16 @@ const GQL_UPDATE_STAFF_ACCOUNT = `
   }
 `;
 
+const GQL_DELETE_MEDICAL_STAFF = `
+  mutation DeleteMedicalStaff($medicalId: ID!) {
+    deleteMedicalStaff(medicalId: $medicalId) {
+      ok
+      message
+      identityReverted
+    }
+  }
+`;
+
 const GQL_LIST_TEMPLATES = `
   query ListPermissionTemplates {
     listPermissionTemplates {
@@ -297,15 +345,6 @@ const GQL_LIST_TEMPLATES = `
         createdBy
         createdAt
         permissions { key enabled branch }
-        permissionGroups {
-          id
-          label
-          enabled
-          fullyEnabled
-          childCount
-          enabledChildCount
-          children { key enabled branch }
-        }
         permissionCount
       }
       count
@@ -324,15 +363,6 @@ const GQL_CREATE_TEMPLATE = `
         createdBy
         createdAt
         permissions { key enabled branch }
-        permissionGroups {
-          id
-          label
-          enabled
-          fullyEnabled
-          childCount
-          enabledChildCount
-          children { key enabled branch }
-        }
         permissionCount
       }
     }
@@ -350,15 +380,6 @@ const GQL_UPDATE_TEMPLATE = `
         createdBy
         createdAt
         permissions { key enabled branch }
-        permissionGroups {
-          id
-          label
-          enabled
-          fullyEnabled
-          childCount
-          enabledChildCount
-          children { key enabled branch }
-        }
         permissionCount
       }
     }
@@ -398,6 +419,24 @@ const GQL_CONFIRM_ADMIN_TRANSFER = `
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
+const DOCUMENT_TEMPLATE_PERMISSION_KEYS = Object.freeze([
+  'document_allow_view',
+  'document_allow_manage',
+  'document_allow_generate',
+]);
+
+function ensureDocumentTemplateKeys(granularPerms = {}) {
+  const normalized = { ...(granularPerms || {}) };
+
+  for (const key of DOCUMENT_TEMPLATE_PERMISSION_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(normalized, key)) {
+      normalized[key] = false;
+    }
+  }
+
+  return normalized;
+}
+
 /**
  * Convert backend Permissions { permissions: [{ key, enabled }] } to flat { key: boolean }.
  */
@@ -415,7 +454,9 @@ function toGranularPermissions(permsResponse) {
  * Convert flat { key: boolean } to ExtendedPermissionInput[] for template mutations.
  */
 function granularToTemplatePerms(granularPerms, branch = 'Both') {
-  return Object.entries(granularPerms).map(([key, enabled]) => ({
+  const normalizedPerms = ensureDocumentTemplateKeys(granularPerms);
+
+  return Object.entries(normalizedPerms).map(([key, enabled]) => ({
     key,
     enabled: Boolean(enabled),
     branch,
@@ -427,8 +468,12 @@ function granularToTemplatePerms(granularPerms, branch = 'Both') {
  */
 function templatePermsToGranular(branchPermissions) {
   const flat = {};
-  for (const p of branchPermissions) {
-    flat[p.key] = p.enabled;
+  for (const p of (branchPermissions || [])) {
+    const key = typeof p?.key === 'string' ? p.key.trim() : '';
+    if (!key) continue;
+
+    const enabled = Boolean(p?.enabled);
+    flat[key] = Boolean(flat[key]) || enabled;
   }
   return flat;
 }
@@ -474,6 +519,69 @@ export const fetchStaffAccount = async (userId) => {
 };
 
 /**
+ * Fetch role-management audit logs for a medical staff record.
+ */
+export const fetchSystemAuditLog = async (medicalId, options = {}) => {
+  const normalizedPage = Number.isFinite(Number(options.page)) && Number(options.page) > 0
+    ? Number.parseInt(options.page, 10)
+    : 1;
+
+  const normalizedPageSize = Number.isFinite(Number(options.pageSize)) && Number(options.pageSize) > 0
+    ? Number.parseInt(options.pageSize, 10)
+    : 10;
+
+  const normalizedSortDirection = String(options.sortDirection || 'DESC').trim().toUpperCase() === 'ASC'
+    ? 'ASC'
+    : 'DESC';
+
+  const normalizedEventType = typeof options.eventType === 'string' && options.eventType.trim()
+    ? options.eventType.trim()
+    : null;
+
+  const normalizedActionKeyword = typeof options.actionKeyword === 'string' && options.actionKeyword.trim()
+    ? options.actionKeyword.trim()
+    : null;
+
+  const normalizedDateFrom = typeof options.dateFrom === 'string' && options.dateFrom.trim()
+    ? options.dateFrom.trim()
+    : null;
+
+  const normalizedDateTo = typeof options.dateTo === 'string' && options.dateTo.trim()
+    ? options.dateTo.trim()
+    : null;
+
+  const data = await sendGraphQL(GQL_GET_SYSTEM_AUDIT_LOG, {
+    medicalId,
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    sortDirection: normalizedSortDirection,
+    eventType: normalizedEventType,
+    actionKeyword: normalizedActionKeyword,
+    dateFrom: normalizedDateFrom,
+    dateTo: normalizedDateTo,
+  });
+
+  const pageResult = data.getSystemAuditLog || {};
+  const rows = Array.isArray(pageResult.entries) ? pageResult.entries : [];
+
+  return {
+    entries: rows.map((row) => ({
+      timestamp: row?.timestamp || null,
+      action: row?.action || 'UNKNOWN_ACTION',
+      event_type: row?.event_type || 'UNKNOWN_EVENT',
+      target_initials: row?.target_initials || '----',
+      target_id: row?.target_id || null,
+      payload: row?.payload || null,
+      actorId: row?.actorId || null,
+      changedBy: row?.changedBy || 'Medical',
+    })),
+    totalCount: Number(pageResult.totalCount) || 0,
+    page: Number(pageResult.page) || normalizedPage,
+    pageSize: Number(pageResult.pageSize) || normalizedPageSize,
+  };
+};
+
+/**
  * Save staff role, status, and/or branch designation changes.
  * Permissions are always derived from role templates — no per-staff overrides.
  * @param {string} userId
@@ -487,6 +595,14 @@ export const updateStaffAccount = async (userId, status, role, templateId, desig
   const result = data.updateStaffAccount;
   if (result.staff) result.staff = enrichStaff(result.staff);
   return result;
+};
+
+/**
+ * Delete a medical staff record by its medical personnel ID.
+ */
+export const deleteMedicalStaff = async (medicalId) => {
+  const data = await sendGraphQL(GQL_DELETE_MEDICAL_STAFF, { medicalId });
+  return data.deleteMedicalStaff || { ok: false, message: 'Failed to delete medical staff record.' };
 };
 
 // ─── USER MANAGEMENT (READ-ONLY) ─────────────────────────────────────────────

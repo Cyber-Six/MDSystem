@@ -180,7 +180,23 @@ class StaffReportTemplate extends BaseTemplate {
 
       // ── Data Table (ranked, before chart) ──────────────
       if (section.labels?.length > 0) {
-        if (section.isBP && section.diastolicValues) {
+        if (section.isBoxPlot && Array.isArray(section.boxPlot) && section.boxPlot.length > 0) {
+          const headers = ['#', 'Vital', 'Min', 'Q1', 'Median', 'Q3', 'Max', 'n'];
+          const rows = section.boxPlot.map((item, i) => [
+            String(i + 1),
+            item.name,
+            String(item.min ?? 0),
+            String(item.q1 ?? 0),
+            String(item.median ?? 0),
+            String(item.q3 ?? 0),
+            String(item.max ?? 0),
+            String(item.count ?? 0),
+          ]);
+          pdf.addTable(this.doc, headers, rows, {
+            // Column widths sum to 468 (standard doc width 612 - 72*2 margins)
+            columnWidths: [24, 112, 44, 44, 52, 44, 44, 104],
+          });
+        } else if (section.isBP && section.diastolicValues) {
           // Blood Pressure: show Systolic, Diastolic, Combined
           // Column widths sum to 468 (standard doc width 612 - 72*2 margins)
           const headers = ['#', 'Period', 'Systolic', 'Diastolic', 'Avg BP'];
@@ -205,15 +221,21 @@ class StaffReportTemplate extends BaseTemplate {
             columnWidths: [28, 300, 140],
           });
         } else {
-          const headers = ['#', section.xAxis || 'Item', section.yAxis || 'Count', '%'];
+          const showPercentage = section.showPercentage !== false;
+          const headers = showPercentage
+            ? ['#', section.xAxis || 'Item', section.yAxis || 'Count', '%']
+            : ['#', section.xAxis || 'Item', section.yAxis || 'Count'];
           const rows = section.labels.map((label, i) => {
+            if (!showPercentage) {
+              return [String(i + 1), label, String(section.values[i] || 0)];
+            }
             const pct = section.total > 0
               ? ((section.values[i] / section.total) * 100).toFixed(1) + '%'
               : '0%';
             return [String(i + 1), label, String(section.values[i] || 0), pct];
           });
           pdf.addTable(this.doc, headers, rows, {
-            columnWidths: [28, 280, 90, 70],
+            columnWidths: showPercentage ? [28, 280, 90, 70] : [28, 300, 140],
           });
         }
         this.doc.moveDown(0.3);

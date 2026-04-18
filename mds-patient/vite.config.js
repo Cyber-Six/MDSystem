@@ -4,6 +4,7 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const ROOT_ENV_DIR = resolve(__dirname, '..')
 
 // Portal → backend URL mapping
 const PORTAL_URLS = {
@@ -14,15 +15,22 @@ const PORTAL_URLS = {
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+  const env = loadEnv(mode, ROOT_ENV_DIR, '');
 
-  const DEV_PORTAL = env.VITE_DEV_PORTAL || 'www';
+  const DEV_PORTAL = env.VITE_PATIENT_DEV_PORTAL || env.VITE_DEV_PORTAL || 'www';
   // Explicit VITE_BACKEND_URL overrides the auto-derived URL
-  const BACKEND_URL = env.VITE_BACKEND_URL || PORTAL_URLS[DEV_PORTAL] || PORTAL_URLS['www'];
+  const BACKEND_URL = env.VITE_PATIENT_BACKEND_URL || env.VITE_BACKEND_URL || PORTAL_URLS[DEV_PORTAL] || PORTAL_URLS['www'];
+  const GOOGLE_CLIENT_ID = env.VITE_GOOGLE_CLIENT_ID || env.SHARED_GOOGLE_WEB_CLIENT_ID || '';
+  const RECAPTCHA_SITE_KEY = env.VITE_RECAPTCHA_SITE_KEY || env.SHARED_RECAPTCHA_SITE_KEY || '';
 
   console.log(`🔗 Patient Portal — DEV_PORTAL=${DEV_PORTAL}  Backend proxy: ${BACKEND_URL}`);
 
   return {
+    envDir: ROOT_ENV_DIR,
+    define: {
+      'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(GOOGLE_CLIENT_ID),
+      'import.meta.env.VITE_RECAPTCHA_SITE_KEY': JSON.stringify(RECAPTCHA_SITE_KEY),
+    },
     resolve: {
       alias: {
         '@core': resolve(__dirname, 'src'),

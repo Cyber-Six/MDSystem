@@ -84,15 +84,17 @@ const buildPatientLookupVariables = (userId = null, patientIdentifier = null, of
  * @param {string} status - SCHEDULING_STATUS value
  * @param {number} [offset=0]
  * @param {number} [limit=20]
+ * @param {{ date?: string, schedulerId?: string, location?: string, searchTerm?: string }} [filters]
  * @returns {Promise<Array>} patientSlot[]
  */
-export const searchByStatus = async (status, offset = 0, limit = 20, { date, schedulerId, location } = {}) => {
+export const searchByStatus = async (status, offset = 0, limit = 20, { date, schedulerId, location, searchTerm } = {}) => {
   const data = await sendGraphQL(`
-    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int, $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION) {
-      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit, date: $date, schedulerId: $schedulerId, location: $location) {
+    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int, $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION, $searchTerm: String) {
+      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit, date: $date, schedulerId: $schedulerId, location: $location, searchTerm: $searchTerm) {
         id
         patientId
         patientIdentifier
+        patientProfileType
         patientName
         patientEmail
         slotEntityId
@@ -113,7 +115,7 @@ export const searchByStatus = async (status, offset = 0, limit = 20, { date, sch
         }
       }
     }
-  `, { status, offset, limit, date: date || null, schedulerId: schedulerId || null, location: location || null });
+  `, { status, offset, limit, date: date || null, schedulerId: schedulerId || null, location: location || null, searchTerm: searchTerm || null });
   return data.searchAppointmentStatuses;
 };
 
@@ -148,22 +150,23 @@ export const getStatusCounts = async ({ schedulerId, date, location } = {}) => {
  *
  * @param {string} status - Active tab's SCHEDULING_STATUS
  * @param {number} [limit=15]
- * @param {{ date?: string, schedulerId?: string, location?: string }} [filters]
+ * @param {{ date?: string, schedulerId?: string, location?: string, searchTerm?: string }} [filters]
  * @returns {Promise<{ appointments: Array, counts: Object, schedulers: Array }>}
  */
-export const loadInitialQueueData = async (status, limit = 15, { date, schedulerId, location } = {}) => {
+export const loadInitialQueueData = async (status, limit = 15, { date, schedulerId, location, searchTerm } = {}) => {
   const data = await sendGraphQL(`
     query LoadInitialQueue(
       $status: SCHEDULING_STATUS!, $limit: Int,
-      $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION
+      $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION, $searchTerm: String
     ) {
       appointments: searchAppointmentStatuses(
         status: $status, offset: 0, limit: $limit,
-        date: $date, schedulerId: $schedulerId, location: $location
+        date: $date, schedulerId: $schedulerId, location: $location, searchTerm: $searchTerm
       ) {
         id
         patientId
         patientIdentifier
+        patientProfileType
         patientName
         patientEmail
         slotEntityId
@@ -188,7 +191,7 @@ export const loadInitialQueueData = async (status, limit = 15, { date, scheduler
         count
       }
     }
-  `, { status, limit, date: date || null, schedulerId: schedulerId || null, location: location || null });
+  `, { status, limit, date: date || null, schedulerId: schedulerId || null, location: location || null, searchTerm: searchTerm || null });
 
   const counts = {};
   for (const { status: s, count } of data.counts) {

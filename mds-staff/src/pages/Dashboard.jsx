@@ -10,7 +10,7 @@ import { StaffNotificationProvider } from '../modules/notification/notification-
 // Lazy-loaded route modules for code splitting
 const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
 const SearchPatient = lazy(() => import('../modules/search-patient/search-patient-view.jsx'));
-const PatientRecord = lazy(() => import('./PatientRecord.jsx'));
+const PatientRecordRoutePage = lazy(() => import('../modules/search-patient/patient-record-route-page.jsx'));
 const PendingRequests = lazy(() => import('./PendingRequests.jsx'));
 const StaffAppointment = lazy(() => import('../modules/appointment/staff-appointment.jsx'));
 const RoleManagementPage = lazy(() => import('../modules/role-management/role-management-page.jsx'));
@@ -42,8 +42,8 @@ const Dashboard = () => {
             <Suspense fallback={<RouteLoader />}>
               <Routes>
                 <Route path="/" element={<DashboardHome />} />
-                <Route path="/search" element={<PermissionRoute moduleId="patientSearch"><SearchPatient /></PermissionRoute>} />
-                <Route path="/patient/:patientId" element={<PermissionRoute moduleId="patientSearch"><PatientRecord /></PermissionRoute>} />
+                <Route path="/search" element={<PermissionRoute requireSearchPatientAccess><SearchPatient /></PermissionRoute>} />
+                <Route path="/patient/:patientId" element={<PermissionRoute requireSearchPatientAccess><PatientRecordRoutePage /></PermissionRoute>} />
                 <Route path="/pending" element={<PermissionRoute moduleId="pendingRequests"><PendingRequests /></PermissionRoute>} />
                 <Route path="/appointments" element={<PermissionRoute moduleId="appointments"><StaffAppointment /></PermissionRoute>} />
                 <Route path="/inventory" element={<PermissionRoute moduleId="inventory"><MedicalInventory /></PermissionRoute>} />

@@ -6,6 +6,7 @@ import { useSettings } from '../../context/settings-context';
 import { usePatientTabs } from '../../context/patient-tabs-context';
 import { useStaffProfile, clearStaffProfileCache } from '../../hooks/use-staff-profile';
 import { usePermissions } from '../../context/permissions-context';
+import { formatBranchLabel } from '../../utils/branch-utils';
 
 function formatRelativeTime(iso) {
   const date = new Date(iso);
@@ -50,6 +51,10 @@ const StaffTopBar = ({ onMenuClick }) => {
   const { clearTabs } = usePatientTabs();
   const { themeMode } = settings;
   const displayUnreadCount = settings.showBadges ? unreadCount : 0;
+  const displayName = [profile?.firstName, profile?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim() || profile?.fullName || profile?.name || 'Staff Member';
 
   const handleNotifClick = (notif) => {
     markAsRead(notif.id);
@@ -572,24 +577,27 @@ const StaffTopBar = ({ onMenuClick }) => {
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700 py-1 z-50">
               {/* User profile header with avatar */}
-              <div className="flex items-start gap-3 px-3 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="flex items-center gap-2.5 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
                 <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
                   {profile?.firstName?.[0] ?? profile?.email?.[0]?.toUpperCase() ?? 'S'}
                 </div>
-                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-tight m-0" title={displayName}>
+                    {displayName}
+                  </p>
                   {profile?.email && (
-                    <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate leading-none m-0" title={profile.email}>
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate leading-tight mt-0.5 mb-0" title={profile.email}>
                       {profile.email}
                     </p>
                   )}
                   {(isAdmin || profile?.role || profile?.branch) && (
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 truncate" title={isAdmin ? 'Admin' : (profile?.role ?? '')}>
                         {isAdmin ? 'Admin' : (profile?.role ?? '—')}
                       </span>
                       {profile?.branch && (
                         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
-                          {profile.branch === 'Both' ? 'MLA & QC' : profile.branch}
+                          {formatBranchLabel(profile.branch)}
                         </span>
                       )}
                     </div>

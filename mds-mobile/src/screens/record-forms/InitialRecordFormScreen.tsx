@@ -21,6 +21,7 @@ import ReviewStep from './steps/ReviewStep';
 import {
   createEmptyFormData, fetchAllCatalogs, createInitialMedicalRecord,
   submitUpdateRecord, fetchRevisionPrefill, checkInitialRecordStatus,
+  getUpdateTicketStatus,
   type FormData, type AllCatalogs,
 } from '../../services/emr-service';
 
@@ -35,7 +36,7 @@ const InitialRecordFormScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { isDark } = useTheme();
-  const { refreshRecordStatus } = useRecordStatus();
+  const { refreshRecordStatus, recordStatus, isRecordLoading } = useRecordStatus();
   const scrollRef = useRef<ScrollView>(null);
 
   const isRevision = route.params?.isRevision ?? false;
@@ -63,9 +64,14 @@ const InitialRecordFormScreen: React.FC = () => {
   }, []);
 
   // Load revision/update data if applicable
+  // Only prefill for revisions (staff requested corrections) — not for regular updates.
+  // Regular updates start with a fresh form, matching mds-patient behavior.
   useEffect(() => {
-    if (!isRevision && !isUpdate) return;
-    fetchRevisionPrefill()
+    if (!isRevision) return;
+
+    if (isRecordLoading) return;
+
+    fetchRevisionPrefill(recordType)
       .then(data => {
         if (data) {
           setFormData(prev => ({
@@ -79,7 +85,7 @@ const InitialRecordFormScreen: React.FC = () => {
         }
       })
       .catch(err => console.warn('[RecordForm] Prefill failed:', err.message));
-  }, [isRevision, isUpdate]);
+  }, [isRevision, isRecordLoading]);
 
   const isFemale = formData.personalInfo.gender === 'Female';
 
@@ -114,7 +120,150 @@ const InitialRecordFormScreen: React.FC = () => {
 
   const scrollToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
 
+  // ─── Per-step validation (aligned with mds-patient record-update-form) ──────
+  const validateCurrentStep = (): string[] => {
+    const stepName = steps[currentStep];
+    const errors: string[] = [];
+
+    if (stepName === 'Personal Info') {
+      const pi = formData.personalInfo;
+      if (!isUpdate) {
+        // Initial record validates all personal fields
+        if (!pi.surname?.trim()) errors.push('Surname is required');
+        if (!pi.firstName?.trim()) errors.push('First name is required');
+        if (!pi.birthday) errors.push('Birthday is required');
+        if (!pi.gender) errors.push('Gender is required');
+        if (!pi.civilStatus) errors.push('Civil status is required');
+        if (!pi.nationality?.trim()) errors.push('Nationality is required');
+        if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
+        else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
+        if (!pi.address?.trim()) errors.push('Present address is required');
+        if (!pi.studentNumber?.trim()) errors.push('Student number is required');
+      }
+      if (!pi.program) errors.push('Please select a program before proceeding');
+      if (!pi.studentCategory) errors.push('Please select your student category before proceeding');
+
+      const c1 = pi.emergencyContacts?.[0];
+      const c2 = pi.emergencyContacts?.[1];
+      if (!c1?.name?.trim()) errors.push('1st emergency contact name is required');
+      if (!c1?.relationship?.trim()) errors.push('1st emergency contact relationship is required');
+      if (!c1?.contactNumber?.trim()) errors.push('1st emergency contact number is required');
+      else if (!isValidPhilippinePhone(c1.contactNumber.trim())) errors.push('1st emergency contact number must be a valid PH number');
+      if (!c2?.name?.trim()) errors.push('2nd emergency contact name is required');
+      if (!c2?.relationship?.trim()) errors.push('2nd emergency contact relationship is required');
+      if (!c2?.contactNumber?.trim()) errors.push('2nd emergency contact number is required');
+      else if (!isValidPhilippinePhone(c2.contactNumber.trim())) errors.push('2nd emergency contact number must be a valid PH number');
+    }
+
+    if (stepName === 'Medical Background') {
+      const mb = formData.medicalBackground;
+      // Lifestyle habits are always required (aligned with mds-patient)
+      if (!mb.smoker) errors.push('Please indicate if you smoke (Lifestyle Habits)');
+      if (!mb.alcoholDrinker) errors.push('Please indicate if you drink alcohol (Lifestyle Habits)');
+
+      // Allergy details validation
+      if (mb.hasAllergies === 'Yes') {
+        const selectedAllergies = Object.entries(mb.allergies)
+          .filter(([, val]) => (typeof val === 'object' ? (val as any)?.checked : !!val));
+        for (const [, val] of selectedAllergies) {
+          const detail = typeof val === 'object' ? val as any : {};
+          if (!detail.status || !detail.severity) {
+            errors.push('Please fill in Status and Severity for all selected allergies');
+            break;
+          }
+        }
+      }
+
+      // Hospitalization dates
+      if (mb.hasHospitalization === 'Yes') {
+        const checkedIds = Object.entries(mb.hospitalizationConditions)
+          .filter(([, v]) => v).map(([k]) => k);
+        if (checkedIds.some(id => !mb.hospitalizationDates?.[id]?.admissionDate)) {
+          errors.push('Please fill in the Admission Date for all selected hospitalizations');
+        }
+      }
+
+      // Operation dates
+      if (mb.hasOperation === 'Yes') {
+        const checkedIds = Object.entries(mb.operationConditions)
+          .filter(([, v]) => v).map(([k]) => k);
+        if (checkedIds.some(id => !mb.operationDates?.[id])) {
+          errors.push('Please fill in the Operation Date for all selected surgeries');
+        }
+      }
+
+      // Medications
+      if (mb.hasMedications === 'Yes') {
+        if (!Object.values(mb.selectedMedications).some(v => v)) {
+          errors.push('Please select at least one medication');
+        }
+      }
+
+      if (!mb.hasHospitalization) errors.push('Hospitalization question is required');
+      if (!mb.hasOperation) errors.push('Surgery/Operation question is required');
+    }
+
+    if (stepName === 'OB-GYNE') {
+      if (!formData.obgyne?.lastMenstrualPeriod) {
+        errors.push('Last menstrual period date is required');
+      }
+    }
+
+    if (stepName === 'Dental History') {
+      const dh = formData.dentalHistory;
+      if (!dh.firstTimeDentist) errors.push('Please indicate whether you have visited a dentist');
+      if (!dh.lastDentalCleaning) errors.push('Please select when your last dental cleaning was');
+
+      // Oral appliance fields
+      if (dh.hasIntraOralAppliance === 'yes') {
+        const checkedAppliances = Object.entries(dh.intraOralAppliances)
+          .filter(([, val]) => (typeof val === 'object' ? (val as any)?.checked : !!val));
+        for (const [, val] of checkedAppliances) {
+          const appData = typeof val === 'object' ? val as any : {};
+          if (!appData.status || !appData.dateIssued) {
+            errors.push('Please fill in Status and Date Issued for all selected oral appliances');
+            break;
+          }
+        }
+      }
+
+      // Dental procedure dates
+      const checkedProcs = Object.entries(dh.selectedDentalProcedures).filter(([, v]) => v);
+      for (const [id] of checkedProcs) {
+        if (!dh.procedureDates?.[id]) {
+          errors.push('Please fill in the Date for all selected dental procedures');
+          break;
+        }
+      }
+
+      // Dental photos — required for initial record; also required for dental/both updates
+      // (aligned with mds-patient: backend DentalPhotoRecordInput requires UUID! for both)
+      if (!isUpdate) {
+        if (!dh.upperTeethPhoto) errors.push('Upper teeth photo is required');
+        if (!dh.lowerTeethPhoto) errors.push('Lower teeth photo is required');
+      } else {
+        // For updates, photos are valid if they have .uri (new upload) or .id (from revision)
+        if (!dh.upperTeethPhoto?.uri && !dh.upperTeethPhoto?.id) {
+          errors.push('Please upload a photo of your upper teeth');
+        }
+        if (!dh.lowerTeethPhoto?.uri && !dh.lowerTeethPhoto?.id) {
+          errors.push('Please upload a photo of your lower teeth');
+        }
+      }
+    }
+
+    return errors;
+  };
+
   const handleNext = () => {
+    // Validate current step before proceeding (aligned with mds-patient)
+    const stepErrors = validateCurrentStep();
+    if (stepErrors.length > 0) {
+      Alert.alert('Incomplete Form', stepErrors.join('\n\n'), [{ text: 'OK' }]);
+      scrollToTop();
+      return;
+    }
+
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
       scrollToTop();
@@ -143,22 +292,25 @@ const InitialRecordFormScreen: React.FC = () => {
     const errors: string[] = [];
     const pi = formData.personalInfo;
 
-    // Personal Info — always validated
-    if (!pi.surname?.trim()) errors.push('Surname is required');
-    if (!pi.firstName?.trim()) errors.push('First name is required');
-    if (!pi.birthday) errors.push('Birthday is required');
-    if (!pi.gender) errors.push('Gender is required');
-    if (!pi.civilStatus) errors.push('Civil status is required');
-    if (!pi.nationality?.trim()) errors.push('Nationality is required');
-    if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
-    else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
-    if (!pi.address?.trim()) errors.push('Present address is required');
+    // Personal Info — only validate personal fields for initial records (not updates)
+    if (!isUpdate) {
+      if (!pi.surname?.trim()) errors.push('Surname is required');
+      if (!pi.firstName?.trim()) errors.push('First name is required');
+      if (!pi.birthday) errors.push('Birthday is required');
+      if (!pi.gender) errors.push('Gender is required');
+      if (!pi.civilStatus) errors.push('Civil status is required');
+      if (!pi.nationality?.trim()) errors.push('Nationality is required');
+      if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
+      else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
+      if (!pi.address?.trim()) errors.push('Present address is required');
+      if (!pi.studentNumber?.trim()) errors.push('Student number is required');
+    }
+    // Program + student category are always required (initial + update)
     if (!pi.program) errors.push('Program is required');
-    if (pi.program === 'Other' && !pi.programOther?.trim()) errors.push('Please specify your program');
-    if (!pi.studentNumber?.trim()) errors.push('Student number is required');
+    if (!isUpdate && pi.program === 'Other' && !pi.programOther?.trim()) errors.push('Please specify your program');
     if (!pi.studentCategory) errors.push('Student category is required');
 
-    // Emergency contacts
+    // Emergency contacts — always required
     const c1 = pi.emergencyContacts?.[0];
     const c2 = pi.emergencyContacts?.[1];
     if (!c1?.name?.trim()) errors.push('1st emergency contact name is required');
@@ -176,6 +328,9 @@ const InitialRecordFormScreen: React.FC = () => {
       const mb = formData.medicalBackground;
       if (!mb.hasHospitalization) errors.push('Hospitalization question is required');
       if (!mb.hasOperation) errors.push('Surgery/Operation question is required');
+      // Lifestyle (aligned with mds-patient)
+      if (!mb.smoker) errors.push('Please indicate if you smoke');
+      if (!mb.alcoholDrinker) errors.push('Please indicate if you drink alcohol');
     }
 
     // Dental History — only when relevant
@@ -184,10 +339,13 @@ const InitialRecordFormScreen: React.FC = () => {
       if (!dh.firstTimeDentist) errors.push('First time dentist question is required');
       if (!dh.lastDentalCleaning) errors.push('Last dental cleaning is required');
       if (!dh.hasIntraOralAppliance) errors.push('Intra-oral appliance question is required');
-      // Photos are mandatory for initial record, optional for updates
+      // Photos — required for initial; id or uri accepted for updates
       if (!isUpdate) {
         if (!dh.upperTeethPhoto) errors.push('Upper teeth photo is required');
         if (!dh.lowerTeethPhoto) errors.push('Lower teeth photo is required');
+      } else {
+        if (!dh.upperTeethPhoto?.uri && !dh.upperTeethPhoto?.id) errors.push('Upper teeth photo is required');
+        if (!dh.lowerTeethPhoto?.uri && !dh.lowerTeethPhoto?.id) errors.push('Lower teeth photo is required');
       }
     }
 
@@ -200,7 +358,73 @@ const InitialRecordFormScreen: React.FC = () => {
     return errors;
   };
 
+  // ─── Error parsing (aligned with mds-patient parseSubmissionError) ──────────
+  const parseSubmissionError = (error: any): string => {
+    const gqlMessages = (
+      error.graphQLErrors ?? error.response?.data?.errors ?? []
+    ).map((e: any) => e?.message).filter(Boolean);
+
+    if (gqlMessages.length > 0) {
+      const errorMsgs: string[] = [];
+      for (const msg of gqlMessages) {
+        const lower = msg.toLowerCase();
+        if (lower.includes('already in progress') || lower.includes('cannot cancel update ticket')) {
+          errorMsgs.push('A previous submission is still being processed. Please wait a moment and try again.');
+        } else if (lower.includes('invalid input value') || lower.includes('invalid value')) {
+          errorMsgs.push('One or more fields contain invalid values. Please review your selections and try again.');
+        } else if (lower.includes('null value') || lower.includes('not-null') || lower.includes('violates not-null')) {
+          errorMsgs.push('A required field is missing. Please review all sections and ensure nothing is left blank.');
+        } else if (lower.includes('unique constraint') || lower.includes('duplicate')) {
+          errorMsgs.push('This record has already been submitted.');
+        } else if (lower.includes('invalid input syntax') || /\bdate\b/.test(lower) || /\btimestamp\b/.test(lower)) {
+          errorMsgs.push('A date field contains an invalid value. Please check and re-enter date fields.');
+        } else if (lower.includes('unauthorized') || error.response?.status === 401) {
+          errorMsgs.push('Your session has expired. Please log out and log back in, then try again.');
+        } else if (lower === 'database error' || lower.startsWith('database error') || lower.includes('internal server error')) {
+          // Suppress generic messages
+        } else {
+          errorMsgs.push(msg);
+        }
+      }
+      if (errorMsgs.length > 0) return errorMsgs.join('\n\n');
+    }
+
+    if (error.response?.status === 401) return 'Your session has expired. Please log out and log back in, then try again.';
+    if (error.response?.status === 403) return 'Access denied. You may not have permission to submit this form.';
+    if (error.response?.status >= 500) return 'The server encountered an unexpected error. Please try again in a moment.';
+    if (error.message) return error.message;
+    return 'An unexpected error occurred. Please check your inputs and try again.';
+  };
+
   // ─── Submission ─────────────────────────────────────────────────────────────
+  const doSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      if (isUpdate) {
+        await submitUpdateRecord(formData, recordType);
+      } else {
+        await createInitialMedicalRecord(formData, { isRevision });
+      }
+      await refreshRecordStatus();
+      const recordTypeLabel = isUpdate
+        ? (recordType === 'both' ? 'Medical and Dental' : recordType === 'medical' ? 'Medical' : 'Dental')
+        : 'Medical';
+      Alert.alert(
+        'Record Updated Successfully!',
+        `Your ${recordTypeLabel} record has been submitted for review.\n\n` +
+        '• Your update has been received and is now pending review\n' +
+        '• The medical staff will review your submission\n' +
+        '• You\'ll receive a notification if more changes are needed',
+        [{ text: 'Back to Updates', onPress: () => navigation.goBack() }]
+      );
+    } catch (error: any) {
+      const msg = parseSubmissionError(error);
+      Alert.alert('Submission Failed', msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
     const errors = validateAllFields();
     if (errors.length > 0) {
@@ -212,35 +436,46 @@ const InitialRecordFormScreen: React.FC = () => {
       return;
     }
 
+    // For updates: check for existing pending ticket and warn (aligned with mds-patient)
+    if (isUpdate && !isRevision) {
+      try {
+        const existingTicket = await getUpdateTicketStatus();
+        if (existingTicket?.status === 'Pending') {
+          Alert.alert(
+            'Existing Request Found',
+            `You already have a ${existingTicket.scope || 'record'} update request that is currently pending staff review.\n\n` +
+            `If you continue, your existing ${existingTicket.scope || ''} request will be cancelled and replaced with this new submission.`,
+            [
+              { text: 'Keep Old Request', style: 'cancel' },
+              {
+                text: 'Cancel Old & Continue',
+                style: 'destructive',
+                onPress: () => {
+                  Alert.alert(
+                    'Submit Record',
+                    'Are you sure you want to submit your record? Please make sure all information is correct.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Submit', onPress: doSubmit },
+                    ]
+                  );
+                },
+              },
+            ]
+          );
+          return;
+        }
+      } catch {
+        // If ticket check fails, proceed normally
+      }
+    }
+
     Alert.alert(
       'Submit Record',
       'Are you sure you want to submit your medical record? Please make sure all information is correct.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Submit',
-          onPress: async () => {
-            setIsSubmitting(true);
-            try {
-              if (isUpdate) {
-                await submitUpdateRecord(formData, recordType);
-              } else {
-                await createInitialMedicalRecord(formData, { isRevision });
-              }
-              await refreshRecordStatus();
-              Alert.alert(
-                'Success!',
-                'Your medical record has been submitted successfully.',
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
-              );
-            } catch (error: any) {
-              const msg = error?.message || 'An unexpected error occurred. Please try again.';
-              Alert.alert('Submission Failed', msg);
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        },
+        { text: 'Submit', onPress: doSubmit },
       ]
     );
   };
@@ -290,7 +525,7 @@ const InitialRecordFormScreen: React.FC = () => {
 
     switch (actualStep) {
       case 0:
-        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} />;
+        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} isUpdate={isUpdate} />;
       case 1:
         return <MedicalHistoryStep formData={formData} onUpdate={(_section: string, data: any) => updateMedicalHistory(data)} isDark={isDark} catalogs={catalogs} />;
       case 2:
@@ -300,7 +535,7 @@ const InitialRecordFormScreen: React.FC = () => {
       case 4:
         return <ObGyneStep formData={formData} onUpdate={updateObgyne} isDark={isDark} />;
       case 5:
-        return <ReviewStep formData={formData} catalogs={catalogs} onEdit={handleEdit} isDark={isDark} />;
+        return <ReviewStep formData={formData} catalogs={catalogs} onEdit={handleEdit} isDark={isDark} onCertificationChange={v => updateCertification(v)} />;
       default:
         return null;
     }
@@ -312,9 +547,7 @@ const InitialRecordFormScreen: React.FC = () => {
     <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
-          <Text style={{ color: colors.primary[500], fontSize: 16 }}>← Back</Text>
-        </TouchableOpacity>
+        <View style={styles.headerBackBtn} />
         <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
           {isUpdate
             ? `Update ${recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Medical & Dental'} Record`
@@ -329,8 +562,8 @@ const InitialRecordFormScreen: React.FC = () => {
       </View>
 
       {/* Step Content */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <ScrollView ref={scrollRef} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {renderStepContent()}
         </ScrollView>
       </KeyboardAvoidingView>

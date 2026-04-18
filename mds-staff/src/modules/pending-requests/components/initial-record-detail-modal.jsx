@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
 import RecordReviewModal from './record-review-modal';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 /**
  * InitialRecordDetailModal
@@ -180,7 +181,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                   Branch
                 </p>
                 <p className="text-xs text-secondary-700 dark:text-neutral-300">
-                  {ticket.branch === 'QuezonCity' ? 'Quezon City' : ticket.branch ?? '—'}
+                  {formatBranchLabel(ticket.branch, { fallback: '—' })}
                 </p>
               </div>
               {ticket.scope && (

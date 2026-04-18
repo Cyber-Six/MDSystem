@@ -70,6 +70,10 @@ export const ProfileScreen: React.FC = () => {
   }, []);
 
   const displayName = profile?.name || profile?.email?.split('@')[0]?.replace(/[._]/g, ' ') || 'Patient';
+  const identity = profile?.identity || 'Patient';
+  const roleLabel = identity;
+  const normalizedUserType = String(profile?.identity || '').trim().toLowerCase();
+  const identifierLabel = normalizedUserType === 'student' ? 'Student ID' : 'Employee ID';
 
   if (isLoading) {
     return (
@@ -117,7 +121,7 @@ export const ProfileScreen: React.FC = () => {
               { color: isDark ? colors.neutral[400] : colors.neutral[500] },
             ]}
           >
-            Patient
+            {roleLabel}
           </Text>
         </View>
 
@@ -138,6 +142,12 @@ export const ProfileScreen: React.FC = () => {
           </Text>
 
           <ProfileField icon="mail" label="Email" value={profile?.email || '—'} isDark={isDark} />
+          <ProfileField
+            icon="card"
+            label={identifierLabel}
+            value={profile?.identifier || '—'}
+            isDark={isDark}
+          />
           <ProfileField icon="call" label="Contact Number" value={profile?.contactNumber || '—'} isDark={isDark} />
           <ProfileField
             icon="alert-circle"
@@ -151,7 +161,6 @@ export const ProfileScreen: React.FC = () => {
             value={profile?.secondEmergencyContactNumber || '—'}
             isDark={isDark}
           />
-          <ProfileField icon="card" label="Student ID" value={profile?.identifier || '—'} isDark={isDark} />
         </View>
 
         <Text
@@ -182,7 +191,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 32, fontWeight: 'bold', color: '#FFFFFF' },
   name: { fontSize: 22, fontWeight: 'bold' },
-  role: { fontSize: 14, marginTop: 4 },
+  role: { fontSize: 14, marginTop: 4, textAlign: 'center', paddingHorizontal: 12 },
   card: { borderRadius: 16, padding: 16, marginBottom: 16 },
   cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
   field: {

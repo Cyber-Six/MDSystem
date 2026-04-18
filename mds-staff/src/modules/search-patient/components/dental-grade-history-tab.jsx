@@ -164,7 +164,6 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
       states[tp.toothIndex] = ENUM_TO_CODE[tp.legend] ?? tp.legend;
     });
     return states;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record]);
 
   const oralFindings   = record?.oralFindings || [];
@@ -397,59 +396,65 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
 }
 
 /* ─── Main Component ──────────────────────────────────────────── */
-export default function PatientDentalGradeHistoryTab({ patient }) {
+export default function PatientDentalGradeHistoryTab({ patient, canSetDentalRecord = true }) {
   const [historyData, setHistoryData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!patient?.id) {
-      setLoading(false);
       return;
     }
+    const currentPatientId = String(patient.id);
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     Promise.all([
       axiosRequest.post('/emr/medical', {
         query: GQL_DENTAL_RECORD_HISTORY,
         variables: { userId: patient.id },
       }),
-      axiosRequest.post('/staff/emr', {
-        query: GQL_STAFF_DENTAL_RECORDS,
-        variables: { patientId: patient.id },
-      }),
+      canSetDentalRecord
+        ? axiosRequest.post('/staff/emr', {
+          query: GQL_STAFF_DENTAL_RECORDS,
+          variables: { patientId: patient.id },
+        })
+        : Promise.resolve(null),
     ])
       .then(([emrRes, staffRes]) => {
         if (cancelled) return;
         const emrData = emrRes.data?.data || {};
-        const staffData = staffRes.data?.data || {};
+        const staffData = staffRes?.data?.data || {};
         setHistoryData({
+          _patientId: currentPatientId,
           ...emrData,
-          getUserDentalRecord: staffData.getPatientDentalRecord || [],
-          oralFindingCatalogs: staffData.getOralFindingCatalogs || [],
+          getUserDentalRecord: canSetDentalRecord ? (staffData.getPatientDentalRecord || []) : [],
+          oralFindingCatalogs: canSetDentalRecord ? (staffData.getOralFindingCatalogs || []) : [],
         });
+        setError(null);
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err?.response?.data?.errors?.[0]?.message || err?.message || 'Failed to load dental record history.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        setError({
+          patientId: currentPatientId,
+          message: err?.response?.data?.errors?.[0]?.message || err?.message || 'Failed to load dental record history.',
+        });
       });
 
     return () => { cancelled = true; };
-  }, [patient?.id]);
+  }, [patient?.id, canSetDentalRecord]);
+
+  const activePatientId = patient?.id ? String(patient.id) : null;
+  const activeHistoryData = historyData && String(historyData._patientId) === activePatientId ? historyData : null;
+  const activeError = error && error.patientId === activePatientId ? error.message : null;
+  const loading = Boolean(activePatientId) && !activeHistoryData && !activeError;
 
   const catalogs = useMemo(() => {
-    if (!historyData) return {};
+    if (!activeHistoryData) return {};
     const dentalProcedureMap = {};
-    (historyData.dentalProcedureCatalogs || []).forEach((c) => { dentalProcedureMap[c.id] = c.name; });
+    (activeHistoryData.dentalProcedureCatalogs || []).forEach((c) => { dentalProcedureMap[c.id] = c.name; });
     const applianceTagMap = {};
-    (historyData.oralApplianceCatalogs || []).forEach((c) => { applianceTagMap[c.id] = c.name; });
-    return { dentalProcedureMap, applianceTagMap, oralFindingCatalogs: historyData.oralFindingCatalogs || [] };
-  }, [historyData]);
+    (activeHistoryData.oralApplianceCatalogs || []).forEach((c) => { applianceTagMap[c.id] = c.name; });
+    return { dentalProcedureMap, applianceTagMap, oralFindingCatalogs: activeHistoryData.oralFindingCatalogs || [] };
+  }, [activeHistoryData]);
 
   if (loading) {
     return (
@@ -463,19 +468,19 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
     );
   }
 
-  if (error) {
+  if (activeError) {
     return (
       <div className="px-3 py-4 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-700 dark:text-error-400">
-        {error}
+        {activeError}
       </div>
     );
   }
 
-  const allDentalRecords  = historyData?.getUserDentalRecord           ?? [];
-  const dentalHistories   = (historyData?.getUserDentalHistory          ?? []).filter(r => r.status === 'Approved');
-  const procedureProfiles = (historyData?.getUserDentalProcedureProfile ?? []).filter(r => r.status === 'Approved');
-  const applianceProfiles = (historyData?.getUserOralApplianceProfile   ?? []).filter(r => r.status === 'Approved');
-  const photoRecords      = (historyData?.getUserDentalPhotoRecord      ?? []).filter(r => r.status === 'Approved');
+  const allDentalRecords  = activeHistoryData?.getUserDentalRecord           ?? [];
+  const dentalHistories   = (activeHistoryData?.getUserDentalHistory          ?? []).filter(r => r.status === 'Approved');
+  const procedureProfiles = (activeHistoryData?.getUserDentalProcedureProfile ?? []).filter(r => r.status === 'Approved');
+  const applianceProfiles = (activeHistoryData?.getUserOralApplianceProfile   ?? []).filter(r => r.status === 'Approved');
+  const photoRecords      = (activeHistoryData?.getUserDentalPhotoRecord      ?? []).filter(r => r.status === 'Approved');
 
   // Number of visit-based cards is driven solely by visit data (histories, procedures,
   // appliances, photos). Standalone dental grades created from the Dental Grading tab

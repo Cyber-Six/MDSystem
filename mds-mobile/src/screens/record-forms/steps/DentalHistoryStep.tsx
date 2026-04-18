@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import { DatePickerInput } from '../../../components/ui/DatePickerInput';
+import { MonthYearPickerInput } from '../../../components/ui/MonthYearPickerInput';
 import { axiosRequest, getApiBaseUrl } from '../../../core';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
@@ -223,7 +224,7 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
 
         {dh.firstTimeDentist === 'no' && (
           <View style={{ marginTop: 12 }}>
-            <DatePickerInput
+            <MonthYearPickerInput
               label="Last Dental Consultation"
               value={dh.lastDentalConsultation}
               onChange={v => onUpdate({ lastDentalConsultation: v })}

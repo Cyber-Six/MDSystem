@@ -30,6 +30,8 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [dbErrors, setDbErrors] = useState([]);
   const [showDbErrorModal, setShowDbErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [submittedRecord, setSubmittedRecord] = useState(null);
 
   // Catalog data fetched from the backend
   const [catalogs, setCatalogs] = useState({
@@ -443,14 +445,8 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
       console.log('[Employee Record Form] Submitting to backend...');
       const result = await createInitialEmployeeRecord(sanitizedData);
       console.log('[Employee Record Form] Submission successful!', result);
-      
-      alert('Medical record submitted successfully! You can now access the system.');
-      
-      if (onComplete) {
-        onComplete(result);
-      } else {
-        navigate('/dashboard');
-      }
+      setSubmittedRecord(result);
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('[Employee Record Form] Submission error:', error);
       const parsedErrors = parseSubmissionError(error);
@@ -458,6 +454,18 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
       setShowDbErrorModal(true);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSuccessAcknowledge = () => {
+    const result = submittedRecord;
+    setShowSuccessModal(false);
+    setSubmittedRecord(null);
+
+    if (onComplete) {
+      onComplete(result);
+    } else {
+      navigate('/dashboard');
     }
   };
 
@@ -686,6 +694,35 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
         title="Submission Failed"
         subtitle="The server rejected your submission. Please fix the issue below and try again."
       />
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleSuccessAcknowledge} />
+          <div className="relative bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-start gap-3 p-6 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">Submission Successful</h3>
+                <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  Medical record submitted successfully. You can now access the system.
+                </p>
+              </div>
+            </div>
+            <div className="p-6 flex justify-end">
+              <button
+                onClick={handleSuccessAcknowledge}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

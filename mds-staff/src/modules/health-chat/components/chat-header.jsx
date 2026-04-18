@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { X, Check, Clock, User, ChevronDown, AlertCircle, Trash2, ArrowRightLeft } from 'lucide-react';
+import { X, Check, Clock, User, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import { formatPatientName, getPatientInitials } from '../health-chat-service';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 import TicketStatusBadge from './ticket-status-badge';
 import ConfirmModal from './confirm-modal';
 import TransferModal from './transfer-modal';
 
-const ChatHeader = () => {
-  const { selectedTicket, activeTicketId, approveTicket, rejectTicket, closeTicket, deleteTicket, transferTicket, isAdmin } = useHealthChat();
+export const ChatHeader = () => {
+  const { selectedTicket, activeTicketId, approveTicket, rejectTicket, closeTicket, transferTicket } = useHealthChat();
   const { profile } = useStaffProfile();
 
   const [actionLoading, setActionLoading] = useState(null);
@@ -65,21 +66,6 @@ const ChatHeader = () => {
       await closeTicket(activeTicketId);
     } catch (err) {
       setActionError(err.message || 'Failed to close');
-      setTimeout(() => setActionError(null), 4000);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!activeTicketId) return;
-    try {
-      setActionLoading('delete');
-      setConfirmModal({ isOpen: false, type: null, reason: '' });
-      setActionError(null);
-      await deleteTicket(activeTicketId);
-    } catch (err) {
-      setActionError(err.message || 'Failed to delete');
       setTimeout(() => setActionError(null), 4000);
     } finally {
       setActionLoading(null);
@@ -197,18 +183,6 @@ const ChatHeader = () => {
                 <Clock className="w-3.5 h-3.5" />
                 Ticket ended
               </span>
-              <button
-                onClick={() => setConfirmModal({ isOpen: true, type: 'delete', reason: '' })}
-                disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                           transition-all duration-150 disabled:opacity-50
-                           text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800
-                           hover:bg-red-50 dark:hover:bg-red-900/20"
-                title="Delete this archived ticket (admin only)"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete
-              </button>
             </div>
           )}
         </div>
@@ -242,7 +216,7 @@ const ChatHeader = () => {
               {[
                 { label: 'Full Name',    value: formatPatientName(patient) },
                 patient?.identifier && { label: getIdLabel(), value: patient.identifier, mono: true },
-                patient?.branch && { label: 'Branch',   value: patient.branch },
+                patient?.branch && { label: 'Branch',   value: formatBranchLabel(patient.branch) },
                 patient?.email  && { label: 'Email',  value: patient.email },
               ].filter(Boolean).map((row) => (
                 <div key={row.label}>
@@ -344,21 +318,12 @@ const ChatHeader = () => {
         variant="warning"
       />
 
-      <ConfirmModal
-        isOpen={confirmModal.isOpen && confirmModal.type === 'delete'}
-        onClose={() => setConfirmModal({ isOpen: false, type: null, reason: '' })}
-        onConfirm={handleDelete}
-        title="Delete Archived Ticket"
-        message="Are you sure you want to permanently delete this archived ticket? This action cannot be undone and will remove all messages."
-        confirmText="Delete Permanently"
-        variant="danger"
-      />
-
       <TransferModal
         isOpen={showTransferModal}
         onClose={() => setShowTransferModal(false)}
         onTransfer={(toMedicalId) => transferTicket(activeTicketId, toMedicalId)}
         currentMedicalEmail={profile?.email}
+        chatId={activeTicketId}
       />
     </>
   );

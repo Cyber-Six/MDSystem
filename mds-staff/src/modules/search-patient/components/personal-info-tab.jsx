@@ -1,5 +1,6 @@
 import React from 'react';
 import PatientSectionCard from './section-card';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 function Field({ label, value }) {
   return (
@@ -26,14 +27,6 @@ export default function PatientPersonalInfoTab({ patient }) {
     }
   };
 
-  const getBranchLabel = (branch) => {
-    if (!branch) return null;
-    const normalized = branch.toString().toLowerCase();
-    if (normalized === 'manila') return 'Manila';
-    if (normalized === 'quezon city' || normalized === 'qc') return 'Quezon City';
-    return branch;
-  };
-
   return (
     <div className="space-y-3">
       <PatientSectionCard title="Account Status">
@@ -47,7 +40,7 @@ export default function PatientPersonalInfoTab({ patient }) {
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-secondary-500 dark:text-neutral-400">Branch:</span>
             <span className="text-sm font-semibold text-secondary-800 dark:text-white">
-              {getBranchLabel(patient.personal.branch) || <span className="text-secondary-300 dark:text-neutral-600 font-normal">N/A</span>}
+              {formatBranchLabel(patient.personal.branch) || <span className="text-secondary-300 dark:text-neutral-600 font-normal">N/A</span>}
             </span>
           </div>
         </div>
@@ -86,7 +79,7 @@ export default function PatientPersonalInfoTab({ patient }) {
               <Field label="Position" value={patient.personal.position || patient.year} />
               <Field label="Employment Category" value={patient.personal.employmentCategory} />
               <Field label="Employment Status" value={patient.personal.employmentStatus} />
-              <Field label="Campus Branch" value={patient.personal.branch} />
+              <Field label="Campus Branch" value={formatBranchLabel(patient.personal.branch)} />
             </>
           ) : (
             <>

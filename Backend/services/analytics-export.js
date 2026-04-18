@@ -181,6 +181,30 @@ function branchLabel(branch) {
   return branch;
 }
 
+/**
+ * Percent-of-total is only meaningful for count-like distributions.
+ * Avoid rendering % for derived metrics (e.g. medians, averages, precomputed percentages).
+ */
+function shouldShowPercentageColumn(result, { isTrend = false, isBP = false, isBoxPlot = false } = {}) {
+  if (isTrend || isBP || isBoxPlot) return false;
+  if (String(result?.unit || '').toLowerCase() === 'percentage') return false;
+
+  const values = Array.isArray(result?.values)
+    ? result.values.map((value) => Number(value))
+    : [];
+  if (values.length === 0) return false;
+
+  if (values.some((value) => !Number.isFinite(value) || value < 0 || !Number.isInteger(value))) {
+    return false;
+  }
+
+  const total = Number(result?.total);
+  if (!Number.isFinite(total) || total <= 0) return false;
+  if (values.some((value) => value > total)) return false;
+
+  return true;
+}
+
 // ============================================================
 // CSV EXPORT
 // ============================================================
@@ -403,17 +427,26 @@ async function generatePDF(data, meta) {
 
     const maxRows = 10;
     const isTrend = isTrendType(dataType);
+    const isBP = dataType === 'blood-pressure-trends';
+    const isBoxPlot = dataType === 'vital-signs-box-plot';
 
     // Sort by value desc for non-trend data; chronological for trends
     let indices = result.labels.map((_, i) => i);
-    if (!isTrend) {
+    if (!isTrend && !isBoxPlot) {
       indices.sort((a, b) => (result.values[b] || 0) - (result.values[a] || 0));
     }
     indices = indices.slice(0, maxRows);
 
     const tableLabels = indices.map(i => result.labels[i]);
-    const tableValues = indices.map(i => result.values[i]);
-    const isBP = dataType === 'blood-pressure-trends';
+    const tableValues = isBoxPlot
+      ? indices.map((i) => Number(result.boxPlot?.[i]?.median) || 0)
+      : indices.map((i) => result.values[i]);
+    const tableBoxPlot = isBoxPlot
+      ? indices
+        .map((i) => result.boxPlot?.[i])
+        .filter((row) => row && typeof row.name === 'string')
+      : undefined;
+    const showPercentage = shouldShowPercentageColumn(result, { isTrend, isBP, isBoxPlot });
 
     sections.push({
       title: exportMeta.label,
@@ -421,11 +454,14 @@ async function generatePDF(data, meta) {
       labels: tableLabels,
       values: tableValues,
       diastolicValues: isBP ? indices.map(i => result.diastolicValues?.[i]) : undefined,
+      boxPlot: tableBoxPlot,
       total: result.total || 0,
       xAxis: exportMeta.xAxis,
       yAxis: exportMeta.yAxis,
       isTrend,
       isBP,
+      isBoxPlot,
+      showPercentage,
       summary: `Total Records: ${result.total || 0}  |  Items shown: ${tableLabels.length}${result.labels.length > maxRows ? ` of ${result.labels.length}` : ''}`,
     });
   }
@@ -489,6 +525,8 @@ async function generateSingleMetricPDF(dataType, result, meta) {
     'appointments-accommodated-trends',
   ].includes(dataType);
   const isBP = dataType === 'blood-pressure-trends';
+  const isBoxPlot = dataType === 'vital-signs-box-plot';
+  const showPercentage = shouldShowPercentageColumn(result, { isTrend, isBP, isBoxPlot });
   const groupBy = result.groupBy || meta.groupBy || 'monthly';
   const groupLabel = groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
 
@@ -519,10 +557,15 @@ async function generateSingleMetricPDF(dataType, result, meta) {
   // Sort by value descending for non-trend data; keep chronological for trends
   const maxRows = 15;
   let sortedIndices = result.labels.map((_, i) => i);
-  if (!isTrend) {
+  if (!isTrend && !isBoxPlot) {
     sortedIndices.sort((a, b) => (result.values[b] || 0) - (result.values[a] || 0));
   }
   sortedIndices = sortedIndices.slice(0, maxRows);
+  const boxPlotRows = isBoxPlot
+    ? sortedIndices
+      .map((idx) => result.boxPlot?.[idx])
+      .filter((row) => row && typeof row.name === 'string')
+    : [];
 
   pdf.addSectionHeading(doc, isTrend ? 'Data Summary' : 'Data Table');
 
@@ -542,16 +585,38 @@ async function generateSingleMetricPDF(dataType, result, meta) {
         columnWidths: [30, 200, 90, 90, 94],
       });
     }
+  } else if (isBoxPlot && boxPlotRows.length > 0) {
+    const headers = ['#', 'Vital', 'Min', 'Q1', 'Median', 'Q3', 'Max', 'n'];
+    const rows = boxPlotRows.map((item, rank) => [
+      String(rank + 1),
+      item.name,
+      String(item.min ?? 0),
+      String(item.q1 ?? 0),
+      String(item.median ?? 0),
+      String(item.q3 ?? 0),
+      String(item.max ?? 0),
+      String(item.count ?? 0),
+    ]);
+
+    pdf.addTable(doc, headers, rows, {
+      // Column widths sum to 504 (letter width minus margins)
+      columnWidths: [24, 140, 52, 52, 62, 52, 52, 70],
+    });
   } else {
     const headers = isTrend
       ? ['#', 'Period', exportMeta.yAxis]
-      : ['#', exportMeta.xAxis, exportMeta.yAxis, '%'];
+      : showPercentage
+        ? ['#', exportMeta.xAxis, exportMeta.yAxis, '%']
+        : ['#', exportMeta.xAxis, exportMeta.yAxis];
 
     const rows = sortedIndices.map((idx, rank) => {
-      const pct = result.total > 0 ? ((result.values[idx] / result.total) * 100).toFixed(1) + '%' : '0%';
       if (isTrend) {
         return [String(rank + 1), result.labels[idx], String(result.values[idx] || 0)];
       }
+      if (!showPercentage) {
+        return [String(rank + 1), result.labels[idx], String(result.values[idx] || 0)];
+      }
+      const pct = result.total > 0 ? ((result.values[idx] / result.total) * 100).toFixed(1) + '%' : '0%';
       return [String(rank + 1), result.labels[idx], String(result.values[idx] || 0), pct];
     });
 
@@ -559,7 +624,9 @@ async function generateSingleMetricPDF(dataType, result, meta) {
       // Column widths must sum to tableWidth = 612 - 54 - 54 = 504
       const colWidths = isTrend
         ? [30, 330, 144]   // 504 total
-        : [30, 300, 90, 84]; // 504 total
+        : showPercentage
+          ? [30, 300, 90, 84] // 504 total
+          : [30, 320, 154]; // 504 total
       pdf.addTable(doc, headers, rows, { columnWidths: colWidths });
     }
   }
@@ -572,8 +639,12 @@ async function generateSingleMetricPDF(dataType, result, meta) {
 
   // ── Chart Visualization ────────────────────────────────
   try {
-    const chartLabels = sortedIndices.map(i => result.labels[i]);
-    const chartValues = sortedIndices.map(i => result.values[i]);
+    const chartLabels = isBoxPlot && boxPlotRows.length > 0
+      ? boxPlotRows.map((item) => item.name)
+      : sortedIndices.map((i) => result.labels[i]);
+    const chartValues = isBoxPlot && boxPlotRows.length > 0
+      ? boxPlotRows.map((item) => Number(item.median) || 0)
+      : sortedIndices.map((i) => result.values[i]);
 
     let chartBuffer;
     const chartOpts = { width: 460, height: 250, title: reportTitle };

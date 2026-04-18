@@ -22,7 +22,14 @@ const TwoFactorAuthModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Two-Factor Authentication" size="md">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Two-Factor Authentication"
+      size="md"
+      backdropBlur={4}
+      backdropOpacity={0.72}
+    >
       <div className="space-y-6">
         {/* Status Section */}
         <div className={`

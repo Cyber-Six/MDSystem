@@ -1,118 +1,112 @@
 # Update Record Module
 
-This module provides a comprehensive form system for users to update their medical and dental records. It implements a multi-step form with validation, state management, and GraphQL integration for seamless record updates.
+This module implements the patient update-record workflow for medical, dental, or combined record updates.
 
-## Overview
+## Scope
 
-The update-record module handles:
-- **Medical Record Updates** - Update patient medical history and information
-- **Dental Record Updates** - Update patient dental history and information
-- **Combined Updates** - Update both medical and dental records in a single form submission
-- **Personal Information** - Update personal details alongside record updates
+Path: `mds-patient/src/modules/record-forms/update-record/`
 
-## File Structure
+Used in the patient portal to collect update submissions and route them through update-ticket review flow.
 
-### Core Components
+## Main Behaviors
 
-| File | Purpose |
-|------|---------|
-| **record-update-form.jsx** | Main form container component that orchestrates the entire multi-step form flow. Manages form state, current step tracking, and navigation between steps. |
-| **progress-stepper.jsx** | Visual progress indicator showing which step the user is currently on, with completed step indicators and styling. |
-| **record-choice-page.jsx** | Full-page selection interface where users choose what type of record they want to update (Medical, Dental, or Both). Replaces the modal version. 
-
-### Form Steps
-
-| File | Purpose |
-|------|---------|
-| **personal-info-step.jsx** | First form step for updating personal information (name, contact details, etc.). |
-| **medical-history-step.jsx** | Step for updating medical history information (diagnoses, medications, conditions, etc.). |
-| **dental-history-step.jsx** | Step for updating dental history information (dental conditions, treatments, etc.). |
-| **review-step.jsx** | Final review step displaying all entered information before submission. |
-
-### UI & Helper Components
-
-| File | Purpose |
-|------|---------|
-| **form-elements.jsx** | Reusable form input components and styled form elements used across all steps. |
-
-### Service & API Integration
-
-| File | Purpose |
-|------|---------|
-| **update-record-service.jsx** | Main service handling GraphQL mutations for creating/updating medical and dental records. Manages API communication and error handling. |
-| **personal-info-service.jsx** | Service for personal information updates through GraphQL. |
-| **medical-history-service.jsx** | Service for medical history record updates through GraphQL. |
-| **dental-history-service.jsx** | Service for dental history record updates through GraphQL. |
+- Dynamic flow by selected record type:
+  - `medical`
+  - `dental`
+  - `both`
+- Update ticket management:
+  - checks existing ticket status
+  - warns before replacing `Pending` submissions
+  - supports revision mode (`Revision` status + staff notes)
+- Revision prefill:
+  - fetches previous submitted data
+  - hydrates form fields before resubmission
+- Catalog-backed forms:
+  - loads medical/dental catalogs from backend
+  - supports searching/creating catalog entries in selected sections
+- Validation and submission safety:
+  - per-step required-field checks
+  - modal-based validation and server error reporting
+  - dental photo staging and media cleanup support in service layer
 
 ## Form Flow
 
-```
-Record Update Form
-  ├── Record Choice Modal
-  ├── Step 1: Personal Info
-  ├── Step 2: Medical History (conditional)
-  ├── Step 3: Dental History (conditional)
-  └── Final Step: Review & Submit
-```
+Record type determines visible steps:
 
-The form dynamically builds steps based on the user's record type selection:
-- **Medical Only**: Personal Info → Medical History → Review
-- **Dental Only**: Personal Info → Dental History → Review
-- **Both**: Personal Info → Medical History → Dental History → Review
+- Medical only: Personal Info -> Medical History -> Review & Submit
+- Dental only: Personal Info -> Dental History -> Review & Submit
+- Both: Personal Info -> Medical History -> Dental History -> Review & Submit
 
-## Usage
+## Primary Component
 
-This module is used in the **Dashboard** to allow patients to update their medical and dental information.
+`record-update-form.jsx`
 
-### Import Example
+Key props:
+
+- `forceRecordType`
+- `skipPersonalStep`
+- `skipPersonalSubmit`
+- `hideRecordChoice`
+- `onSubmissionSuccess`
+- `isInactiveMode`
+
+## File Map
+
+| File | Responsibility |
+| --- | --- |
+| `record-update-form.jsx` | Parent orchestrator for steps, validation, revision banner/modal, pending warning, and submit lifecycle. |
+| `record-choice-page.jsx` | Full-page record-type selector before step flow begins. |
+| `progress-stepper.jsx` | Step indicator UI. |
+| `personal-info-step.jsx` | Program search, student category, emergency contacts. |
+| `medical-history-step.jsx` | Medical background/history workflow with catalog fetch and dynamic "other" creation. |
+| `dental-history-step.jsx` | Dental visit history, appliances, procedures, and dental photo inputs. |
+| `review-step.jsx` | Read-only review and per-section edit jump points before submit. |
+| `personal-info-service.jsx` | GraphQL operations for student profile + emergency contacts. |
+| `medical-history-service.jsx` | Catalog retrieval for medical sections. |
+| `dental-history-service.jsx` | Catalog retrieval for dental sections. |
+| `update-record-service.jsx` | Ticket lifecycle, prefill mapping, media staging, and medical/dental submit orchestration. |
+| `update-record-modal.jsx` | Modal wrapper integration variant for this module. |
+| `form-elements.jsx` | Shared UI primitives used by step components. |
+
+## Service Layer Highlights
+
+`update-record-service.jsx` includes:
+
+- Ticket status methods:
+  - `getUpdateTicketStatus`
+  - `getUpdateRevisionStatus`
+  - `createUpdateTicket`
+  - `submitUpdateTicket`
+  - `cancelUpdateTicket`
+- Revision preload helpers:
+  - `fetchUpdateRevisionPrefill`
+  - `fetchDentalPhotoAsBlob`
+- Domain submit helpers:
+  - `submitMedicalUpdate`
+  - `submitDentalUpdate`
+  - `submitUpdateRecord`
+
+## Endpoint Usage
+
+- GraphQL endpoint: `/emr/patient`
+- Media staging endpoints:
+  - `POST /media/stage/`
+  - `DELETE /media/unstage/:fileId`
+  - `GET /media/record/dentalPhoto/:fileId`
+
+## Usage Example
+
 ```jsx
 import RecordUpdateForm from '../modules/record-forms/update-record/record-update-form.jsx';
 
-// Then render in your component
-<RecordUpdateForm />
+export default function UpdatePage() {
+  return <RecordUpdateForm />;
+}
 ```
-
-### Used By
-- [Dashboard.jsx](../../pages/Dashboard.jsx) - Main dashboard page imports and renders the RecordUpdateForm component
-
-## Key Features
-
-- **Multi-step Form Navigation** - Users progress through form steps with next/back buttons
-- **Conditional Steps** - Medical and dental steps only appear based on user selection
-- **State Management** - Form data is accumulated across steps and stored until submission
-- **GraphQL Integration** - Uses GraphQL mutations to communicate with the backend
-- **Validation** - Form validation on each step before proceeding
-- **Progress Tracking** - Visual progress indicator shows current step and completion status
-- **Responsive Design** - Tailwind CSS styling for mobile and desktop views
-
-## API Endpoints Used
-
-- `/emr/patient` - GraphQL endpoint for medical/dental record updates
 
 ## Dependencies
 
-- React 18+
-- Tailwind CSS (for styling)
-- axios (via packages-core-adapter)
-- GraphQL (queries & mutations)
-
-## Component Hierarchy
-
-```
-RecordUpdateForm
-├── ProgressStepper
-├── RecordChoicePage
-└── Step Components (dynamic)
-    ├── PersonalInfoStep
-    ├── MedicalHistoryStep (conditional)
-    ├── DentalHistoryStep (conditional)
-    └── ReviewStep
-```
-
-## State Management
-
-The RecordUpdateForm maintains:
-- `currentStep` - Index of the current form step
-- `formData` - Accumulated form data from all steps
-- `isSubmitting` - Loading state during form submission
-- `recordType` - Type of record being updated ('medical', 'dental', or 'both')
+- React
+- Tailwind CSS styles from patient app design system
+- GraphQL backend routes exposed via patient API
+- Shared core adapters (`@core` / package-core adapter)

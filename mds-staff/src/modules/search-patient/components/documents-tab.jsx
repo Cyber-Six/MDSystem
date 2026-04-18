@@ -151,7 +151,7 @@ function DocumentPreviewModal({ isOpen, onClose, fileUrl, fileType, fileName }) 
   );
 }
 
-export default function PatientDocumentsTab({ patient }) {
+export default function PatientDocumentsTab({ patient, canManageDocuments = true }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -162,7 +162,7 @@ export default function PatientDocumentsTab({ patient }) {
   const [cancelling, setCancelling] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [activeSubTab, setActiveSubTab] = useState('non-generated');
-  const [filter, setFilter] = useState('Missing');
+  const [filter, setFilter] = useState(canManageDocuments ? 'Missing' : 'Recorded');
   const [notes, setNotes] = useState({});
   const [generatedDocuments, setGeneratedDocuments] = useState([]);
   const [generatedLoading, setGeneratedLoading] = useState(false);
@@ -228,6 +228,12 @@ export default function PatientDocumentsTab({ patient }) {
     loadGenerated();
   }, [activeSubTab, loadGenerated]);
 
+  useEffect(() => {
+    if (!canManageDocuments && ['Missing', 'Requested', 'Pending'].includes(filter)) {
+      setFilter('Recorded');
+    }
+  }, [canManageDocuments, filter]);
+
   // Subscribe to document:submitted notifications to auto-refresh this patient's documents
   useEffect(() => {
     if (!patientId) return;
@@ -248,6 +254,7 @@ export default function PatientDocumentsTab({ patient }) {
   }, [subscribe, patientId, loadDocuments]);
 
   const handleRequest = async (documentId) => {
+    if (!canManageDocuments) return;
     setRequesting(documentId);
     setError('');
     try {
@@ -263,6 +270,7 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const handleApprove = async (documentId) => {
+    if (!canManageDocuments) return;
     setApproving(documentId);
     setError('');
     try {
@@ -278,6 +286,7 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const handleReject = async (documentId, documentLabel) => {
+    if (!canManageDocuments) return;
     setConfirmModal({
       isOpen: true,
       type: 'reject',
@@ -287,6 +296,7 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const confirmReject = async (reason) => {
+    if (!canManageDocuments) return;
     const documentId = confirmModal.documentId;
     setConfirmModal({ isOpen: false, type: null, documentId: null, documentLabel: null });
     setRejecting(documentId);
@@ -303,6 +313,7 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const handleArchive = async (documentId, documentLabel) => {
+    if (!canManageDocuments) return;
     setConfirmModal({
       isOpen: true,
       type: 'archive',
@@ -312,6 +323,7 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const confirmArchive = async (archiveNotes) => {
+    if (!canManageDocuments) return;
     const documentId = confirmModal.documentId;
     setConfirmModal({ isOpen: false, type: null, documentId: null, documentLabel: null });
     setArchiving(documentId);
@@ -374,6 +386,7 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const handleCancel = async (documentId, documentLabel) => {
+    if (!canManageDocuments) return;
     setConfirmModal({
       isOpen: true,
       type: 'cancel',
@@ -383,6 +396,7 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const confirmCancel = async () => {
+    if (!canManageDocuments) return;
     const documentId = confirmModal.documentId;
     setConfirmModal({ isOpen: false, type: null, documentId: null, documentLabel: null });
     setCancelling(documentId);
@@ -479,8 +493,10 @@ export default function PatientDocumentsTab({ patient }) {
     return documents.filter(d => getDocStatus(d) === filter);
   };
 
-  // Filter tabs: Missing, Requested, Pending, Recorded, Archived
-  const statuses = ['Missing', 'Requested', 'Pending', 'Recorded', 'Archived'];
+  // Filter tabs: manage-enabled users see workflow states, others are read-only.
+  const statuses = canManageDocuments
+    ? ['Missing', 'Requested', 'Pending', 'Recorded', 'Archived']
+    : ['Recorded', 'Archived'];
   const filtered = getFilteredDocs();
 
   const submittedDocs = documents.filter(d => d.submission?.status === 'Recorded');
@@ -644,18 +660,22 @@ export default function PatientDocumentsTab({ patient }) {
           <p className="text-lg font-bold text-success-600 dark:text-success-400">{submittedDocs.length}</p>
           <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Approved</p>
         </div>
-        <div className="text-center">
-          <p className="text-lg font-bold text-warning-600 dark:text-warning-400">{pendingDocs.length}</p>
-          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Pending</p>
-        </div>
-        <div className="text-center">
-          <p className="text-lg font-bold text-primary-600 dark:text-primary-400">{requestedDocs.length}</p>
-          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Requested</p>
-        </div>
-        <div className="text-center">
-          <p className="text-lg font-bold text-neutral-400 dark:text-neutral-500">{missingDocs.length}</p>
-          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Missing</p>
-        </div>
+        {canManageDocuments && (
+          <>
+            <div className="text-center">
+              <p className="text-lg font-bold text-warning-600 dark:text-warning-400">{pendingDocs.length}</p>
+              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Pending</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-primary-600 dark:text-primary-400">{requestedDocs.length}</p>
+              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Requested</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-neutral-400 dark:text-neutral-500">{missingDocs.length}</p>
+              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Missing</p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Filter Tabs */}
@@ -1023,56 +1043,81 @@ export default function PatientDocumentsTab({ patient }) {
 
                   {/* Recorded: Show View File + Archive button */}
                   {status === 'Recorded' && doc.submission?.file && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleViewFile(doc.submission.file, `${doc.label} - Recorded`)}
-                          disabled={isViewing}
-                          className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                        >
-                          {isViewing ? (
-                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          )}
-                          View File
-                        </button>
-                      </div>
+                    canManageDocuments ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewFile(doc.submission.file, `${doc.label} - Recorded`)}
+                            disabled={isViewing}
+                            className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                          >
+                            {isViewing ? (
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            )}
+                            View File
+                          </button>
+                        </div>
 
-                      {/* Archive section */}
-                      <div className="space-y-1">
-                        <input
-                          type="text"
-                          value={notes[doc.id] || ''}
-                          onChange={(e) => setNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
-                          placeholder="Add reason for archiving (optional)..."
-                          className="w-full px-2 py-1.5 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                        />
-                        <button
-                          onClick={() => handleArchive(doc.id, doc.label)}
-                          disabled={isArchiving}
-                          className="px-2.5 py-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                        >
-                          {isArchiving ? (
-                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                            </svg>
-                          )}
-                          Archive
-                        </button>
+                        {/* Archive section */}
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={notes[doc.id] || ''}
+                            onChange={(e) => setNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
+                            placeholder="Add reason for archiving (optional)..."
+                            className="w-full px-2 py-1.5 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+                          />
+                          <button
+                            onClick={() => handleArchive(doc.id, doc.label)}
+                            disabled={isArchiving}
+                            className="px-2.5 py-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                          >
+                            {isArchiving ? (
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                              </svg>
+                            )}
+                            Archive
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewFile(doc.submission.file, `${doc.label} - Recorded`)}
+                            disabled={isViewing}
+                            className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                          >
+                            {isViewing ? (
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            )}
+                            View File
+                          </button>
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
                 )}

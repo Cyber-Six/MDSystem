@@ -44,9 +44,9 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
 
   return (
     <ModalBackdrop onClose={onCancel}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div className="bg-white dark:bg-[#171311] rounded-xl shadow-2xl border border-neutral-200 dark:border-[#2a2420] overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+        <div className="px-6 py-4 border-b border-neutral-100 dark:border-[#2a2420]/70">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30">
               <svg className="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,7 +82,7 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
 
           {/* Manual Key */}
           {showManualKey && (
-            <div className="mb-4 p-3 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
+            <div className="mb-4 p-3 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-[#2a2420]">
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mb-1">Manual Entry Key</p>
               <p className="font-mono text-sm text-secondary-800 dark:text-neutral-200 tracking-wider select-all break-all">
                 {formattedSecret}
@@ -105,7 +105,7 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
               onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
               placeholder="000000"
               disabled={isLoading}
-              className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+              className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-[#3a322c] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
             />
 
             {error && (
@@ -117,7 +117,7 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
                 type="button"
                 onClick={onCancel}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-[#3a322c] hover:bg-neutral-50 dark:hover:bg-[#221d1a] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -160,9 +160,9 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
 
   return (
     <ModalBackdrop onClose={onCancel}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div className="bg-white dark:bg-[#171311] rounded-xl shadow-2xl border border-neutral-200 dark:border-[#2a2420] overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+        <div className="px-6 py-4 border-b border-neutral-100 dark:border-[#2a2420]/70">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-full bg-error-100 dark:bg-error-900/30">
               <svg className="w-5 h-5 text-error-600 dark:text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -199,7 +199,7 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
               onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
               placeholder="000000"
               disabled={isLoading}
-              className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-error-500 focus:border-transparent disabled:opacity-50"
+              className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-[#3a322c] rounded-lg focus:outline-none focus:ring-2 focus:ring-error-500 focus:border-transparent disabled:opacity-50"
             />
 
             {error && (
@@ -211,7 +211,7 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
                 type="button"
                 onClick={onCancel}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-[#3a322c] hover:bg-neutral-50 dark:hover:bg-[#221d1a] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -241,7 +241,7 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
 // ── Success Modal ──
 const SuccessModal = ({ message, onClose }) => (
   <ModalBackdrop onClose={onClose}>
-    <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 p-6 text-center">
+    <div className="bg-white dark:bg-[#171311] rounded-xl shadow-2xl border border-neutral-200 dark:border-[#2a2420] p-6 text-center">
       <div className="mx-auto w-12 h-12 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center mb-4">
         <svg className="w-6 h-6 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -386,7 +386,7 @@ const TotpSettings = () => {
           <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
             totpEnabled
               ? 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400'
-              : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-400'
+              : 'bg-neutral-100 text-neutral-600 dark:bg-[#2d2723] dark:text-neutral-300'
           }`}>
             {totpEnabled ? 'Enabled' : 'Disabled'}
           </span>

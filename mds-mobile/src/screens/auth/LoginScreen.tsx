@@ -26,7 +26,9 @@ import * as WebBrowser from 'expo-web-browser';
 // Complete any pending auth sessions on app load
 WebBrowser.maybeCompleteAuthSession();
 
-const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_ID = Platform.OS === 'ios'
+  ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '')
+  : (process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '');
 // Server-side secret exchanged instead of a reCAPTCHA browser token.
 // Mobile native apps cannot render v2 checkbox widgets.
 const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || '';
@@ -56,6 +58,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 }) => {
   const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
+  const isIOS = Platform.OS === 'ios';
   
   // Form state
   const [email, setEmail] = useState('');
@@ -377,6 +380,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
+        autoComplete={isIOS ? 'off' : 'email'}
+        textContentType={isIOS ? 'none' : 'emailAddress'}
+        importantForAutofill={isIOS ? 'no' : 'auto'}
         autoCapitalize="none"
         autoCorrect={false}
         editable={!isLoading}
@@ -388,6 +394,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoComplete={isIOS ? 'off' : 'password'}
+        textContentType={isIOS ? 'none' : 'password'}
+        importantForAutofill={isIOS ? 'no' : 'auto'}
+        autoCorrect={false}
         editable={!isLoading}
       />
 
@@ -560,7 +570,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {currentStep === 'credentials' && (
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                <Ionicons name="medkit" size={40} color="#FFFFFF" />
+                <Image
+                  source={require('../../../assets/MDSystem.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={[
                 styles.title,
@@ -613,13 +627,15 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logoContainer: {
-    width: 80,
+    width: 180,
     height: 80,
-    backgroundColor: colors.primary[500],
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   logoEmoji: {
     // unused

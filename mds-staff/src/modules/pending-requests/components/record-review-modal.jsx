@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
 import { fetchPatientRecordForReview, submitStaffEdits } from '../patient-record-service';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -229,7 +230,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
               <span>Scope: {scope}</span>
               <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
-              <span>{ticket.branch === 'QuezonCity' ? 'Quezon City' : ticket.branch}</span>
+              <span>{formatBranchLabel(ticket.branch)}</span>
             </div>
           </div>
           <button

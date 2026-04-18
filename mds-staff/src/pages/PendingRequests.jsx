@@ -26,6 +26,16 @@ const PendingRequests = () => {
   const [selectedRequests, setSelectedRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [modalType, setModalType] = useState(null);
+  const [feedbackModal, setFeedbackModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'success',
+  });
+
+  const openFeedbackModal = (title, message, variant = 'success') => {
+    setFeedbackModal({ isOpen: true, title, message, variant });
+  };
 
   // TODO: Load from API — patientSlot (Pending), patientUpdateLog, MedicineTransactionLog
   const allRequests = [ // eslint-disable-line no-unused-vars
@@ -206,45 +216,45 @@ const PendingRequests = () => {
   const handleAcceptAppointment = (appointmentId) => {
     console.log('Accepting appointment:', appointmentId);
     // TODO: Implement API call to accept appointment
-    alert('Appointment accepted successfully!');
+    openFeedbackModal('Appointment Updated', 'Appointment accepted successfully.');
   };
 
   const handleRejectAppointment = (appointmentId, reason) => {
     console.log('Rejecting appointment:', appointmentId, 'Reason:', reason);
     // TODO: Implement API call to reject appointment
-    alert(`Appointment rejected. Reason: ${reason}`);
+    openFeedbackModal('Appointment Updated', `Appointment rejected. Reason: ${reason || 'No reason provided.'}`);
   };
 
   const handleUpdateAppointment = (appointmentId, updatedData) => {
     console.log('Updating appointment:', appointmentId, updatedData);
     // TODO: Implement API call to update appointment
-    alert('Appointment updated successfully!');
+    openFeedbackModal('Appointment Updated', 'Appointment updated successfully.');
   };
 
   // Record Update handlers
   const handleApproveRecordUpdate = (requestId) => {
     console.log('Approving record update:', requestId);
     // TODO: Implement API call to approve record update
-    alert('Record update approved successfully!');
+    openFeedbackModal('Record Update Processed', 'Record update approved successfully.');
   };
 
   const handleRejectRecordUpdate = (requestId, reason) => {
     console.log('Rejecting record update:', requestId, 'Reason:', reason);
     // TODO: Implement API call to reject record update
-    alert(`Record update rejected. Reason: ${reason}`);
+    openFeedbackModal('Record Update Processed', `Record update rejected. Reason: ${reason || 'No reason provided.'}`);
   };
 
   // Medicine Request handlers
   const handleDispenseMedicine = (requestId, quantity) => {
     console.log('Dispensing medicine:', requestId, 'Quantity:', quantity);
     // TODO: Implement API call to dispense medicine
-    alert(`Medicine dispensed successfully! Quantity: ${quantity}`);
+    openFeedbackModal('Medicine Request Processed', `Medicine dispensed successfully. Quantity: ${quantity}`);
   };
 
   const handleRejectMedicineRequest = (requestId, reason) => {
     console.log('Rejecting medicine request:', requestId, 'Reason:', reason);
     // TODO: Implement API call to reject medicine request
-    alert(`Medicine request rejected. Reason: ${reason}`);
+    openFeedbackModal('Medicine Request Processed', `Medicine request rejected. Reason: ${reason || 'No reason provided.'}`);
   };
 
   // Filter requests (legacy local table only)
@@ -481,6 +491,66 @@ const PendingRequests = () => {
           onDispense={handleDispenseMedicine}
           onReject={handleRejectMedicineRequest}
         />
+      )}
+
+      {feedbackModal.isOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setFeedbackModal((prev) => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between p-6 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  feedbackModal.variant === 'success'
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                    : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                }`}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {feedbackModal.variant === 'success' ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    )}
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-secondary-900 dark:text-white">
+                    {feedbackModal.title}
+                  </h2>
+                </div>
+              </div>
+              <button
+                onClick={() => setFeedbackModal((prev) => ({ ...prev, isOpen: false }))}
+                className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-neutral-500 dark:text-neutral-400"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-neutral-600 dark:text-neutral-300">
+                {feedbackModal.message}
+              </p>
+            </div>
+            <div className="flex items-center justify-end p-6 border-t border-neutral-200 dark:border-neutral-700">
+              <button
+                onClick={() => setFeedbackModal((prev) => ({ ...prev, isOpen: false }))}
+                className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors text-white ${
+                  feedbackModal.variant === 'success'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600'
+                    : 'bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600'
+                }`}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

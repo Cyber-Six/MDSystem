@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../context/settings-context';
 import TotpSettings from './totp-settings';
 import ChangePasswordSettings from './change-password-settings';
@@ -67,23 +66,43 @@ const Toggle = ({ checked, onChange, disabled }) => (
   </button>
 );
 
+// Separate style tokens so section header and setting rows can be tuned independently.
+const SECTION_HEADER_STYLES = {
+  container: 'px-5 py-2 border-b border-neutral-100 dark:border-neutral-700/50',
+  icon: 'text-secondary-500 dark:text-neutral-400 flex-shrink-0',
+  textWrap: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  title: 'text-sm font-semibold text-secondary-800 dark:text-white',
+  description: 'text-xs text-secondary-500 dark:text-neutral-400',
+  titleStyle: { lineHeight: 1.25, margin: 0 },
+  descriptionStyle: { lineHeight: 1.35, margin: 0 },
+};
+
+const SETTING_ROW_STYLES = {
+  rowBase: 'flex items-center justify-between gap-4 py-1',
+  labelBase: 'text-sm font-medium text-secondary-700 dark:text-neutral-200',
+  labelIndented: 'text-xs',
+  description: 'text-xs text-secondary-400 dark:text-neutral-500',
+  labelStyle: { lineHeight: 1.2, margin: 0 },
+  descriptionStyle: { marginTop: '2px', lineHeight: 1.25, marginBottom: 0 },
+};
+
 /**
  * Section wrapper
  */
 const Section = ({ icon, title, description, children }) => (
   <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-    <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+    <div className={SECTION_HEADER_STYLES.container}>
       <div className="flex items-center gap-2.5">
-        <span className="text-secondary-500 dark:text-neutral-400">{icon}</span>
-        <div>
-          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">{title}</h3>
+        <span className={SECTION_HEADER_STYLES.icon}>{icon}</span>
+        <div style={SECTION_HEADER_STYLES.textWrap}>
+          <h3 style={SECTION_HEADER_STYLES.titleStyle} className={SECTION_HEADER_STYLES.title}>{title}</h3>
           {description && (
-            <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{description}</p>
+            <p style={SECTION_HEADER_STYLES.descriptionStyle} className={SECTION_HEADER_STYLES.description}>{description}</p>
           )}
         </div>
       </div>
     </div>
-    <div className="px-5 py-3 divide-y divide-neutral-100 dark:divide-neutral-700/50">
+    <div className="px-5 py-1 divide-y divide-neutral-100 dark:divide-neutral-700/50">
       {children}
     </div>
   </div>
@@ -93,23 +112,16 @@ const Section = ({ icon, title, description, children }) => (
  * Settings row
  */
 const SettingRow = ({ label, description, children, indent }) => (
-  <div className={`flex items-center justify-between gap-4 py-3 ${indent ? 'pl-6' : ''}`}>
+  <div className={`${SETTING_ROW_STYLES.rowBase} ${indent ? 'pl-6' : ''}`}>
     <div className="flex-1 min-w-0">
-      <p className={`text-sm font-medium text-secondary-700 dark:text-neutral-200 ${indent ? 'text-xs' : ''}`}>{label}</p>
+      <p style={SETTING_ROW_STYLES.labelStyle} className={`${SETTING_ROW_STYLES.labelBase} ${indent ? SETTING_ROW_STYLES.labelIndented : ''}`}>{label}</p>
       {description && (
-        <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">{description}</p>
+        <p className={SETTING_ROW_STYLES.description} style={SETTING_ROW_STYLES.descriptionStyle}>{description}</p>
       )}
     </div>
     <div className="flex-shrink-0">{children}</div>
   </div>
 );
-
-const MODULE_LABELS = {
-  healthChat: 'Health Chat',
-  appointments: 'Appointments',
-  medicineRequests: 'Medicine Requests',
-  general: 'General / Announcements',
-};
 
 const CHANNEL_MODULE_LABELS = {
   appointments:     'Appointments',
@@ -127,19 +139,49 @@ const FONT_SIZE_OPTIONS = [
 ];
 const THEME_SWITCH_ANIMATION_MS = 260;
 
+// Deep equality checker — handles nested objects and arrays reliably.
+const deepEqual = (a, b) => {
+  // Same reference
+  if (a === b) return true;
+  
+  // One or both are null/undefined
+  if (a == null || b == null) return a === b;
+  
+  // Different types
+  if (typeof a !== typeof b) return false;
+  
+  // Handle arrays
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, idx) => deepEqual(item, b[idx]));
+  }
+  
+  // Handle objects
+  if (typeof a === 'object' && typeof b === 'object') {
+    const keysA = Object.keys(a).sort();
+    const keysB = Object.keys(b).sort();
+    if (keysA.length !== keysB.length) return false;
+    if (!keysA.every((k, i) => k === keysB[i])) return false;
+    return keysA.every(k => deepEqual(a[k], b[k]));
+  }
+  
+  // Primitives
+  return false;
+};
+
 /**
  * Patient Settings Page
  */
 const PatientSettings = () => {
-  const navigate = useNavigate();
   const { settings: savedSettings, updateSettings, DEFAULT_SETTINGS } = useSettings();
 
   // Local draft state — only committed on save
   const [draft, setDraft] = useState(() => structuredClone(savedSettings));
   const [saved, setSaved] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  // Expanded/collapsed state for By Module sections
-  const [expandedSoundModules, setExpandedSoundModules] = useState(false);
+  // Track if user has interacted with any control
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  // Expanded/collapsed state for By Module channels section
   const [expandedModuleChannels, setExpandedModuleChannels] = useState(false);
   // 'back' = user hit browser back; null = user clicked Cancel in save bar
   const pendingActionRef = useRef(null);
@@ -147,7 +189,18 @@ const PatientSettings = () => {
   // Sync draft when savedSettings change externally (e.g. another tab)
   useEffect(() => {
     setDraft(structuredClone(savedSettings));
+    setHasUserInteracted(false); // Reset when settings reload
   }, [savedSettings]);
+
+  // Use BOTH: object comparison AND interaction tracking
+  const hasChanges = hasUserInteracted && !deepEqual(draft, savedSettings);
+  
+  // DEBUG
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Settings]', { hasUserInteracted, hasChanges, draftEqualsSettings: deepEqual(draft, savedSettings) });
+    }
+  }, [hasUserInteracted, hasChanges, draft, savedSettings]);
 
   // Always-current ref for cleanup purposes
   const savedThemeModeRef = useRef(savedSettings.themeMode);
@@ -185,7 +238,6 @@ const PatientSettings = () => {
     };
   }, [draft.themeMode]);
 
-  const hasChanges = JSON.stringify(draft) !== JSON.stringify(savedSettings);
   const hasChangesRef = useRef(hasChanges);
   useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
 
@@ -219,14 +271,7 @@ const PatientSettings = () => {
   // ── Draft updaters ──
   const set = useCallback((key, value) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
-    setSaved(false);
-  }, []);
-
-  const setModuleSound = useCallback((moduleKey, value) => {
-    setDraft((prev) => ({
-      ...prev,
-      soundByModule: { ...prev.soundByModule, [moduleKey]: value },
-    }));
+    setHasUserInteracted(true);
     setSaved(false);
   }, []);
 
@@ -238,6 +283,7 @@ const PatientSettings = () => {
         [moduleKey]: { ...prev.moduleChannels[moduleKey], [channel]: value },
       },
     }));
+    setHasUserInteracted(true);
     setSaved(false);
   }, []);
 
@@ -249,12 +295,14 @@ const PatientSettings = () => {
       }
       return { ...prev, channels: { ...prev.channels, [channel]: value }, moduleChannels: next };
     });
+    setHasUserInteracted(true);
     setSaved(false);
   }, []);
 
   // ── Save / Reset ──
   const handleSave = () => {
     updateSettings(structuredClone(draft));
+    setHasUserInteracted(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -262,7 +310,6 @@ const PatientSettings = () => {
   const handleReset = () => {
     const defaults = {
       ...DEFAULT_SETTINGS,
-      soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
       channels: { ...DEFAULT_SETTINGS.channels },
       moduleChannels: {},
     };
@@ -270,6 +317,7 @@ const PatientSettings = () => {
       defaults.moduleChannels[key] = { ...DEFAULT_SETTINGS.channels };
     }
     setDraft(defaults);
+    setHasUserInteracted(true);
     setSaved(false);
   };
 
@@ -277,6 +325,7 @@ const PatientSettings = () => {
   const handleDiscard = () => {
     setShowDiscardDialog(false);
     setDraft(structuredClone(savedSettings));
+    setHasUserInteracted(false);
     if (pendingActionRef.current === 'back') {
       guardPushedRef.current = false;
       window.history.go(-2);
@@ -286,6 +335,7 @@ const PatientSettings = () => {
 
   const handleApplyAndGo = () => {
     updateSettings(structuredClone(draft));
+    setHasUserInteracted(false);
     setShowDiscardDialog(false);
     if (pendingActionRef.current === 'back') {
       guardPushedRef.current = false;
@@ -319,14 +369,16 @@ const PatientSettings = () => {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
 
+  const showSaveBar = hasChanges;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className={`max-w-2xl mx-auto space-y-3 transition-all duration-200 ${hasChanges ? 'pb-24' : 'pb-4'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-secondary-800 dark:text-white">Settings</h2>
-          <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
-            Customize your patient portal experience. Stored locally on this device.
+      <div className="flex items-center justify-between px-0.5">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-lg font-bold text-secondary-800 dark:text-white">Settings</h2>
+          <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">
+            Customize your patient portal experience. Saved to your account.
           </p>
         </div>
         <button
@@ -359,58 +411,30 @@ const PatientSettings = () => {
           label="Sound volume"
           indent
         >
-          <div className="flex items-center gap-2 w-36">
+          <div className="flex items-center gap-2.5 w-40">
+            {(() => {
+              const volume = Number.isFinite(draft.soundVolume) ? draft.soundVolume : 1;
+              const clamped = Math.min(1, Math.max(0, volume));
+              const pct = Math.round(clamped * 100);
+              return (
             <input
               type="range"
               min="0"
-              max="1"
-              step="0.1"
-              value={draft.soundVolume}
-              onChange={(e) => set('soundVolume', parseFloat(e.target.value))}
+              max="100"
+              step="1"
+              value={pct}
+              onChange={(e) => set('soundVolume', Number(e.target.value) / 100)}
               disabled={!draft.soundEnabled}
-              className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-neutral-200 dark:bg-neutral-600 accent-primary-500 disabled:opacity-40"
+              className="settings-volume-slider w-full cursor-pointer disabled:opacity-40"
             />
-            <span className="text-xs text-secondary-500 dark:text-neutral-400 w-8 text-right tabular-nums">
+              );
+            })()}
+            <span className="text-sm text-secondary-500 dark:text-neutral-300 w-10 text-right tabular-nums font-medium">
               {Math.round(draft.soundVolume * 100)}%
             </span>
           </div>
         </SettingRow>
 
-        {/* Per-module toggles — collapsible dropdown */}
-        <button
-          type="button"
-          onClick={() => setExpandedSoundModules(!expandedSoundModules)}
-          className="w-full flex items-center justify-between py-3 px-0 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 rounded transition-colors"
-        >
-          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
-            By Module
-          </p>
-          <svg
-            className={`w-4 h-4 text-secondary-500 dark:text-neutral-400 transition-transform ${
-              expandedSoundModules ? 'rotate-180' : ''
-            }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-          </svg>
-        </button>
-
-        {/* Sound module toggles — hidden by default */}
-        {expandedSoundModules && (
-          <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-700/50">
-            {Object.entries(MODULE_LABELS).map(([key, label]) => (
-              <SettingRow key={key} label={label}>
-                <Toggle
-                  checked={draft.soundByModule[key]}
-                  onChange={(v) => setModuleSound(key, v)}
-                  disabled={!draft.soundEnabled}
-                />
-              </SettingRow>
-            ))}
-          </div>
-        )}
       </Section>
 
       {/* ── Notification Display ── */}
@@ -448,7 +472,7 @@ const PatientSettings = () => {
         </SettingRow>
         <SettingRow
           label="Compact banners"
-          description="Group same-type notifications into one countable banner"
+          description="Cap the number of banners shown at once"
           indent
         >
           <Toggle
@@ -588,6 +612,20 @@ const PatientSettings = () => {
         )}
       </Section>
 
+      {/* ── Security ── */}
+      <Section
+        icon={
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        }
+        title="Security"
+        description="Manage two-factor authentication for your account"
+      >
+        <TotpSettings />
+        <ChangePasswordSettings />
+      </Section>
+
       {/* ── Appearance ── */}
       <Section
         icon={
@@ -656,68 +694,29 @@ const PatientSettings = () => {
             ))}
           </div>
         </SettingRow>
-        <SettingRow
-          label="Minimized sidebar"
-          description="Keep the sidebar collapsed by default"
-        >
-          <Toggle checked={draft.compactSidebar} onChange={(v) => set('compactSidebar', v)} />
-        </SettingRow>
       </Section>
 
-      {/* ── Security ── */}
-      <Section
-        icon={
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-        }
-        title="Security"
-        description="Manage two-factor authentication for your account"
-      >
-        <TotpSettings />
-        <ChangePasswordSettings />
-      </Section>
-      <div
-        className={`sticky bottom-0 bg-white/80 dark:bg-neutral-800/80 backdrop-blur-md rounded-xl border transition-all duration-200 ${
-          hasChanges
-            ? 'border-primary-300 dark:border-primary-700 shadow-lg'
-            : 'border-neutral-200 dark:border-neutral-700'
-        }`}
-      >
-        <div className="flex items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-2">
-            {hasChanges && (
-              <>
-                <span className="w-2 h-2 rounded-full bg-warning-500 animate-pulse" />
-                <p className="text-xs font-medium text-warning-600 dark:text-warning-400">You have unsaved changes</p>
-              </>
-            )}
-            {saved && !hasChanges && (
-              <>
-                <svg className="w-4 h-4 text-success-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <p className="text-xs font-medium text-success-600 dark:text-success-400">Settings saved</p>
-              </>
-            )}
+      {/* ── Save Bar ── */}
+      <div className={`sticky bottom-2 z-30 bg-white/95 dark:bg-neutral-800/95 backdrop-blur-md rounded-xl border border-primary-300 dark:border-primary-700 shadow-xl ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300 ${
+        showSaveBar 
+          ? 'opacity-100 scale-y-100 translate-y-0' 
+          : 'opacity-0 scale-y-95 translate-y-full pointer-events-none'
+      }`}>
+        <div className="flex items-center justify-between gap-4 px-5 py-2.5">
+          <div className="flex min-h-10 items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-warning-500 animate-pulse" />
+            <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs font-medium text-warning-600 dark:text-warning-400">You have unsaved changes</p>
           </div>
-          <div className="flex items-center gap-2">
-            {hasChanges && (
-              <button
-                onClick={handleCancelBar}
-                className="px-4 py-2 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-              >
-                Cancel
-              </button>
-            )}
+          <div className="ml-auto flex items-center gap-2 self-center">
+            <button
+              onClick={handleCancelBar}
+              className="h-10 px-4 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+            >
+              Cancel
+            </button>
             <button
               onClick={handleSave}
-              disabled={!hasChanges}
-              className={`px-5 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                hasChanges
-                  ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-sm'
-                  : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
-              }`}
+              className="h-10 px-5 text-sm font-semibold rounded-lg transition-colors bg-primary-500 text-white hover:bg-primary-600 shadow-sm"
             >
               Save Changes
             </button>

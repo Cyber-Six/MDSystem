@@ -5,6 +5,7 @@
 
 import { sendGraphQLRequest } from './graphql-client';
 import { axiosRequest } from '../core';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -283,6 +284,38 @@ const uploadMediaFile = async (photo: { uri: string; name: string; type: string 
 const unstageMediaFile = async (fileId: string | null) => {
   if (!fileId) return;
   try { await axiosRequest.delete(`/media/unstage/${encodeURIComponent(fileId)}`); } catch {}
+};
+
+/**
+ * Download a dental photo from the backend to the device cache.
+ * Returns a photo object with a local `uri` that can be re-uploaded via uploadMediaFile().
+ * This mirrors mds-patient's fetchDentalPhotoAsBlob — the backend expects staged (re-uploaded)
+ * file IDs, not permanent record IDs, so photos must be downloaded and re-staged on submission.
+ */
+const fetchDentalPhotoToCache = async (
+  fileId: string,
+  label: string,
+): Promise<{ uri: string; name: string; type: string } | null> => {
+  if (!fileId) return null;
+  try {
+    const response = await axiosRequest.get(`/media/record/dentalPhoto/${fileId}`, {
+      responseType: 'arraybuffer',
+    });
+    const uint8 = new Uint8Array(response.data);
+    let binary = '';
+    for (let i = 0; i < uint8.byteLength; i++) {
+      binary += String.fromCharCode(uint8[i]);
+    }
+    const base64 = btoa(binary);
+    const fileUri = `${FileSystem.cacheDirectory}${label}-${fileId}.jpg`;
+    await FileSystem.writeAsStringAsync(fileUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return { uri: fileUri, name: `${label}.jpg`, type: 'image/jpeg' };
+  } catch (err: any) {
+    console.warn(`[EMR Service] fetchDentalPhotoToCache(${label}) failed:`, err.message);
+    return null;
+  }
 };
 
 // ─── Profile setup ───────────────────────────────────────────────────────────
@@ -793,21 +826,19 @@ export const submitUpdateRecord = async (
     const allCatalogs = await fetchAllCatalogs();
 
     // Upload dental photos before building inputs (need photo IDs for dentalPhotoRecord)
+    // Always re-upload when uri exists — the backend expects staged file UUIDs,
+    // not permanent record UUIDs from previous submissions.
     const showDental = recordType === 'dental' || recordType === 'both';
     if (showDental) {
       const upperPhoto = formData.dentalHistory?.upperTeethPhoto;
       const lowerPhoto = formData.dentalHistory?.lowerTeethPhoto;
 
-      if (upperPhoto?.uri && !upperPhoto?.id) {
+      if (upperPhoto?.uri) {
         upperTeethFileId = await uploadMediaFile(upperPhoto);
-      } else if (upperPhoto?.id) {
-        upperTeethFileId = upperPhoto.id;
       }
 
-      if (lowerPhoto?.uri && !lowerPhoto?.id) {
+      if (lowerPhoto?.uri) {
         lowerTeethFileId = await uploadMediaFile(lowerPhoto);
-      } else if (lowerPhoto?.id) {
-        lowerTeethFileId = lowerPhoto.id;
       }
     }
 
@@ -1205,7 +1236,52 @@ const reverseMapYearLevel = (v: string): string => {
   return m[v] || '';
 };
 
-export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
+const formatGraphQLErrorList = (errors: any[] = []): string => {
+  return errors
+    .map((gqlError, index) => {
+      const message = gqlError?.message || 'Unknown GraphQL error';
+      const path = Array.isArray(gqlError?.path) && gqlError.path.length > 0
+        ? ` @ ${gqlError.path.join('.')}`
+        : '';
+      return `${index + 1}. ${message}${path}`;
+    })
+    .join(' | ');
+};
+
+export const fetchRevisionPrefill = async (scope: 'medical' | 'dental' | 'both' = 'both'): Promise<FormData | null> => {
+  const includeMedical = scope === 'medical' || scope === 'both';
+  const includeDental = scope === 'dental' || scope === 'both';
+
+  // Build scope-aware EMR query — only request fields relevant to the revision scope
+  const emrFields = [
+    `emrProfile: getProfile { ... on StudentProfile { program year } ... on EmployeeProfile { department role } }`,
+    `emergencyContact: getEmergencyContact {
+      firstContact { contactName relationship contactNumber address }
+      secondContact { contactName relationship contactNumber address }
+    }`,
+  ];
+  if (includeMedical) {
+    emrFields.push(
+      `medicalHistory: getMedicalHistory { conditions { conditionId relationship } notes }`,
+      `allergyProfile: getAllergyProfile { allergies { allergenCatalogId status severity } notes }`,
+      `hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate dischargeDate notes } notes }`,
+      `operationProfile: getOperationProfile { operations { procedureId operationDate notes } notes }`,
+      `medicationProfile: getMedicationProfile { medications { medicineId description } notes }`,
+      `immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } notes }`,
+      `lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency }`,
+      `visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }`,
+      `obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }`,
+    );
+  }
+  if (includeDental) {
+    emrFields.push(
+      `dentalHistory: getDentalHistory { seenByDentist lastDentalCleaning purpose lastVisitDate }`,
+      `dentalProcedureProfile: getDentalProcedureProfile { procedures { procedureTypeId procedureDate } }`,
+      `dentalPhotoRecord: getDentalPhotoRecord { upperTeeth lowerTeeth }`,
+      `oralAppliance: getOralApplianceProfile { appliances { tagId status dateIssued arch } }`,
+    );
+  }
+
   const [profileResult, emrResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetRevisionPersonalData {
@@ -1218,34 +1294,35 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
           branch
           identifier
         }
-      }`, {}, { endpoint: '/profile/patient' }
+      }`, {}, { endpoint: '/profile/patient', allowPartialData: true }
     ),
     sendGraphQLRequest(
-      `query GetRevisionEMRData {
-        emrProfile: getProfile { ... on StudentProfile { program year } ... on EmployeeProfile { department role } }
-        emergencyContact: getEmergencyContact {
-          firstContact { contactName relationship contactNumber address }
-          secondContact { contactName relationship contactNumber address }
-        }
-        medicalHistory: getMedicalHistory { conditions { conditionId relationship } notes }
-        allergyProfile: getAllergyProfile { allergies { allergenCatalogId status severity } notes }
-        hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate dischargeDate notes } notes }
-        operationProfile: getOperationProfile { operations { procedureId operationDate notes } notes }
-        medicationProfile: getMedicationProfile { medications { medicineId description } notes }
-        immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } notes }
-        lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency }
-        visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }
-        dentalHistory: getDentalHistory { seenByDentist lastDentalCleaning lastVisitDate }
-        dentalProcedureProfile: getDentalProcedureProfile { procedures { procedureTypeId } }
-        dentalPhotoRecord: getDentalPhotoRecord { upperTeeth lowerTeeth }
-        oralAppliance: getOralApplianceProfile { appliances { tagId arch } }
-        obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }
-      }`, {}
+      `query GetRevisionEMRData { ${emrFields.join('\n        ')} }`, {}, { allowPartialData: true }
     ),
   ]);
 
-  const profileData = profileResult.status === 'fulfilled' ? profileResult.value : {};
-  const emrData = emrResult.status === 'fulfilled' ? emrResult.value : {};
+  if (profileResult.status === 'rejected') {
+    const profileError = profileResult.reason;
+    console.warn('[EMR Service] Profile prefill fetch failed:', profileError?.message || 'Unknown error');
+    if (Array.isArray(profileError?.graphQLErrors) && profileError.graphQLErrors.length > 0) {
+      console.warn('[EMR Service] Profile prefill GraphQL errors:', formatGraphQLErrorList(profileError.graphQLErrors));
+    }
+  }
+
+  if (emrResult.status === 'rejected') {
+    const emrError = emrResult.reason;
+    console.warn('[EMR Service] EMR prefill fetch failed:', emrError?.message || 'Unknown error');
+    if (Array.isArray(emrError?.graphQLErrors) && emrError.graphQLErrors.length > 0) {
+      console.warn('[EMR Service] EMR prefill GraphQL errors:', formatGraphQLErrorList(emrError.graphQLErrors));
+    }
+  }
+
+  const profileData = profileResult.status === 'fulfilled'
+    ? profileResult.value
+    : ((profileResult as PromiseRejectedResult).reason?.data || {});
+  const emrData = emrResult.status === 'fulfilled'
+    ? emrResult.value
+    : ((emrResult as PromiseRejectedResult).reason?.data || {});
 
   if (!(profileData as any)?.personalLog && Object.keys(emrData).length === 0) return null;
 
@@ -1293,9 +1370,22 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   base.medicalBackground.hasAllergies = allergies.length > 0 ? 'Yes' : 'No';
   for (const a of allergies) base.medicalBackground.allergies[a.allergenCatalogId] = { checked: true, severity: a.severity || 'Unknown', status: a.status || 'Active' };
   base.medicalBackground.hasHospitalization = hosps.length > 0 ? 'Yes' : 'No';
-  for (const h of hosps) base.medicalBackground.hospitalizationConditions[h.conditionId] = true;
+  for (const h of hosps) {
+    base.medicalBackground.hospitalizationConditions[h.conditionId] = true;
+    if (h.admissionDate || h.dischargeDate) {
+      base.medicalBackground.hospitalizationDates[h.conditionId] = {
+        admissionDate: h.admissionDate ? new Date(h.admissionDate).toISOString().split('T')[0] : '',
+        dischargeDate: h.dischargeDate ? new Date(h.dischargeDate).toISOString().split('T')[0] : '',
+      };
+    }
+  }
   base.medicalBackground.hasOperation = ops.length > 0 ? 'Yes' : 'No';
-  for (const o of ops) base.medicalBackground.operationConditions[o.procedureId] = true;
+  for (const o of ops) {
+    base.medicalBackground.operationConditions[o.procedureId] = true;
+    if (o.operationDate) {
+      base.medicalBackground.operationDates[o.procedureId] = new Date(o.operationDate).toISOString().split('T')[0];
+    }
+  }
   base.medicalBackground.hasMedications = meds.length > 0 ? 'Yes' : 'No';
   for (const m of meds) base.medicalBackground.selectedMedications[m.medicineId] = true;
   for (const i of immuns) {
@@ -1338,21 +1428,31 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   base.dentalHistory.firstTimeDentist = dh.seenByDentist === true ? 'no' : dh.seenByDentist === false ? 'yes' : '';
   base.dentalHistory.lastDentalConsultation = dh.lastVisitDate ? String(dh.lastVisitDate).slice(0, 7) : '';
   base.dentalHistory.lastDentalCleaning = reverseMapDentalCleaningRange(dh.lastDentalCleaning || '');
+  base.dentalHistory.purpose = dh.purpose || '';
   base.dentalHistory.hasIntraOralAppliance = oaAppliances.length > 0 ? 'yes' : 'no';
-  for (const a of oaAppliances) base.dentalHistory.intraOralAppliances[a.tagId] = { checked: true, arch: a.arch || 'None', status: a.status || '', dateIssued: a.dateIssued || '' };
-  for (const p of dentalProcs) base.dentalHistory.selectedDentalProcedures[p.procedureTypeId] = true;
+  for (const a of oaAppliances) base.dentalHistory.intraOralAppliances[a.tagId] = { checked: true, arch: a.arch || 'None', status: a.status || '', dateIssued: a.dateIssued ? new Date(a.dateIssued).toISOString().split('T')[0] : '' };
+  for (const p of dentalProcs) {
+    base.dentalHistory.selectedDentalProcedures[p.procedureTypeId] = true;
+    if (p.procedureDate) {
+      base.dentalHistory.procedureDates[p.procedureTypeId] = new Date(p.procedureDate).toISOString().split('T')[0];
+    }
+  }
 
-  // Dental photos — preserve existing UUIDs so updates can reuse them
+  // Dental photos — download to cache so they can be re-uploaded (re-staged) on submission.
+  // The backend expects staged file UUIDs, not permanent record UUIDs, so we must
+  // download → cache → re-upload, matching mds-patient's fetchDentalPhotoAsBlob approach.
   const dpr = emr?.dentalPhotoRecord;
   if (dpr?.upperTeeth) {
-    base.dentalHistory.upperTeethPhoto = {
-      uri: '', name: 'Upper Teeth (from revision)', type: 'image/jpeg', id: dpr.upperTeeth,
-    };
+    const photo = await fetchDentalPhotoToCache(dpr.upperTeeth, 'upper-teeth');
+    if (photo) {
+      base.dentalHistory.upperTeethPhoto = photo;
+    }
   }
   if (dpr?.lowerTeeth) {
-    base.dentalHistory.lowerTeethPhoto = {
-      uri: '', name: 'Lower Teeth (from revision)', type: 'image/jpeg', id: dpr.lowerTeeth,
-    };
+    const photo = await fetchDentalPhotoToCache(dpr.lowerTeeth, 'lower-teeth');
+    if (photo) {
+      base.dentalHistory.lowerTeethPhoto = photo;
+    }
   }
 
   // OB-GYNE

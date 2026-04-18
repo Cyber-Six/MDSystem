@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { updateStaffAccount, fetchTemplates } from '../staff-service';
+import { updateStaffAccount, fetchTemplates, deleteMedicalStaff } from '../staff-service';
 import ActivityLog from './activity-log';
 import { useBanner } from '../../../context/use-banner';
+import { usePermissions } from '../../../context/permissions-context';
 import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 /**
  * Staff Detail Component
@@ -10,8 +12,9 @@ import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx'
  * Role dropdown populated from backend Role Templates.
  * Permissions are template-only — no per-staff overrides.
  */
-const StaffDetail = ({ staff, onClose, onSave }) => {
+const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
   const { showBanner } = useBanner();
+  const { isAdmin: isCurrentUserAdmin } = usePermissions();
   const isPending = staff.status === 'Pending';
 
   const [activeTab, setActiveTab] = useState('info');
@@ -25,6 +28,9 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [showAccountUpdateConfirm, setShowAccountUpdateConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   // Load templates from backend
   useEffect(() => {
@@ -32,11 +38,45 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
   }, []);
 
   const currentTemplate = templates.find(t => t.label === role);
-  const isAdmin = staff.permissions?.is_admin === true;
+  const isTargetAdmin = staff.permissions?.is_admin === true;
 
   const handleRoleChange = (newRole) => {
     setRole(newRole);
     setHasChanges(true);
+  };
+
+  const handleDeleteStaff = async () => {
+    if (!isCurrentUserAdmin) return;
+    if (isTargetAdmin) {
+      setDeleteError('Admin staff record cannot be deleted directly. Use Admin Transfer first.');
+      return;
+    }
+
+    setDeleteError(null);
+    setIsDeleting(true);
+
+    try {
+      const result = await deleteMedicalStaff(staff.id);
+      if (!result?.ok) {
+        throw new Error(result?.message || 'Failed to delete medical staff record.');
+      }
+
+      showBanner({
+        type: 'success',
+        message: result.message || 'Medical staff record deleted successfully.',
+        duration: 5000,
+      });
+
+      if (typeof onDelete === 'function') {
+        onDelete(String(staff.id));
+      } else {
+        onClose();
+      }
+    } catch (err) {
+      setDeleteError(err.message || 'Failed to delete medical staff record.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSave = async (confirmedAccountUpdate = false) => {
@@ -91,25 +131,25 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
       {/* Modal */}
       <div className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-xl shadow-2xl flex flex-col max-h-[85vh] animate-fade-in">
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+        <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-[#F1C526] flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
               {staff.name.split(' ').map((n) => n[0]).join('').substring(0, 2)}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-secondary-900 dark:text-white truncate">{staff.name}</h3>
+                <h3 className="text-sm font-semibold text-secondary-900 dark:text-white truncate" style={{ lineHeight: 1.2, margin: 0 }}>{staff.name}</h3>
                 {isPending ? (
                   <span className="text-[9px] px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium flex-shrink-0">
                     Pending
                   </span>
-                ) : isAdmin && (
+                ) : isTargetAdmin && (
                   <span className="text-[9px] px-1.5 py-0.5 bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400 rounded font-medium flex-shrink-0">
                     Admin
                   </span>
                 )}
               </div>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate" style={{ lineHeight: 1.2, margin: 0 }}>
                 {isPending ? 'No role assigned yet' : (role || 'No role')} · {staff.email}
               </p>
             </div>
@@ -125,7 +165,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0.5 px-5 pt-1.5 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
+        <div className="flex gap-0.5 px-4 pt-1 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -142,16 +182,16 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto px-5 py-3">
+        <div className="flex-1 overflow-y-auto px-4 py-2.5">
           {/* ── Info Tab ── */}
           {activeTab === 'info' && (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {/* Account Details */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
                   <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Details</h4>
                 </div>
-                <div className="p-3 grid grid-cols-2 gap-3">
+                <div className="p-3 grid grid-cols-2 gap-2.5">
                   <div>
                     <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Full Name</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.name}</p>
@@ -166,9 +206,9 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                   </div>
                   <div>
                     <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Branch</p>
-                    {isAdmin ? (
+                    {isTargetAdmin ? (
                       <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{branch === 'QuezonCity' ? 'Quezon City' : branch === 'Both' ? 'MLA & QC (Both)' : branch}</p>
+                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{formatBranchLabel(branch)}</p>
                         <span className="text-[8px] px-1 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium leading-none">Locked</span>
                       </div>
                     ) : (
@@ -179,7 +219,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                       >
                         <option value="Manila">Manila</option>
                         <option value="QuezonCity">Quezon City</option>
-                        <option value="Both">MLA & QC (Both)</option>
+                        <option value="Both">MLA & QC</option>
                       </select>
                     )}
                   </div>
@@ -192,7 +232,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
 
               {/* Role Assignment */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
                   <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Role Assignment</h4>
                 </div>
                 <div className="p-3">
@@ -200,15 +240,15 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                   <select
                     value={role}
                     onChange={(e) => handleRoleChange(e.target.value)}
-                    disabled={isAdmin}
-                    className={`w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    disabled={isTargetAdmin}
+                    className={`w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${isTargetAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <option value="">Select a role…</option>
                     {templates.map((t) => (
                       <option key={t.id} value={t.label}>{t.label}</option>
                     ))}
                   </select>
-                  {isAdmin ? (
+                  {isTargetAdmin ? (
                     <p className="text-xs text-warning-600 dark:text-warning-400 mt-1">
                       Admin role cannot be changed directly. Use Admin Transfer instead.
                     </p>
@@ -226,7 +266,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
 
               {/* Account Status */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
                   <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Status</h4>
                 </div>
                 <div className="p-3">
@@ -234,12 +274,12 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                     <p className="text-xs text-secondary-500 dark:text-neutral-400">
                       This account is <span className="font-semibold text-warning-600 dark:text-warning-400">pending</span>. Assign a role and save to grant staff portal access.
                     </p>
-                  ) : isAdmin ? (
+                  ) : isTargetAdmin ? (
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-success-500 flex-shrink-0" />
-                      <div>
-                        <p className="text-xs font-medium text-secondary-800 dark:text-white">Admin Account — Always Active</p>
-                        <p className="text-xs text-secondary-400 dark:text-neutral-500">Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-secondary-800 dark:text-white" style={{ lineHeight: 1.2, margin: 0 }}>Admin Account — Always Active</p>
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5" style={{ lineHeight: 1.2, margin: 0 }}>Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
                       </div>
                     </div>
                   ) : (
@@ -262,6 +302,38 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                   )}
                 </div>
               </div>
+
+              {isCurrentUserAdmin && (
+                <div className="border border-error-200 dark:border-error-800 rounded-lg overflow-hidden">
+                  <div className="bg-error-50 dark:bg-error-900/20 px-3 py-2 border-b border-error-200 dark:border-error-800">
+                    <h4 className="text-xs font-semibold text-error-700 dark:text-error-300 uppercase tracking-wide">Danger Zone</h4>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    {isTargetAdmin ? (
+                      <p className="text-xs text-warning-600 dark:text-warning-400">
+                        Admin staff record cannot be deleted directly. Use Admin Transfer to move admin privileges first.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-secondary-600 dark:text-neutral-400">
+                          Delete this staff record from MedicalPersonnel. This action removes role-management access for the selected account.
+                        </p>
+                        {deleteError && (
+                          <p className="text-xs text-error-600 dark:text-error-400">{deleteError}</p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowDeleteConfirm(true)}
+                          disabled={isDeleting}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-error-600 hover:bg-error-700 text-white transition-colors disabled:opacity-60"
+                        >
+                          Delete Staff Record
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -273,7 +345,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
 
         {/* Footer — Save / Cancel */}
         {(hasChanges || saveError) && (
-          <div className="px-5 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800/50 rounded-b-xl">
+          <div className="px-4 py-2 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800/50 rounded-b-xl">
             <div className="flex-1 min-w-0">
               {saveError && (
                 <p className="text-xs text-error-600 dark:text-error-400 truncate">{saveError}</p>
@@ -315,6 +387,22 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
         confirmText="Update Account"
         cancelText="Cancel"
         variant="primary"
+      />
+
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={async () => {
+          setShowDeleteConfirm(false);
+          await handleDeleteStaff();
+        }}
+        isLoading={isDeleting}
+        title="Confirm Staff Deletion"
+        message="Delete this medical staff record?"
+        description="This deletes the record from MedicalPersonnel and removes role-management staff access."
+        confirmText="Delete Staff"
+        cancelText="Cancel"
+        variant="danger"
       />
     </div>
   );

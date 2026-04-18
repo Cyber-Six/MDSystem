@@ -50,6 +50,7 @@ const ChatBox = ({
   // Plus action menu
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [isFileUploading, setIsFileUploading] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
   const plusMenuRef = useRef(null);
   const localFileInputRef = useRef(null);
 
@@ -64,19 +65,34 @@ const ChatBox = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showPlusMenu]);
 
+  useEffect(() => {
+    if (attachedFile) setAttachmentError('');
+  }, [attachedFile]);
+
+  useEffect(() => {
+    if (!isActive) setAttachmentError('');
+  }, [isActive]);
+
   const handleLocalFileSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
     const allowed = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime'.split(',');
-    if (!allowed.includes(file.type)) { alert('Unsupported file type.'); return; }
-    if (file.size > 10 * 1024 * 1024) { alert('File too large. Max 10MB.'); return; }
+    if (!allowed.includes(file.type)) {
+      setAttachmentError('Unsupported file type.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setAttachmentError('File too large. Max 10MB.');
+      return;
+    }
     setIsFileUploading(true);
     try {
       const fileId = await uploadFile(file);
+      setAttachmentError('');
       onFileStaged({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
     } catch {
-      alert('Upload failed. Please try again.');
+      setAttachmentError('Upload failed. Please try again.');
     } finally {
       setIsFileUploading(false);
     }
@@ -84,6 +100,7 @@ const ChatBox = ({
 
   const { handlePaste } = useClipboardPaste({
     onFileStaged,
+    onError: setAttachmentError,
     disabled: !canSendMessage || isLoading || !!attachedFile,
   });
 
@@ -322,6 +339,13 @@ const ChatBox = ({
       <div
         className="px-4 py-2.5 flex-shrink-0 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 shadow-lg dark:shadow-dark-sm"
       >
+        {attachmentError && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            {attachmentError}
+          </div>
+        )}
+
         {/* Frozen */}
         {isFrozen && (
           <div

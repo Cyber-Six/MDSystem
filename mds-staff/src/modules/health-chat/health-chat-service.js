@@ -409,23 +409,6 @@ export const closeTicket = async (chatId, notes = null) => {
   return data.closeTicket;
 };
 
-/**
- * Delete an archived ticket (admin only)
- */
-export const deleteArchivedTicket = async (chatId) => {
-  const mutation = `
-    mutation DeleteArchivedTicket($chatId: ID!) {
-      deleteArchivedTicket(chatId: $chatId) {
-        success
-        message
-      }
-    }
-  `;
-
-  const data = await sendGraphQL(mutation, { chatId });
-  return data.deleteArchivedTicket;
-};
-
 // ==================== TRANSFER & TAKEOVER ====================
 
 /**
@@ -512,29 +495,32 @@ export const takeoverOngoingTicket = async (chatId) => {
 
 /**
  * Get staff accounts for transfer dropdown
- * Reuses the role-management listStaffAccounts query
+ * Uses health chat transfer-candidate filtering (permission + branch scoped)
  */
-export const getHealthChatStaff = async () => {
+export const getHealthChatStaff = async (chatId) => {
+  if (!chatId) return [];
+
   const query = `
-    query ListStaffAccounts {
-      listStaffAccounts {
-        staff {
+    query GetTransferCandidates($chatId: ID!) {
+      getTransferCandidates(chatId: $chatId) {
           id
-          name
+          firstName
+          lastName
           email
           role
           branch
         }
-        count
-      }
     }
   `;
 
-  const response = await axiosRequest.post('/rolemanagement/admin', { query });
-  if (response.data.errors) {
-    throw new Error(response.data.errors[0]?.message || 'Failed to load staff list');
-  }
-  return response.data.data.listStaffAccounts.staff || [];
+  const data = await sendGraphQL(query, { chatId });
+  return (data.getTransferCandidates || []).map((staff) => ({
+    id: Number(staff.id),
+    name: `${staff.firstName || ''} ${staff.lastName || ''}`.trim() || staff.email || `Staff ${staff.id}`,
+    email: staff.email || '',
+    role: staff.role || null,
+    branch: staff.branch || null,
+  }));
 };
 
 // ==================== FILE HANDLING ====================
@@ -566,10 +552,10 @@ export const extendSession = async (chatId) => {
 /**
  * Get patient conversations grouped by patient (1 row per patient)
  */
-export const getPatientConversations = async (statuses = null, offset = 0, limit = 50, location = 'Both') => {
+export const getPatientConversations = async (statuses = null, offset = 0, limit = 50, location = 'Both', searchTerm = null) => {
   const query = `
-    query GetPatientConversations($location: Designation, $statuses: [ChatStatus], $offset: Int, $limit: Int) {
-      getPatientConversations(location: $location, statuses: $statuses, offset: $offset, limit: $limit) {
+    query GetPatientConversations($location: Designation, $statuses: [ChatStatus], $searchTerm: String, $offset: Int, $limit: Int) {
+      getPatientConversations(location: $location, statuses: $statuses, searchTerm: $searchTerm, offset: $offset, limit: $limit) {
         conversations {
           patientId
           patient {
@@ -578,6 +564,7 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
             lastName
             email
             identifier
+            profileType
             branch
             dateOfBirth
             sex
@@ -628,7 +615,7 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
     }
   `;
 
-  const data = await sendGraphQL(query, { location, statuses, offset, limit });
+  const data = await sendGraphQL(query, { location, statuses, searchTerm: searchTerm || null, offset, limit });
   return data.getPatientConversations;
 };
 

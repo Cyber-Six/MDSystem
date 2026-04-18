@@ -143,15 +143,43 @@ router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
 // Route: Get current user's module permissions
 router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
     try {
-        const { getStaffModulePermissions, isMedicalPermitted, permissions: permKeys, getStaffBranch: getStaffDesignation } = require('../../services/permit.js');
+        const {
+            getStaffModulePermissions,
+            getStaffPermissions,
+            isMedicalPermitted,
+            permissions: permKeys,
+            getStaffBranch: getStaffDesignation,
+        } = require('../../services/permit.js');
         const modulePerms = await getStaffModulePermissions(req.user.id);
+        const granularPerms = await getStaffPermissions(req.user.id);
         const {permitted: isAdmin} = await isMedicalPermitted(req.user.id, permKeys.is_admin);
         const branch = await getStaffDesignation(req.user.id);
+
+        const granularByKey = {};
+        for (const perm of granularPerms?.permissions || []) {
+            if (!perm?.key) continue;
+            granularByKey[perm.key] = Boolean(perm.enabled);
+        }
+
+        const searchPatientPermissions = {
+            profile_allow_view: Boolean(granularByKey.profile_allow_view),
+            emr_allow_view: Boolean(granularByKey.emr_allow_view),
+            emr_allow_set_vital_sign: Boolean(granularByKey.emr_allow_set_vital_sign),
+            emr_allow_set_dental_record: Boolean(granularByKey.emr_allow_set_dental_record),
+            consultation_allow_view: Boolean(granularByKey.consultation_allow_view),
+            consultation_allow_edit: Boolean(granularByKey.consultation_allow_edit),
+            appointment_allow_view_records: Boolean(granularByKey.appointment_allow_view_records),
+            inventory_allow_manage_requests: Boolean(granularByKey.inventory_allow_manage_requests),
+            document_allow_view: Boolean(granularByKey.document_allow_view),
+            document_allow_manage: Boolean(granularByKey.document_allow_manage),
+            document_allow_generate: Boolean(granularByKey.document_allow_generate),
+        };
 
         res.json({
             modules: modulePerms.modules,
             isAdmin: !!isAdmin,
             branch: branch || 'Both',
+            searchPatientPermissions,
         });
     } catch (error) {
         logger.error('Error fetching own permissions:', error);

@@ -1173,7 +1173,7 @@ const MedicalInventory = () => {
 
       {activeSection === 'direct-release' && (
         <div className="space-y-3">
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
             {allowedLocationsList.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-neutral-500 dark:text-neutral-400">You do not have access to any inventory locations.</p>
@@ -1181,17 +1181,17 @@ const MedicalInventory = () => {
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+                    <h2 className="text-sm font-semibold text-secondary-800 dark:text-white leading-none m-0">Dispense for Walk-in Patients</h2>
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">Release medicine to patients without prior request</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
                     <select
                       value={directReleaseLocation || ''}
                       onChange={(e) => setDirectReleaseLocation(e.target.value)}
-                      className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
+                      className="px-2 py-0.5 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
                     >
                       {allowedLocationsList.map((loc) => (
                         <option key={loc} value={loc}>

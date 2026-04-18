@@ -21,3 +21,39 @@ export function getLocationsByBranch(branch) {
       return [];
   }
 }
+
+/**
+ * Normalize a branch value for user-facing display.
+ *
+ * @param {string|null|undefined} branch
+ * @param {{ fallback?: string|null, includeBothSuffix?: boolean }} [options]
+ * @returns {string|null}
+ */
+export function formatBranchLabel(branch, options = {}) {
+  const { fallback = null, includeBothSuffix = false } = options;
+
+  if (branch === null || branch === undefined) {
+    return fallback;
+  }
+
+  const raw = String(branch).trim();
+  if (!raw) {
+    return fallback;
+  }
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, '');
+
+  if (normalized === 'both') {
+    return includeBothSuffix ? 'MLA & QC (Both)' : 'MLA & QC';
+  }
+
+  if (normalized === 'quezoncity' || normalized === 'qc') {
+    return 'Quezon City';
+  }
+
+  if (normalized === 'manila') {
+    return 'Manila';
+  }
+
+  return raw;
+}

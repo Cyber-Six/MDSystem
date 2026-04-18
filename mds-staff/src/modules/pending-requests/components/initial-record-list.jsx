@@ -8,6 +8,7 @@ import {
 } from '../initial-record-service';
 import { enrichWithInitialFlag } from './ticket-type-helper';
 import InitialRecordDetailModal from './initial-record-detail-modal';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 /**
  * InitialRecordList
@@ -139,7 +140,7 @@ const InitialRecordList = ({
               {ALL_BRANCHES
                 .filter((b) => allowedBranches().includes(b))
                 .map((b) => (
-                  <option key={b} value={b}>{b === 'QuezonCity' ? 'Quezon City' : b}</option>
+                  <option key={b} value={b}>{formatBranchLabel(b)}</option>
                 ))}
             </select>
           </div>

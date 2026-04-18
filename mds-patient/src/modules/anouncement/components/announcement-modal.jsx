@@ -1,20 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { axiosRequest } from '../../../packages-core-adapter';
+import React from 'react';
+import AuthenticatedAnnouncementImage from './authenticated-announcement-image';
 import { formatAnnouncementDate, getAnnouncementTimeZone } from '../timezoneUtils';
-
-/* Small authenticated image loader (media endpoints require JWT) */
-function AuthImage({ path, alt, className }) {
-  const [src, setSrc] = useState(null);
-  useEffect(() => {
-    let objectUrl = null, cancelled = false;
-    axiosRequest.get(path, { responseType: 'blob' })
-      .then((res) => { if (!cancelled) { objectUrl = URL.createObjectURL(res.data); setSrc(objectUrl); } })
-      .catch(() => {});
-    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [path]);
-  if (!src) return null;
-  return <img src={src} alt={alt} className={className} />;
-}
 
 /**
  * Announcement Modal Component - Patient Version (Read-only)
@@ -78,7 +64,7 @@ const AnnouncementModal = ({ announcement, onClose }) => {
           {/* Pubmat Image */}
           {announcement.pubmat && (
             <div className="mt-4">
-              <AuthImage
+              <AuthenticatedAnnouncementImage
                 path={`/media/record/announcement/${announcement.pubmat}`}
                 alt={announcement.label || 'Announcement image'}
                 className="w-full max-h-[60vh] object-contain rounded border border-gray-200 dark:border-neutral-700"

@@ -154,6 +154,156 @@ BEGIN
   END IF;
 END$$;
 
+-- Normalized generated-document setup for Prescription
+INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
+SELECT 'Prescription', 'Prescription document template', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM "documentTemplate" WHERE LOWER(template) = LOWER('Prescription')
+);
+
+INSERT INTO "documentRequirementsTag" (vartag)
+SELECT seed.tag_name
+FROM (
+  VALUES
+    ('complaints'),
+    ('diagnosis'),
+    ('medications'),
+    ('instructions'),
+    ('follow_up')
+) AS seed(tag_name)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM "documentRequirementsTag" drt
+  WHERE LOWER(drt.vartag) = LOWER(seed.tag_name)
+);
+
+INSERT INTO "documentRequirements" ("templateId", "requirementtagId")
+SELECT dt.id, drt.id
+FROM "documentTemplate" dt
+JOIN "documentRequirementsTag" drt
+  ON LOWER(drt.vartag) IN ('complaints', 'diagnosis', 'medications', 'instructions', 'follow_up')
+WHERE LOWER(dt.template) = LOWER('Prescription')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM "documentRequirements" dr
+    WHERE dr."templateId" = dt.id
+      AND dr."requirementtagId" = drt.id
+  );
+
+-- Prevent duplicate template-tag mappings before enforcing uniqueness.
+DELETE FROM "documentRequirements" current_row
+USING "documentRequirements" older_row
+WHERE current_row.id > older_row.id
+  AND current_row."templateId" = older_row."templateId"
+  AND current_row."requirementtagId" = older_row."requirementtagId";
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_document_requirements_template_tag_unique
+ON "documentRequirements" ("templateId", "requirementtagId");
+
+-- Enforce non-null requirement references for all newly inserted rows.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM "documentData"
+    WHERE "requirementId" IS NULL
+    LIMIT 1
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conname = 'ck_documentdata_requirementid_not_null'
+        AND conrelid = '"documentData"'::regclass
+    ) THEN
+      ALTER TABLE "documentData"
+        ADD CONSTRAINT ck_documentdata_requirementid_not_null
+        CHECK ("requirementId" IS NOT NULL) NOT VALID;
+    END IF;
+  ELSE
+    ALTER TABLE "documentData"
+      ALTER COLUMN "requirementId" SET NOT NULL;
+  END IF;
+END$$;
+
+-- Ensure the normalized document tables are connected by foreign keys.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentRequirements"'::regclass
+      AND c.confrelid = '"documentTemplate"'::regclass
+      AND a.attname = 'templateId'
+  ) THEN
+    ALTER TABLE "documentRequirements"
+      ADD CONSTRAINT fk_documentrequirements_template
+      FOREIGN KEY ("templateId") REFERENCES "documentTemplate" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentRequirements"'::regclass
+      AND c.confrelid = '"documentRequirementsTag"'::regclass
+      AND a.attname = 'requirementtagId'
+  ) THEN
+    ALTER TABLE "documentRequirements"
+      ADD CONSTRAINT fk_documentrequirements_requirementtag
+      FOREIGN KEY ("requirementtagId") REFERENCES "documentRequirementsTag" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"PatientDocuments"'::regclass
+      AND c.confrelid = '"documentTemplate"'::regclass
+      AND a.attname = 'templateId'
+  ) THEN
+    ALTER TABLE "PatientDocuments"
+      ADD CONSTRAINT fk_patientdocuments_template
+      FOREIGN KEY ("templateId") REFERENCES "documentTemplate" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentData"'::regclass
+      AND c.confrelid = '"PatientDocuments"'::regclass
+      AND a.attname = 'documentId'
+  ) THEN
+    ALTER TABLE "documentData"
+      ADD CONSTRAINT fk_documentdata_document
+      FOREIGN KEY ("documentId") REFERENCES "PatientDocuments" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentData"'::regclass
+      AND c.confrelid = '"documentRequirements"'::regclass
+      AND a.attname = 'requirementId'
+  ) THEN
+    ALTER TABLE "documentData"
+      ADD CONSTRAINT fk_documentdata_requirement
+      FOREIGN KEY ("requirementId") REFERENCES "documentRequirements" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+END$$;
+
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
@@ -422,11 +572,23 @@ CREATE TABLE IF NOT EXISTS "UsersPreferences" (
 CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id);
 
 -- Missing rolesTable entries (idempotent — safe to re-run)
-INSERT INTO "rolesTable" (label, data) VALUES
-('ALLOW_TO_SET_VITAL_SIGN',                'Permission to set vital signs'),
-('ALLOW_TO_CONFIGURE_INVENTORY',           'Permission to configure inventory settings and thresholds'),
-('ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS', 'Permission to send push notifications and alerts to patients')
-ON CONFLICT (label) DO NOTHING;
+-- Uses NOT EXISTS instead of ON CONFLICT because some environments do not
+-- enforce a unique constraint on rolesTable.label.
+INSERT INTO "rolesTable" (label, data)
+SELECT v.label, v.data
+FROM (VALUES
+  ('ALLOW_TO_SET_VITAL_SIGN',                'Permission to set vital signs'),
+  ('ALLOW_TO_CONFIGURE_INVENTORY',           'Permission to configure inventory settings and thresholds'),
+  ('ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS', 'Permission to send push notifications and alerts to patients'),
+  ('ALLOW_TO_VIEW_DOCUMENTS',                'Permission to view documents'),
+  ('ALLOW_TO_MANAGE_DOCUMENTS',              'Permission to manage (create/edit/delete) documents'),
+  ('ALLOW_TO_GENERATE_DOCUMENTS',            'Permission to generate documents')
+) AS v(label, data)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM "rolesTable" r
+  WHERE r.label = v.label
+);
 
 -- Student programs (added post-initial build)
 INSERT INTO student_programs (label)

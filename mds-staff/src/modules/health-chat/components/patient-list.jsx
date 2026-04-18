@@ -13,7 +13,13 @@ const PatientList = () => {
     needsReplyChats,
     selectedFilters,
     removingPatientIds,
+    conversationsHasMore,
+    conversationsLoadingMore,
+    loadMoreConversations,
   } = useHealthChat();
+
+  const scrollContainerRef = useRef(null);
+  const loadMoreSentinelRef = useRef(null);
 
   // Which statuses each filter bucket covers
   const FILTER_STATUS_MAP = {
@@ -72,6 +78,24 @@ const PatientList = () => {
     }
   }, [tickets]);
 
+  useEffect(() => {
+    const root = scrollContainerRef.current;
+    const target = loadMoreSentinelRef.current;
+    if (!root || !target || !conversationsHasMore) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          loadMoreConversations();
+        }
+      },
+      { root, rootMargin: '120px', threshold: 0 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [conversationsHasMore, loadMoreConversations]);
+
   if (ticketsLoading && visibleTickets.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center py-12">
@@ -95,7 +119,7 @@ const PatientList = () => {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
       <style>{`
         @keyframes listSlideIn {
           from { opacity: 0; transform: translateY(-12px); max-height: 0; }
@@ -133,8 +157,16 @@ const PatientList = () => {
         );
       })}
 
+      {conversationsHasMore && <div ref={loadMoreSentinelRef} className="h-px" aria-hidden />}
+
       {/* Loading indicator at bottom of list */}
       {ticketsLoading && visibleTickets.length > 0 && (
+        <div className="flex items-center justify-center py-3 border-t border-neutral-100 dark:border-neutral-800">
+          <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+        </div>
+      )}
+
+      {conversationsLoadingMore && (
         <div className="flex items-center justify-center py-3 border-t border-neutral-100 dark:border-neutral-800">
           <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
         </div>

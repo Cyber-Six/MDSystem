@@ -113,17 +113,22 @@ export const HealthChatScreen: React.FC = () => {
 
   const flatListRef = useRef<FlatList>(null);
   const hasInitialized = useRef(false);
+  const pendingBottomSnapRef = useRef(true);
 
   // ── Previous tickets history (for landing view) ───────────────────────────
   const [previousTickets, setPreviousTickets] = useState<Ticket[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   // ── Session expiry warning ────────────────────────────────────────────────
   const [isSessionExpiringSoon, setIsSessionExpiringSoon] = useState(false);
   const [isExtendingSession, setIsExtendingSession] = useState(false);
 
   // ── Data loading ──────────────────────────────────────────────────────────
-  const loadMessages = useCallback(async (chatId: string) => {
+  const loadMessages = useCallback(async (chatId: string, options?: { snapToBottom?: boolean }) => {
     try {
+      if (options?.snapToBottom !== false) {
+        pendingBottomSnapRef.current = true;
+      }
       const fetchedMessages = await getTicketMessages(chatId);
       setMessages(fetchedMessages || []);
     } catch (err) {
@@ -153,8 +158,8 @@ export const HealthChatScreen: React.FC = () => {
       const expired = expiredResult.status === 'fulfilled' ? (expiredResult.value?.chats ?? []) : [];
       const merged = [...closed, ...expired].sort(
         (a, b) =>
-          new Date(b.session_start ?? b.session_end ?? '').getTime() -
-          new Date(a.session_start ?? a.session_end ?? '').getTime(),
+          new Date(b.session_end ?? b.archived_at ?? b.session_start ?? '').getTime() -
+          new Date(a.session_end ?? a.archived_at ?? a.session_start ?? '').getTime(),
       );
       setPreviousTickets(merged.slice(0, 5));
     } catch {}
@@ -190,14 +195,18 @@ export const HealthChatScreen: React.FC = () => {
     }, []),
   });
 
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 150);
+  const scrollToBottom = useCallback((animated: boolean = true) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated });
+      });
+    });
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    const shouldSnap = pendingBottomSnapRef.current;
+    pendingBottomSnapRef.current = false;
+    scrollToBottom(!shouldSnap);
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
@@ -435,6 +444,27 @@ export const HealthChatScreen: React.FC = () => {
     }
   }
 
+  const handleSelectPreviousTicket = useCallback(
+    async (selectedTicket: Ticket) => {
+      if (!selectedTicket?.id) return;
+      if (ticket?.id === selectedTicket.id) return;
+
+      setError(null);
+      setIsHistoryLoading(true);
+      setTicket(selectedTicket);
+      setMessages([]);
+
+      try {
+        await loadMessages(selectedTicket.id);
+      } catch {
+        setError('Failed to load conversation history.');
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    },
+    [ticket?.id, loadMessages],
+  );
+
   // ── Derived values ────────────────────────────────────────────────────────
   const shouldShowLanding =
     !isInitializing &&
@@ -521,6 +551,7 @@ export const HealthChatScreen: React.FC = () => {
           <NewChatCTA
             ticket={ticket}
             messages={messages}
+            isHistoryLoading={isHistoryLoading}
             onStartNew={() => setShowCreateForm(true)}
             formatTime={formatTime}
           />
@@ -532,11 +563,20 @@ export const HealthChatScreen: React.FC = () => {
               </Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {previousTickets.map((t) => (
-                  <View
+                  <TouchableOpacity
                     key={t.id}
+                    activeOpacity={0.85}
+                    onPress={() => handleSelectPreviousTicket(t)}
                     style={[
                       styles.prevTicketCard,
-                      { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+                      ticket?.id === t.id && styles.prevTicketCardSelected,
+                      {
+                        backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+                        borderColor:
+                          ticket?.id === t.id
+                            ? colors.primary[500]
+                            : (isDark ? colors.neutral[700] : colors.neutral[200]),
+                      },
                     ]}
                   >
                     <View style={[
@@ -558,7 +598,10 @@ export const HealthChatScreen: React.FC = () => {
                         {formatTime(t.session_end ?? t.session_start)}
                       </Text>
                     )}
-                  </View>
+                    <Text style={[styles.prevTicketHint, { color: ticket?.id === t.id ? colors.primary[500] : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
+                      {ticket?.id === t.id ? 'Viewing history' : 'Tap to view history'}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
             </View>
@@ -650,7 +693,7 @@ export const HealthChatScreen: React.FC = () => {
             data={groupedMessages}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.messagesContent}
-            onContentSizeChange={scrollToBottom}
+            onContentSizeChange={() => scrollToBottom(false)}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -856,6 +899,10 @@ const styles = StyleSheet.create({
     padding: 12,
     marginRight: 10,
     gap: 6,
+    borderWidth: 1,
+  },
+  prevTicketCardSelected: {
+    borderWidth: 1.5,
   },
   prevTicketBadge: {
     alignSelf: 'flex-start',
@@ -866,6 +913,7 @@ const styles = StyleSheet.create({
   prevTicketStatus: { fontSize: 11, fontWeight: '700' },
   prevTicketPurpose: { fontSize: 13, lineHeight: 18 },
   prevTicketDate: { fontSize: 11 },
+  prevTicketHint: { fontSize: 10, fontWeight: '600', marginTop: 2 },
 });
 
 export default HealthChatScreen;

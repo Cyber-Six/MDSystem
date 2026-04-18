@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { RefreshCw, Stethoscope } from 'lucide-react';
 import { HealthChatProvider, useHealthChat } from './context/health-chat-context';
@@ -8,10 +8,96 @@ import PatientList from './components/patient-list';
 import ChatPanel from './components/chat-panel';
 import { SidebarContext } from '../../components/layout/StaffLayout';
 
+const DEFAULT_LIST_WIDTH = 320;
+const MIN_LIST_WIDTH = 220;
+const MAX_LIST_WIDTH = 520;
+const MIN_CHAT_WIDTH = 360;
+const LIST_WIDTH_STORAGE_KEY = 'mds-staff-health-chat-list-width';
+
 const HealthChatContent = () => {
   const { isConnected, emitTyping } = useHealthChatSocket();
   const { socketError, refreshMessages, selectChat, conversations } = useHealthChat();
   const { state } = useLocation();
+  const layoutRef = useRef(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH);
+
+  const getClampedListWidth = useCallback((rawWidth) => {
+    const containerWidth = layoutRef.current?.getBoundingClientRect().width;
+    if (!containerWidth || Number.isNaN(containerWidth)) {
+      return Math.min(Math.max(rawWidth, MIN_LIST_WIDTH), MAX_LIST_WIDTH);
+    }
+
+    const maxBasedOnContainer = Math.max(MIN_LIST_WIDTH, containerWidth - MIN_CHAT_WIDTH);
+    const hardMax = Math.min(MAX_LIST_WIDTH, maxBasedOnContainer);
+    return Math.min(Math.max(rawWidth, MIN_LIST_WIDTH), hardMax);
+  }, []);
+
+  const handleResizeStart = useCallback((event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const handleResizeWithKeyboard = useCallback((event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+
+    const delta = event.key === 'ArrowLeft' ? -20 : 20;
+    setListWidth(prev => getClampedListWidth(prev + delta));
+  }, [getClampedListWidth]);
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem(LIST_WIDTH_STORAGE_KEY);
+    const parsed = Number(raw);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      setListWidth(parsed);
+    }
+  }, []);
+
+  useEffect(() => {
+    const syncToViewport = () => {
+      setListWidth(prev => getClampedListWidth(prev));
+    };
+
+    syncToViewport();
+    window.addEventListener('resize', syncToViewport);
+    return () => window.removeEventListener('resize', syncToViewport);
+  }, [getClampedListWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LIST_WIDTH_STORAGE_KEY, String(Math.round(listWidth)));
+  }, [listWidth]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handlePointerMove = (event) => {
+      if (!layoutRef.current) return;
+      const bounds = layoutRef.current.getBoundingClientRect();
+      const nextWidth = event.clientX - bounds.left;
+      setListWidth(getClampedListWidth(nextWidth));
+    };
+
+    const handlePointerUp = () => {
+      setIsResizing(false);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+    };
+  }, [isResizing, getClampedListWidth]);
 
   // If we arrived here via a notification click that included a chatId,
   // auto-select that conversation once the list has loaded.
@@ -79,14 +165,15 @@ const HealthChatContent = () => {
       </div>
 
       {/* ── Messenger layout ── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      <div ref={layoutRef} style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* Left panel */}
         <div
           className="bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-700"
           style={{
-            width: '320px',
-            minWidth: '220px',
+            width: `${listWidth}px`,
+            minWidth: `${MIN_LIST_WIDTH}px`,
+            maxWidth: `${MAX_LIST_WIDTH}px`,
             flexShrink: 1,
             display: 'flex',
             flexDirection: 'column',
@@ -97,8 +184,40 @@ const HealthChatContent = () => {
           <PatientList />
         </div>
 
+        {/* Resizer */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize conversation list"
+          aria-valuemin={MIN_LIST_WIDTH}
+          aria-valuemax={MAX_LIST_WIDTH}
+          aria-valuenow={Math.round(listWidth)}
+          tabIndex={0}
+          onPointerDown={handleResizeStart}
+          onKeyDown={handleResizeWithKeyboard}
+          className="group flex-shrink-0 bg-white dark:bg-neutral-900 focus:outline-none"
+          style={{
+            width: '12px',
+            cursor: 'col-resize',
+            display: 'flex',
+            alignItems: 'stretch',
+            justifyContent: 'center',
+            touchAction: 'none',
+          }}
+        >
+          <div
+            className="h-full transition-colors"
+            style={{
+              width: '2px',
+              backgroundColor: isResizing
+                ? '#f4c430'
+                : 'rgba(115, 115, 115, 0.45)',
+            }}
+          />
+        </div>
+
         {/* Right panel */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: '280px' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: `${MIN_CHAT_WIDTH}px` }}>
           <ChatPanel emitTyping={emitTyping} />
         </div>
 

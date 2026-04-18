@@ -1,247 +1,148 @@
 # MDSystem Mobile
 
-React Native mobile application built with Expo, TypeScript, and NativeWind (Tailwind CSS for React Native).
+MDSystem Mobile is the Expo React Native client for patient workflows in the MDSystem platform.
 
-## Features
-
-- **Shared Business Logic**: Uses `@mdsystem/core` package for platform-agnostic business logic shared with the web app
-- **NativeWind/Tailwind CSS**: Shares the same Tailwind configuration with the web app for consistent design system
-- **TypeScript**: Full type safety across the mobile app
-- **Token-based Authentication**: AsyncStorage-based token management
-- **Banner Notifications**: Global banner system for user feedback
-- **Validation**: Email and password validation shared with web
+This README is intentionally mobile-scope only.
 
 ## Tech Stack
 
-- **React Native 0.81.5** - Mobile framework
-- **Expo ~54.0.30** - Development platform
-- **TypeScript 5.9.2** - Type safety
-- **NativeWind** - Tailwind CSS for React Native (via `className` prop)
-- **AsyncStorage** - Token storage for React Native
-- **Axios** - HTTP client
-- **@mdsystem/core** - Shared business logic package
+- Expo 54
+- React Native 0.81
+- React 19
+- TypeScript
+- React Navigation (drawer, tabs, stack)
+- AsyncStorage (auth token persistence)
+- Expo Notifications
+- Socket.IO client
+- NativeWind + Tailwind theme tokens
 
-## Setup
+## Core Mobile Capabilities
 
-### Prerequisites
+- Authentication flow with token-backed session state
+- Drawer + tab navigation with route gating based on record status
+- Initial medical record and update-record workflows
+- Appointment, medicine request, health chat, announcements, profile, settings, and documents screens
+- Mobile GraphQL service layer for EMR and related modules
+- Banner and notification providers integrated across the app
 
-- Node.js >= 18.0.0
-- npm or yarn
-- Expo CLI (installed automatically)
-- Expo Go app on your phone (for testing)
+## Prerequisites
 
-### Installation
+- Node.js 18+
+- npm
+- Expo CLI (via `npx expo` / package script)
+- Android Studio emulator or physical device with Expo Go
+- Backend API accessible from your device/emulator
+
+## Installation
+
+From this folder:
 
 ```bash
-# Navigate to the mobile directory
-cd mds-mobile
-
-# Install dependencies
 npm install
+```
 
-# Link the core package (from workspace root)
+Because `@mdsystem/core` is linked from `../packages/core`, ensure repository dependencies are installed as well:
+
+```bash
 cd ..
 npm install
-
-# Navigate back to mobile
 cd mds-mobile
 ```
 
-### Configuration
+## Environment Configuration
 
-The app uses the shared Tailwind configuration from the web app:
+Set values in `mds-mobile/.env` (or your environment profile):
 
-```js
-// tailwind.config.js
-module.exports = {
-  content: ["./App.{js,jsx,ts,tsx}", "./src/**/*.{js,jsx,ts,tsx}"],
-  presets: [require('../mds-patient/tailwind.config.js')],
-};
-```
+| Key | Required | Purpose |
+| --- | --- | --- |
+| `EXPO_PUBLIC_API_URL` | Yes | Absolute backend base URL used by mobile API calls. |
+| `EXPO_PUBLIC_APP_ENV` | No | App environment label (for display/config). |
+| `EXPO_PUBLIC_APP_VERSION` | No | Version label shown in UI surfaces. |
+| `EXPO_PUBLIC_GOOGLE_CLIENT_ID` | Optional | Google login configuration. |
+| `EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET` | Optional | Mobile recaptcha token value used by auth flows. |
 
-This provides access to all the custom colors, spacing, and styles from the web app:
-- `bg-primary-500` - TIP Yellow (#F1C526)
-- `bg-secondary-900` - Dark Gray
-- `bg-accent-500` - Blue accent color
-- `bg-success-*`, `bg-error-*`, `bg-warning-*` - Status colors
+Notes:
 
-### Running the App
+- Mobile uses absolute backend URLs (no Vite proxy layer).
+- `src/core.ts` reads `EXPO_PUBLIC_API_URL` and defaults to `https://www.mdsystemtip.space`.
 
-```bash
-# Start the development server
-npm start
+## Available Scripts
 
-# Run on iOS simulator (macOS only)
-npm run ios
+Run from `mds-mobile/`:
 
-# Run on Android emulator
-npm run android
-
-# Run on web (development)
-npm run web
-```
-
-Scan the QR code with:
-- **iOS**: Camera app
-- **Android**: Expo Go app
+| Command | Description |
+| --- | --- |
+| `npm start` | Start Expo dev server. |
+| `npm run start:clear` | Start Expo with cleared cache. |
+| `npm run android` | Build/run Android native app. |
+| `npm run android:clear` | Start Expo Android with cache clear. |
+| `npm run ios` | Build/run iOS native app. |
+| `npm run ios:clear` | Start Expo iOS with cache clear. |
+| `npm run web` | Run Expo web target. |
+| `npm test` | Run Jest tests. |
+| `npm run test:watch` | Jest in watch mode. |
+| `npm run test:coverage` | Jest with coverage output. |
 
 ## Project Structure
 
-```
+```text
 mds-mobile/
-├── App.tsx                     # Main app entry point with NativeWind
-├── src/
-│   ├── core.js                 # Core package adapters for React Native
-│   ├── components/
-│   │   └── Banner.tsx          # Banner component with NativeWind classes
-│   ├── screens/               # App screens (to be added)
-│   ├── navigation/            # Navigation setup (to be added)
-│   └── services/              # React Native-specific services
-├── babel.config.js            # Babel config with NativeWind plugin
-├── tailwind.config.js         # Tailwind config (shares web config)
-├── nativewind-env.d.ts        # TypeScript declarations for NativeWind
-└── tsconfig.json              # TypeScript configuration
+|-- App.tsx
+|-- app.config.js
+|-- src/
+|   |-- components/
+|   |-- context/
+|   |-- hooks/
+|   |-- navigation/
+|   |-- screens/
+|   |-- services/
+|   `-- core.ts
+|-- assets/
+|-- jest.setup.ts
+`-- tailwind.config.js
 ```
 
-## Using NativeWind
+## Navigation Model
 
-NativeWind allows you to use Tailwind CSS classes via the `className` prop:
+- `AppDrawerNavigator` provides drawer-level shell navigation.
+- `MainTabNavigator` hosts main tabs:
+  - Update Record
+  - Appointments
+  - Health Chat
+  - Medicine
+  - More
+- Access to several tabs is gated while initial record completion is pending.
 
-```tsx
-// Instead of StyleSheet
-<View className="flex-1 bg-neutral-50 px-4">
-  <Text className="text-2xl font-bold text-secondary-900">
-    Hello World
-  </Text>
-  
-  <TouchableOpacity className="bg-accent-500 py-3 px-4 rounded-lg">
-    <Text className="text-white text-center font-semibold">
-      Press Me
-    </Text>
-  </TouchableOpacity>
-</View>
-```
+## Data + Service Layer
 
-All Tailwind classes from the web configuration work identically in React Native!
+- `src/core.ts` wires `@mdsystem/core` factories for token handling and axios interceptors.
+- `src/services/graphql-client.ts` wraps GraphQL requests.
+- `src/services/emr-service.ts` handles catalogs, record submission, ticket status, and revision prefill flows.
+- Additional services under `src/services/` support appointments, profile, documents, notifications, announcements, medicine, and health chat.
 
-## Core Features
+## Testing
 
-### Token Storage
-
-```tsx
-import { TokenStorage } from './src/core';
-
-// Store tokens
-await TokenStorage.storeTokens({
-  accessToken: 'token',
-  refreshToken: 'refresh',
-  expiresIn: 3600
-});
-
-// Retrieve tokens
-const token = await TokenStorage.getAccessToken();
-
-// Clear tokens
-await TokenStorage.clearTokens();
-```
-
-### Banner Notifications
-
-```tsx
-import { bannerService } from './src/core';
-
-// Show a banner
-bannerService.showBanner({
-  type: 'success',
-  message: 'Operation successful!'
-});
-
-// Subscribe to banner updates
-useEffect(() => {
-  const unsubscribe = bannerService.subscribe(setBanners);
-  return () => unsubscribe();
-}, []);
-```
-
-### API Requests
-
-```tsx
-import { axiosRequest } from './src/core';
-
-// Make authenticated requests
-const response = await axiosRequest.get('/api/endpoint');
-const data = await axiosRequest.post('/api/endpoint', { data });
-```
-
-### Validation
-
-```tsx
-import { validatePassword } from '@mdsystem/core/validation/password-validation';
-import { isValidTipEmail } from '@mdsystem/core/validation/email-validation';
-
-const isValid = validatePassword('MyPassword123');
-const isValidEmail = isValidTipEmail('student@tip.edu.ph');
-```
-
-## Styling with Shared Tailwind Config
-
-The mobile app shares the exact same Tailwind configuration as the web app. This means:
-
-- **Same colors**: `bg-primary-500`, `text-accent-600`, etc.
-- **Same spacing**: `p-4`, `mx-2`, `gap-3`, etc.
-- **Same typography**: `text-lg`, `font-bold`, `leading-relaxed`, etc.
-- **Same design tokens**: Consistent look and feel across platforms
-
-## Development Tips
-
-1. **Hot Reload**: Shake your device to open the developer menu
-2. **Debugging**: Press `j` in the terminal to open Chrome DevTools
-3. **TypeScript**: Run `npm run type-check` to check types without building
-4. **NativeWind**: Changes to Tailwind classes reload instantly with Fast Refresh
-
-## Building for Production
-
-```bash
-# Build for iOS
-eas build --platform ios
-
-# Build for Android
-eas build --platform android
-
-# Build for both
-eas build --platform all
-```
-
-(Requires EAS CLI setup - see [Expo docs](https://docs.expo.dev/build/setup/))
+- Jest preset: `jest-expo`
+- Test bootstrap: `jest.setup.ts`
+- Coverage target includes `src/**/*.{ts,tsx}`
 
 ## Troubleshooting
 
-### "Module not found: @mdsystem/core"
+### API calls fail on device
 
-Make sure you've installed dependencies from the workspace root:
+- Verify `EXPO_PUBLIC_API_URL` is reachable from the device/emulator network.
+- Check backend CORS and host configuration.
+
+### Stale Metro build output
+
 ```bash
-cd ..
-npm install
-cd mds-mobile
+npm run start:clear
 ```
 
-### NativeWind classes not working
+### Module resolution issues for `@mdsystem/core`
 
-1. Clear cache: `npm start -- --clear`
-2. Verify `babel.config.js` has `nativewind/babel` plugin
-3. Check that `nativewind-env.d.ts` exists
-
-### TypeScript errors
-
-Run `npm install --save-dev @types/react @types/react-native` to install type definitions.
+- Re-run installs at repo root and in `mds-mobile/`.
 
 ## License
 
-See LICENSE file in the workspace root.
-
-## Learn More
-
-- [React Native Documentation](https://reactnative.dev/docs/getting-started)
-- [Expo Documentation](https://docs.expo.dev/)
-- [NativeWind Documentation](https://www.nativewind.dev/)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
+See the repository root [LICENSE](../LICENSE).

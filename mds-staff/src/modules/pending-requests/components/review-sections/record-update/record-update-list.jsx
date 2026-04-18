@@ -219,7 +219,7 @@ const RecordUpdateList = ({
                 <option value={BRANCH.QUEZON_CITY}>Quezon City</option>
               )}
               {allowedBranches().includes(BRANCH.BOTH) && (
-                <option value={BRANCH.BOTH}>Both</option>
+                <option value={BRANCH.BOTH}>MLA & QC</option>
               )}
             </select>
           </div>

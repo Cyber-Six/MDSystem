@@ -11,6 +11,7 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, onClick }) 
   const patient = ticket.patient;
   const initials = getPatientInitials(patient);
   const hasUnread = ticket.unreadCount > 0;
+  const patientType = patient?.profileType || null;
 
   // If expiresAt has passed but DB status hasn't been flipped yet, treat as Expired
   const effectiveStatus =
@@ -81,13 +82,20 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, onClick }) 
       <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
         {/* Name + Time row */}
         <div className="flex items-center justify-between gap-1.5">
-          <span className={`text-xs overflow-hidden text-ellipsis whitespace-nowrap ${
-            isSelected
-              ? 'font-bold text-primary-700 dark:text-primary-300'
-              : 'font-semibold text-secondary-900 dark:text-white'
-          }`}>
-            {formatPatientName(patient)}
-          </span>
+          <div className="min-w-0 flex items-center gap-1.5">
+            <span className={`text-xs overflow-hidden text-ellipsis whitespace-nowrap ${
+              isSelected
+                ? 'font-bold text-primary-700 dark:text-primary-300'
+                : 'font-semibold text-secondary-900 dark:text-white'
+            }`}>
+              {formatPatientName(patient)}
+            </span>
+            {patientType && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                {patientType}
+              </span>
+            )}
+          </div>
           <span className={`text-xs flex-shrink-0 ${
             isSelected
               ? 'text-primary-600 dark:text-primary-400 font-medium'

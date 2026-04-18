@@ -1,5 +1,6 @@
 import React from 'react';
 import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
+import { formatBranchLabel } from '../../../../utils/branch-utils';
 
 /**
  * PersonalInfoSection
@@ -120,7 +121,7 @@ const PersonalInfoSection = ({
           ) : (
             <>
               <DataRow label="Identifier" value={basicInfo?.identifier} />
-              <DataRow label="Branch" value={basicInfo?.branch === 'QuezonCity' ? 'Quezon City' : basicInfo?.branch} />
+              <DataRow label="Branch" value={formatBranchLabel(basicInfo?.branch)} />
             </>
           )}
         </dl>

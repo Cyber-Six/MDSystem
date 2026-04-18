@@ -68,6 +68,14 @@ const drawerItems: DrawerItem[] = [
     activeRoutes: ['HealthChat'],
   },
   {
+    key: 'announcements',
+    label: 'Announcements',
+    iconName: 'megaphone-outline',
+    targetTab: 'More',
+    params: { screen: 'Announcements' },
+    activeRoutes: ['Announcements'],
+  },
+  {
     key: 'my-documents',
     label: 'My Documents',
     iconName: 'folder-open-outline',
@@ -101,11 +109,13 @@ const SidebarContent: React.FC<DrawerContentComponentProps> = ({ navigation }) =
     Boolean(recordStatus?.needsInitialRecord) || recordStatus?.credentialStatus === 'Inactive';
   const shouldShowInitialRecordLabel =
     Boolean(recordStatus?.needsInitialRecord) && recordStatus?.credentialStatus !== 'Inactive';
+  const recordUpdateDrawerItem =
+    drawerItems.find((item) => item.key === 'record-update') ?? drawerItems[0];
 
   const visibleDrawerItems = isDomainAccessRestricted
     ? [
         {
-          ...drawerItems[1],
+          ...recordUpdateDrawerItem,
           label: shouldShowInitialRecordLabel ? 'Complete Record' : 'Record Update',
           iconName: shouldShowInitialRecordLabel ? 'clipboard-outline' : 'create-outline',
         },

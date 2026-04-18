@@ -41,7 +41,7 @@ const PasswordField = ({ id, label, value, onChange, placeholder, disabled, auto
           disabled={disabled}
           autoFocus={autoFocus}
           autoComplete="off"
-          className="w-full px-3 py-2.5 pr-10 text-sm bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+          className="w-full px-3 py-2.5 pr-10 text-sm bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-[#3a322c] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
         />
         <button
           type="button"
@@ -190,9 +190,9 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 
   return (
     <ModalBackdrop onClose={isLoading ? undefined : onCancel}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div className="bg-white dark:bg-[#171311] rounded-xl shadow-2xl border border-neutral-200 dark:border-[#2a2420] overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+        <div className="px-6 py-4 border-b border-neutral-100 dark:border-[#2a2420]/70">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30">
               <svg className="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -257,7 +257,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
                 type="button"
                 onClick={onCancel}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-[#3a322c] hover:bg-neutral-50 dark:hover:bg-[#221d1a] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -304,7 +304,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
                 placeholder="000000"
                 disabled={isLoading}
                 autoFocus
-                className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+                className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-[#3a322c] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
               />
             </div>
 
@@ -319,7 +319,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
                 type="button"
                 onClick={() => { setStep('passwords'); setError(''); setTotpToken(''); }}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-[#3a322c] hover:bg-neutral-50 dark:hover:bg-[#221d1a] transition-colors disabled:opacity-50"
               >
                 Back
               </button>
@@ -374,7 +374,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
                 placeholder="000000"
                 disabled={isLoading}
                 autoFocus
-                className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+                className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-[#3a322c] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
               />
             </div>
 
@@ -393,7 +393,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
                   setEmailOtp('');
                 }}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-[#3a322c] hover:bg-neutral-50 dark:hover:bg-[#221d1a] transition-colors disabled:opacity-50"
               >
                 Back
               </button>
@@ -423,7 +423,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 // ── Success Modal ──
 const SuccessModal = ({ message, onClose }) => (
   <ModalBackdrop onClose={onClose}>
-    <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 p-6 text-center">
+    <div className="bg-white dark:bg-[#171311] rounded-xl shadow-2xl border border-neutral-200 dark:border-[#2a2420] p-6 text-center">
       <div className="mx-auto w-12 h-12 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center mb-4">
         <svg className="w-6 h-6 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

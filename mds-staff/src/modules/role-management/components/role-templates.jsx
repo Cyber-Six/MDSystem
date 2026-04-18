@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, ROLE_COLORS, allModules, clonePermissions } from '../role-permissions';
+import { DEFAULT_ROLE_TEMPLATES, ROLE_COLORS, allModules, clonePermissions, normalizePermissions } from '../role-permissions';
 import { fetchTemplates, createTemplate, updateTemplate, deleteTemplate } from '../staff-service';
 import PermissionMatrix from './permission-matrix';
 
@@ -11,7 +11,7 @@ import PermissionMatrix from './permission-matrix';
 const RoleTemplates = () => {
   const [roles, setRoles] = useState(DEFAULT_ROLE_TEMPLATES);
   const [selectedRoleId, setSelectedRoleId] = useState(roles[0]?.id || null);
-  const [workingPermissions, setWorkingPermissions] = useState(() => clonePermissions(roles[0]?.permissions || {}));
+  const [workingPermissions, setWorkingPermissions] = useState(() => normalizePermissions(clonePermissions(roles[0]?.permissions || {})));
   const [hasChanges, setHasChanges] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -39,14 +39,14 @@ const RoleTemplates = () => {
           description: defaultMatch?.description || 'Custom role — configure permissions below',
           color: defaultMatch?.color || ROLE_COLORS[merged.length % ROLE_COLORS.length],
           locked: false,
-          permissions: t.permissions,
+          permissions: normalizePermissions(t.permissions || {}),
           _backendId: t.id,
         });
       }
       setRoles(merged);
       const sel = merged[0];
       setSelectedRoleId(sel?.id || null);
-      setWorkingPermissions(clonePermissions(sel?.permissions || {}));
+      setWorkingPermissions(normalizePermissions(clonePermissions(sel?.permissions || {})));
     } catch {
       // Fallback to defaults on error
     } finally {
@@ -83,7 +83,7 @@ const RoleTemplates = () => {
     }
     const role = roles.find((r) => r.id === roleId);
     setSelectedRoleId(roleId);
-    setWorkingPermissions(clonePermissions(role?.permissions || {}));
+    setWorkingPermissions(normalizePermissions(clonePermissions(role?.permissions || {})));
     setHasChanges(false);
     setConfirmDeleteId(null);
     setEditingName(false);
@@ -91,7 +91,7 @@ const RoleTemplates = () => {
   };
 
   const handlePermissionChange = (updated) => {
-    setWorkingPermissions(updated);
+    setWorkingPermissions(normalizePermissions(updated));
     setHasChanges(true);
   };
 
@@ -101,22 +101,23 @@ const RoleTemplates = () => {
     setIsSaving(true);
     setSaveFeedback(null);
     try {
+      const normalizedWorkingPermissions = normalizePermissions(clonePermissions(workingPermissions));
       const nameChanged = workingName && workingName !== role.name;
       if (role._backendId) {
         const result = await updateTemplate(
           role._backendId,
           nameChanged ? workingName : undefined,
-          workingPermissions,
+          normalizedWorkingPermissions,
         );
         if (result.message) {
           setSaveFeedback({ type: 'success', message: result.message });
         }
       } else {
         const effectiveName = nameChanged ? workingName : role.name;
-        const result = await createTemplate(effectiveName, workingPermissions);
+        const result = await createTemplate(effectiveName, normalizedWorkingPermissions);
         if (result) {
           setRoles((prev) =>
-            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: result.id, name: effectiveName, permissions: clonePermissions(workingPermissions) } : r)
+            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: result.id, name: effectiveName, permissions: normalizePermissions(clonePermissions(normalizedWorkingPermissions)) } : r)
           );
         }
         setSaveFeedback({ type: 'success', message: 'Template created successfully.' });
@@ -124,7 +125,7 @@ const RoleTemplates = () => {
       setRoles((prev) =>
         prev.map((r) =>
           r.id === selectedRoleId
-            ? { ...r, name: nameChanged ? workingName : r.name, permissions: clonePermissions(workingPermissions) }
+            ? { ...r, name: nameChanged ? workingName : r.name, permissions: normalizePermissions(clonePermissions(normalizedWorkingPermissions)) }
             : r
         )
       );
@@ -143,7 +144,7 @@ const RoleTemplates = () => {
   };
 
   const handleCancel = () => {
-    setWorkingPermissions(clonePermissions(selectedRole.permissions));
+    setWorkingPermissions(normalizePermissions(clonePermissions(selectedRole.permissions)));
     setHasChanges(false);
     setEditingName(false);
     setWorkingName('');
@@ -156,7 +157,7 @@ const RoleTemplates = () => {
     if (roles.find((r) => r.id === id)) return;
     const usedColors = roles.map((r) => r.color);
     const color = ROLE_COLORS.find((c) => !usedColors.includes(c)) || ROLE_COLORS[roles.length % ROLE_COLORS.length];
-    const perms = allModules(false);
+    const perms = normalizePermissions(allModules(false));
     setIsSaving(true);
     try {
       const created = await createTemplate(newRoleName.trim(), perms);
@@ -166,12 +167,12 @@ const RoleTemplates = () => {
         description: 'Custom role — configure permissions below',
         color,
         locked: false,
-        permissions: created?.permissions || perms,
+        permissions: normalizePermissions(created?.permissions || perms),
         _backendId: created?.id || null,
       };
       setRoles((prev) => [...prev, newRole]);
       setSelectedRoleId(newRole.id);
-      setWorkingPermissions(clonePermissions(newRole.permissions));
+      setWorkingPermissions(normalizePermissions(clonePermissions(newRole.permissions)));
       setShowAddForm(false);
       setNewRoleName('');
       setHasChanges(false);
@@ -196,7 +197,7 @@ const RoleTemplates = () => {
       if (selectedRoleId === roleId) {
         const fallback = updated[0];
         setSelectedRoleId(fallback?.id || null);
-        setWorkingPermissions(clonePermissions(fallback?.permissions || {}));
+        setWorkingPermissions(normalizePermissions(clonePermissions(fallback?.permissions || {})));
         setHasChanges(false);
       }
     } catch (err) {

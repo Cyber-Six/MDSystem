@@ -3,14 +3,12 @@
  * Mirrors mds-patient's announcement-carousel + announcement-modal components.
  *
  * Fetches active announcements and shows them as a card list.
- * Tapping an announcement expands a bottom-sheet-style detail view.
+ * Tapping an announcement opens a full-view detail modal.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
-  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -21,8 +19,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Announcement, fetchActiveAnnouncements } from '../../services/announcement-service';
 import { useTheme, colors } from '../../context/ThemeContext';
-import { axiosRequest } from '../../core';
 import { Ionicons } from '@expo/vector-icons';
+import AnnouncementDetailModal from '../../components/announcements/AnnouncementDetailModal';
+import SecureAnnouncementImage from '../../components/announcements/SecureAnnouncementImage';
 
 const formatDate = (iso: string): string => {
   try {
@@ -33,33 +32,6 @@ const formatDate = (iso: string): string => {
     return iso;
   }
 };
-
-/** Fetches an authenticated media image and renders it inline. */
-function SecureAnnouncementImage({ pubmat }: { pubmat: string }) {
-  const [uri, setUri] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    axiosRequest
-      .get(`/media/record/announcement/${pubmat}`, { responseType: 'arraybuffer' })
-      .then((res) => {
-        if (cancelled) return;
-        const uint8 = new Uint8Array(res.data as ArrayBuffer);
-        let binary = '';
-        for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-        setUri(`data:image/jpeg;base64,${btoa(binary)}`);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [pubmat]);
-  if (!uri) return null;
-  return (
-    <Image
-      source={{ uri }}
-      style={{ width: '100%', height: 200, borderRadius: 8, marginTop: 12 }}
-      resizeMode="contain"
-    />
-  );
-}
 
 interface AnnouncementsScreenProps {
   navigation: any;
@@ -147,47 +119,23 @@ export const AnnouncementsScreen: React.FC<AnnouncementsScreenProps> = () => {
             <Text style={[styles.cardBody, { color: textSecondary }]} numberOfLines={3}>
               {item.description}
             </Text>
+            {item.pubmat ? (
+              <SecureAnnouncementImage
+                pubmat={item.pubmat}
+                style={styles.cardImage}
+                resizeMode="cover"
+              />
+            ) : null}
             <Text style={[styles.readMore, { color: colors.primary[500] }]}>Read more →</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {/* Detail modal */}
-      {selected && (
-        <Modal
-          visible
-          animationType="slide"
-          transparent
-          onRequestClose={() => setSelected(null)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalSheet, { backgroundColor: cardBg }]}>
-              {/* Handle bar */}
-              <View style={[styles.handle, { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[300] }]} />
-
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={[styles.modalTitle, { color: textPrimary }]}>{selected.label}</Text>
-                <Text style={[styles.modalDate, { color: textSecondary }]}>
-                  Posted {formatDate(selected.created_at)}
-                </Text>
-                <View style={[styles.divider, { backgroundColor: border }]} />
-                <Text style={[styles.modalBody, { color: textPrimary }]}>{selected.description}</Text>
-
-                {selected.pubmat && (
-                  <SecureAnnouncementImage pubmat={selected.pubmat} />
-                )}
-              </ScrollView>
-
-              <TouchableOpacity
-                style={[styles.closeBtn, { backgroundColor: colors.primary[500] }]}
-                onPress={() => setSelected(null)}
-              >
-                <Text style={styles.closeBtnText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
+      <AnnouncementDetailModal
+        visible={Boolean(selected)}
+        announcement={selected}
+        onClose={() => setSelected(null)}
+      />
     </SafeAreaView>
   );
 };
@@ -209,37 +157,13 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
   cardDate: { fontSize: 12 },
   cardBody: { fontSize: 14, lineHeight: 20 },
+  cardImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
   readMore: { fontSize: 13, fontWeight: '500' },
-
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '85%',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: { fontSize: 20, fontWeight: '700', lineHeight: 28, marginBottom: 4 },
-  modalDate: { fontSize: 13, marginBottom: 12 },
-  divider: { height: 1, marginBottom: 16 },
-  modalBody: { fontSize: 15, lineHeight: 24 },
-  closeBtn: {
-    marginTop: 20,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  closeBtnText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
 });
 
 export default AnnouncementsScreen;

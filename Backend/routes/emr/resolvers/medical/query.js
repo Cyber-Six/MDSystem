@@ -332,9 +332,11 @@ const Query = {
   // ─── Patient Search ───────────────────────────────────────────────────────
   getPatientBasicInfo: async (_, args, { user, res }) => {
     // Step 1: check baseline view permission/branch without Superior strictness.
-    const isBasePermitted = await permit.isMedicalPermittedPatientBased(
+    const isBasePermitted = await permit.isMedicalPermittedPatientBasedMulti(
       user.id,
-      permit.permissions.emr_allow_view,
+      [permit.permissions.emr_allow_view, permit.permissions.appointment_allow_view_records, 
+       permit.permissions.profile_allow_view, permit.permissions.inventory_allow_manage_requests,
+       permit.permissions.consultation_allow_view, permit.permissions.document_allow_view],
       args.userId,
       false
     );

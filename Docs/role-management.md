@@ -8,6 +8,16 @@ GraphQL API for managing medical staff roles, permissions, access control, and a
 
 ---
 
+## Schema Change Notes
+
+### 2026-04-16 - Role Template Query Alignment
+- Added `roleTemplates: [PermissionTemplate!]!` to `Query` as an array alias for template listing.
+- Kept `listPermissionTemplates` and `getPermissionTemplate` for backward compatibility.
+- Frontend entangled permission fetch removed deprecated `permissionTemplate` query usage and now reads `getStaffPermissions(userId)`.
+- Result: role-management frontend queries align with live schema and avoid invalid-field runtime failures.
+
+---
+
 ## Key Concepts
 
 ### Permission Model
@@ -47,6 +57,7 @@ Permissions can be designated for specific locations:
 - `getStaffModulePermissions(userId: ID!): ModulePermissionList!` — Module-level derived status
 
 **Permission Templates:**
+- `roleTemplates: [PermissionTemplate!]!`
 - `listPermissionTemplates: PermissionTemplateList!`
 - `getPermissionTemplate(templateId: ID!): PermissionTemplate`
 

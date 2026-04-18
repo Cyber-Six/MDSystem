@@ -13,7 +13,7 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
     {
       id: 1,
       icon: Shield,
-      headline: "Welcome to MDS Healthcare",
+      headline: "Welcome to MDSystem",
       description: "Comprehensive healthcare management platform designed for modern medical institutions.",
       color: "primary"
     },

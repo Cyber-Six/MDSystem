@@ -468,63 +468,94 @@ export const MedicineRequestScreen: React.FC = () => {
         </View>
       )}
 
-      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <View style={[styles.tabBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-        <TouchableOpacity
-          style={[styles.tab, view === 'form' && styles.activeTab, view === 'form' && { borderBottomColor: colors.primary[500] }]}
-          onPress={() => setView('form')}
-        >
-          <View style={styles.tabInner}>
-            <Ionicons
-              name="create-outline"
-              size={14}
-              color={view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
-            />
-            <Text style={[styles.tabText, { color: view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-              New Request
-            </Text>
+      {/* Header */}
+      <View style={styles.headerSection}>
+        <View style={[styles.headerBanner, { backgroundColor: colors.success[500] }]}>
+          <MaterialCommunityIcons name="pill" size={28} color="#FFFFFF" style={styles.headerIcon} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Medicine Request</Text>
+            <Text style={styles.headerSubtitle}>Request medicines from the clinic</Text>
           </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, view === 'status' && styles.activeTab, view === 'status' && { borderBottomColor: colors.primary[500] }]}
-          onPress={() => setView('status')}
+        </View>
+      </View>
+
+      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
+      <View style={styles.tabBarWrap}>
+        <View
+          style={[
+            styles.tabBar,
+            {
+              backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+              borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+            },
+          ]}
         >
-          <View style={styles.tabInner}>
-            <Ionicons
-              name="list-outline"
-              size={14}
-              color={view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
-            />
-            <Text style={[styles.tabText, { color: view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-              Request Status
-            </Text>
-            {hasPendingRequest && (
-              <View
-                style={[
-                  styles.tabCountBadge,
-                  {
-                    backgroundColor: view === 'status'
-                      ? colors.primary[500]
-                      : (isDark ? colors.neutral[700] : colors.neutral[200]),
-                  },
-                ]}
-              >
-                <Text
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              view === 'form' && {
+                backgroundColor: isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50],
+              },
+            ]}
+            onPress={() => setView('form')}
+          >
+            <View style={styles.tabInner}>
+              <Ionicons
+                name="create-outline"
+                size={14}
+                color={view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
+              />
+              <Text style={[styles.tabText, { color: view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
+                New Request
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              view === 'status' && {
+                backgroundColor: isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50],
+              },
+            ]}
+            onPress={() => setView('status')}
+          >
+            <View style={styles.tabInner}>
+              <Ionicons
+                name="list-outline"
+                size={14}
+                color={view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
+              />
+              <Text style={[styles.tabText, { color: view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
+                Request Status
+              </Text>
+              {hasPendingRequest && (
+                <View
                   style={[
-                    styles.tabCountText,
+                    styles.tabCountBadge,
                     {
-                      color: view === 'status'
-                        ? '#FFFFFF'
-                        : (isDark ? colors.primary[200] : colors.primary[700]),
+                      backgroundColor: view === 'status'
+                        ? colors.primary[500]
+                        : (isDark ? colors.neutral[700] : colors.neutral[200]),
                     },
                   ]}
                 >
-                  {pendingRequests.length}
-                </Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.tabCountText,
+                      {
+                        color: view === 'status'
+                          ? '#FFFFFF'
+                          : (isDark ? colors.primary[200] : colors.primary[700]),
+                      },
+                    ]}
+                  >
+                    {pendingRequests.length}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Form View ──────────────────────────────────────────────────── */}
@@ -557,15 +588,6 @@ export const MedicineRequestScreen: React.FC = () => {
             />
           }
         >
-          {/* Header */}
-          <View style={[styles.headerBanner, { backgroundColor: colors.success[500] }]}>
-            <MaterialCommunityIcons name="pill" size={28} color="#FFFFFF" style={styles.headerIcon} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Medicine Request</Text>
-              <Text style={styles.headerSubtitle}>Request medicines from the clinic</Text>
-            </View>
-          </View>
-
           {hasPendingRequest && latestPendingRequest && (
             <View
               style={[
@@ -919,7 +941,7 @@ const styles = StyleSheet.create({
   topMenuRow: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    marginBottom: 4,
+    marginBottom: 10,
   },
   menuButton: {
     width: 40,
@@ -929,20 +951,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  headerSection: {
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+
   // Tab bar
+  tabBarWrap: {
+    paddingHorizontal: 16,
+    marginBottom: 4,
+  },
   tabBar: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 4,
   },
   tab: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    justifyContent: 'center',
+    borderRadius: 12,
   },
   tabInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  activeTab: {},
   tabText: { fontWeight: '600', fontSize: 14 },
   tabCountBadge: {
     minWidth: 20,

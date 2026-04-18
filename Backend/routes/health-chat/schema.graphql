@@ -73,6 +73,7 @@ type ChatParticipant {
   lastName: String
   email: String
   identifier: Int
+  profileType: String
   branch: String
   dateOfBirth: String
   sex: String
@@ -150,8 +151,9 @@ type MedicalQuery {
   getAllTickets(location: Designation, status: ChatStatus, offset: Int, limit: Int): HealthChatList!
   getTicket(chatId: ID!): HealthChat
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
-  getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
+  getPatientConversations(location: Designation, statuses: [ChatStatus], searchTerm: String, offset: Int, limit: Int): PatientConversationList!
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
+  getTransferCandidates(chatId: ID!): [ChatParticipant!]!
 }
 
 # Unified queries exposed to appropriate role
@@ -167,8 +169,9 @@ type Query {
   getAllTickets(location: Designation, status: ChatStatus, offset: Int, limit: Int): HealthChatList!
   getTicket(chatId: ID!): HealthChat
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
-  getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
+  getPatientConversations(location: Designation, statuses: [ChatStatus], searchTerm: String, offset: Int, limit: Int): PatientConversationList!
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
+  getTransferCandidates(chatId: ID!): [ChatParticipant!]!
 }
 
 # Mutations
@@ -186,7 +189,6 @@ type Mutation {
   rejectTicket(chatId: ID!, reason: String): TicketResult!
   sendMedicalMessage(input: SendMessageInput!): MessageResult!
   closeTicket(input: CloseTicketInput!): TicketResult!
-  deleteArchivedTicket(chatId: ID!): TicketResult!
 
   transferTicket(chatId: ID!, toMedicalId: Int!): TicketResult!
   takeoverOngoingTicket(chatId: ID!): TicketResult! # for admin only

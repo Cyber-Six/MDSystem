@@ -18,6 +18,7 @@ import { logout, axiosRequest } from '../../core';
 import { unregisterPushToken } from '../../services/notification-service';
 import { getPatientProfile } from '../../services/profile-service';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
+import { useRecordStatus } from '../../context/RecordStatusContext';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -33,17 +34,27 @@ interface MenuItem {
   description?: string;
 }
 
+const SHOW_LOGIN_ACTIVITY_IN_MORE = false;
+
 const menuItems: MenuItem[] = [
   { iconName: 'person', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
   { iconName: 'megaphone', label: 'Announcements', screen: 'Announcements', description: 'Clinic news and announcements' },
-  { iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
+  { iconName: 'folder-open-outline', label: 'My Documents', screen: 'MyDocuments', description: 'View your uploaded files' },
+  ...(SHOW_LOGIN_ACTIVITY_IN_MORE
+    ? [{ iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' }]
+    : []),
   { iconName: 'help-circle', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
   { iconName: 'settings', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
 ];
 
+// Screens hidden when patient credential is inactive (matches mds-patient web lockdown)
+const INACTIVE_HIDDEN_SCREENS = new Set(['MyDocuments']);
+
 export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) => {
   const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
+  const { recordStatus } = useRecordStatus();
+  const isInactive = recordStatus?.credentialStatus === 'Inactive';
   const [userName, setUserName] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
 
@@ -147,12 +158,14 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
             { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
           ]}
         >
-          {menuItems.map((item, index) => (
+          {menuItems
+            .filter((item) => !isInactive || !INACTIVE_HIDDEN_SCREENS.has(item.screen))
+            .map((item, index, filtered) => (
             <TouchableOpacity
               key={item.screen}
               style={[
                 styles.menuItem,
-                index < menuItems.length - 1 && {
+                index < filtered.length - 1 && {
                   borderBottomWidth: 1,
                   borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100],
                 },

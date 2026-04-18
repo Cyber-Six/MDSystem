@@ -39,22 +39,15 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const pi = formData.personalInfo;
   const [categoryOpen, setCategoryOpen] = useState(false);
 
-  // Program search state
-  const [programInput, setProgramInput] = useState(pi.program || '');
+  // Program modal search state
+  const [programOpen, setProgramOpen] = useState(false);
+  const [programSearch, setProgramSearch] = useState('');
   const [programSuggestions, setProgramSuggestions] = useState<Array<{ id: string; label: string }>>([]);
   const [programSearching, setProgramSearching] = useState(false);
-  const [programFocused, setProgramFocused] = useState(false);
   const programTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleProgramInputChange = useCallback((value: string) => {
-    setProgramInput(value);
-    // Clear the selection if user edits text after selecting
-    if (pi.programId) {
-      onUpdate({ program: value, programId: '' });
-    } else {
-      onUpdate({ program: value });
-    }
-    // Debounced search
+  const handleProgramSearch = useCallback((value: string) => {
+    setProgramSearch(value);
     if (programTimerRef.current) clearTimeout(programTimerRef.current);
     if (value.trim().length < 2) { setProgramSuggestions([]); return; }
     programTimerRef.current = setTimeout(async () => {
@@ -65,15 +58,20 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
       } catch { setProgramSuggestions([]); }
       setProgramSearching(false);
     }, 300);
-  }, [pi.programId, onUpdate]);
+  }, []);
 
   const selectProgram = useCallback((item: { id: string; label: string }) => {
-    setProgramInput(item.label);
-    setProgramSuggestions([]);
-    setProgramFocused(false);
     onUpdate({ program: item.label, programId: item.id });
-    Keyboard.dismiss();
+    setProgramOpen(false);
+    setProgramSearch('');
+    setProgramSuggestions([]);
   }, [onUpdate]);
+
+  const openProgramModal = useCallback(() => {
+    setProgramSearch('');
+    setProgramSuggestions([]);
+    setProgramOpen(true);
+  }, []);
 
   const inputStyle = [styles.input, {
     backgroundColor: isDark ? colors.neutral[700] : '#FFF',
@@ -237,61 +235,76 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         School Information
       </Text>
 
-      {/* Program — search input */}
+      {/* Program — modal select with search */}
       <View style={styles.fieldGroup}>
         <Text style={labelStyle}>Program *</Text>
-        <View style={{ position: 'relative' }}>
-          <View style={[styles.searchInputRow, {
+        <TouchableOpacity
+          style={[styles.selectTrigger, {
             backgroundColor: isDark ? colors.neutral[700] : '#FFF',
             borderColor: errors.program ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
-          }]}>
-            <TextInput
-              style={[styles.searchInput, { color: isDark ? colors.neutral[100] : colors.neutral[900] }]}
-              value={programInput}
-              onChangeText={handleProgramInputChange}
-              onFocus={() => setProgramFocused(true)}
-              placeholder="Search program..."
-              placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-              returnKeyType="done"
-            />
-            {programSearching ? (
-              <ActivityIndicator size="small" color={colors.primary[500]} />
-            ) : pi.programId ? (
-              <Ionicons name="checkmark-circle" size={18} color={colors.success[500]} />
-            ) : (
-              <Ionicons name="search" size={16} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
-            )}
-          </View>
-          {programFocused && programSuggestions.length > 0 && (
-            <View style={[styles.suggestionsDropdown, {
-              backgroundColor: isDark ? colors.neutral[800] : '#FFF',
-              borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
-            }]}>
-              {programSuggestions.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.suggestionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
-                  onPress={() => selectProgram(item)}
-                >
-                  <Text style={{ fontSize: 14, color: isDark ? colors.neutral[200] : colors.neutral[800] }}>
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          }]}
+          onPress={openProgramModal}
+          activeOpacity={0.7}
+        >
+          <Text style={{ flex: 1, fontSize: 15, color: pi.program ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
+            {pi.program || 'Select program...'}
+          </Text>
+          {pi.programId ? (
+            <Ionicons name="checkmark-circle" size={18} color={colors.success[500]} />
+          ) : (
+            <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
           )}
-          {programFocused && !programSearching && programInput.trim().length >= 2 && programSuggestions.length === 0 && (
-            <View style={[styles.suggestionsDropdown, {
-              backgroundColor: isDark ? colors.neutral[800] : '#FFF',
-              borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
-            }]}>
-              <Text style={{ padding: 12, fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500], textAlign: 'center' }}>
-                No programs found
-              </Text>
-            </View>
-          )}
-        </View>
+        </TouchableOpacity>
         {errors.program && <Text style={styles.errorText}>{errors.program}</Text>}
+        <Modal visible={programOpen} transparent animationType="slide">
+          <Pressable style={styles.modalOverlay} onPress={() => setProgramOpen(false)}>
+            <Pressable style={[styles.modalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Program</Text>
+                <TouchableOpacity onPress={() => setProgramOpen(false)}>
+                  <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.modalSearchRow, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+                <Ionicons name="search" size={16} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+                <TextInput
+                  style={[styles.modalSearchInput, { color: isDark ? colors.neutral[100] : colors.neutral[900] }]}
+                  value={programSearch}
+                  onChangeText={handleProgramSearch}
+                  placeholder="Search program..."
+                  placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                  autoFocus
+                  returnKeyType="done"
+                />
+                {programSearching && <ActivityIndicator size="small" color={colors.primary[500]} />}
+              </View>
+              {programSuggestions.length > 0 ? (
+                <FlatList
+                  data={programSuggestions}
+                  keyExtractor={item => item.id}
+                  keyboardShouldPersistTaps="handled"
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                      onPress={() => selectProgram(item)}
+                    >
+                      <Text style={{ flex: 1, fontSize: 15, color: item.id === pi.programId ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.id === pi.programId ? '600' : '400' }}>
+                        {item.label}
+                      </Text>
+                      {item.id === pi.programId && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
+                    </TouchableOpacity>
+                  )}
+                />
+              ) : (
+                <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
+                    {programSearch.trim().length < 2 ? 'Type at least 2 characters to search' : programSearching ? 'Searching...' : 'No programs found'}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
 
       {/* Student Category — dropdown select */}
@@ -369,15 +382,13 @@ const styles = StyleSheet.create({
   contactCard: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 14 },
   contactTitle: { fontSize: 15, fontWeight: '600', marginBottom: 12 },
   selectTrigger: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' },
-  searchInputRow: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' },
-  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15 },
-  suggestionsDropdown: { position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, borderWidth: 1, borderRadius: 12, marginTop: 4, maxHeight: 200, overflow: 'hidden' },
-  suggestionItem: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { maxHeight: '60%', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.1)' },
   modalTitle: { fontSize: 17, fontWeight: '700' },
   optionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1 },
+  modalSearchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 4, borderBottomWidth: 1, gap: 8 },
+  modalSearchInput: { flex: 1, fontSize: 15, paddingVertical: 10 },
 });
 
 export default PersonalInfoStep;

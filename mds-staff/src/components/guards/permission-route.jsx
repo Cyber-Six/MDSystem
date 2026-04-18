@@ -8,15 +8,27 @@ import { useBanner } from '../../context/use-banner';
  * If the user lacks the required module, shows a toast and redirects to dashboard.
  *
  * @param {string} moduleId - The module permission required (e.g. 'appointments')
+ * @param {boolean} requireSearchPatientAccess - If true, checks the composite Search Patient access gate
  * @param {React.ReactNode} children - The route element to render if permitted
  * @param {boolean} adminOnly - If true, only admins can access this route
  */
-const PermissionRoute = ({ moduleId, adminOnly = false, children }) => {
-  const { hasPermission, isAdmin, isLoading } = usePermissions();
+const PermissionRoute = ({ moduleId, adminOnly = false, requireSearchPatientAccess = false, children }) => {
+  const { hasPermission, hasSearchPatientAccess, isAdmin, isLoading } = usePermissions();
   const { showBanner } = useBanner();
   const location = useLocation();
 
-  const isAllowed = adminOnly ? isAdmin : hasPermission(moduleId);
+  let isAllowed = false;
+  if (adminOnly) {
+    isAllowed = isAdmin;
+  } else if (requireSearchPatientAccess) {
+    isAllowed = hasSearchPatientAccess;
+  } else if (Array.isArray(moduleId)) {
+    isAllowed = moduleId.some((id) => hasPermission(id));
+  } else if (!moduleId) {
+    isAllowed = true;
+  } else {
+    isAllowed = hasPermission(moduleId);
+  }
 
   useEffect(() => {
     if (!isLoading && !isAllowed) {
