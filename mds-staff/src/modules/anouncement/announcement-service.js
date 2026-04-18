@@ -6,14 +6,47 @@
 
 import { axiosRequest } from '../../packages-core-adapter';
 
+const ACTIVE_ANNOUNCEMENTS_CACHE_TTL_MS = 30_000;
+
+let activeAnnouncementsCache = null;
+let activeAnnouncementsCacheAt = 0;
+let activeAnnouncementsInFlight = null;
+
+export const clearActiveAnnouncementsCache = () => {
+  activeAnnouncementsCache = null;
+  activeAnnouncementsCacheAt = 0;
+  activeAnnouncementsInFlight = null;
+};
+
 /**
  * Fetch all active announcements (publicly accessible)
  * @returns {Promise<Array>} Array of announcements
  */
-export const fetchActiveAnnouncements = async () => {
+export const fetchActiveAnnouncements = async (options = {}) => {
+  const force = Boolean(options?.force);
+  const now = Date.now();
+
+  if (!force && activeAnnouncementsCache && now - activeAnnouncementsCacheAt < ACTIVE_ANNOUNCEMENTS_CACHE_TTL_MS) {
+    return activeAnnouncementsCache;
+  }
+
+  if (!force && activeAnnouncementsInFlight) {
+    return activeAnnouncementsInFlight;
+  }
+
   try {
-    const response = await axiosRequest.get('/announcement');
-    return response.data.data || [];
+    activeAnnouncementsInFlight = axiosRequest.get('/announcement')
+      .then((response) => {
+        const data = response.data.data || [];
+        activeAnnouncementsCache = data;
+        activeAnnouncementsCacheAt = Date.now();
+        return data;
+      })
+      .finally(() => {
+        activeAnnouncementsInFlight = null;
+      });
+
+    return await activeAnnouncementsInFlight;
   } catch (err) {
     console.error('Failed to fetch announcements:', err);
     throw err;
@@ -48,6 +81,7 @@ export const fetchAnnouncementById = async (id) => {
 export const createAnnouncement = async (data) => {
   try {
     const response = await axiosRequest.post('/announcement', data);
+    clearActiveAnnouncementsCache();
     return response.data.data;
   } catch (err) {
     console.error('Failed to create announcement:', err);
@@ -65,6 +99,7 @@ export const createAnnouncement = async (data) => {
 export const updateAnnouncement = async (id, data) => {
   try {
     const response = await axiosRequest.put(`/announcement/${id}`, data);
+    clearActiveAnnouncementsCache();
     return response.data.data;
   } catch (err) {
     console.error(`Failed to update announcement ${id}:`, err);
@@ -80,6 +115,7 @@ export const updateAnnouncement = async (id, data) => {
 export const deleteAnnouncement = async (id) => {
   try {
     const response = await axiosRequest.delete(`/announcement/${id}`);
+    clearActiveAnnouncementsCache();
     return response.data;
   } catch (err) {
     console.error(`Failed to delete announcement ${id}:`, err);

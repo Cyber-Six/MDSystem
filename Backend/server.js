@@ -39,6 +39,7 @@ require('./config/sockets/acknowledgement-events'); // Register notification ack
 const { initPatientMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initPatientHealthChatGraphQL, initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
+const { initPatientDashboardGraphQL } = require('./routes/dashboard/graphql.js');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
 
@@ -106,6 +107,7 @@ initPatientMedicineRequestGraphQL(app);
 initPrescriptionGraphQL(app);
 initPatientHealthChatGraphQL(app);
 initMedicalHealthChatGraphQL(app);
+initPatientDashboardGraphQL(app);
 
 // AI Medical Chatbot — proxied to MDS-Chatbot microservice
 // Requests to /econsultation/chat/* are forwarded to CHATBOT_URL (localhost or remote)

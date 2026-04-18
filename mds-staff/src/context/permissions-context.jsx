@@ -10,6 +10,37 @@ import {
 
 const PermissionsContext = createContext(null);
 
+const PERMISSIONS_BOOTSTRAP_TTL_MS = 10_000;
+let permissionsBootstrapCache = null;
+let permissionsBootstrapCacheAt = 0;
+let permissionsBootstrapInFlight = null;
+
+async function fetchPermissionsBootstrap(force = false) {
+  const now = Date.now();
+
+  if (!force && permissionsBootstrapCache && now - permissionsBootstrapCacheAt < PERMISSIONS_BOOTSTRAP_TTL_MS) {
+    return permissionsBootstrapCache;
+  }
+
+  if (!force && permissionsBootstrapInFlight) {
+    return permissionsBootstrapInFlight;
+  }
+
+  permissionsBootstrapInFlight = axiosRequest
+    .get('/staff/me/permissions')
+    .then((response) => {
+      const payload = response.data || {};
+      permissionsBootstrapCache = payload;
+      permissionsBootstrapCacheAt = Date.now();
+      return payload;
+    })
+    .finally(() => {
+      permissionsBootstrapInFlight = null;
+    });
+
+  return permissionsBootstrapInFlight;
+}
+
 const SEARCH_PATIENT_PERMISSION_KEYS = Object.freeze([
   'profile_allow_view',
   'emr_allow_view',
@@ -352,12 +383,11 @@ export const PermissionsProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchPermissions = useCallback(async () => {
+  const fetchPermissions = useCallback(async (force = false) => {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await axiosRequest.get('/staff/me/permissions');
-      const data = response.data;
+      const data = await fetchPermissionsBootstrap(force);
 
       // Convert modules array to flat { moduleId: boolean } map
       const flat = {};
@@ -384,7 +414,7 @@ export const PermissionsProvider = ({ children }) => {
 
       if (nextIsAdmin) {
         try {
-          const fetchedEntangled = await fetchEntangledPermissions({ isAdmin: true });
+          const fetchedEntangled = await fetchEntangledPermissions({ isAdmin: true, force });
           resolvedEntangled = mergeEntangledPermissionMaps(derivedEntangled, fetchedEntangled);
         } catch (entangledError) {
           // Fall back to /staff/me/permissions-derived states when admin entangled fetch fails.
@@ -573,7 +603,7 @@ export const PermissionsProvider = ({ children }) => {
     canAccessRoute,
     canAccessBranch,
     allowedBranches,
-    refetch: fetchPermissions,
+    refetch: () => fetchPermissions(true),
   };
 
   return (

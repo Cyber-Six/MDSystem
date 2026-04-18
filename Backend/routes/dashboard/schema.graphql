@@ -147,6 +147,68 @@ type DashboardStats {
 }
 
 """
+Most recent appointment record for the current patient.
+"""
+type PatientDashboardAppointment {
+  id: ID!
+  status: String!
+  session: String
+  purpose: String
+  schedulerLabel: String
+  scheduledDate: String
+  created_at: String
+}
+
+"""
+Patient medicine request summary for dashboard list/stat rendering.
+"""
+type PatientDashboardMedicineRequest {
+  id: ID!
+  status: String!
+  purpose: String
+  created_at: String
+}
+
+"""
+Current patient record-update ticket, when available.
+"""
+type PatientDashboardUpdateTicket {
+  id: ID!
+  status: String!
+  scope: String
+  notes: String
+  created_at: String
+}
+
+"""
+Patient health-chat ticket summary.
+"""
+type PatientDashboardChat {
+  id: ID!
+  status: String!
+  purpose: String
+  session_start: String
+}
+
+"""
+Health-chat list and total count payload for dashboard counters/widgets.
+"""
+type PatientDashboardChatData {
+  chats: [PatientDashboardChat!]!
+  total: Int!
+}
+
+"""
+Single payload used by patient dashboard to avoid multiple endpoint calls.
+"""
+type PatientDashboardData {
+  appointment: PatientDashboardAppointment
+  medicineReqs: [PatientDashboardMedicineRequest!]!
+  updateTicket: PatientDashboardUpdateTicket
+  chatData: PatientDashboardChatData!
+}
+
+"""
 Tomorrow's slot availability for a specific scheduler
 """
 type TomorrowSlot {
@@ -172,4 +234,13 @@ type Query {
   Returns: DashboardStats with permission-based field filtering
   """
   getDashboardStats: DashboardStats!
+
+  """
+  Get patient dashboard aggregates (appointment, medicine requests, update ticket,
+  and health-chat summary) in one request.
+
+  Access Control:
+  - Requires authenticated patient context
+  """
+  getPatientDashboardData: PatientDashboardData!
 }
