@@ -1,13 +1,22 @@
+const crypto = require('crypto');
+
 const PRESCRIPTION_TEMPLATE_NAME = 'Prescription';
 const PRESCRIPTION_DOC_TYPE = 'prescription';
 const GENERIC_BINARY_TAG = 'payload';
 
-const PRESCRIPTION_REQUIRED_TAGS = Object.freeze([
+const PRESCRIPTION_CORE_TAGS = Object.freeze([
   'complaints',
   'diagnosis',
   'medications',
   'instructions',
   'follow_up',
+]);
+
+const PRESCRIPTION_REQUIRED_TAGS = Object.freeze([
+  ...PRESCRIPTION_CORE_TAGS,
+  'doctor_signature',
+  'ptr_number',
+  'license_number',
 ]);
 
 function normalizeTag(value) {
@@ -41,6 +50,50 @@ function normalizeQuantity(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function hashString(value = '') {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function toDataUrl(base64Value, mimeType = 'image/png') {
+  const text = pickFirstNonEmpty(base64Value);
+  if (!text) return '';
+  if (text.startsWith('data:')) return text;
+  return `data:${mimeType};base64,${text}`;
+}
+
+function normalizeDoctorSignature(physician = {}) {
+  const signature = physician?.signature || physician?.doctorSignature || {};
+  const base64Source = pickFirstNonEmpty(
+    signature.base64,
+    signature.data,
+    signature.dataUri,
+    physician.signatureBase64
+  );
+
+  const mimeType = pickFirstNonEmpty(signature.mimeType, signature.type, 'image/png');
+  const dataUrl = toDataUrl(base64Source, mimeType);
+  const signaturePath = pickFirstNonEmpty(
+    signature.path,
+    signature.fsPath,
+    signature.filePath,
+    physician.signaturePath
+  );
+
+  const signatureHash = pickFirstNonEmpty(
+    signature.hash,
+    signature.sha256,
+    physician.signatureHash,
+    dataUrl ? hashString(dataUrl) : ''
+  );
+
+  return {
+    path: signaturePath || null,
+    hash: signatureHash || null,
+    base64: dataUrl || null,
+    mimeType: dataUrl ? mimeType : null,
+  };
+}
+
 function normalizeMedications(medications = []) {
   if (!Array.isArray(medications)) return [];
 
@@ -63,6 +116,7 @@ function normalizeMedications(medications = []) {
 
 function buildPrescriptionRequirementValues(documentPayload = {}) {
   const prescription = documentPayload?.prescription || {};
+  const physician = documentPayload?.physician || {};
 
   const diagnosis = pickFirstNonEmpty(prescription.diagnosis) || 'Not specified';
 
@@ -100,12 +154,28 @@ function buildPrescriptionRequirementValues(documentPayload = {}) {
     prescription.followUp
   );
 
+  const doctorSignature = normalizeDoctorSignature(physician);
+  const ptrNumber = pickFirstNonEmpty(
+    physician.ptrNo,
+    physician.ptr_number,
+    physician.ptrNumber
+  ) || 'Not Provided';
+
+  const licenseNumber = pickFirstNonEmpty(
+    physician.licenseNo,
+    physician.license_number,
+    physician.licenseNumber
+  ) || 'Not Provided';
+
   const requirementValues = {
     complaints: JSON.stringify(complaintsPayload),
     diagnosis,
     medications: JSON.stringify(medications),
     instructions: JSON.stringify(instructionsPayload),
     follow_up: followUpDate || 'Not specified',
+    doctor_signature: JSON.stringify(doctorSignature),
+    ptr_number: ptrNumber,
+    license_number: licenseNumber,
   };
 
   const missingTags = PRESCRIPTION_REQUIRED_TAGS.filter(
@@ -132,6 +202,12 @@ function buildPrescriptionRequirementValues(documentPayload = {}) {
       advice: instructionsPayload.advice || undefined,
       followUpDate: followUpDate || undefined,
     },
+    normalizedPhysician: {
+      ...physician,
+      licenseNo: licenseNumber === 'Not Provided' ? physician.licenseNo : licenseNumber,
+      ptrNo: ptrNumber === 'Not Provided' ? physician.ptrNo : ptrNumber,
+      signature: doctorSignature,
+    },
   };
 }
 
@@ -144,7 +220,7 @@ function parsePrescriptionRequirementRows(rows = []) {
     byTag.set(tag, row?.data ?? '');
   });
 
-  const missingTags = PRESCRIPTION_REQUIRED_TAGS.filter((tag) => !byTag.has(tag));
+  const missingTags = PRESCRIPTION_CORE_TAGS.filter((tag) => !byTag.has(tag));
   if (missingTags.length > 0) {
     const err = new Error(`Normalized prescription data is missing tags: ${missingTags.join(', ')}`);
     err.statusCode = 500;
@@ -161,6 +237,12 @@ function parsePrescriptionRequirementRows(rows = []) {
 
   const rawMedications = byTag.get('medications') || '[]';
   const medicationsArray = parseJsonSafe(rawMedications, []);
+
+  const signatureRaw = byTag.get('doctor_signature') || '';
+  const signatureObj = parseJsonSafe(signatureRaw, null);
+
+  const ptrNumber = pickFirstNonEmpty(byTag.get('ptr_number'));
+  const licenseNumber = pickFirstNonEmpty(byTag.get('license_number'));
 
   return {
     diagnosis: pickFirstNonEmpty(byTag.get('diagnosis')) || 'Not specified',
@@ -184,12 +266,16 @@ function parsePrescriptionRequirementRows(rows = []) {
       pickFirstNonEmpty(byTag.get('follow_up')) === 'Not specified'
         ? undefined
         : pickFirstNonEmpty(byTag.get('follow_up')) || undefined,
+    doctorSignature: signatureObj,
+    ptrNumber: ptrNumber || undefined,
+    licenseNumber: licenseNumber || undefined,
   };
 }
 
 module.exports = {
   PRESCRIPTION_TEMPLATE_NAME,
   PRESCRIPTION_DOC_TYPE,
+  PRESCRIPTION_CORE_TAGS,
   PRESCRIPTION_REQUIRED_TAGS,
   GENERIC_BINARY_TAG,
   normalizeTag,

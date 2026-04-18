@@ -169,7 +169,10 @@ FROM (
     ('diagnosis'),
     ('medications'),
     ('instructions'),
-    ('follow_up')
+    ('follow_up'),
+    ('doctor_signature'),
+    ('ptr_number'),
+    ('license_number')
 ) AS seed(tag_name)
 WHERE NOT EXISTS (
   SELECT 1
@@ -181,7 +184,16 @@ INSERT INTO "documentRequirements" ("templateId", "requirementtagId")
 SELECT dt.id, drt.id
 FROM "documentTemplate" dt
 JOIN "documentRequirementsTag" drt
-  ON LOWER(drt.vartag) IN ('complaints', 'diagnosis', 'medications', 'instructions', 'follow_up')
+  ON LOWER(drt.vartag) IN (
+    'complaints',
+    'diagnosis',
+    'medications',
+    'instructions',
+    'follow_up',
+    'doctor_signature',
+    'ptr_number',
+    'license_number'
+  )
 WHERE LOWER(dt.template) = LOWER('Prescription')
   AND NOT EXISTS (
     SELECT 1

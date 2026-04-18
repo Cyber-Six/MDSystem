@@ -14,7 +14,8 @@ const {
   buildPrescriptionRequirementValues,
   parsePrescriptionRequirementRows,
 } = require('../../../services/doc-generate-module/prescription-normalized.js');
-const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
+const { formatMessage } = require('../../health-chat/resolvers/wrapper/helper.js');
+const { emitToRoom, notifyUser } = require('../../../config/sockets');
 const { permissions, isMedicalPermittedPatientBased, isMedicalPermitted } = require('../../../services/permit.js');
 
 const router = express.Router();
@@ -175,7 +176,9 @@ async function resolvePhysicianData(physicianId, existingPhysician = {}) {
       lastName: pickFirstNonEmpty(base.lastName, base.last_name, row.last_name),
       title: pickFirstNonEmpty(base.title, row.title, 'MD'),
       licenseNo: pickFirstNonEmpty(base.licenseNo),
+      ptrNo: pickFirstNonEmpty(base.ptrNo, base.ptr_number, base.ptrNumber),
       specialization: pickFirstNonEmpty(base.specialization, row.designation),
+      signature: base.signature || base.doctorSignature || null,
     };
   } catch (err) {
     logger.warn('Physician enrichment lookup failed', {
@@ -301,6 +304,141 @@ async function resolvePrescriptionTemplateRequirements(client) {
   }
 
   return { templateId, requirementByTag };
+}
+
+function parseOptionalChatId(rawValue) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return null;
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw createRouteError(400, 'INVALID_CHAT_ID', 'chatId must be a positive integer.');
+  }
+  return parsed;
+}
+
+async function validatePrescriptionChatAccess(chatId, patientId, medicalId) {
+  if (!chatId) return null;
+
+  const chatResult = await db.query(
+    `SELECT id, "patientId", "medicalId", status
+     FROM "HealthChat"
+     WHERE id = $1
+     LIMIT 1`,
+    [chatId]
+  );
+
+  if (chatResult.rows.length === 0) {
+    throw createRouteError(404, 'HEALTH_CHAT_NOT_FOUND', 'Health chat ticket was not found.');
+  }
+
+  const chat = chatResult.rows[0];
+  if (Number(chat.patientId) !== Number(patientId)) {
+    throw createRouteError(400, 'HEALTH_CHAT_PATIENT_MISMATCH', 'The health chat ticket does not belong to this patient.');
+  }
+
+  if (chat.status !== 'Ongoing' && chat.status !== 'Open') {
+    throw createRouteError(400, 'HEALTH_CHAT_NOT_ACTIVE', `Cannot attach prescription to a ${chat.status || 'closed'} ticket.`);
+  }
+
+  if (chat.medicalId && Number(chat.medicalId) !== Number(medicalId)) {
+    throw createRouteError(403, 'HEALTH_CHAT_FORBIDDEN', 'Only the assigned staff can attach a prescription to this ticket.');
+  }
+
+  return chat;
+}
+
+async function emitHealthChatMessage(chatId, message, patientId) {
+  emitToRoom(`healthchat:${chatId}`, 'healthchat:new-message', {
+    chatId,
+    message,
+    senderType: 'Medical',
+  });
+
+  if (patientId) {
+    await notifyUser(String(patientId), 'healthchat:new-message', {
+      chatId,
+      message,
+      senderType: 'Medical',
+    });
+  }
+}
+
+async function attachPrescriptionToHealthChat({
+  chatId,
+  documentId,
+  patientId,
+  medicalId,
+  physicianName,
+}) {
+  if (!chatId) return;
+
+  const documentPath = `/documents/generated/download/${documentId}`;
+  const logText = `Prescription issued by ${physicianName}. View PDF Document: ${documentPath}`;
+  const virtualDocumentFileId = `document:${documentId}`;
+
+  const insertResult = await db.query(
+    `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "filename", "promptType", "userId", "userType")
+     VALUES
+       ($1, $2, NULL, 'text', $3, 'Medical'),
+       ($1, NULL, $4, 'file', $3, 'Medical')
+     RETURNING *`,
+    [chatId, logText, medicalId, virtualDocumentFileId]
+  );
+
+  for (const row of insertResult.rows) {
+    const formatted = await formatMessage(row);
+    await emitHealthChatMessage(chatId, formatted, patientId);
+  }
+
+  logger.info('Prescription attached to health chat ticket', {
+    chatId,
+    documentId,
+    patientId,
+    issuedBy: medicalId,
+  });
+}
+
+async function getPrescriptionNormalizedRows(documentId) {
+  const normalizedDataResult = await db.query(
+    `SELECT drt.vartag, dd.data
+     FROM "documentData" dd
+     JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+     JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+     WHERE dd."documentId" = $1`,
+    [documentId]
+  );
+
+  if (normalizedDataResult.rows.length === 0) {
+    throw createRouteError(404, 'DOCUMENT_DATA_NOT_FOUND', 'No normalized prescription data found for this document.');
+  }
+
+  return normalizedDataResult.rows;
+}
+
+function toPrescriptionViewPayload(documentMeta, normalizedPrescription, resolvedByName) {
+  return {
+    id: documentMeta.id,
+    patientId: documentMeta.patientId,
+    issuedBy: {
+      id: documentMeta.issuedBy,
+      name: resolvedByName,
+      ptrNumber: normalizedPrescription.ptrNumber || null,
+      licenseNumber: normalizedPrescription.licenseNumber || null,
+      signature: normalizedPrescription.doctorSignature || null,
+    },
+    diagnosis: normalizedPrescription.diagnosis || 'Not specified',
+    complaints: normalizedPrescription.chiefComplaints || '',
+    peFindings: normalizedPrescription.peFindings || '',
+    medications: normalizedPrescription.medications || [],
+    instructions: {
+      specialInstructions: normalizedPrescription.specialInstructions || '',
+      advice: normalizedPrescription.advice || '',
+    },
+    followUpDate: normalizedPrescription.followUpDate || null,
+    expiredAt: documentMeta.expired_at,
+    createdAt: documentMeta.created_at,
+    downloadPath: `/documents/generated/download/${documentMeta.id}`,
+  };
 }
 
 // ============================================================
@@ -1177,8 +1315,11 @@ router.post('/:docType/preview', jwtProtect('medical'), async (req, res) => {
 router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
   try {
     const { docType } = req.params;
-    const { patientId, data } = req.body;
+    const { patientId, data, chatId: requestChatId } = req.body;
     const scopedPatientId = patientId || data?.patient?.id;
+    const scopedChatId = parseOptionalChatId(
+      requestChatId || data?.healthChatTicketId || data?.chatId
+    );
 
     const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_generate, scopedPatientId);
     if (!isPermitted) {
@@ -1205,10 +1346,25 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
     enrichedData.physician = await resolvePhysicianData(req.user.id, enrichedData.physician);
 
     let prescriptionRequirementValues = null;
+    let normalizedPrescriptionPhysician = null;
+    let validatedChat = null;
     if (shouldPersist && docType === PRESCRIPTION_DOC_TYPE) {
+      if (scopedChatId) {
+        validatedChat = await validatePrescriptionChatAccess(
+          scopedChatId,
+          scopedPatientId,
+          req.user.id
+        );
+      }
+
       const prescriptionPayload = buildPrescriptionRequirementValues(enrichedData);
       prescriptionRequirementValues = prescriptionPayload.requirementValues;
       enrichedData.prescription = prescriptionPayload.normalizedPrescription;
+      normalizedPrescriptionPhysician = prescriptionPayload.normalizedPhysician;
+      enrichedData.physician = {
+        ...enrichedData.physician,
+        ...normalizedPrescriptionPhysician,
+      };
     }
 
     if (shouldPersist) {
@@ -1302,11 +1458,29 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
       }
 
       // Notify patient about the new document
-      try {
-        const physicianName = enrichedData.physician?.firstName
-          ? `${enrichedData.physician.firstName} ${enrichedData.physician.lastName}`.trim()
-          : 'your healthcare provider';
+      const physicianName = enrichedData.physician?.firstName
+        ? `${enrichedData.physician.firstName} ${enrichedData.physician.lastName}`.trim()
+        : 'your healthcare provider';
 
+      if (docType === PRESCRIPTION_DOC_TYPE && validatedChat?.id) {
+        try {
+          await attachPrescriptionToHealthChat({
+            chatId: validatedChat.id,
+            documentId,
+            patientId: actualPatientId,
+            medicalId: req.user.id,
+            physicianName,
+          });
+        } catch (chatErr) {
+          logger.warn('Prescription generated but health chat attachment failed', {
+            documentId,
+            chatId: validatedChat.id,
+            error: chatErr.message,
+          });
+        }
+      }
+
+      try {
         await notifyUser(
           String(actualPatientId),
           'document:new',
@@ -1407,6 +1581,127 @@ router.get('/generated/patient/:patientId', jwtProtect('medical'), async (req, r
 });
 
 /**
+ * GET /documents/generated/prescription/patient/:patientId
+ * List normalized prescriptions for a patient
+ */
+router.get('/generated/prescription/patient/:patientId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view prescriptions for this patient.' });
+    }
+
+    const result = await db.query(
+      `SELECT pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName",
+              COALESCE(
+                JSON_AGG(
+                  JSON_BUILD_OBJECT(
+                    'vartag', drt.vartag,
+                    'data', dd.data
+                  )
+                ) FILTER (WHERE dd.id IS NOT NULL),
+                '[]'::json
+              ) as "normalizedRows"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON dt.id = pd."templateId"
+       LEFT JOIN "UsersPersonal" up_issuer ON up_issuer.id = pd."issuedBy"
+       LEFT JOIN "documentData" dd ON dd."documentId" = pd.id
+       LEFT JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+       LEFT JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+       WHERE pd."patientId" = $1 AND LOWER(dt.template) = LOWER($2)
+       GROUP BY pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+                up_issuer.first_name, up_issuer.last_name
+       ORDER BY pd."created_at" DESC`,
+      [patientId, PRESCRIPTION_TEMPLATE_NAME]
+    );
+
+    const prescriptions = result.rows
+      .map((row) => {
+        try {
+          const normalizedRows = Array.isArray(row.normalizedRows) ? row.normalizedRows : [];
+          const normalized = parsePrescriptionRequirementRows(normalizedRows);
+          const issuedByName = `${row.issuedByFirstName || ''} ${row.issuedByLastName || ''}`.trim() || 'Unknown';
+
+          return toPrescriptionViewPayload(row, normalized, issuedByName);
+        } catch (parseErr) {
+          logger.warn('Skipping malformed normalized prescription row during list', {
+            documentId: row.id,
+            error: parseErr.message,
+          });
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    res.json({ success: true, prescriptions });
+  } catch (err) {
+    logger.error('Normalized prescription list failed', { error: err.message });
+    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
+  }
+});
+
+/**
+ * GET /documents/generated/prescription/view/:documentId
+ * View one normalized prescription document payload
+ */
+router.get('/generated/prescription/view/:documentId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { documentId } = req.params;
+
+    const docMetaResult = await db.query(
+      `SELECT pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+              LOWER(dt.template) as "templateType",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON dt.id = pd."templateId"
+       LEFT JOIN "UsersPersonal" up_issuer ON up_issuer.id = pd."issuedBy"
+       WHERE pd.id = $1
+       LIMIT 1`,
+      [documentId]
+    );
+
+    if (docMetaResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    }
+
+    const documentMeta = docMetaResult.rows[0];
+    if (documentMeta.templateType !== PRESCRIPTION_DOC_TYPE) {
+      return res.status(400).json({ error: 'NOT_A_PRESCRIPTION', message: 'Requested document is not a prescription.' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, documentMeta.patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view this prescription.' });
+    }
+
+    const normalizedRows = await getPrescriptionNormalizedRows(documentId);
+    const normalized = parsePrescriptionRequirementRows(normalizedRows);
+    const issuedByName = `${documentMeta.issuedByFirstName || ''} ${documentMeta.issuedByLastName || ''}`.trim() || 'Unknown';
+
+    res.json({
+      success: true,
+      prescription: toPrescriptionViewPayload(documentMeta, normalized, issuedByName),
+    });
+  } catch (err) {
+    logger.error('Normalized prescription view failed', {
+      error: err.message,
+      code: err.errorCode,
+      details: err.details,
+    });
+
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({
+      error: err.errorCode || 'VIEW_FAILED',
+      message: err.message,
+      details: err.details || null,
+    });
+  }
+});
+
+/**
  * GET /documents/generated/download/:documentId
  * Download a generated document for staff (permission-scoped by patient)
  */
@@ -1447,7 +1742,12 @@ router.get('/generated/download/:documentId', jwtProtect('medical'), async (req,
         try {
           const prescription = parsePrescriptionRequirementRows(normalizedDataResult.rows);
           const patient = await normalizePrescriptionPatientData(docMeta.patientId, { id: docMeta.patientId });
-          const physician = await resolvePhysicianData(docMeta.issuedBy, { id: docMeta.issuedBy });
+          const physician = await resolvePhysicianData(docMeta.issuedBy, {
+            id: docMeta.issuedBy,
+            licenseNo: prescription.licenseNumber,
+            ptrNo: prescription.ptrNumber,
+            signature: prescription.doctorSignature,
+          });
 
           const regenerated = await docGen.generateDocumentBuffer(PRESCRIPTION_DOC_TYPE, {
             patient,

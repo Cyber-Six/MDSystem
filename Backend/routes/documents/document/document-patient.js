@@ -105,6 +105,9 @@ async function resolvePhysicianData(physicianId) {
     firstName: '',
     lastName: '',
     title: 'MD',
+    ptrNo: '',
+    licenseNo: '',
+    signature: null,
     specialization: '',
   };
 
@@ -136,6 +139,52 @@ async function resolvePhysicianData(physicianId) {
     });
     return fallback;
   }
+}
+
+async function getPrescriptionNormalizedRows(documentId) {
+  const result = await db.query(
+    `SELECT drt.vartag, dd.data
+     FROM "documentData" dd
+     JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+     JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+     WHERE dd."documentId" = $1`,
+    [documentId]
+  );
+
+  if (result.rows.length === 0) {
+    const err = new Error('No normalized prescription data found for this document.');
+    err.statusCode = 404;
+    err.errorCode = 'DOCUMENT_DATA_NOT_FOUND';
+    throw err;
+  }
+
+  return result.rows;
+}
+
+function toPrescriptionViewPayload(documentMeta, normalized) {
+  return {
+    id: documentMeta.id,
+    patientId: documentMeta.patientId,
+    issuedBy: {
+      id: documentMeta.issuedBy,
+      name: documentMeta.issuedByName || 'Unknown',
+      ptrNumber: normalized.ptrNumber || null,
+      licenseNumber: normalized.licenseNumber || null,
+      signature: normalized.doctorSignature || null,
+    },
+    diagnosis: normalized.diagnosis || 'Not specified',
+    complaints: normalized.chiefComplaints || '',
+    peFindings: normalized.peFindings || '',
+    medications: normalized.medications || [],
+    instructions: {
+      specialInstructions: normalized.specialInstructions || '',
+      advice: normalized.advice || '',
+    },
+    followUpDate: normalized.followUpDate || null,
+    expiredAt: documentMeta.expired_at,
+    createdAt: documentMeta.created_at,
+    downloadPath: `/documents/me/download/${documentMeta.id}`,
+  };
 }
 
 // ============================================================
@@ -474,6 +523,61 @@ router.get('/my', jwtProtect("patient"), checkCredentialsStatus, async (req, res
 }); 
 
 /**
+ * GET /documents/my/prescription/view/:documentId
+ * View one normalized prescription document payload for the authenticated patient
+ */
+router.get('/my/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const patientId = req.user.id;
+
+    const docResult = await db.query(
+      `SELECT pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+              LOWER(dt.template) as "templateType",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       LEFT JOIN "UsersPersonal" up_issuer ON up_issuer.id = pd."issuedBy"
+       WHERE pd.id = $1 AND pd."patientId" = $2
+       LIMIT 1`,
+      [documentId, patientId]
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    }
+
+    const docMeta = docResult.rows[0];
+    if (docMeta.templateType !== PRESCRIPTION_DOC_TYPE) {
+      return res.status(400).json({ error: 'NOT_A_PRESCRIPTION', message: 'Requested document is not a prescription.' });
+    }
+
+    const normalizedRows = await getPrescriptionNormalizedRows(documentId);
+    const normalized = parsePrescriptionRequirementRows(normalizedRows);
+
+    const payload = toPrescriptionViewPayload(
+      {
+        ...docMeta,
+        issuedByName: `${docMeta.issuedByFirstName || ''} ${docMeta.issuedByLastName || ''}`.trim() || 'Unknown',
+      },
+      normalized
+    );
+
+    res.json({ success: true, prescription: payload });
+  } catch (err) {
+    logger.error('Patient normalized prescription view failed', {
+      error: err.message,
+      code: err.errorCode,
+    });
+
+    res.status(err.statusCode || 500).json({
+      error: err.errorCode || 'VIEW_FAILED',
+      message: err.message,
+    });
+  }
+});
+
+/**
  * GET /documents/me/download/:documentId
  * Download a specific generated document as PDF for the authenticated patient
  */
@@ -513,6 +617,9 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
           const prescription = parsePrescriptionRequirementRows(normalizedDataResult.rows);
           const patient = await resolvePatientData(patientId);
           const physician = await resolvePhysicianData(doc.issuedBy);
+          physician.licenseNo = prescription.licenseNumber || physician.licenseNo;
+          physician.ptrNo = prescription.ptrNumber || physician.ptrNo;
+          physician.signature = prescription.doctorSignature || physician.signature;
 
           const regenerated = await docGen.generateDocumentBuffer(PRESCRIPTION_DOC_TYPE, {
             patient,
