@@ -11,19 +11,20 @@ export default {
         // Override white to warm off-white (reduces eye strain in light mode)
         white: '#fdfcfa',
         
+        // Primary - TIP Yellow/Gold Brand Color
         primary: {
           50: '#FFFBEB',
           100: '#FEF3C7',
           200: '#FDE68A',
           300: '#FCD34D',
           400: '#FBBF24',
-          500: '#f4c430',   // ← BRAND COLOR  (sidebar, headers, buttons, profile)
-          600: '#DDB322',
-          700: '#C9A01E',
-          800: '#B58D1A',
+          500: '#F1C526',    
+          600: '#DDB322',    
+          700: '#C9A01E',    
+          800: '#B58D1A',    
           900: '#8B6914',
           950: '#6B520F',
-          DEFAULT: '#f4c430',
+          DEFAULT: '#FFD940',
         },
         // Secondary - Warm Dark Gray for headers and text
         secondary: {

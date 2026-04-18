@@ -176,16 +176,6 @@ const EVENT_MODULE_MAP = {
 const STORAGE_KEY = 'patient_notifications';
 const MAX_NOTIFICATIONS = 50;
 
-// Maps notification.type -> soundByModule key.
-const TYPE_TO_SOUND_MODULE = {
-  chat: 'healthChat',
-  appointment: 'appointments',
-  medicine: 'medicineRequests',
-  document: 'general',
-  record: 'general',
-  general: 'general',
-};
-
 function loadPersistedNotifications() {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -244,13 +234,10 @@ export function PatientNotificationProvider({ children }) {
       return next;
     });
 
-    // Play notification sound honoring patient volume and per-module settings.
+    // Play notification sound honoring global patient sound settings.
     const s = settingsRef.current ?? DEFAULT_PATIENT_SETTINGS;
-    const moduleKey = EVENT_MODULE_MAP[event] || TYPE_TO_SOUND_MODULE[notif.type] || 'general';
-    if (s.soundEnabled && s.soundByModule?.[moduleKey] !== false) {
-      const soundId = s.soundFileByModule?.[moduleKey] || s.notificationSound || 'synthesis';
-      const fallbackId = s.notificationSound || 'synthesis';
-      playNotificationSound(s.soundVolume, soundId, fallbackId);
+    if (s.soundEnabled) {
+      playNotificationSound(s.soundVolume, s.notificationSound || 'synthesis');
     }
   }, [isWebNotificationEnabled]);
 

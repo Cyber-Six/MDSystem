@@ -8,9 +8,8 @@ function toBackendPrefs(s) {
   return {
     appearance:   { themeMode: s.themeMode, fontSize: s.fontSize, compactSidebar: s.compactSidebar },
     notification: {
-      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume, soundByModule: s.soundByModule,
+      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume,
       notificationSound: s.notificationSound,
-      soundFileByModule: s.soundFileByModule,
       showBadges: s.showBadges, showBanners: s.showBanners, bannerErrorsOnly: s.bannerErrorsOnly,
       bannerCompact: s.bannerCompact, bannerAutoDismiss: s.bannerAutoDismiss, bannerDismissDelay: s.bannerDismissDelay,
       channels: s.channels,
@@ -22,12 +21,6 @@ function toBackendPrefs(s) {
 function mergeFromBackendPrefs(prefs) {
   const flat = { ...(prefs.appearance || {}), ...(prefs.notification || {}) };
   const merged = sanitizeSettings(flat);
-  if (prefs.notification?.soundByModule && typeof prefs.notification.soundByModule === 'object') {
-    merged.soundByModule = { ...DEFAULT_SETTINGS.soundByModule, ...merged.soundByModule };
-  }
-  if (prefs.notification?.soundFileByModule && typeof prefs.notification.soundFileByModule === 'object') {
-    merged.soundFileByModule = { ...DEFAULT_SETTINGS.soundFileByModule, ...merged.soundFileByModule };
-  }
   if (prefs.notification?.channels && typeof prefs.notification.channels === 'object') {
     merged.channels = { ...DEFAULT_SETTINGS.channels, ...merged.channels };
   }
@@ -65,23 +58,6 @@ const DEFAULT_SETTINGS = {
   soundEnabled: true,
   soundVolume: 1,
   notificationSound: 'synthesis', // 'synthesis' | any id from AVAILABLE_SOUNDS
-  soundByModule: {
-    healthChat: true,
-    appointments: true,
-    medicineRequests: true,
-    inventory: true,
-    general: true,
-  },
-  soundFileByModule: {
-    healthChat: 'healthchat.mp3',
-    appointments: 'appointments.mp3',
-    medicineRequests: 'requests.mp3',
-    inventory: 'inventory.mp3',
-    documents: 'documents.mp3',
-    emr: 'emr.mp3',
-    roleManagement: 'general.mp3',
-    general: 'general.mp3',
-  },
 
   // ── Notification Display ──
   showBadges: true,
@@ -159,8 +135,6 @@ const BOOL_SETTINGS_KEYS = [
   'soundEnabled', 'showBadges', 'showBanners', 'bannerErrorsOnly',
   'bannerCompact', 'bannerAutoDismiss', 'compactSidebar',
 ];
-const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
-const SOUND_FILE_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundFileByModule);
 // SECURITY: valid sound id — alphanumeric + dot/hyphen/underscore, max 64 chars.
 const VALID_SOUND_ID = /^[a-zA-Z0-9_\-.]{1,64}$/;
 
@@ -177,8 +151,6 @@ function isAllowedSoundId(id) {
 function sanitizeSettings(parsed) {
   const safe = {
     ...DEFAULT_SETTINGS,
-    soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
-    soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
     channels: { ...DEFAULT_SETTINGS.channels },
     moduleChannels: {},
   };
@@ -203,23 +175,6 @@ function sanitizeSettings(parsed) {
   // Enum keys
   if (['light', 'dark', 'system'].includes(parsed.themeMode)) safe.themeMode = parsed.themeMode;
   if (['small', 'default', 'large'].includes(parsed.fontSize)) safe.fontSize = parsed.fontSize;
-
-  // soundByModule — only accept known boolean keys
-  if (parsed.soundByModule && typeof parsed.soundByModule === 'object') {
-    SOUND_MODULE_KEYS.forEach((k) => {
-      if (typeof parsed.soundByModule[k] === 'boolean') safe.soundByModule[k] = parsed.soundByModule[k];
-    });
-  }
-
-  // soundFileByModule — validate each value against sound-id pattern
-  if (parsed.soundFileByModule && typeof parsed.soundFileByModule === 'object') {
-    SOUND_FILE_MODULE_KEYS.forEach((k) => {
-      const v = parsed.soundFileByModule[k];
-      if (typeof v === 'string' && VALID_SOUND_ID.test(v) && isAllowedSoundId(v)) {
-        safe.soundFileByModule[k] = v;
-      }
-    });
-  }
 
   // notificationSound — SECURITY: only allow safe filenames or 'synthesis'
   if (
@@ -417,19 +372,9 @@ export function SettingsProvider({ children }) {
     }
   }, []);
 
-  /**
-   * Check if a particular module's sound is enabled.
-   */
-  const isModuleSoundEnabled = useCallback((moduleKey) => {
-    const s = settingsRef.current;
-    if (!s.soundEnabled) return false;
-    return s.soundByModule[moduleKey] !== false;
-  }, []);
-
   const value = {
     settings,
     updateSettings,
-    isModuleSoundEnabled,
     resolvedTheme,
     isDarkMode,
     DEFAULT_SETTINGS,
