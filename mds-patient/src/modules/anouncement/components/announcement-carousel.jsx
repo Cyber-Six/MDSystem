@@ -1,22 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { fetchActiveAnnouncements } from '../announcement-service';
-import { axiosRequest } from '../../../packages-core-adapter';
 import AnnouncementModal from './announcement-modal';
+import AuthenticatedAnnouncementImage from './authenticated-announcement-image';
 import { formatAnnouncementDate, getAnnouncementTimeZone } from '../timezoneUtils';
-
-/* Small authenticated image loader (media endpoints require JWT) */
-function AuthImage({ path, alt, className }) {
-  const [src, setSrc] = useState(null);
-  useEffect(() => {
-    let objectUrl = null, cancelled = false;
-    axiosRequest.get(path, { responseType: 'blob' })
-      .then((res) => { if (!cancelled) { objectUrl = URL.createObjectURL(res.data); setSrc(objectUrl); } })
-      .catch(() => {});
-    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [path]);
-  if (!src) return null;
-  return <img src={src} alt={alt} className={className} />;
-}
 
 /**
  * Announcement Carousel Component - Patient Version (Read-only)
@@ -128,7 +114,7 @@ const AnnouncementCarousel = () => {
 
         {/* Pubmat image — covers the full frame, maintains aspect via object-cover */}
         {currentAnnouncement.pubmat && (
-          <AuthImage
+          <AuthenticatedAnnouncementImage
             path={`/media/record/announcement/${currentAnnouncement.pubmat}`}
             alt={currentAnnouncement.label || 'Announcement image'}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
