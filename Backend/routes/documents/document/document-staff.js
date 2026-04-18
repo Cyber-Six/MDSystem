@@ -14,6 +14,13 @@ const {
   buildPrescriptionRequirementValues,
   parsePrescriptionRequirementRows,
 } = require('../../../services/doc-generate-module/prescription-normalized.js');
+const {
+  MEDICAL_CERTIFICATE_TEMPLATE_NAME,
+  MEDICAL_CERTIFICATE_DOC_TYPE,
+  MEDICAL_CERTIFICATE_REQUIRED_TAGS,
+  buildMedicalCertificateRequirementValues,
+  parseMedicalCertificateRequirementRows,
+} = require('../../../services/doc-generate-module/medical-certificate-normalized.js');
 const { formatMessage } = require('../../health-chat/resolvers/wrapper/helper.js');
 const { emitToRoom, notifyUser } = require('../../../config/sockets');
 const { permissions, isMedicalPermittedPatientBased, isMedicalPermitted } = require('../../../services/permit.js');
@@ -306,6 +313,50 @@ async function resolvePrescriptionTemplateRequirements(client) {
   return { templateId, requirementByTag };
 }
 
+async function resolveMedicalCertificateTemplateRequirements(client) {
+  const templateResult = await client.query(
+    `SELECT id, template
+     FROM "documentTemplate"
+     WHERE REPLACE(LOWER(template), ' ', '-') = LOWER($1)
+     LIMIT 1`,
+    [MEDICAL_CERTIFICATE_TEMPLATE_NAME]
+  );
+
+  if (templateResult.rows.length === 0) {
+    throw createRouteError(
+      500,
+      'MEDICAL_CERTIFICATE_TEMPLATE_NOT_INITIALIZED',
+      'Medical certificate template setup is missing. Run post_build_setup.sql first.'
+    );
+  }
+
+  const templateId = templateResult.rows[0].id;
+  const requirementsResult = await client.query(
+    `SELECT dr.id as "requirementId", drt.vartag
+     FROM "documentRequirements" dr
+     JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+     WHERE dr."templateId" = $1`,
+    [templateId]
+  );
+
+  const requirementByTag = new Map();
+  requirementsResult.rows.forEach((row) => {
+    requirementByTag.set(normalizeTag(row.vartag), row.requirementId);
+  });
+
+  const missingTags = MEDICAL_CERTIFICATE_REQUIRED_TAGS.filter((tag) => !requirementByTag.has(tag));
+  if (missingTags.length > 0) {
+    throw createRouteError(
+      500,
+      'MEDICAL_CERTIFICATE_REQUIREMENTS_NOT_INITIALIZED',
+      'Medical certificate requirement mapping is incomplete. Run post_build_setup.sql first.',
+      { missingTags }
+    );
+  }
+
+  return { templateId, requirementByTag };
+}
+
 function parseOptionalChatId(rawValue) {
   if (rawValue === undefined || rawValue === null || rawValue === '') return null;
   const parsed = Number(rawValue);
@@ -315,7 +366,7 @@ function parseOptionalChatId(rawValue) {
   return parsed;
 }
 
-async function validatePrescriptionChatAccess(chatId, patientId, medicalId) {
+async function validateGeneratedDocumentChatAccess(chatId, patientId, medicalId, documentLabel = 'document') {
   if (!chatId) return null;
 
   const chatResult = await db.query(
@@ -336,11 +387,19 @@ async function validatePrescriptionChatAccess(chatId, patientId, medicalId) {
   }
 
   if (chat.status !== 'Ongoing' && chat.status !== 'Open') {
-    throw createRouteError(400, 'HEALTH_CHAT_NOT_ACTIVE', `Cannot attach prescription to a ${chat.status || 'closed'} ticket.`);
+    throw createRouteError(
+      400,
+      'HEALTH_CHAT_NOT_ACTIVE',
+      `Cannot attach ${documentLabel.toLowerCase()} to a ${chat.status || 'closed'} ticket.`
+    );
   }
 
   if (chat.medicalId && Number(chat.medicalId) !== Number(medicalId)) {
-    throw createRouteError(403, 'HEALTH_CHAT_FORBIDDEN', 'Only the assigned staff can attach a prescription to this ticket.');
+    throw createRouteError(
+      403,
+      'HEALTH_CHAT_FORBIDDEN',
+      `Only the assigned staff can attach a ${documentLabel.toLowerCase()} to this ticket.`
+    );
   }
 
   return chat;
@@ -362,17 +421,18 @@ async function emitHealthChatMessage(chatId, message, patientId) {
   }
 }
 
-async function attachPrescriptionToHealthChat({
+async function attachGeneratedDocumentToHealthChat({
   chatId,
   documentId,
   patientId,
   medicalId,
   physicianName,
+  documentLabel = 'Document',
 }) {
   if (!chatId) return;
 
   const documentPath = `/documents/generated/download/${documentId}`;
-  const logText = `Prescription issued by ${physicianName}. View PDF Document: ${documentPath}`;
+  const logText = `${documentLabel} issued by ${physicianName}. View PDF Document: ${documentPath}`;
   const virtualDocumentFileId = `document:${documentId}`;
 
   const insertResult = await db.query(
@@ -390,11 +450,12 @@ async function attachPrescriptionToHealthChat({
     await emitHealthChatMessage(chatId, formatted, patientId);
   }
 
-  logger.info('Prescription attached to health chat ticket', {
+  logger.info(`${documentLabel} attached to health chat ticket`, {
     chatId,
     documentId,
     patientId,
     issuedBy: medicalId,
+    documentType: normalizeTag(documentLabel),
   });
 }
 
@@ -435,6 +496,49 @@ function toPrescriptionViewPayload(documentMeta, normalizedPrescription, resolve
       advice: normalizedPrescription.advice || '',
     },
     followUpDate: normalizedPrescription.followUpDate || null,
+    expiredAt: documentMeta.expired_at,
+    createdAt: documentMeta.created_at,
+    downloadPath: `/documents/generated/download/${documentMeta.id}`,
+  };
+}
+
+async function getMedicalCertificateNormalizedRows(documentId) {
+  const normalizedDataResult = await db.query(
+    `SELECT drt.vartag, dd.data
+     FROM "documentData" dd
+     JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+     JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+     WHERE dd."documentId" = $1`,
+    [documentId]
+  );
+
+  if (normalizedDataResult.rows.length === 0) {
+    throw createRouteError(404, 'DOCUMENT_DATA_NOT_FOUND', 'No normalized medical certificate data found for this document.');
+  }
+
+  return normalizedDataResult.rows;
+}
+
+function toMedicalCertificateViewPayload(documentMeta, normalizedCertificate, resolvedByName) {
+  return {
+    id: documentMeta.id,
+    patientId: documentMeta.patientId,
+    issuedBy: {
+      id: documentMeta.issuedBy,
+      name: resolvedByName,
+      ptrNumber: normalizedCertificate.ptrNumber || null,
+      licenseNumber: normalizedCertificate.licenseNumber || null,
+      signature: normalizedCertificate.doctorSignature || null,
+    },
+    purpose: normalizedCertificate.purpose || 'General Medical Evaluation',
+    diagnosis: normalizedCertificate.diagnosis || 'Not specified',
+    recommendations: normalizedCertificate.recommendations || '',
+    validity: {
+      validFrom: normalizedCertificate.validFrom || null,
+      validUntil: normalizedCertificate.validUntil || null,
+    },
+    restrictions: normalizedCertificate.restrictions || '',
+    remarks: normalizedCertificate.remarks || '',
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
     downloadPath: `/documents/generated/download/${documentMeta.id}`,
@@ -1289,7 +1393,7 @@ router.post('/:docType/preview', jwtProtect('medical'), async (req, res) => {
       physician: data?.physician || { id: req.user.id },
     };
 
-    if (docType === PRESCRIPTION_DOC_TYPE) {
+    if (docType === PRESCRIPTION_DOC_TYPE || docType === MEDICAL_CERTIFICATE_DOC_TYPE) {
       enrichedData.patient = await normalizePrescriptionPatientData(data?.patient?.id, enrichedData.patient);
     }
 
@@ -1332,6 +1436,8 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
     }
 
     const shouldPersist = docGen.shouldPersist(docType);
+    const isPrescriptionDocument = docType === PRESCRIPTION_DOC_TYPE;
+    const isMedicalCertificateDocument = docType === MEDICAL_CERTIFICATE_DOC_TYPE;
 
     const enrichedData = {
       ...data,
@@ -1339,32 +1445,48 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
       physician: data?.physician || { id: req.user.id },
     };
 
-    if (docType === PRESCRIPTION_DOC_TYPE) {
+    if (isPrescriptionDocument || isMedicalCertificateDocument) {
       enrichedData.patient = await normalizePrescriptionPatientData(scopedPatientId, enrichedData.patient);
     }
 
     enrichedData.physician = await resolvePhysicianData(req.user.id, enrichedData.physician);
 
     let prescriptionRequirementValues = null;
+    let medicalCertificateRequirementValues = null;
     let normalizedPrescriptionPhysician = null;
+    let normalizedMedicalCertificatePhysician = null;
     let validatedChat = null;
-    if (shouldPersist && docType === PRESCRIPTION_DOC_TYPE) {
+    if (shouldPersist && (isPrescriptionDocument || isMedicalCertificateDocument)) {
       if (scopedChatId) {
-        validatedChat = await validatePrescriptionChatAccess(
+        validatedChat = await validateGeneratedDocumentChatAccess(
           scopedChatId,
           scopedPatientId,
-          req.user.id
+          req.user.id,
+          isPrescriptionDocument ? 'Prescription' : 'Medical Certificate'
         );
       }
 
-      const prescriptionPayload = buildPrescriptionRequirementValues(enrichedData);
-      prescriptionRequirementValues = prescriptionPayload.requirementValues;
-      enrichedData.prescription = prescriptionPayload.normalizedPrescription;
-      normalizedPrescriptionPhysician = prescriptionPayload.normalizedPhysician;
-      enrichedData.physician = {
-        ...enrichedData.physician,
-        ...normalizedPrescriptionPhysician,
-      };
+      if (isPrescriptionDocument) {
+        const prescriptionPayload = buildPrescriptionRequirementValues(enrichedData);
+        prescriptionRequirementValues = prescriptionPayload.requirementValues;
+        enrichedData.prescription = prescriptionPayload.normalizedPrescription;
+        normalizedPrescriptionPhysician = prescriptionPayload.normalizedPhysician;
+        enrichedData.physician = {
+          ...enrichedData.physician,
+          ...normalizedPrescriptionPhysician,
+        };
+      }
+
+      if (isMedicalCertificateDocument) {
+        const medicalCertificatePayload = buildMedicalCertificateRequirementValues(enrichedData);
+        medicalCertificateRequirementValues = medicalCertificatePayload.requirementValues;
+        enrichedData.certificate = medicalCertificatePayload.normalizedCertificate;
+        normalizedMedicalCertificatePhysician = medicalCertificatePayload.normalizedPhysician;
+        enrichedData.physician = {
+          ...enrichedData.physician,
+          ...normalizedMedicalCertificatePhysician,
+        };
+      }
     }
 
     if (shouldPersist) {
@@ -1383,7 +1505,7 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
       try {
         await client.query('BEGIN');
 
-        if (docType === PRESCRIPTION_DOC_TYPE) {
+        if (isPrescriptionDocument) {
           const prescriptionTemplate = await resolvePrescriptionTemplateRequirements(client);
 
           const docResult = await client.query(
@@ -1410,6 +1532,34 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
             issuedBy: req.user.id,
             templateId: prescriptionTemplate.templateId,
             requirementCount: PRESCRIPTION_REQUIRED_TAGS.length,
+          });
+        } else if (isMedicalCertificateDocument) {
+          const medicalCertificateTemplate = await resolveMedicalCertificateTemplateRequirements(client);
+
+          const docResult = await client.query(
+            `INSERT INTO "PatientDocuments" ("patientId", "templateId", "issuedBy", "expired_at")
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [actualPatientId, medicalCertificateTemplate.templateId, req.user.id, data?.expiredAt || null]
+          );
+
+          documentId = docResult.rows[0].id;
+
+          for (const tag of MEDICAL_CERTIFICATE_REQUIRED_TAGS) {
+            const requirementId = medicalCertificateTemplate.requirementByTag.get(tag);
+            await client.query(
+              `INSERT INTO "documentData" ("documentId", "requirementId", "data")
+               VALUES ($1, $2, $3)`,
+              [documentId, requirementId, medicalCertificateRequirementValues[tag]]
+            );
+          }
+
+          logger.info('Medical certificate generated and normalized rows stored', {
+            documentId,
+            patientId: actualPatientId,
+            issuedBy: req.user.id,
+            templateId: medicalCertificateTemplate.templateId,
+            requirementCount: MEDICAL_CERTIFICATE_REQUIRED_TAGS.length,
           });
         } else {
           const templateRecord = await resolveOrCreateTemplate(
@@ -1462,19 +1612,22 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
         ? `${enrichedData.physician.firstName} ${enrichedData.physician.lastName}`.trim()
         : 'your healthcare provider';
 
-      if (docType === PRESCRIPTION_DOC_TYPE && validatedChat?.id) {
+      if ((isPrescriptionDocument || isMedicalCertificateDocument) && validatedChat?.id) {
         try {
-          await attachPrescriptionToHealthChat({
+          const documentLabel = isPrescriptionDocument ? 'Prescription' : 'Medical Certificate';
+          await attachGeneratedDocumentToHealthChat({
             chatId: validatedChat.id,
             documentId,
             patientId: actualPatientId,
             medicalId: req.user.id,
             physicianName,
+            documentLabel,
           });
         } catch (chatErr) {
-          logger.warn('Prescription generated but health chat attachment failed', {
+          logger.warn('Generated document created but health chat attachment failed', {
             documentId,
             chatId: validatedChat.id,
+            docType,
             error: chatErr.message,
           });
         }
@@ -1702,6 +1855,127 @@ router.get('/generated/prescription/view/:documentId', jwtProtect('medical'), as
 });
 
 /**
+ * GET /documents/generated/medical-certificate/patient/:patientId
+ * List normalized medical certificates for a patient
+ */
+router.get('/generated/medical-certificate/patient/:patientId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view medical certificates for this patient.' });
+    }
+
+    const result = await db.query(
+      `SELECT pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName",
+              COALESCE(
+                JSON_AGG(
+                  JSON_BUILD_OBJECT(
+                    'vartag', drt.vartag,
+                    'data', dd.data
+                  )
+                ) FILTER (WHERE dd.id IS NOT NULL),
+                '[]'::json
+              ) as "normalizedRows"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON dt.id = pd."templateId"
+       LEFT JOIN "UsersPersonal" up_issuer ON up_issuer.id = pd."issuedBy"
+       LEFT JOIN "documentData" dd ON dd."documentId" = pd.id
+       LEFT JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+       LEFT JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+       WHERE pd."patientId" = $1 AND REPLACE(LOWER(dt.template), ' ', '-') = LOWER($2)
+       GROUP BY pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+                up_issuer.first_name, up_issuer.last_name
+       ORDER BY pd."created_at" DESC`,
+      [patientId, MEDICAL_CERTIFICATE_TEMPLATE_NAME]
+    );
+
+    const certificates = result.rows
+      .map((row) => {
+        try {
+          const normalizedRows = Array.isArray(row.normalizedRows) ? row.normalizedRows : [];
+          const normalized = parseMedicalCertificateRequirementRows(normalizedRows);
+          const issuedByName = `${row.issuedByFirstName || ''} ${row.issuedByLastName || ''}`.trim() || 'Unknown';
+
+          return toMedicalCertificateViewPayload(row, normalized, issuedByName);
+        } catch (parseErr) {
+          logger.warn('Skipping malformed normalized medical certificate row during list', {
+            documentId: row.id,
+            error: parseErr.message,
+          });
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    res.json({ success: true, certificates });
+  } catch (err) {
+    logger.error('Normalized medical certificate list failed', { error: err.message });
+    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
+  }
+});
+
+/**
+ * GET /documents/generated/medical-certificate/view/:documentId
+ * View one normalized medical certificate document payload
+ */
+router.get('/generated/medical-certificate/view/:documentId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { documentId } = req.params;
+
+    const docMetaResult = await db.query(
+      `SELECT pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+              REPLACE(LOWER(dt.template), ' ', '-') as "templateType",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON dt.id = pd."templateId"
+       LEFT JOIN "UsersPersonal" up_issuer ON up_issuer.id = pd."issuedBy"
+       WHERE pd.id = $1
+       LIMIT 1`,
+      [documentId]
+    );
+
+    if (docMetaResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    }
+
+    const documentMeta = docMetaResult.rows[0];
+    if (documentMeta.templateType !== MEDICAL_CERTIFICATE_DOC_TYPE) {
+      return res.status(400).json({ error: 'NOT_A_MEDICAL_CERTIFICATE', message: 'Requested document is not a medical certificate.' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, documentMeta.patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view this medical certificate.' });
+    }
+
+    const normalizedRows = await getMedicalCertificateNormalizedRows(documentId);
+    const normalized = parseMedicalCertificateRequirementRows(normalizedRows);
+    const issuedByName = `${documentMeta.issuedByFirstName || ''} ${documentMeta.issuedByLastName || ''}`.trim() || 'Unknown';
+
+    res.json({
+      success: true,
+      certificate: toMedicalCertificateViewPayload(documentMeta, normalized, issuedByName),
+    });
+  } catch (err) {
+    logger.error('Normalized medical certificate view failed', {
+      error: err.message,
+      code: err.errorCode,
+      details: err.details,
+    });
+
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({
+      error: err.errorCode || 'VIEW_FAILED',
+      message: err.message,
+      details: err.details || null,
+    });
+  }
+});
+
+/**
  * GET /documents/generated/download/:documentId
  * Download a generated document for staff (permission-scoped by patient)
  */
@@ -1711,7 +1985,7 @@ router.get('/generated/download/:documentId', jwtProtect('medical'), async (req,
 
     const docResult = await db.query(
       `SELECT pd.id, pd."patientId", pd."issuedBy", pd."created_at",
-              LOWER(dt.template) as "templateType"
+              REPLACE(LOWER(dt.template), ' ', '-') as "templateType"
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        WHERE pd.id = $1`,
@@ -1759,6 +2033,44 @@ router.get('/generated/download/:documentId', jwtProtect('medical'), async (req,
           return sendPdfBuffer(res, regenerated.buffer, regenerated.filename || `${docMeta.templateType}_${documentId}.pdf`);
         } catch (normalizedErr) {
           logger.warn('Prescription normalized download regeneration failed, using legacy payload fallback', {
+            documentId,
+            error: normalizedErr.message,
+          });
+        }
+      }
+    }
+
+    if (docMeta.templateType === MEDICAL_CERTIFICATE_DOC_TYPE) {
+      const normalizedDataResult = await db.query(
+        `SELECT drt.vartag, dd.data
+         FROM "documentData" dd
+         JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+         JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+         WHERE dd."documentId" = $1`,
+        [documentId]
+      );
+
+      if (normalizedDataResult.rows.length > 0) {
+        try {
+          const certificate = parseMedicalCertificateRequirementRows(normalizedDataResult.rows);
+          const patient = await normalizePrescriptionPatientData(docMeta.patientId, { id: docMeta.patientId });
+          const physician = await resolvePhysicianData(docMeta.issuedBy, {
+            id: docMeta.issuedBy,
+            licenseNo: certificate.licenseNumber,
+            ptrNo: certificate.ptrNumber,
+            signature: certificate.doctorSignature,
+          });
+
+          const regenerated = await docGen.generateDocumentBuffer(MEDICAL_CERTIFICATE_DOC_TYPE, {
+            patient,
+            physician,
+            issuedDate: toDateInput(docMeta.created_at),
+            certificate,
+          });
+
+          return sendPdfBuffer(res, regenerated.buffer, regenerated.filename || `${docMeta.templateType}_${documentId}.pdf`);
+        } catch (normalizedErr) {
+          logger.warn('Medical certificate normalized download regeneration failed, using legacy payload fallback', {
             documentId,
             error: normalizedErr.message,
           });
@@ -1814,7 +2126,7 @@ router.get('/:docType/patient/:patientId', jwtProtect('medical'), async (req, re
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up ON pd."issuedBy" = up.id
-       WHERE pd."patientId" = $1 AND LOWER(dt.template) = LOWER($2)
+       WHERE pd."patientId" = $1 AND REPLACE(LOWER(dt.template), ' ', '-') = LOWER($2)
        ORDER BY pd."created_at" DESC`,
       [patientId, docType]
     );
@@ -1859,7 +2171,7 @@ router.get('/:docType/patients', jwtProtect('medical'), async (req, res) => {
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up ON pd."patientId" = up.id
-       WHERE LOWER(dt.template) = LOWER($1)
+       WHERE REPLACE(LOWER(dt.template), ' ', '-') = LOWER($1)
        GROUP BY pd."patientId", up.first_name, up.last_name
        ORDER BY "lastDocumentAt" DESC`,
       [docType]
@@ -1902,7 +2214,7 @@ router.get('/:docType', jwtProtect('medical'), async (req, res) => {
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up_patient ON pd."patientId" = up_patient.id
        LEFT JOIN "UsersPersonal" up_issuer ON pd."issuedBy" = up_issuer.id
-       WHERE LOWER(dt.template) = LOWER($1)
+       WHERE REPLACE(LOWER(dt.template), ' ', '-') = LOWER($1)
        ORDER BY pd."created_at" DESC`,
       [docType]
     );

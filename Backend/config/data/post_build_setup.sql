@@ -202,6 +202,58 @@ WHERE LOWER(dt.template) = LOWER('Prescription')
       AND dr."requirementtagId" = drt.id
   );
 
+  -- Normalized generated-document setup for Medical Certificate
+  INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
+  SELECT 'medical-certificate', 'Medical certificate document template', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), 1
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM "documentTemplate"
+    WHERE REPLACE(LOWER(template), ' ', '-') = LOWER('medical-certificate')
+  );
+
+  INSERT INTO "documentRequirementsTag" (vartag)
+  SELECT seed.tag_name
+  FROM (
+    VALUES
+      ('purpose'),
+      ('diagnosis'),
+      ('recommendations'),
+      ('validity'),
+      ('restrictions'),
+      ('remarks'),
+      ('doctor_signature'),
+      ('ptr_number'),
+      ('license_number')
+  ) AS seed(tag_name)
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM "documentRequirementsTag" drt
+    WHERE LOWER(drt.vartag) = LOWER(seed.tag_name)
+  );
+
+  INSERT INTO "documentRequirements" ("templateId", "requirementtagId")
+  SELECT dt.id, drt.id
+  FROM "documentTemplate" dt
+  JOIN "documentRequirementsTag" drt
+    ON LOWER(drt.vartag) IN (
+      'purpose',
+      'diagnosis',
+      'recommendations',
+      'validity',
+      'restrictions',
+      'remarks',
+      'doctor_signature',
+      'ptr_number',
+      'license_number'
+    )
+  WHERE REPLACE(LOWER(dt.template), ' ', '-') = LOWER('medical-certificate')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM "documentRequirements" dr
+      WHERE dr."templateId" = dt.id
+        AND dr."requirementtagId" = drt.id
+    );
+
 -- Prevent duplicate template-tag mappings before enforcing uniqueness.
 DELETE FROM "documentRequirements" current_row
 USING "documentRequirements" older_row

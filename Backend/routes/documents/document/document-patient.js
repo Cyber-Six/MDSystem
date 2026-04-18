@@ -10,6 +10,10 @@ const {
   GENERIC_BINARY_TAG,
   parsePrescriptionRequirementRows,
 } = require('../../../services/doc-generate-module/prescription-normalized.js');
+const {
+  MEDICAL_CERTIFICATE_DOC_TYPE,
+  parseMedicalCertificateRequirementRows,
+} = require('../../../services/doc-generate-module/medical-certificate-normalized.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
 const { checkCredentialsStatus } = require("../../../config/middleware/activeCredential.js");
 
@@ -181,6 +185,52 @@ function toPrescriptionViewPayload(documentMeta, normalized) {
       advice: normalized.advice || '',
     },
     followUpDate: normalized.followUpDate || null,
+    expiredAt: documentMeta.expired_at,
+    createdAt: documentMeta.created_at,
+    downloadPath: `/documents/me/download/${documentMeta.id}`,
+  };
+}
+
+async function getMedicalCertificateNormalizedRows(documentId) {
+  const result = await db.query(
+    `SELECT drt.vartag, dd.data
+     FROM "documentData" dd
+     JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+     JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+     WHERE dd."documentId" = $1`,
+    [documentId]
+  );
+
+  if (result.rows.length === 0) {
+    const err = new Error('No normalized medical certificate data found for this document.');
+    err.statusCode = 404;
+    err.errorCode = 'DOCUMENT_DATA_NOT_FOUND';
+    throw err;
+  }
+
+  return result.rows;
+}
+
+function toMedicalCertificateViewPayload(documentMeta, normalized) {
+  return {
+    id: documentMeta.id,
+    patientId: documentMeta.patientId,
+    issuedBy: {
+      id: documentMeta.issuedBy,
+      name: documentMeta.issuedByName || 'Unknown',
+      ptrNumber: normalized.ptrNumber || null,
+      licenseNumber: normalized.licenseNumber || null,
+      signature: normalized.doctorSignature || null,
+    },
+    purpose: normalized.purpose || 'General Medical Evaluation',
+    diagnosis: normalized.diagnosis || 'Not specified',
+    recommendations: normalized.recommendations || '',
+    validity: {
+      validFrom: normalized.validFrom || null,
+      validUntil: normalized.validUntil || null,
+    },
+    restrictions: normalized.restrictions || '',
+    remarks: normalized.remarks || '',
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
     downloadPath: `/documents/me/download/${documentMeta.id}`,
@@ -533,7 +583,7 @@ router.get('/my/prescription/view/:documentId', jwtProtect('patient'), checkCred
 
     const docResult = await db.query(
       `SELECT pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
-              LOWER(dt.template) as "templateType",
+              REPLACE(LOWER(dt.template), ' ', '-') as "templateType",
               up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
@@ -578,6 +628,61 @@ router.get('/my/prescription/view/:documentId', jwtProtect('patient'), checkCred
 });
 
 /**
+ * GET /documents/my/medical-certificate/view/:documentId
+ * View one normalized medical certificate payload for the authenticated patient
+ */
+router.get('/my/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const patientId = req.user.id;
+
+    const docResult = await db.query(
+      `SELECT pd.id, pd."patientId", pd."issuedBy", pd."expired_at", pd."created_at",
+              REPLACE(LOWER(dt.template), ' ', '-') as "templateType",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       LEFT JOIN "UsersPersonal" up_issuer ON up_issuer.id = pd."issuedBy"
+       WHERE pd.id = $1 AND pd."patientId" = $2
+       LIMIT 1`,
+      [documentId, patientId]
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    }
+
+    const docMeta = docResult.rows[0];
+    if (docMeta.templateType !== MEDICAL_CERTIFICATE_DOC_TYPE) {
+      return res.status(400).json({ error: 'NOT_A_MEDICAL_CERTIFICATE', message: 'Requested document is not a medical certificate.' });
+    }
+
+    const normalizedRows = await getMedicalCertificateNormalizedRows(documentId);
+    const normalized = parseMedicalCertificateRequirementRows(normalizedRows);
+
+    const payload = toMedicalCertificateViewPayload(
+      {
+        ...docMeta,
+        issuedByName: `${docMeta.issuedByFirstName || ''} ${docMeta.issuedByLastName || ''}`.trim() || 'Unknown',
+      },
+      normalized
+    );
+
+    res.json({ success: true, certificate: payload });
+  } catch (err) {
+    logger.error('Patient normalized medical certificate view failed', {
+      error: err.message,
+      code: err.errorCode,
+    });
+
+    res.status(err.statusCode || 500).json({
+      error: err.errorCode || 'VIEW_FAILED',
+      message: err.message,
+    });
+  }
+});
+
+/**
  * GET /documents/me/download/:documentId
  * Download a specific generated document as PDF for the authenticated patient
  */
@@ -589,7 +694,7 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
     // Verify document belongs to this patient
     const docResult = await db.query(
       `SELECT pd.id, pd."issuedBy", pd."created_at",
-              LOWER(dt.template) as "templateType", dt.description
+              REPLACE(LOWER(dt.template), ' ', '-') as "templateType", dt.description
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        WHERE pd.id = $1 AND pd."patientId" = $2`,
@@ -650,6 +755,54 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
       }
     }
 
+    if (doc.templateType === MEDICAL_CERTIFICATE_DOC_TYPE) {
+      const normalizedDataResult = await db.query(
+        `SELECT drt.vartag, dd.data
+         FROM "documentData" dd
+         JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+         JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+         WHERE dd."documentId" = $1`,
+        [documentId]
+      );
+
+      if (normalizedDataResult.rows.length > 0) {
+        try {
+          const certificate = parseMedicalCertificateRequirementRows(normalizedDataResult.rows);
+          const patient = await resolvePatientData(patientId);
+          const physician = await resolvePhysicianData(doc.issuedBy);
+          physician.licenseNo = certificate.licenseNumber || physician.licenseNo;
+          physician.ptrNo = certificate.ptrNumber || physician.ptrNo;
+          physician.signature = certificate.doctorSignature || physician.signature;
+
+          const regenerated = await docGen.generateDocumentBuffer(MEDICAL_CERTIFICATE_DOC_TYPE, {
+            patient,
+            physician,
+            issuedDate: toDateInput(doc.created_at),
+            certificate,
+          });
+
+          sendPdfBuffer(
+            res,
+            regenerated.buffer,
+            regenerated.filename || `${doc.templateType}_${documentId}.pdf`
+          );
+
+          logger.info('Patient document downloaded', {
+            documentId,
+            patientId,
+            mode: 'normalized-regenerated-medical-certificate',
+          });
+          return;
+        } catch (normalizedErr) {
+          logger.warn('Patient medical certificate regeneration failed, using legacy payload fallback', {
+            documentId,
+            patientId,
+            error: normalizedErr.message,
+          });
+        }
+      }
+    }
+
     // Fetch stored PDF buffer
     const dataResult = await db.query(
       `SELECT dd.data
@@ -697,7 +850,7 @@ router.get('/my/:docType', jwtProtect('patient'), checkCredentialsStatus, async 
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up ON pd."issuedBy" = up.id
-       WHERE pd."patientId" = $1 AND LOWER(dt.template) = LOWER($2)
+       WHERE pd."patientId" = $1 AND REPLACE(LOWER(dt.template), ' ', '-') = LOWER($2)
        ORDER BY pd."created_at" DESC`,
       [patientId, docType]
     );

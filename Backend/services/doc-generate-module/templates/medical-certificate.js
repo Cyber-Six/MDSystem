@@ -1,4 +1,5 @@
 const BaseTemplate = require('../base-template.js');
+const fs = require('fs');
 const pdf = require('../../pdfkit.js');
 
 /**
@@ -48,9 +49,64 @@ class MedicalCertificateTemplate extends BaseTemplate {
     this._addCertificateDetails();
 
     // Physician Signature
-    this.addPhysicianSignature();
+    this._addPhysicianSignature();
 
     return this;
+  }
+
+  _addPhysicianSignature() {
+    const { physician } = this.data;
+    if (!physician) return;
+
+    const signatureMeta = physician.signature || {};
+    const signatureDataUrl = signatureMeta.base64 || '';
+    const signaturePath = signatureMeta.path || '';
+    let signatureBuffer = null;
+
+    try {
+      if (signatureDataUrl && signatureDataUrl.startsWith('data:')) {
+        const base64Part = signatureDataUrl.split(',')[1] || '';
+        if (base64Part) {
+          signatureBuffer = Buffer.from(base64Part, 'base64');
+        }
+      } else if (signatureDataUrl) {
+        signatureBuffer = Buffer.from(signatureDataUrl, 'base64');
+      } else if (signaturePath && fs.existsSync(signaturePath)) {
+        signatureBuffer = fs.readFileSync(signaturePath);
+      }
+    } catch (_) {
+      signatureBuffer = null;
+    }
+
+    if (signatureBuffer) {
+      try {
+        this.doc.image(signatureBuffer, this.doc.page.margins.left, this.doc.y, {
+          fit: [160, 32],
+          align: 'left',
+          valign: 'top',
+        });
+        this.doc.moveDown(2.2);
+      } catch (_) {
+        // Skip invalid signature image payloads and continue with text signature.
+      }
+    }
+
+    const physicianName = `${physician.firstName || ''} ${physician.lastName || ''}`.trim();
+    const title = physician.title || 'MD';
+
+    const credentials = [
+      physician.specialization || null,
+      physician.licenseNo ? `License No: ${physician.licenseNo}` : null,
+      physician.ptrNo ? `PTR No: ${physician.ptrNo}` : null,
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    pdf.addSignatureLine(
+      this.doc,
+      `${physicianName}${physicianName ? ', ' : ''}${title}`,
+      credentials
+    );
   }
 
   _addCertificateDetails() {
