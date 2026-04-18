@@ -466,7 +466,15 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
       return res.status(404).json({ error: 'NO_DATA', message: 'No data found for the selected queries' });
     }
 
-    const meta = { branch, startDate, endDate };
+    const meta = {
+      branch,
+      startDate,
+      endDate,
+      groupBy,
+      department,
+      sex,
+      generatedAt: new Date().toISOString(),
+    };
 
     // ── CSV ──────────────────────────────────────────────────
     if (format === 'csv') {
@@ -594,6 +602,8 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
       startDate,
       endDate,
       groupBy,
+      department,
+      sex,
       physician: {
         id: req.user.id,
         firstName: physician.first_name,
