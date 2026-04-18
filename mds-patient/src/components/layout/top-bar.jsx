@@ -93,12 +93,11 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
     }
   };
 
-  // Responsive: yellow in light mode, black in dark mode, on mobile
+  // Match staff shell background while keeping the existing patient topbar layout.
   return (
     <header
       className={`sticky top-0 z-30 transition-colors border-b
-        md:bg-white md:dark:bg-neutral-900 md:border-gray-200 md:dark:border-neutral-700
-        bg-primary-500 dark:bg-neutral-900 border-primary-600 dark:border-neutral-800
+        bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700
       `}
       style={{paddingLeft: 0}}
     >
