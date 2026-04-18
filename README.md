@@ -1,92 +1,79 @@
 # MDSystem
 
-MDSystem is a multi-application medical information platform used across patient, staff, and mobile experiences. This repository contains the backend services, web portals, mobile client, and shared core logic.
+MDSystem is a multi-application medical information platform for patient care workflows, staff operations, and medical record management. It centralizes digital services for health records, consultation support, appointment operations, medicine requests, analytics, and document handling across web and mobile channels.
 
-## Applications In This Repository
+## System Summary
+
+MDSystem is organized as a unified ecosystem with separate user experiences and a shared backend foundation:
+
+- Patient website for self-service healthcare tasks.
+- Staff website for medical and operational management.
+- Mobile app for patient-first access to core services.
+- Backend services for authentication, EMR, inventory, notifications, and documents.
+- Shared core package for reusable cross-platform logic.
+
+The platform supports both transactional workflows (for example, record updates and appointment operations) and communication workflows (for example, health chat and notifications).
+
+## Website And App Scopes
 
 | Scope | Path | Purpose |
 | --- | --- | --- |
-| Patient Web | `mds-patient/` | Patient-facing web portal (records, appointments, medicine requests, health chat, documents). |
-| Staff Web | `mds-staff/` | Medical/staff portal (review workflows, appointments, inventory, analytics, role-based tools). |
-| Mobile | `mds-mobile/` | Expo React Native mobile app for patient workflows. |
-| Backend | `Backend/` | Express + GraphQL/REST backend, auth, sockets, media, document and EMR services. |
-| Shared Core | `packages/core/` | Reusable cross-platform services (token, axios, validation, banners, auth helpers). |
+| Patient Web | `mds-patient/` | Patient-facing portal for records, appointments, medicine requests, documents, and health chat. |
+| Staff Web | `mds-staff/` | Staff and medical portal for review, approvals, inventory, analytics, and role-sensitive operations. |
+| Mobile App | `mds-mobile/` | React Native app for patient workflows and notifications on iOS/Android. |
+| Backend | `Backend/` | Service layer providing API, GraphQL domains, socket events, auth, and data integration. |
+| Shared Core | `packages/core/` | Shared services for auth/token handling, HTTP requests, validation, and common logic. |
 
-## Workspace Behavior
+## Module Overview
 
-- Root npm workspaces include `packages/*`, `mds-patient`, and `mds-staff`.
-- `mds-mobile` is maintained in the same repository but is not part of the root workspaces list.
-- Root `npm install` runs `Backend` install automatically via `postinstall`.
+| Module Area | Description |
+| --- | --- |
+| Authentication And Security | Credential login, Google OAuth, 2FA/TOTP, session handling, rate limiting, and consent flows. |
+| EMR And Record Forms | Initial record intake, update/revision workflows, catalog-driven medical/dental data entry. |
+| Appointments | Patient scheduling and staff-side appointment management. |
+| Health Chat | Real-time chat and support workflows with socket-backed updates. |
+| Medicine And Inventory | Patient medicine request flow and staff inventory/dispensing processes. |
+| Documents | Medical document generation, access, and patient/staff retrieval flows. |
+| Notifications | In-app and push-oriented notification dispatch and acknowledgement flow. |
+| Dashboard And Analytics | Operational metrics, summaries, and export/reporting features. |
+| Role And Permissions | Staff capability boundaries and role-aware access control. |
 
-## Prerequisites
+## Tools And Technology Used
 
-- Node.js 18+
-- npm
+### Backend
+
+- Node.js
+- Express 5
+- GraphQL + REST endpoints
 - PostgreSQL
 - Redis
-- SMTP credentials (for email flows)
+- Socket.IO
+- BullMQ
+- JWT auth
+- Joi validation
 
-## Installation
+### Web Applications
 
-### 1) Install root dependencies
+- React
+- Vite
+- React Router
+- Tailwind CSS
+- Axios
 
-```bash
-npm install
-```
+### Mobile Application
 
-### 2) Install mobile dependencies
+- Expo
+- React Native
+- TypeScript
+- React Navigation
+- AsyncStorage
+- NativeWind
 
-```bash
-cd mds-mobile
-npm install
-cd ..
-```
+### Shared Utilities
 
-## Running The System
-
-### Web + Backend (development)
-
-Run backend and frontend in separate terminals.
-
-```bash
-# Terminal 1 - patient backend server
-npm run start:patient
-
-# Terminal 2 - patient web app (Vite)
-npm run dev:patient
-```
-
-```bash
-# Terminal 1 - staff backend server
-npm run start:staff
-
-# Terminal 2 - staff web app (Vite)
-npm run dev:staff
-```
-
-### Mobile (Expo)
-
-```bash
-cd mds-mobile
-npm start
-```
-
-### Production build (web apps)
-
-```bash
-npm run build
-```
-
-## Backend Configuration Notes
-
-- Backend loads configuration from `Backend/.env` and validates required values on startup.
-- Required groups include PostgreSQL, JWT, Redis, SMTP, and TOTP settings.
-- Generate an initial TOTP encryption key with:
-
-```bash
-cd Backend
-npm run setup:totp-key
-```
+- Workspace shared package architecture (`@mdsystem/core`)
+- Cross-platform token service and HTTP request handling
+- Shared validation utilities and banner/notification helpers
 
 ## Repository Structure
 
@@ -102,11 +89,29 @@ MDSystem/
 `-- README.md
 ```
 
-## Related Documentation
+## Documentation Map
+
+### Core References
 
 - [Docs/file_structure.md](Docs/file_structure.md)
-- [mds-mobile/README.md](mds-mobile/README.md)
+- [Docs/SECURITY.md](Docs/SECURITY.md)
 - [packages/core/README.md](packages/core/README.md)
+
+### Product And Domain References
+
+- [Docs/appointment.md](Docs/appointment.md)
+- [Docs/consultation.md](Docs/consultation.md)
+- [Docs/emr.md](Docs/emr.md)
+- [Docs/staff-emr.md](Docs/staff-emr.md)
+- [Docs/medical-inventory.md](Docs/medical-inventory.md)
+- [Docs/health-chat.md](Docs/health-chat.md)
+- [Docs/patient-documents.md](Docs/patient-documents.md)
+- [Docs/role-management.md](Docs/role-management.md)
+- [Docs/sockets.md](Docs/sockets.md)
+
+### Module-Level READMEs
+
+- [mds-mobile/README.md](mds-mobile/README.md)
 - [mds-patient/src/modules/record-forms/update-record/README.md](mds-patient/src/modules/record-forms/update-record/README.md)
 - [mds-patient/src/modules/record-forms/initial-record/medical/README.md](mds-patient/src/modules/record-forms/initial-record/medical/README.md)
 
