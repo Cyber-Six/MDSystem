@@ -44,36 +44,45 @@ const inferIdentityFromEmail = (email: string | null | undefined): PatientIdenti
   return null;
 };
 
-const inferIdentityFromEmrProfile = (emrProfile: any): PatientIdentity | null => {
-  if (!emrProfile) return null;
-  if (emrProfile.__typename === 'StudentProfile') return 'Student';
-  if (emrProfile.__typename === 'EmployeeProfile') {
-    const role = String(emrProfile.role || '').trim().toLowerCase();
-    return role === 'superior' ? 'Superior' : 'Employee';
-  }
+const normalizeIdentity = (value: unknown): PatientIdentity | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'student') return 'Student';
+  if (normalized === 'employee') return 'Employee';
+  if (normalized === 'superior') return 'Superior';
   return null;
 };
 
-const extractDepartment = (emrProfile: any): string | null => {
-  if (!emrProfile) return null;
-  if (emrProfile.__typename === 'StudentProfile') {
-    return emrProfile.program || null;
-  }
-  if (emrProfile.__typename === 'EmployeeProfile') {
-    return emrProfile.department || null;
-  }
+const inferIdentityFromBasicInfo = (basicInfo: any): PatientIdentity | null => {
+  if (!basicInfo) return null;
+
+  const profileIdentity = normalizeIdentity(basicInfo.profile_type);
+  if (profileIdentity) return profileIdentity;
+
+  const roleIdentity = normalizeIdentity(basicInfo.role);
+  if (roleIdentity) return roleIdentity;
+
   return null;
 };
 
-const shouldFetchEmrProfile = (status: unknown): boolean => {
-  const normalized = String(status || '').trim();
-  return normalized === 'InProgress' || normalized === 'Revision';
+const extractDepartment = (basicInfo: any): string | null => {
+  if (!basicInfo) return null;
+
+  const profileIdentity = normalizeIdentity(basicInfo.profile_type);
+  if (profileIdentity === 'Student') {
+    return basicInfo.program || null;
+  }
+
+  if (profileIdentity === 'Employee' || profileIdentity === 'Superior') {
+    return basicInfo.department || null;
+  }
+
+  return basicInfo.program || basicInfo.department || null;
 };
 
 export const getPatientProfile = async (): Promise<PatientProfile> => {
   if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
-  const [profileResult, emergencyResult] = await Promise.allSettled([
+  const [profileResult, emergencyResult, basicInfoResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -95,6 +104,18 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       }`,
       {},
     ),
+    sendGraphQLRequest(
+      `query GetIdentityAndDepartment {
+        basicInfo: getPatientBasicInfo(userId: "self") {
+          profile_type
+          program
+          department
+          role
+        }
+      }`,
+      {},
+      { allowPartialData: true },
+    ),
   ]);
 
   const profileData =
@@ -115,29 +136,18 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     console.warn('[Profile Service] Active emergency contact fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
   }
 
+  const basicInfoData =
+    basicInfoResult.status === 'fulfilled'
+      ? basicInfoResult.value
+      : ((basicInfoResult as PromiseRejectedResult).reason?.data || null);
+
+  if (basicInfoResult.status === 'rejected') {
+    console.warn('[Profile Service] Profile basic info fetch failed:', (basicInfoResult as PromiseRejectedResult).reason?.message);
+  }
+
   const log = (profileData as any)?.personalLog || {};
   const email = (profileData as any)?.loginEmail || null;
-  const personalLogStatus = (profileData as any)?.personalLogStatus;
-
-  let emrProfile: any = null;
-  if (shouldFetchEmrProfile(personalLogStatus)) {
-    try {
-      const emrProfileData = await sendGraphQLRequest(
-        `query GetIdentityAndDepartment {
-          emrProfile: getProfile {
-            __typename
-            ... on StudentProfile { program }
-            ... on EmployeeProfile { department role }
-          }
-        }`,
-        {},
-        { allowPartialData: true },
-      );
-      emrProfile = (emrProfileData as any)?.emrProfile || null;
-    } catch {
-      // Ignore EMR profile fetch failures for profile card rendering.
-    }
-  }
+  const basicInfo = (basicInfoData as any)?.basicInfo || null;
 
   const latestEmergency =
     (emergencyData as any)?.emergencyContact ||
@@ -148,8 +158,8 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
 
   const nameParts = [log.first_name, log.middle_name, log.last_name, log.suffix].filter(Boolean);
   const emailIdentity = inferIdentityFromEmail(email);
-  const emrIdentity = inferIdentityFromEmrProfile(emrProfile);
-  const identity = emailIdentity === 'Superior' ? 'Superior' : (emrIdentity || emailIdentity);
+  const profileIdentity = inferIdentityFromBasicInfo(basicInfo);
+  const identity = emailIdentity === 'Superior' ? 'Superior' : (profileIdentity || emailIdentity);
 
   _cacheTimestamp = Date.now();
   _cache = {
@@ -161,7 +171,7 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     secondEmergencyContactNumber: extractContactNumber(latestEmergency?.secondContact),
     identifier: (profileData as any)?.personalRecord?.identifier || null,
     identity,
-    department: extractDepartment(emrProfile),
+    department: extractDepartment(basicInfo),
   };
 
   return _cache;
