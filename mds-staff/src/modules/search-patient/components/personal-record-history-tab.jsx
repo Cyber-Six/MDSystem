@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter';
 import PatientSectionCard from './section-card';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 const GQL_PERSONAL_RECORD_LOG = `
   query GetPersonalRecordLog($userId: ID!) {
@@ -36,14 +37,6 @@ function Field({ label, value }) {
       <p className="text-sm font-medium text-secondary-800 dark:text-white">{value || 'N/A'}</p>
     </div>
   );
-}
-
-function getBranchLabel(branch) {
-  if (!branch) return null;
-  const normalized = branch.toString().toLowerCase();
-  if (normalized === 'manila') return 'Manila';
-  if (normalized === 'quezon city' || normalized === 'qc') return 'Quezon City';
-  return branch;
 }
 
 function SnapshotBlock({ index, isCurrent, snapshotDate, children }) {
@@ -199,7 +192,7 @@ export default function PatientPersonalRecordHistoryTab({ patient }) {
                       <Field label="Position"             value={patient.personal.position || patient.year} />
                       <Field label="Employment Category"  value={patient.personal.employmentCategory} />
                       <Field label="Employment Status"    value={patient.personal.employmentStatus} />
-                      <Field label="Campus Branch"        value={getBranchLabel(r.branch) || getBranchLabel(patient.personal.branch)} />
+                      <Field label="Campus Branch"        value={formatBranchLabel(r.branch) || formatBranchLabel(patient.personal.branch)} />
                     </>
                   ) : (
                     <>
@@ -207,7 +200,7 @@ export default function PatientPersonalRecordHistoryTab({ patient }) {
                       <Field label="Program"        value={patient.program} />
                       <Field label="Year Level"     value={patient.year} />
                       {(r.branch || patient.personal.branch) && (
-                        <Field label="Campus Branch" value={getBranchLabel(r.branch) || getBranchLabel(patient.personal.branch)} />
+                        <Field label="Campus Branch" value={formatBranchLabel(r.branch) || formatBranchLabel(patient.personal.branch)} />
                       )}
                     </>
                   )}

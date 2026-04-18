@@ -3,7 +3,7 @@ import { Loader2, RefreshCw, Lock, ShieldAlert } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { getPatientMessages } from '../health-chat-service';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
-import ChatHeader from './chat-header';
+import { ChatHeader } from './chat-header';
 import MessageBubble from './message-bubble';
 import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
