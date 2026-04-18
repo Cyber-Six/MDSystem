@@ -14,7 +14,7 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
   };
 
   return (
-    <div className="flex h-screen bg-stone-100 dark:bg-neutral-800">
+    <div className="flex h-screen bg-neutral-50 dark:bg-neutral-900">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -29,7 +29,7 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
         <TopBar onMenuClick={toggleSidebar} isSidebarOpen={sidebarOpen} />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-neutral-50 dark:bg-neutral-900">
           <div className="container mx-auto px-4 py-6 max-w-7xl">
             {children}
           </div>
