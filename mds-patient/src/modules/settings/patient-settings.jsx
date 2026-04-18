@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSettings } from '../../context/settings-context';
 import TotpSettings from './totp-settings';
 import ChangePasswordSettings from './change-password-settings';
-import { AVAILABLE_SOUNDS, playNotificationSound } from '../../utils/notification-sound';
 
 /**
  * Unsaved-changes guard dialog
@@ -405,37 +404,6 @@ const PatientSettings = () => {
           description="Play a sound when new notifications arrive"
         >
           <Toggle checked={draft.soundEnabled} onChange={(v) => set('soundEnabled', v)} />
-        </SettingRow>
-
-        {/* Sound picker */}
-        <SettingRow
-          label="Notification sound"
-          description="Choose a sound or drop your own file into public/sounds/"
-          indent
-        >
-          <div className="flex items-center gap-1.5">
-            <select
-              value={draft.notificationSound}
-              onChange={(e) => set('notificationSound', e.target.value)}
-              disabled={!draft.soundEnabled}
-              className="text-sm px-2 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40 max-w-[160px]"
-            >
-              {AVAILABLE_SOUNDS.map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              title="Preview sound"
-              disabled={!draft.soundEnabled}
-              onClick={() => playNotificationSound(draft.soundVolume, draft.notificationSound)}
-              className="p-1.5 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </button>
-          </div>
         </SettingRow>
 
         {/* Volume slider */}
