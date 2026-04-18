@@ -12,15 +12,20 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../../packages-core-adapter';
 import { useHealthChat } from '../context/health-chat-context';
+import { useStaffNotifications } from '../../notification/notification-context';
 
 /**
  * Hook for staff health chat socket connection
  */
 export function useHealthChatSocket() {
+  const { subscribe } = useStaffNotifications();
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const typingTimeoutRef = useRef(null);
   const typingDebounceRef = useRef(null);
+  const branchJoinRetryTimeoutRef = useRef(null);
+  const connectRetryTimeoutRef = useRef(null);
+  const connectRetryAttemptRef = useRef(0);
   const lastTypingEmitRef = useRef(0);
   const joinedRoomsRef = useRef(new Set());
   const processedMessageIds = useRef(new Set());
@@ -69,6 +74,27 @@ export function useHealthChatSocket() {
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
 
+  // Fallback path: consume health-chat events from the shared notification socket.
+  // This keeps the list reactive even if the dedicated health-chat socket reconnects slowly.
+  useEffect(() => {
+    const unsubCreated = subscribe('healthchat:ticket-created', (data) => {
+      if (data?.chat) {
+        addTicketRef.current(data.chat);
+        return;
+      }
+      refreshConversationListRef.current();
+    });
+
+    const unsubStatusChanged = subscribe('healthchat:ticket-status-changed', () => {
+      refreshConversationListRef.current();
+    });
+
+    return () => {
+      unsubCreated?.();
+      unsubStatusChanged?.();
+    };
+  }, [subscribe]);
+
   // Connect on mount only - use empty dependency array to prevent reconnection
   useEffect(() => {
     let isMounted = true;
@@ -87,144 +113,227 @@ export function useHealthChatSocket() {
       }
     });
 
-    socketService.connect().then(() => {
-      // Check if component is still mounted before setting state
-      if (!isMounted) {
-        socketService.disconnect();
+    const clearBranchJoinRetry = () => {
+      if (branchJoinRetryTimeoutRef.current) {
+        clearTimeout(branchJoinRetryTimeoutRef.current);
+        branchJoinRetryTimeoutRef.current = null;
+      }
+    };
+
+    const clearConnectRetry = () => {
+      if (connectRetryTimeoutRef.current) {
+        clearTimeout(connectRetryTimeoutRef.current);
+        connectRetryTimeoutRef.current = null;
+      }
+    };
+
+    const scheduleConnectRetry = () => {
+      clearConnectRetry();
+      if (!isMounted) return;
+      const delayMs = Math.min(5000, 1000 * Math.max(1, connectRetryAttemptRef.current));
+      connectRetryTimeoutRef.current = setTimeout(() => {
+        if (!isMounted) return;
+        connectWithRetry();
+      }, delayMs);
+    };
+
+    const scheduleBranchJoinRetry = () => {
+      clearBranchJoinRetry();
+      if (!isMounted) return;
+      branchJoinRetryTimeoutRef.current = setTimeout(() => {
+        if (!isMounted) return;
+        joinBranchRoom();
+      }, 1500);
+    };
+
+    const joinBranchRoom = () => {
+      if (!socketService.isConnected()) {
+        scheduleBranchJoinRetry();
         return;
       }
 
-      socketRef.current = socketService;
-      setIsConnected(true);
-      setSocketErrorRef.current(false);
+      const emitted = socketService.emit('notification:join-branch', {}, (ack) => {
+        if (!isMounted) return;
 
-      // Join branch-scoped notification rooms used by health chat ticket events.
-      socketService.emit('notification:join-branch', {});
-
-      // Handle reconnection - rejoin all tracked rooms
-      socketService.getSocket()?.on('reconnect', () => {
-        socketService.emit('notification:join-branch', {});
-        joinedRoomsRef.current.forEach(roomId => {
-          socketService.emit('healthchat:join-room', { chatId: roomId });
-        });
-      });
-
-      // Listen for new ticket created by patient
-      socketService.on('healthchat:ticket-created', (data) => {
-        if (data?.chat) {
-          addTicketRef.current(data.chat);
+        if (ack?.success) {
+          clearBranchJoinRetry();
+          setSocketErrorRef.current(false);
           return;
         }
 
-        // Fallback to source-of-truth fetch if payload is partial.
-        refreshConversationListRef.current();
+        console.warn('[HealthChatSocket] Failed to join branch room:', ack);
+        setSocketErrorRef.current(true);
+        scheduleBranchJoinRetry();
       });
 
-      // Listen for new messages (in any room we're in) with deduplication
-      socketService.on('healthchat:new-message', (data) => {
-        // Handle both Patient and Medical messages
-        if (data.chatId && data.message && (data.senderType === 'Patient' || data.senderType === 'Medical')) {
-          // Deduplicate messages by ID
-          const messageId = String(data.message?.id);
-          if (messageId && processedMessageIds.current.has(messageId)) {
+      if (!emitted) {
+        scheduleBranchJoinRetry();
+      }
+    };
+
+    const connectWithRetry = () => {
+      socketService.connect().then(() => {
+        // Check if component is still mounted before setting state
+        if (!isMounted) {
+          socketService.disconnect();
+          return;
+        }
+
+        socketRef.current = socketService;
+        setIsConnected(true);
+        setSocketErrorRef.current(false);
+        connectRetryAttemptRef.current = 0;
+        clearConnectRetry();
+
+        // Join branch-scoped notification rooms used by health chat ticket events.
+        joinBranchRoom();
+
+        const rawSocket = socketService.getSocket();
+
+        // Keep UI connectivity status in sync across reconnect cycles.
+        rawSocket?.on('connect', () => {
+          if (!isMounted) return;
+          setIsConnected(true);
+          joinBranchRoom();
+        });
+
+        rawSocket?.on('disconnect', () => {
+          if (!isMounted) return;
+          setIsConnected(false);
+          setSocketErrorRef.current(true);
+        });
+
+        // Handle reconnection - rejoin all tracked rooms
+        rawSocket?.on('reconnect', () => {
+          joinBranchRoom();
+          joinedRoomsRef.current.forEach(roomId => {
+            socketService.emit('healthchat:join-room', { chatId: roomId });
+          });
+        });
+
+        // Listen for new ticket created by patient
+        socketService.on('healthchat:ticket-created', (data) => {
+          if (data?.chat) {
+            addTicketRef.current(data.chat);
             return;
           }
-          if (messageId) {
-            processedMessageIds.current.add(messageId);
-            // Keep Set size bounded - remove old entries
-            if (processedMessageIds.current.size > 100) {
-              const firstKey = processedMessageIds.current.values().next().value;
-              processedMessageIds.current.delete(firstKey);
+
+          // Fallback to source-of-truth fetch if payload is partial.
+          refreshConversationListRef.current();
+        });
+
+        // Listen for new messages (in any room we're in) with deduplication
+        socketService.on('healthchat:new-message', (data) => {
+          // Handle both Patient and Medical messages
+          if (data.chatId && data.message && (data.senderType === 'Patient' || data.senderType === 'Medical')) {
+            // Deduplicate messages by ID
+            const messageId = String(data.message?.id);
+            if (messageId && processedMessageIds.current.has(messageId)) {
+              return;
             }
+            if (messageId) {
+              processedMessageIds.current.add(messageId);
+              // Keep Set size bounded - remove old entries
+              if (processedMessageIds.current.size > 100) {
+                const firstKey = processedMessageIds.current.values().next().value;
+                processedMessageIds.current.delete(firstKey);
+              }
+            }
+            addMessageRef.current(data.chatId, data.message);
+            // Update conversation list (lastMessage, unread, order)
+            updateConversationForNewMessageRef.current(data.chatId, data.message, data.senderType);
           }
-          addMessageRef.current(data.chatId, data.message);
-          // Update conversation list (lastMessage, unread, order)
-          updateConversationForNewMessageRef.current(data.chatId, data.message, data.senderType);
-        }
-      });
+        });
 
-      // Listen for typing indicators (ignore closed chats)
-      // Map ticketId to patientId for typing state since UI is patient-grouped
-      socketService.on('healthchat:user-typing', (data) => {
-        if (data.chatId && data.userType === 'Patient') {
-          // Ignore typing events for closed chats
-          if (closedChatIds.current.has(String(data.chatId))) {
-            return;
+        // Listen for typing indicators (ignore closed chats)
+        // Map ticketId to patientId for typing state since UI is patient-grouped
+        socketService.on('healthchat:user-typing', (data) => {
+          if (data.chatId && data.userType === 'Patient') {
+            // Ignore typing events for closed chats
+            if (closedChatIds.current.has(String(data.chatId))) {
+              return;
+            }
+            // Find the patientId for this ticket by checking the tickets list
+            const ticketId = String(data.chatId);
+            let patientKey = ticketId; // Default to ticketId
+            const ticket = ticketsRef.current?.find(t =>
+              String(t.id) === ticketId ||
+              t.tickets?.some(sub => String(sub.id) === ticketId)
+            );
+            if (ticket?.patientId) {
+              patientKey = String(ticket.patientId);
+            }
+            setUserTypingRef.current(patientKey, data.userId, data.isTyping);
           }
-          // Find the patientId for this ticket by checking the tickets list
-          const ticketId = String(data.chatId);
-          let patientKey = ticketId; // Default to ticketId
-          const ticket = ticketsRef.current?.find(t =>
-            String(t.id) === ticketId ||
-            t.tickets?.some(sub => String(sub.id) === ticketId)
-          );
-          if (ticket?.patientId) {
-            patientKey = String(ticket.patientId);
+        });
+
+        // Listen for ticket closed by patient
+        // Updates status immediately but defers removal from list until staff navigates away
+        socketService.on('healthchat:ticket-closed', (data) => {
+          if (data.chatId) {
+            const closedBy = data.closedBy || 'Patient';
+            // Track this chat as closed to ignore future typing events
+            closedChatIds.current.add(String(data.chatId));
+            // Find the patient for this ticket
+            const ticketId = String(data.chatId);
+            const ticket = ticketsRef.current?.find(t =>
+              String(t.id) === ticketId ||
+              t.tickets?.some(sub => String(sub.id) === ticketId)
+            );
+            const patientId = ticket?.patientId || ticketId;
+            // Mark as closed (status updates immediately, stays in list)
+            markTicketClosedRef.current(data.chatId, patientId, closedBy);
+            // Clear typing indicator
+            setUserTypingRef.current(String(patientId), null, false);
           }
-          setUserTypingRef.current(patientKey, data.userId, data.isTyping);
-        }
-      });
+        });
 
-      // Listen for ticket closed by patient
-      // Updates status immediately but defers removal from list until staff navigates away
-      socketService.on('healthchat:ticket-closed', (data) => {
-        if (data.chatId) {
-          const closedBy = data.closedBy || 'Patient';
-          // Track this chat as closed to ignore future typing events
-          closedChatIds.current.add(String(data.chatId));
-          // Find the patient for this ticket
-          const ticketId = String(data.chatId);
-          const ticket = ticketsRef.current?.find(t =>
-            String(t.id) === ticketId ||
-            t.tickets?.some(sub => String(sub.id) === ticketId)
-          );
-          const patientId = ticket?.patientId || ticketId;
-          // Mark as closed (status updates immediately, stays in list)
-          markTicketClosedRef.current(data.chatId, patientId, closedBy);
-          // Clear typing indicator
-          setUserTypingRef.current(String(patientId), null, false);
-        }
-      });
+        // Listen for ticket status changes by other staff (approve/reject)
+        socketService.on('healthchat:ticket-status-changed', (data) => {
+          if (data.chatId && data.status) {
+            // Pull source-of-truth data so ownership changes are reflected immediately.
+            refreshConversationListRef.current();
+          }
+        });
 
-      // Listen for ticket status changes by other staff (approve/reject)
-      socketService.on('healthchat:ticket-status-changed', (data) => {
-        if (data.chatId && data.status) {
-          // Pull source-of-truth data so ownership changes are reflected immediately.
-          refreshConversationListRef.current();
-        }
-      });
+        // Listen for session extended (patient or other staff extended the session)
+        socketService.on('healthchat:session-extended', (data) => {
+          if (data.chatId && data.expiresAt) {
+            updateTicketExpiresAtRef.current(data.chatId, data.expiresAt);
+          }
+        });
 
-      // Listen for session extended (patient or other staff extended the session)
-      socketService.on('healthchat:session-extended', (data) => {
-        if (data.chatId && data.expiresAt) {
-          updateTicketExpiresAtRef.current(data.chatId, data.expiresAt);
-        }
-      });
+        // Listen for ticket transferred away from current staff
+        socketService.on('healthchat:ticket-transferred', (data) => {
+          if (data?.chatId) {
+            refreshConversationListRef.current();
+          }
+        });
 
-      // Listen for ticket transferred away from current staff
-      socketService.on('healthchat:ticket-transferred', (data) => {
-        if (data?.chatId) {
-          refreshConversationListRef.current();
-        }
+        // Listen for ticket taken over by admin
+        socketService.on('healthchat:ticket-taken-over', (data) => {
+          if (data?.chatId) {
+            refreshConversationListRef.current();
+          }
+        });
+      }).catch((err) => {
+        if (!isMounted) return;
+        console.error('[HealthChatSocket] Connection failed:', err);
+        console.error('[HealthChatSocket] Details:', err.message);
+        setIsConnected(false);
+        setSocketErrorRef.current(true);
+        connectRetryAttemptRef.current += 1;
+        scheduleConnectRetry();
       });
+    };
 
-      // Listen for ticket taken over by admin
-      socketService.on('healthchat:ticket-taken-over', (data) => {
-        if (data?.chatId) {
-          refreshConversationListRef.current();
-        }
-      });
-    }).catch((err) => {
-      if (!isMounted) return;
-      console.error('[HealthChatSocket] Connection failed:', err);
-      console.error('[HealthChatSocket] Details:', err.message);
-      setIsConnected(false);
-      setSocketErrorRef.current(true);
-    });
+    connectWithRetry();
 
     // Cleanup on unmount only
     return () => {
       isMounted = false;
+      clearBranchJoinRetry();
+      clearConnectRetry();
       if (socketRef.current) {
         // Leave all joined rooms
         joinedRoomsRef.current.forEach(roomId => {
@@ -234,6 +343,8 @@ export function useHealthChatSocket() {
         socketRef.current.disconnect();
         socketRef.current = null;
         setIsConnected(false);
+      } else {
+        socketService.disconnect();
       }
       processedMessageIds.current.clear();
       closedChatIds.current.clear();

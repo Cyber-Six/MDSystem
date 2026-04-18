@@ -3,11 +3,12 @@ import { X, Check, Clock, User, AlertCircle, ArrowRightLeft } from 'lucide-react
 import { useHealthChat } from '../context/health-chat-context';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import { formatPatientName, getPatientInitials } from '../health-chat-service';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 import TicketStatusBadge from './ticket-status-badge';
 import ConfirmModal from './confirm-modal';
 import TransferModal from './transfer-modal';
 
-const ChatHeader = () => {
+export const ChatHeader = () => {
   const { selectedTicket, activeTicketId, approveTicket, rejectTicket, closeTicket, transferTicket } = useHealthChat();
   const { profile } = useStaffProfile();
 
@@ -215,7 +216,7 @@ const ChatHeader = () => {
               {[
                 { label: 'Full Name',    value: formatPatientName(patient) },
                 patient?.identifier && { label: getIdLabel(), value: patient.identifier, mono: true },
-                patient?.branch && { label: 'Branch',   value: patient.branch },
+                patient?.branch && { label: 'Branch',   value: formatBranchLabel(patient.branch) },
                 patient?.email  && { label: 'Email',  value: patient.email },
               ].filter(Boolean).map((row) => (
                 <div key={row.label}>

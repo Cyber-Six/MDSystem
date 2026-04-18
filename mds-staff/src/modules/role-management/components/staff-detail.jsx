@@ -4,6 +4,7 @@ import ActivityLog from './activity-log';
 import { useBanner } from '../../../context/use-banner';
 import { usePermissions } from '../../../context/permissions-context';
 import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 /**
  * Staff Detail Component
@@ -207,7 +208,7 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
                     <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Branch</p>
                     {isTargetAdmin ? (
                       <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{branch === 'QuezonCity' ? 'Quezon City' : branch === 'Both' ? 'MLA & QC (Both)' : branch}</p>
+                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{formatBranchLabel(branch)}</p>
                         <span className="text-[8px] px-1 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium leading-none">Locked</span>
                       </div>
                     ) : (
@@ -218,7 +219,7 @@ const StaffDetail = ({ staff, onClose, onSave, onDelete }) => {
                       >
                         <option value="Manila">Manila</option>
                         <option value="QuezonCity">Quezon City</option>
-                        <option value="Both">MLA & QC (Both)</option>
+                        <option value="Both">MLA & QC</option>
                       </select>
                     )}
                   </div>
