@@ -5,6 +5,7 @@ import logo from '@core/assets/MDSystem.png';
 const Sidebar = ({
   isOpen,
   isExpanded,
+  canToggleExpand = true,
   onClose,
   onToggleExpand,
   isInactive = false,
@@ -78,19 +79,21 @@ const Sidebar = ({
         } ${isExpanded ? 'md:w-72' : 'md:w-32'}`}
       >
         {/* Expand/Collapse Button (Desktop) */}
-        <button
-          onClick={onToggleExpand}
-          className="hidden md:flex absolute -right-3 top-16 w-6 h-6 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-full items-center justify-center shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors"
-        >
-          <svg
-            className={`w-3 h-3 text-neutral-600 dark:text-neutral-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        {canToggleExpand && (
+          <button
+            onClick={onToggleExpand}
+            className="hidden md:flex absolute -right-3 top-16 w-6 h-6 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-full items-center justify-center shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+            <svg
+              className={`w-3 h-3 text-neutral-600 dark:text-neutral-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
 
         <div className="flex flex-col h-full">
           {/* Logo Section */}

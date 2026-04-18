@@ -5,6 +5,7 @@ import TopBar from './top-bar';
 
 const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true }) => {
   const location = useLocation();
+  const isSettingsRoute = location.pathname.startsWith('/settings');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
     const saved = localStorage.getItem('patient_sidebar_expanded');
@@ -28,11 +29,7 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    if (window.innerWidth >= 768 && location.pathname.startsWith('/settings')) {
-      setSidebarExpanded(false);
-    }
-  }, [location.pathname]);
+  const effectiveSidebarExpanded = isSettingsRoute ? false : sidebarExpanded;
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -43,6 +40,7 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
   };
 
   const toggleSidebarExpand = () => {
+    if (isSettingsRoute) return;
     setSidebarExpanded((prev) => !prev);
   };
 
@@ -51,7 +49,8 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
-        isExpanded={sidebarExpanded}
+        isExpanded={effectiveSidebarExpanded}
+        canToggleExpand={!isSettingsRoute}
         onClose={closeSidebar}
         onToggleExpand={toggleSidebarExpand}
         isInactive={isInactive}
@@ -60,7 +59,7 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col overflow-hidden transition-[margin-left] duration-300 ${
-        sidebarExpanded ? 'md:ml-72' : 'md:ml-32'
+        effectiveSidebarExpanded ? 'md:ml-72' : 'md:ml-32'
       }`}>
         {/* Top Bar */}
         <TopBar onMenuClick={toggleSidebar} isSidebarOpen={sidebarOpen} />
