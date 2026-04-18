@@ -1,65 +1,115 @@
 # MDSystem
 
-MDSystem is a medical data management system for the TIP ecosystem. It provides digital workflows for patients, medical staff, and doctors — covering health records, appointments, consultations, medical inventory, and document generation.
+MDSystem is a multi-application medical information platform used across patient, staff, and mobile experiences. This repository contains the backend services, web portals, mobile client, and shared core logic.
 
-## Applications
+## Applications In This Repository
 
-| Application | Description |
-|---|---|
-| **Patient Portal** | Web portal for patients to manage their medical records, view appointments, submit medicine requests, and access e-consultation. |
-| **Staff Portal** | Web portal for medical staff and doctors to handle appointments, review patient records, manage medical inventory, and oversee staff roles. |
-| **Mobile App** | React Native mobile client providing patient-facing access on Android and iOS. |
-| **Backend API** | Express-based REST and GraphQL API serving both portals and the mobile app. Handles authentication, EMR, inventory, media, and document services. |
-| **Shared Core** | Platform-agnostic JavaScript package shared across the web portals and mobile app for token management, API communication, and validation. |
+| Scope | Path | Purpose |
+| --- | --- | --- |
+| Patient Web | `mds-patient/` | Patient-facing web portal (records, appointments, medicine requests, health chat, documents). |
+| Staff Web | `mds-staff/` | Medical/staff portal (review workflows, appointments, inventory, analytics, role-based tools). |
+| Mobile | `mds-mobile/` | Expo React Native mobile app for patient workflows. |
+| Backend | `Backend/` | Express + GraphQL/REST backend, auth, sockets, media, document and EMR services. |
+| Shared Core | `packages/core/` | Reusable cross-platform services (token, axios, validation, banners, auth helpers). |
 
-## Features
+## Workspace Behavior
 
-### Patient
-- Account registration and authentication
-- Initial and updated medical record forms
-- Appointment scheduling and tracking
-- Medicine request submission
-- E-consultation (chatbot-assisted)
-- Document downloads (medical certificates, prescriptions, referrals)
+- Root npm workspaces include `packages/*`, `mds-patient`, and `mds-staff`.
+- `mds-mobile` is maintained in the same repository but is not part of the root workspaces list.
+- Root `npm install` runs `Backend` install automatically via `postinstall`.
 
-### Medical Staff / Doctor
-- Patient record review and approval workflow
-- Appointment queue and availability management
-- Medical inventory tracking (stock, dispensing, transactions)
-- Document generation with tag-based templates
-- Role and permission management
-- Analytics and reports
+## Prerequisites
 
-## Tech Stack
+- Node.js 18+
+- npm
+- PostgreSQL
+- Redis
+- SMTP credentials (for email flows)
 
-| Layer | Stack |
-|---|---|
-| Backend | Node.js, Express 5, PostgreSQL, Redis, GraphQL, BullMQ |
-| Web Portals | React 19, Vite 7, React Router 7, Tailwind CSS 3 |
-| Mobile | Expo 54, React Native 0.81, TypeScript, NativeWind |
-| Document Service | Python, FastAPI, docxtpl |
-| Shared Core | ESM JavaScript, Axios |
+## Installation
+
+### 1) Install root dependencies
+
+```bash
+npm install
+```
+
+### 2) Install mobile dependencies
+
+```bash
+cd mds-mobile
+npm install
+cd ..
+```
+
+## Running The System
+
+### Web + Backend (development)
+
+Run backend and frontend in separate terminals.
+
+```bash
+# Terminal 1 - patient backend server
+npm run start:patient
+
+# Terminal 2 - patient web app (Vite)
+npm run dev:patient
+```
+
+```bash
+# Terminal 1 - staff backend server
+npm run start:staff
+
+# Terminal 2 - staff web app (Vite)
+npm run dev:staff
+```
+
+### Mobile (Expo)
+
+```bash
+cd mds-mobile
+npm start
+```
+
+### Production build (web apps)
+
+```bash
+npm run build
+```
+
+## Backend Configuration Notes
+
+- Backend loads configuration from `Backend/.env` and validates required values on startup.
+- Required groups include PostgreSQL, JWT, Redis, SMTP, and TOTP settings.
+- Generate an initial TOTP encryption key with:
+
+```bash
+cd Backend
+npm run setup:totp-key
+```
 
 ## Repository Structure
 
 ```text
 MDSystem/
-├── Backend/          # API server and services
-├── mds-patient/      # Patient web portal
-├── mds-staff/        # Staff web portal
-├── mds-mobile/       # Mobile app
-├── packages/core/    # Shared business logic
-└── Docs/             # Project documentation
+|-- Backend/
+|-- Docs/
+|-- mds-mobile/
+|-- mds-patient/
+|-- mds-staff/
+|-- packages/
+|   `-- core/
+`-- README.md
 ```
 
-For the full file map, see [Docs/file_structure.md](Docs/file_structure.md).
+## Related Documentation
 
-## Documentation
-
-- [Docs/file_structure.md](Docs/file_structure.md) — full repository structure
-- [packages/core/README.md](packages/core/README.md) — shared core package
-- [mds-mobile/README.md](mds-mobile/README.md) — mobile app notes
+- [Docs/file_structure.md](Docs/file_structure.md)
+- [mds-mobile/README.md](mds-mobile/README.md)
+- [packages/core/README.md](packages/core/README.md)
+- [mds-patient/src/modules/record-forms/update-record/README.md](mds-patient/src/modules/record-forms/update-record/README.md)
+- [mds-patient/src/modules/record-forms/initial-record/medical/README.md](mds-patient/src/modules/record-forms/initial-record/medical/README.md)
 
 ## License
 
-This repository is proprietary software. See [LICENSE](LICENSE) for the applicable terms.
+This repository is proprietary software. See [LICENSE](LICENSE) for terms.
