@@ -772,15 +772,40 @@ export function HealthChatProvider({ children }) {
       return;
     }
 
+    const normalizeIncomingStatus = (status) => {
+      const normalized = String(status || '').trim().toLowerCase();
+      if (!normalized) return null;
+
+      if (normalized === 'open' || normalized === 'pending') return 'Open';
+      if (normalized === 'ongoing' || normalized === 'inprogress' || normalized === 'active') return 'Ongoing';
+      if (normalized === 'closed') return 'Closed';
+      if (normalized === 'expired') return 'Expired';
+      return null;
+    };
+
+    const normalizedTicket = {
+      ...ticket,
+      id: ticket.id ?? ticket.chatId ?? null,
+      patientId: ticket.patientId ?? ticket.patient?.id ?? null,
+      status: normalizeIncomingStatus(ticket.status),
+    };
+
+    // Socket payloads can vary by source; fallback to source-of-truth refresh
+    // when we cannot reliably map the event to a patient/ticket row.
+    if (!normalizedTicket.id || !normalizedTicket.patientId || !normalizedTicket.status) {
+      scheduleListRefresh();
+      return;
+    }
+
     const shouldShow =
-      (selectedFilters.includes('pending') && ticket.status === 'Open') ||
-      (selectedFilters.includes('active') && ticket.status === 'Ongoing') ||
-      (selectedFilters.includes('archive') && ['Closed', 'Expired'].includes(ticket.status));
+      (selectedFilters.includes('pending') && normalizedTicket.status === 'Open') ||
+      (selectedFilters.includes('active') && normalizedTicket.status === 'Ongoing') ||
+      (selectedFilters.includes('archive') && ['Closed', 'Expired'].includes(normalizedTicket.status));
 
     if (!shouldShow) return;
 
-    const patientId = String(ticket.patientId || '');
-    const ticketId = String(ticket.id || '');
+    const patientId = String(normalizedTicket.patientId || '');
+    const ticketId = String(normalizedTicket.id || '');
 
     // Fallback to source-of-truth refresh for malformed payloads.
     if (!patientId || !ticketId) {
@@ -852,28 +877,28 @@ export function HealthChatProvider({ children }) {
           if (ticketAlreadyTracked) {
             // Known sub-ticket — just flip its status
             updatedSubTickets = t.tickets?.map(sub =>
-              String(sub.id) === ticketId ? { ...sub, status: ticket.status } : sub
+              String(sub.id) === ticketId ? { ...sub, status: normalizedTicket.status } : sub
             );
           } else {
             // New ticket for an existing patient — prepend it so it becomes the latest
             const newSub = {
-              id: ticket.id,
-              status: ticket.status,
-              purpose: ticket.purpose,
-              session_start: ticket.session_start,
-              session_end: ticket.session_end,
-              expiresAt: ticket.expiresAt,
-              closedBy: ticket.closedBy,
+              id: normalizedTicket.id,
+              status: normalizedTicket.status,
+              purpose: normalizedTicket.purpose,
+              session_start: normalizedTicket.session_start,
+              session_end: normalizedTicket.session_end,
+              expiresAt: normalizedTicket.expiresAt,
+              closedBy: normalizedTicket.closedBy,
             };
             updatedSubTickets = [newSub, ...(t.tickets || [])];
           }
 
           return {
             ...t,
-            status: ticket.status,
-            lastMessage: ticket.lastMessage || t.lastMessage,
-            lastMessageAt: ticket.lastMessageAt || ticket.session_start || new Date().toISOString(),
-            unreadCount: ticket.unreadCount ?? t.unreadCount,
+            status: normalizedTicket.status,
+            lastMessage: normalizedTicket.lastMessage || t.lastMessage,
+            lastMessageAt: normalizedTicket.lastMessageAt || normalizedTicket.session_start || new Date().toISOString(),
+            unreadCount: normalizedTicket.unreadCount ?? t.unreadCount,
             tickets: updatedSubTickets || t.tickets,
           };
         });
@@ -888,44 +913,44 @@ export function HealthChatProvider({ children }) {
           let updatedSubTickets;
           if (ticketAlreadyTracked) {
             updatedSubTickets = c.tickets?.map(sub =>
-              String(sub.id) === ticketId ? { ...sub, status: ticket.status } : sub
+              String(sub.id) === ticketId ? { ...sub, status: normalizedTicket.status } : sub
             );
           } else {
             const newSub = {
-              id: ticket.id,
-              status: ticket.status,
-              purpose: ticket.purpose,
-              session_start: ticket.session_start,
-              session_end: ticket.session_end,
-              expiresAt: ticket.expiresAt,
-              closedBy: ticket.closedBy,
+              id: normalizedTicket.id,
+              status: normalizedTicket.status,
+              purpose: normalizedTicket.purpose,
+              session_start: normalizedTicket.session_start,
+              session_end: normalizedTicket.session_end,
+              expiresAt: normalizedTicket.expiresAt,
+              closedBy: normalizedTicket.closedBy,
             };
             updatedSubTickets = [newSub, ...(c.tickets || [])];
           }
 
           const latestTicket = c.latestTicket && String(c.latestTicket.id) === ticketId
-            ? { ...c.latestTicket, ...ticket }
+            ? { ...c.latestTicket, ...normalizedTicket }
             : ticketAlreadyTracked
               ? c.latestTicket
               : {
-                  id: ticket.id,
-                  patientId: ticket.patientId,
-                  medicalId: ticket.medicalId,
-                  purpose: ticket.purpose,
-                  status: ticket.status,
-                  session_start: ticket.session_start,
-                  session_end: ticket.session_end,
-                  archived_at: ticket.archived_at,
-                  expiresAt: ticket.expiresAt,
-                  closedBy: ticket.closedBy,
-                  medical: ticket.medical,
+                  id: normalizedTicket.id,
+                  patientId: normalizedTicket.patientId,
+                  medicalId: normalizedTicket.medicalId,
+                  purpose: normalizedTicket.purpose,
+                  status: normalizedTicket.status,
+                  session_start: normalizedTicket.session_start,
+                  session_end: normalizedTicket.session_end,
+                  archived_at: normalizedTicket.archived_at,
+                  expiresAt: normalizedTicket.expiresAt,
+                  closedBy: normalizedTicket.closedBy,
+                  medical: normalizedTicket.medical,
                 };
 
           return {
             ...c,
-            lastMessage: ticket.lastMessage || c.lastMessage,
-            lastMessageAt: ticket.lastMessageAt || ticket.session_start || c.lastMessageAt,
-            unreadCount: ticket.unreadCount ?? c.unreadCount,
+            lastMessage: normalizedTicket.lastMessage || c.lastMessage,
+            lastMessageAt: normalizedTicket.lastMessageAt || normalizedTicket.session_start || c.lastMessageAt,
+            unreadCount: normalizedTicket.unreadCount ?? c.unreadCount,
             tickets: updatedSubTickets || c.tickets,
             latestTicket,
           };
@@ -942,61 +967,61 @@ export function HealthChatProvider({ children }) {
     // New patient in current filters: insert optimistically so it appears immediately,
     // then refresh in the background to normalize counts/metadata.
     const fallbackTimestamp = new Date().toISOString();
-    const effectiveLastMessageAt = ticket.lastMessageAt || ticket.session_start || fallbackTimestamp;
+    const effectiveLastMessageAt = normalizedTicket.lastMessageAt || normalizedTicket.session_start || fallbackTimestamp;
 
     const normalizedSubTicket = {
-      id: ticket.id,
-      status: ticket.status,
-      purpose: ticket.purpose,
-      session_start: ticket.session_start,
-      session_end: ticket.session_end,
-      archived_at: ticket.archived_at,
-      expiresAt: ticket.expiresAt,
-      closedBy: ticket.closedBy,
+      id: normalizedTicket.id,
+      status: normalizedTicket.status,
+      purpose: normalizedTicket.purpose,
+      session_start: normalizedTicket.session_start,
+      session_end: normalizedTicket.session_end,
+      archived_at: normalizedTicket.archived_at,
+      expiresAt: normalizedTicket.expiresAt,
+      closedBy: normalizedTicket.closedBy,
     };
 
     const optimisticTicketRow = {
-      id: ticket.patientId,
-      patientId: ticket.patientId,
-      patient: ticket.patient || null,
-      purpose: ticket.purpose,
-      status: ticket.status,
-      medicalId: ticket.medicalId,
-      medical: ticket.medical,
-      session_start: ticket.session_start,
-      session_end: ticket.session_end,
-      archived_at: ticket.archived_at,
-      expiresAt: ticket.expiresAt,
-      closedBy: ticket.closedBy,
-      lastMessage: ticket.lastMessage || null,
+      id: normalizedTicket.patientId,
+      patientId: normalizedTicket.patientId,
+      patient: normalizedTicket.patient || null,
+      purpose: normalizedTicket.purpose,
+      status: normalizedTicket.status,
+      medicalId: normalizedTicket.medicalId,
+      medical: normalizedTicket.medical,
+      session_start: normalizedTicket.session_start,
+      session_end: normalizedTicket.session_end,
+      archived_at: normalizedTicket.archived_at,
+      expiresAt: normalizedTicket.expiresAt,
+      closedBy: normalizedTicket.closedBy,
+      lastMessage: normalizedTicket.lastMessage || null,
       lastMessageAt: effectiveLastMessageAt,
-      unreadCount: ticket.unreadCount || 0,
-      activeTicketCount: ['Open', 'Ongoing'].includes(ticket.status) ? 1 : 0,
+      unreadCount: normalizedTicket.unreadCount || 0,
+      activeTicketCount: ['Open', 'Ongoing'].includes(normalizedTicket.status) ? 1 : 0,
       totalTicketCount: 1,
       tickets: [normalizedSubTicket],
       _isConversation: true,
     };
 
     const optimisticConversation = {
-      patientId: ticket.patientId,
-      patient: ticket.patient || null,
+      patientId: normalizedTicket.patientId,
+      patient: normalizedTicket.patient || null,
       latestTicket: {
-        id: ticket.id,
-        patientId: ticket.patientId,
-        medicalId: ticket.medicalId,
-        purpose: ticket.purpose,
-        status: ticket.status,
-        session_start: ticket.session_start,
-        session_end: ticket.session_end,
-        archived_at: ticket.archived_at,
-        expiresAt: ticket.expiresAt,
-        closedBy: ticket.closedBy,
-        medical: ticket.medical,
+        id: normalizedTicket.id,
+        patientId: normalizedTicket.patientId,
+        medicalId: normalizedTicket.medicalId,
+        purpose: normalizedTicket.purpose,
+        status: normalizedTicket.status,
+        session_start: normalizedTicket.session_start,
+        session_end: normalizedTicket.session_end,
+        archived_at: normalizedTicket.archived_at,
+        expiresAt: normalizedTicket.expiresAt,
+        closedBy: normalizedTicket.closedBy,
+        medical: normalizedTicket.medical,
       },
-      lastMessage: ticket.lastMessage || null,
+      lastMessage: normalizedTicket.lastMessage || null,
       lastMessageAt: effectiveLastMessageAt,
-      unreadCount: ticket.unreadCount || 0,
-      activeTicketCount: ['Open', 'Ongoing'].includes(ticket.status) ? 1 : 0,
+      unreadCount: normalizedTicket.unreadCount || 0,
+      activeTicketCount: ['Open', 'Ongoing'].includes(normalizedTicket.status) ? 1 : 0,
       totalTicketCount: 1,
       tickets: [normalizedSubTicket],
     };

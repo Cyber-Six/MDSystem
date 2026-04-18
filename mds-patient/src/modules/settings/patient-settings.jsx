@@ -817,12 +817,6 @@ const PatientSettings = () => {
             ))}
           </div>
         </SettingRow>
-        <SettingRow
-          label="Minimized sidebar"
-          description="Keep the sidebar collapsed by default"
-        >
-          <Toggle checked={draft.compactSidebar} onChange={(v) => set('compactSidebar', v)} />
-        </SettingRow>
       </Section>
 
       {/* ── Save Bar ── */}

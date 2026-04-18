@@ -78,10 +78,13 @@ export function useHealthChatSocket() {
   // This keeps the list reactive even if the dedicated health-chat socket reconnects slowly.
   useEffect(() => {
     const unsubCreated = subscribe('healthchat:ticket-created', (data) => {
-      if (data?.chat) {
-        addTicketRef.current(data.chat);
+      const chatPayload = data?.chat || data;
+
+      if (chatPayload?.id || chatPayload?.chatId) {
+        addTicketRef.current(chatPayload);
         return;
       }
+
       refreshConversationListRef.current();
     });
 
@@ -213,8 +216,10 @@ export function useHealthChatSocket() {
 
         // Listen for new ticket created by patient
         socketService.on('healthchat:ticket-created', (data) => {
-          if (data?.chat) {
-            addTicketRef.current(data.chat);
+          const chatPayload = data?.chat || data;
+
+          if (chatPayload?.id || chatPayload?.chatId) {
+            addTicketRef.current(chatPayload);
             return;
           }
 
