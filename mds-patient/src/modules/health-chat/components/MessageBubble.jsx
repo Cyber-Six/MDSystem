@@ -186,7 +186,7 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
               {isPdf && (
                 <button onClick={() => setLightboxOpen(true)} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:opacity-80 transition-opacity text-secondary-900">
                   {getIcon()}
-                  View PDF
+                  View PDF Document
                 </button>
               )}
               {isVideo && <video src={displayUrl} controls className="max-w-full max-h-56" preload="metadata" />}
@@ -210,7 +210,7 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
               {isPdf && (
                 <button onClick={() => setLightboxOpen(true)} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300">
                   {getIcon()}
-                  View PDF
+                  View PDF Document
                 </button>
               )}
               {isVideo && <video src={displayUrl} controls className="max-w-full max-h-56" preload="metadata" />}

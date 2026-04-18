@@ -7,6 +7,38 @@
 
 import { axiosRequest } from '../packages-core-adapter';
 
+const isPdfBlob = async (blob) => {
+  if (!blob) return false;
+
+  const contentType = String(blob.type || '').split(';')[0].trim().toLowerCase();
+  if (contentType === 'application/pdf') return true;
+
+  try {
+    const header = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+    return (
+      header.length === 5 &&
+      header[0] === 0x25 && // %
+      header[1] === 0x50 && // P
+      header[2] === 0x44 && // D
+      header[3] === 0x46 && // F
+      header[4] === 0x2d    // -
+    );
+  } catch {
+    return false;
+  }
+};
+
+const fetchPdfBlob = async (url) => {
+  const response = await axiosRequest.get(url, { responseType: 'blob' });
+  const blob = response.data;
+
+  if (!(await isPdfBlob(blob))) {
+    throw new Error('Received non-PDF payload while downloading document.');
+  }
+
+  return blob;
+};
+
 /**
  * Generate a medical certificate PDF — saves to PatientDocuments in the DB.
  * @param {number} patientId
@@ -38,15 +70,9 @@ export const generateMedicalCertificate = async (patientId, data, options = {}) 
  */
 export const downloadDocumentBlob = async (documentId) => {
   try {
-    const response = await axiosRequest.get(`/documents/generated/download/${documentId}`, {
-      responseType: 'blob',
-    });
-    return response.data;
+    return await fetchPdfBlob(`/documents/generated/download/${documentId}`);
   } catch {
-    const fallbackResponse = await axiosRequest.get(`/documents/${documentId}`, {
-      responseType: 'blob',
-    });
-    return fallbackResponse.data;
+    return await fetchPdfBlob(`/documents/${documentId}`);
   }
 };
 

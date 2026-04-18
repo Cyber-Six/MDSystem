@@ -2,12 +2,14 @@ const crypto = require('crypto');
 
 const MEDICAL_CERTIFICATE_TEMPLATE_NAME = 'medical-certificate';
 const MEDICAL_CERTIFICATE_DOC_TYPE = 'medical-certificate';
+const MEDICAL_CERTIFICATE_VALIDITY_TAGS = Object.freeze(['valid_from', 'valid_until']);
+const MEDICAL_CERTIFICATE_LEGACY_VALIDITY_TAG = 'validity';
 
 const MEDICAL_CERTIFICATE_CORE_TAGS = Object.freeze([
   'purpose',
   'diagnosis',
   'recommendations',
-  'validity',
+  ...MEDICAL_CERTIFICATE_VALIDITY_TAGS,
 ]);
 
 const MEDICAL_CERTIFICATE_REQUIRED_TAGS = Object.freeze([
@@ -46,6 +48,12 @@ function parseJsonSafe(raw, fallback = null) {
 
 function hashString(value = '') {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function toOptionalField(value) {
+  const text = pickFirstNonEmpty(value);
+  if (!text) return undefined;
+  return text.toLowerCase() === 'not specified' ? undefined : text;
 }
 
 function toDataUrl(base64Value, mimeType = 'image/png') {
@@ -111,11 +119,6 @@ function buildMedicalCertificateRequirementValues(documentPayload = {}) {
     certificate.endDate
   );
 
-  const validity = {
-    validFrom: validFrom || null,
-    validUntil: validUntil || null,
-  };
-
   const restrictions = pickFirstNonEmpty(certificate.restrictions);
   const remarks = pickFirstNonEmpty(certificate.remarks);
 
@@ -136,7 +139,8 @@ function buildMedicalCertificateRequirementValues(documentPayload = {}) {
     purpose,
     diagnosis,
     recommendations,
-    validity: JSON.stringify(validity),
+    valid_from: validFrom || 'Not specified',
+    valid_until: validUntil || 'Not specified',
     restrictions,
     remarks,
     doctor_signature: JSON.stringify(doctorSignature),
@@ -163,8 +167,8 @@ function buildMedicalCertificateRequirementValues(documentPayload = {}) {
       purpose,
       diagnosis,
       recommendations,
-      validFrom: validity.validFrom || undefined,
-      validUntil: validity.validUntil || undefined,
+      validFrom: validFrom || undefined,
+      validUntil: validUntil || undefined,
       restrictions: restrictions || undefined,
       remarks: remarks || undefined,
     },
@@ -186,7 +190,9 @@ function parseMedicalCertificateRequirementRows(rows = []) {
     byTag.set(tag, row?.data ?? '');
   });
 
-  const missingTags = MEDICAL_CERTIFICATE_CORE_TAGS.filter((tag) => !byTag.has(tag));
+  const missingTags = ['purpose', 'diagnosis', 'recommendations'].filter(
+    (tag) => !byTag.has(tag)
+  );
   if (missingTags.length > 0) {
     const err = new Error(
       `Normalized medical certificate data is missing tags: ${missingTags.join(', ')}`
@@ -197,7 +203,22 @@ function parseMedicalCertificateRequirementRows(rows = []) {
     throw err;
   }
 
-  const validityObj = parseJsonSafe(byTag.get('validity') || '{}', {});
+  const hasValidityRange = MEDICAL_CERTIFICATE_VALIDITY_TAGS.some((tag) => byTag.has(tag));
+  const hasLegacyValidity = byTag.has(MEDICAL_CERTIFICATE_LEGACY_VALIDITY_TAG);
+  if (!hasValidityRange && !hasLegacyValidity) {
+    const err = new Error(
+      'Normalized medical certificate data is missing validity tags: valid_from and valid_until'
+    );
+    err.statusCode = 500;
+    err.errorCode = 'MEDICAL_CERTIFICATE_DATA_INCOMPLETE';
+    err.details = { missingTags: MEDICAL_CERTIFICATE_VALIDITY_TAGS };
+    throw err;
+  }
+
+  const validityObj = parseJsonSafe(
+    byTag.get(MEDICAL_CERTIFICATE_LEGACY_VALIDITY_TAG) || '{}',
+    {}
+  );
   const signatureObj = parseJsonSafe(byTag.get('doctor_signature') || '', null);
 
   const ptrNumber = pickFirstNonEmpty(byTag.get('ptr_number'));
@@ -208,8 +229,12 @@ function parseMedicalCertificateRequirementRows(rows = []) {
     diagnosis: pickFirstNonEmpty(byTag.get('diagnosis')) || 'Not specified',
     recommendations:
       pickFirstNonEmpty(byTag.get('recommendations')) || 'Follow physician instructions.',
-    validFrom: pickFirstNonEmpty(validityObj?.validFrom) || undefined,
-    validUntil: pickFirstNonEmpty(validityObj?.validUntil) || undefined,
+    validFrom: toOptionalField(
+      pickFirstNonEmpty(byTag.get('valid_from'), validityObj?.validFrom)
+    ),
+    validUntil: toOptionalField(
+      pickFirstNonEmpty(byTag.get('valid_until'), validityObj?.validUntil)
+    ),
     restrictions: pickFirstNonEmpty(byTag.get('restrictions')) || undefined,
     remarks: pickFirstNonEmpty(byTag.get('remarks')) || undefined,
     doctorSignature: signatureObj,
@@ -221,6 +246,7 @@ function parseMedicalCertificateRequirementRows(rows = []) {
 module.exports = {
   MEDICAL_CERTIFICATE_TEMPLATE_NAME,
   MEDICAL_CERTIFICATE_DOC_TYPE,
+  MEDICAL_CERTIFICATE_VALIDITY_TAGS,
   MEDICAL_CERTIFICATE_CORE_TAGS,
   MEDICAL_CERTIFICATE_REQUIRED_TAGS,
   normalizeTag,
