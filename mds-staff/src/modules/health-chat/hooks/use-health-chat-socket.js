@@ -33,7 +33,6 @@ export function useHealthChatSocket() {
     addMessage,
     addTicket,
     updateConversationForNewMessage,
-    removeConversation,
     setUserTyping,
     refreshConversationList,
     setSocketError,
@@ -50,7 +49,6 @@ export function useHealthChatSocket() {
   const setUserTypingRef = useRef(setUserTyping);
   const setSocketErrorRef = useRef(setSocketError);
   const refreshConversationListRef = useRef(refreshConversationList);
-  const removeConversationRef = useRef(removeConversation);
   const markTicketClosedRef = useRef(markTicketClosed);
   const ticketsRef = useRef(tickets);
   const updateTicketExpiresAtRef = useRef(updateTicketExpiresAt);
@@ -63,11 +61,10 @@ export function useHealthChatSocket() {
     setUserTypingRef.current = setUserTyping;
     setSocketErrorRef.current = setSocketError;
     refreshConversationListRef.current = refreshConversationList;
-    removeConversationRef.current = removeConversation;
     markTicketClosedRef.current = markTicketClosed;
     ticketsRef.current = tickets;
     updateTicketExpiresAtRef.current = updateTicketExpiresAt;
-  }, [addMessage, addTicket, updateConversationForNewMessage, setUserTyping, setSocketError, refreshConversationList, removeConversation, markTicketClosed, tickets, updateTicketExpiresAt]);
+  }, [addMessage, addTicket, updateConversationForNewMessage, setUserTyping, setSocketError, refreshConversationList, markTicketClosed, tickets, updateTicketExpiresAt]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -114,9 +111,13 @@ export function useHealthChatSocket() {
 
       // Listen for new ticket created by patient
       socketService.on('healthchat:ticket-created', (data) => {
-        if (data.chat) {
+        if (data?.chat) {
           addTicketRef.current(data.chat);
+          return;
         }
+
+        // Fallback to source-of-truth fetch if payload is partial.
+        refreshConversationListRef.current();
       });
 
       // Listen for new messages (in any room we're in) with deduplication
@@ -202,20 +203,16 @@ export function useHealthChatSocket() {
 
       // Listen for ticket transferred away from current staff
       socketService.on('healthchat:ticket-transferred', (data) => {
-        if (data.chatId && data.patientId) {
-          // Remove the conversation with slide-out animation
-          removeConversationRef.current(String(data.patientId));
+        if (data?.chatId) {
+          refreshConversationListRef.current();
         }
-        refreshConversationListRef.current();
       });
 
       // Listen for ticket taken over by admin
       socketService.on('healthchat:ticket-taken-over', (data) => {
-        if (data.chatId && data.patientId) {
-          // Remove the conversation with slide-out animation
-          removeConversationRef.current(String(data.patientId));
+        if (data?.chatId) {
+          refreshConversationListRef.current();
         }
-        refreshConversationListRef.current();
       });
     }).catch((err) => {
       if (!isMounted) return;
