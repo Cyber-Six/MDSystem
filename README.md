@@ -89,32 +89,6 @@ MDSystem/
 `-- README.md
 ```
 
-## Documentation Map
-
-### Core References
-
-- [Docs/file_structure.md](Docs/file_structure.md)
-- [Docs/SECURITY.md](Docs/SECURITY.md)
-- [packages/core/README.md](packages/core/README.md)
-
-### Product And Domain References
-
-- [Docs/appointment.md](Docs/appointment.md)
-- [Docs/consultation.md](Docs/consultation.md)
-- [Docs/emr.md](Docs/emr.md)
-- [Docs/staff-emr.md](Docs/staff-emr.md)
-- [Docs/medical-inventory.md](Docs/medical-inventory.md)
-- [Docs/health-chat.md](Docs/health-chat.md)
-- [Docs/patient-documents.md](Docs/patient-documents.md)
-- [Docs/role-management.md](Docs/role-management.md)
-- [Docs/sockets.md](Docs/sockets.md)
-
-### Module-Level READMEs
-
-- [mds-mobile/README.md](mds-mobile/README.md)
-- [mds-patient/src/modules/record-forms/update-record/README.md](mds-patient/src/modules/record-forms/update-record/README.md)
-- [mds-patient/src/modules/record-forms/initial-record/medical/README.md](mds-patient/src/modules/record-forms/initial-record/medical/README.md)
-
 ## License
 
 This repository is proprietary software. See [LICENSE](LICENSE) for terms.
