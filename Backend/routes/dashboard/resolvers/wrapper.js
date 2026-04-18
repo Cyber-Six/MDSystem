@@ -2,6 +2,8 @@ const db = require('../../../config/query.js');
 const { isMedicalPermitted } = require('../../../services/permit.js');
 const logger = require('../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../utils/graphql-helper.js');
+const emrWrapperQuery = require('../../emr/wrapper/query.js');
+const { autoExpireTickets } = require('../../health-chat/resolvers/wrapper/helper.js');
 
 const Query = {
   _getDashboardStats: async (_, args, { user, res }) => {
@@ -365,6 +367,135 @@ const Query = {
       logger.error(`Error fetching dashboard stats for userId=${user.id}: ${error.message}`);
       throwGraphQLError(res)
         .message('Failed to fetch dashboard statistics')
+        .status(500)
+        .throw();
+    }
+  },
+
+  _getPatientDashboardData: async (_, args, { user, res }) => {
+    const userId = user?.id;
+    if (!userId) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    try {
+      const [appointmentResult, medicineResult, updateTicketResult] = await Promise.allSettled([
+        db.query(
+          `
+            SELECT
+              ps.id::text AS id,
+              ps.status::text AS status,
+              ps.session::text AS session,
+              ps.purpose,
+              ss.label AS "schedulerLabel",
+              sde."scheduledDate" AS "scheduledDate",
+              ps.created_at
+            FROM "patientSlot" ps
+            LEFT JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+            LEFT JOIN "slotScheduler" ss ON ss.id = sde."slotId"
+            WHERE ps."patientId" = $1
+            ORDER BY ps.id DESC
+            LIMIT 1
+          `,
+          [userId]
+        ),
+        db.query(
+          `
+            SELECT
+              mrl.id::text AS id,
+              mrl.status::text AS status,
+              mrl.purpose,
+              mrl.created_at
+            FROM "MedicineRequestLog" mrl
+            WHERE mrl."patientId" = $1
+            ORDER BY mrl.created_at DESC
+            LIMIT 20
+          `,
+          [userId]
+        ),
+        emrWrapperQuery._getUserUpdateTicket(_, { userId }, { user, res }),
+      ]);
+
+      let chatRows = [];
+      let chatTotal = 0;
+
+      try {
+        await autoExpireTickets(userId);
+
+        const [chatResult, chatCountResult] = await Promise.all([
+          db.query(
+            `
+              SELECT
+                hc.id::text AS id,
+                hc.status::text AS status,
+                hc.purpose,
+                hc.session_start
+              FROM "HealthChat" hc
+              WHERE hc."patientId" = $1
+              ORDER BY hc.id DESC
+              LIMIT 50
+            `,
+            [userId]
+          ),
+          db.query(
+            `
+              SELECT COUNT(*)::int AS total
+              FROM "HealthChat" hc
+              WHERE hc."patientId" = $1
+            `,
+            [userId]
+          ),
+        ]);
+
+        chatRows = chatResult.rows;
+        chatTotal = chatCountResult.rows[0]?.total || 0;
+      } catch (chatError) {
+        logger.warn(`Patient dashboard chat segment failed for userId=${userId}: ${chatError.message}`);
+      }
+
+      const appointment = appointmentResult.status === 'fulfilled'
+        ? (appointmentResult.value.rows[0] || null)
+        : null;
+      const medicineReqs = medicineResult.status === 'fulfilled'
+        ? medicineResult.value.rows
+        : [];
+      const updateTicketRaw = updateTicketResult.status === 'fulfilled'
+        ? updateTicketResult.value
+        : null;
+
+      if (appointmentResult.status === 'rejected') {
+        logger.warn(`Patient dashboard appointment segment failed for userId=${userId}: ${appointmentResult.reason?.message || appointmentResult.reason}`);
+      }
+      if (medicineResult.status === 'rejected') {
+        logger.warn(`Patient dashboard medicine segment failed for userId=${userId}: ${medicineResult.reason?.message || medicineResult.reason}`);
+      }
+      if (updateTicketResult.status === 'rejected') {
+        logger.warn(`Patient dashboard update-ticket segment failed for userId=${userId}: ${updateTicketResult.reason?.message || updateTicketResult.reason}`);
+      }
+
+      const updateTicket = updateTicketRaw?.id
+        ? {
+            id: String(updateTicketRaw.id),
+            status: updateTicketRaw.status || null,
+            scope: updateTicketRaw.scope || null,
+            notes: updateTicketRaw.notes || null,
+            created_at: updateTicketRaw.created_at || null,
+          }
+        : null;
+
+      return {
+        appointment,
+        medicineReqs,
+        updateTicket,
+        chatData: {
+          chats: chatRows,
+          total: chatTotal,
+        },
+      };
+    } catch (error) {
+      logger.error(`Error fetching patient dashboard data for userId=${userId}: ${error.message}`);
+      throwGraphQLError(res)
+        .message('Failed to fetch patient dashboard data')
         .status(500)
         .throw();
     }

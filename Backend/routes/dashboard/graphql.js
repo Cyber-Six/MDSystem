@@ -44,4 +44,29 @@ function initDashboardGraphQL(app) {
   );
 }
 
-module.exports = { initDashboardGraphQL };
+/**
+ * Initialize the Dashboard GraphQL endpoint for patients
+ * @param {Express.Application} app - Express application instance
+ */
+function initPatientDashboardGraphQL(app) {
+  app.use(
+    '/dashboard/patient',
+    ipRateLimiter("genericLimiter", "patient"),
+    jwtProtect('patient'),
+    graphqlHTTP((req) => {
+      if (!req.body || !req.body.query) {
+        throw new Error('Empty GraphQL request');
+      }
+      return {
+        schema: dashboardSchema,
+        graphiql: process.env.NODE_ENV !== 'production',
+        context: {
+          user: req.user || null,
+          res: req.res,
+        },
+      };
+    })
+  );
+}
+
+module.exports = { initDashboardGraphQL, initPatientDashboardGraphQL };

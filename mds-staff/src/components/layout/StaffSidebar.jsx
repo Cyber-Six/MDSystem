@@ -6,13 +6,27 @@ import { usePermissions } from '../../context/permissions-context';
 import { useSettings } from '../../context/settings-context';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
 
+const ALL_NAV_ITEMS = [
+  { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
+  { path: '/search', icon: 'search', label: 'Search Patient', requiresSearchPatientAccess: true },
+  { path: '/pending', icon: 'pending', label: 'Pending Requests', moduleId: 'pendingRequests' },
+  { path: '/appointments', icon: 'calendar', label: 'Appointments', moduleId: 'appointments' },
+  { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
+  { path: '/announcements', icon: 'announcements', label: 'Announcements', moduleId: 'announcements' },
+  { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
+  { path: '/notifications', icon: 'notifications', label: 'Send Notification', moduleId: 'sendNotification' },
+  { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
+  { path: '/settings/roles', icon: 'roles', label: 'Administration', adminOnly: true },
+];
+
 /**
  * Staff Sidebar Navigation Component
  * Compact, collapsible sidebar for staff dashboard
  */
 const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const location = useLocation();
-  const pendingChatCount = useHealthChatBadge();
+  const shouldFetchHealthChatBadge = location.pathname.startsWith('/health-chat');
+  const pendingChatCount = useHealthChatBadge({ enabled: shouldFetchHealthChatBadge });
   const { hasPermission, hasSearchPatientAccess, isAdmin, isLoading } = usePermissions();
   const { settings } = useSettings();
   const showBadges = settings.showBadges;
@@ -23,22 +37,9 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
     window.location.assign('/');
   };
 
-  const allNavItems = [
-    { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
-    { path: '/search', icon: 'search', label: 'Search Patient', requiresSearchPatientAccess: true },
-    { path: '/pending', icon: 'pending', label: 'Pending Requests', moduleId: 'pendingRequests' },
-    { path: '/appointments', icon: 'calendar', label: 'Appointments', moduleId: 'appointments' },
-    { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
-    { path: '/announcements', icon: 'announcements', label: 'Announcements', moduleId: 'announcements' },
-    { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
-    { path: '/notifications', icon: 'notifications', label: 'Send Notification', moduleId: 'sendNotification' },
-    { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
-    { path: '/settings/roles', icon: 'roles', label: 'Administration', adminOnly: true },
-  ];
-
   const navItems = useMemo(() => {
-    if (isLoading) return allNavItems.filter((item) => !item.moduleId && !item.adminOnly && !item.requiresSearchPatientAccess);
-    return allNavItems.filter((item) => {
+    if (isLoading) return ALL_NAV_ITEMS.filter((item) => !item.moduleId && !item.adminOnly && !item.requiresSearchPatientAccess);
+    return ALL_NAV_ITEMS.filter((item) => {
       if (item.adminOnly) return isAdmin;
       if (item.requiresSearchPatientAccess) return hasSearchPatientAccess;
       if (item.moduleId) return hasPermission(item.moduleId);
