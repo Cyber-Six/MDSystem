@@ -65,10 +65,15 @@ const extractDepartment = (emrProfile: any): string | null => {
   return null;
 };
 
+const shouldFetchEmrProfile = (status: unknown): boolean => {
+  const normalized = String(status || '').trim();
+  return normalized === 'InProgress' || normalized === 'Revision';
+};
+
 export const getPatientProfile = async (): Promise<PatientProfile> => {
   if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
-  const [profileResult, emergencyResult, emrProfileResult] = await Promise.allSettled([
+  const [profileResult, emergencyResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -90,17 +95,6 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       }`,
       {},
     ),
-    sendGraphQLRequest(
-      `query GetIdentityAndDepartment {
-        emrProfile: getProfile {
-          __typename
-          ... on StudentProfile { program }
-          ... on EmployeeProfile { department role }
-        }
-      }`,
-      {},
-      { allowPartialData: true },
-    ),
   ]);
 
   const profileData =
@@ -121,18 +115,29 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     console.warn('[Profile Service] Active emergency contact fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
   }
 
-  const emrProfileData =
-    emrProfileResult.status === 'fulfilled'
-      ? emrProfileResult.value
-      : ((emrProfileResult as PromiseRejectedResult).reason?.data || null);
-
-  if (emrProfileResult.status === 'rejected') {
-    console.warn('[Profile Service] EMR profile fetch failed:', (emrProfileResult as PromiseRejectedResult).reason?.message);
-  }
-
   const log = (profileData as any)?.personalLog || {};
   const email = (profileData as any)?.loginEmail || null;
-  const emrProfile = (emrProfileData as any)?.emrProfile || null;
+  const personalLogStatus = (profileData as any)?.personalLogStatus;
+
+  let emrProfile: any = null;
+  if (shouldFetchEmrProfile(personalLogStatus)) {
+    try {
+      const emrProfileData = await sendGraphQLRequest(
+        `query GetIdentityAndDepartment {
+          emrProfile: getProfile {
+            __typename
+            ... on StudentProfile { program }
+            ... on EmployeeProfile { department role }
+          }
+        }`,
+        {},
+        { allowPartialData: true },
+      );
+      emrProfile = (emrProfileData as any)?.emrProfile || null;
+    } catch {
+      // Ignore EMR profile fetch failures for profile card rendering.
+    }
+  }
 
   const latestEmergency =
     (emergencyData as any)?.emergencyContact ||
