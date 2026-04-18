@@ -105,6 +105,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
         <DataRow label="Address" value={pi.address} />
         <DataRow label="Province Address" value={pi.provinceAddress} />
         <DataRow label="Contact Number" value={pi.contactNumber} />
+        <DataRow label="Program" value={pi.program === 'Other' ? pi.programOther : pi.program} />
         <DataRow label="Student Number" value={pi.studentNumber} />
         <DataRow label="Student Category" value={pi.studentCategory === 'Grade11' ? 'Grade 11' : pi.studentCategory === 'Grade12' ? 'Grade 12' : pi.studentCategory} />
         <DataRow label="Drug Test" value={pi.drugTestDone} />
