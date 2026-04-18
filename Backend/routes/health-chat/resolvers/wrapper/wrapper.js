@@ -801,9 +801,17 @@ const Query = {
                JOIN "rolesTable" rt ON rt.id = rm."rolesId"
                WHERE rm."personnelId" = mp.id
                  AND rt.label = $3
-                 AND (rm.branch = 'Both' OR $4 = 'Both' OR rm.branch = $4)
+                   AND (
+                     rm.branch = 'Both'::"UserDesignation"
+                     OR $4::"UserDesignation" = 'Both'::"UserDesignation"
+                     OR rm.branch = $4::"UserDesignation"
+                   )
              )
-             AND (mp.designation = 'Both' OR $4 = 'Both' OR mp.designation = $4)
+               AND (
+                 mp.designation = 'Both'::"UserDesignation"
+                 OR $4::"UserDesignation" = 'Both'::"UserDesignation"
+                 OR mp.designation = $4::"UserDesignation"
+               )
            )
          )
          AND (
