@@ -17,7 +17,6 @@ export interface PatientProfile {
   secondEmergencyContactNumber: string | null;
   identifier: string | null;
   identity: PatientIdentity | null;
-  department: string | null;
 }
 
 let _cache: PatientProfile | null = null;
@@ -63,14 +62,6 @@ const inferIdentityFromEmail = (email: string | null | undefined): PatientIdenti
   return null;
 };
 
-const normalizeIdentity = (value: unknown): PatientIdentity | null => {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'student') return 'Student';
-  if (normalized === 'employee') return 'Employee';
-  if (normalized === 'superior') return 'Superior';
-  return null;
-};
-
 const inferIdentityFromActiveProfile = (activeProfile: any): PatientIdentity | null => {
   const typeName = String(activeProfile?.__typename || '').trim().toLowerCase();
   if (typeName === 'studentprofile') return 'Student';
@@ -78,80 +69,10 @@ const inferIdentityFromActiveProfile = (activeProfile: any): PatientIdentity | n
   return null;
 };
 
-const inferIdentityFromBasicInfo = (basicInfo: any): PatientIdentity | null => {
-  if (!basicInfo) return null;
-
-  const profileIdentity = normalizeIdentity(basicInfo.profile_type);
-  if (profileIdentity) return profileIdentity;
-
-  const roleIdentity = normalizeIdentity(basicInfo.role);
-  if (roleIdentity) return roleIdentity;
-
-  return null;
-};
-
-const extractDepartment = (
-  basicInfo: any,
-  activeProfile: any,
-  identity: PatientIdentity | null,
-): string | null => {
-  const basicProgram = sanitizeDisplayValue(basicInfo?.program);
-  const basicDepartment = sanitizeDisplayValue(basicInfo?.department);
-  const activeProgram = sanitizeDisplayValue(activeProfile?.program);
-  const activeDepartment = sanitizeDisplayValue(activeProfile?.department);
-
-  if (identity === 'Student') {
-    return basicProgram || activeProgram || basicDepartment || activeDepartment || null;
-  }
-
-  if (identity === 'Employee' || identity === 'Superior') {
-    return basicDepartment || activeDepartment || basicProgram || activeProgram || null;
-  }
-
-  return basicProgram || basicDepartment || activeProgram || activeDepartment || null;
-};
-
-const fetchPatientBasicInfo = async (): Promise<any> => {
-  const queryWithUserId = `query GetIdentityAndDepartment {
-    basicInfo: getPatientBasicInfo(userId: "self") {
-      profile_type
-      program
-      department
-      role
-    }
-  }`;
-
-  try {
-    return await sendGraphQLRequest(queryWithUserId, {}, { allowPartialData: true });
-  } catch (error: any) {
-    const errorMessage = String(error?.message || '').toLowerCase();
-    const canRetryWithoutArgs =
-      errorMessage.includes('unknown argument') ||
-      errorMessage.includes('required argument') ||
-      errorMessage.includes('argument "userid"') ||
-      errorMessage.includes('field "getpatientbasicinfo" argument "userid"');
-
-    if (!canRetryWithoutArgs) {
-      throw error;
-    }
-  }
-
-  const queryWithoutUserId = `query GetIdentityAndDepartmentNoArgs {
-    basicInfo: getPatientBasicInfo {
-      profile_type
-      program
-      department
-      role
-    }
-  }`;
-
-  return sendGraphQLRequest(queryWithoutUserId, {}, { allowPartialData: true });
-};
-
 export const getPatientProfile = async (): Promise<PatientProfile> => {
   if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
-  const [profileResult, emergencyResult, basicInfoResult, activeProfileResult] = await Promise.allSettled([
+  const [profileResult, emergencyResult, activeProfileResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -173,17 +94,10 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       }`,
       {},
     ),
-    fetchPatientBasicInfo(),
     sendGraphQLRequest(
       `query GetActiveProfileFallback {
         activeProfile: getProfile {
           __typename
-          ... on StudentProfile {
-            program
-          }
-          ... on EmployeeProfile {
-            department
-          }
         }
       }`,
       {},
@@ -209,15 +123,6 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     console.warn('[Profile Service] Active emergency contact fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
   }
 
-  const basicInfoData =
-    basicInfoResult.status === 'fulfilled'
-      ? basicInfoResult.value
-      : ((basicInfoResult as PromiseRejectedResult).reason?.data || null);
-
-  if (basicInfoResult.status === 'rejected') {
-    console.warn('[Profile Service] Profile basic info fetch failed:', (basicInfoResult as PromiseRejectedResult).reason?.message);
-  }
-
   const activeProfileData =
     activeProfileResult.status === 'fulfilled'
       ? activeProfileResult.value
@@ -229,7 +134,6 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
 
   const log = (profileData as any)?.personalLog || {};
   const email = (profileData as any)?.loginEmail || null;
-  const basicInfo = (basicInfoData as any)?.basicInfo || null;
   const activeProfile = (activeProfileData as any)?.activeProfile || null;
 
   const latestEmergency =
@@ -246,12 +150,11 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     sanitizeDisplayValue(log.suffix),
   ].filter(Boolean) as string[];
   const emailIdentity = inferIdentityFromEmail(sanitizeDisplayValue(email));
-  const profileIdentity = inferIdentityFromBasicInfo(basicInfo);
   const activeProfileIdentity = inferIdentityFromActiveProfile(activeProfile);
   const identity =
     emailIdentity === 'Superior'
       ? 'Superior'
-      : (profileIdentity || activeProfileIdentity || emailIdentity);
+      : (activeProfileIdentity || emailIdentity);
 
   _cacheTimestamp = Date.now();
   _cache = {
@@ -263,7 +166,6 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     secondEmergencyContactNumber: extractContactNumber(latestEmergency?.secondContact),
     identifier: sanitizeDisplayValue((profileData as any)?.personalRecord?.identifier),
     identity,
-    department: extractDepartment(basicInfo, activeProfile, identity),
   };
 
   return _cache;

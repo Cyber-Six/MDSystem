@@ -19,21 +19,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const PLACEHOLDER_TEXT_VALUES = new Set(['', 'null', 'undefined', '--', '—', 'n/a', 'na']);
-
-const resolveProgramDepartmentValue = (identity: string, value: string | null | undefined): string => {
-  const normalized = String(value ?? '').trim();
-  const lowered = normalized.toLowerCase();
-
-  if (!PLACEHOLDER_TEXT_VALUES.has(lowered)) {
-    return normalized;
-  }
-
-  if (identity === 'Student') return 'Program not set';
-  if (identity === 'Employee' || identity === 'Superior') return 'Department not set';
-  return 'Program / Department not set';
-};
-
 const ProfileField: React.FC<{
   icon: IoniconName;
   label: string;
@@ -86,11 +71,7 @@ export const ProfileScreen: React.FC = () => {
 
   const displayName = profile?.name || profile?.email?.split('@')[0]?.replace(/[._]/g, ' ') || 'Patient';
   const identity = profile?.identity || 'Patient';
-  const programDepartmentValue = resolveProgramDepartmentValue(identity, profile?.department);
-  const roleAndDepartment =
-    identity === 'Student' || identity === 'Employee' || identity === 'Superior'
-      ? `${identity} • ${programDepartmentValue}`
-      : programDepartmentValue;
+  const roleLabel = identity;
 
   if (isLoading) {
     return (
@@ -138,7 +119,7 @@ export const ProfileScreen: React.FC = () => {
               { color: isDark ? colors.neutral[400] : colors.neutral[500] },
             ]}
           >
-            {roleAndDepartment}
+            {roleLabel}
           </Text>
         </View>
 
@@ -160,12 +141,6 @@ export const ProfileScreen: React.FC = () => {
 
           <ProfileField icon="mail" label="Email" value={profile?.email || '—'} isDark={isDark} />
           <ProfileField icon="call" label="Contact Number" value={profile?.contactNumber || '—'} isDark={isDark} />
-          <ProfileField
-            icon={identity === 'Student' ? 'school' : 'business'}
-            label={identity === 'Student' ? 'Program / Department' : 'Department'}
-            value={programDepartmentValue}
-            isDark={isDark}
-          />
           <ProfileField
             icon="alert-circle"
             label="Emergency Contact 1"
