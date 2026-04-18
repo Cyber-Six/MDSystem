@@ -1,20 +1,20 @@
 /**
- * Prescription Document Service — Health Chat
+ * Medical Certificate Document Service — Health Chat
  *
- * REST calls to generate prescription PDFs via the doc-generate-module.
+ * REST calls to generate medical certificate PDFs via the doc-generate-module.
  * Endpoint: /documents
  */
 
 import { axiosRequest } from '../packages-core-adapter';
 
 /**
- * Generate a prescription PDF — saves to PatientDocuments in the DB.
+ * Generate a medical certificate PDF — saves to PatientDocuments in the DB.
  * @param {number} patientId
- * @param {object} data - { patient, prescription, issuedDate, ... }
+ * @param {object} data - { patient, certificate, issuedDate, physician, ... }
  * @param {object} options - Optional integration options
  * @returns {{ success, documentId, filename, metadata }}
  */
-export const generatePrescription = async (patientId, data, options = {}) => {
+export const generateMedicalCertificate = async (patientId, data, options = {}) => {
   const payload = {
     patientId,
     data,
@@ -24,9 +24,9 @@ export const generatePrescription = async (patientId, data, options = {}) => {
     payload.chatId = options.chatId;
   }
 
-  const response = await axiosRequest.post('/documents/prescription/generate', payload);
+  const response = await axiosRequest.post('/documents/medical-certificate/generate', payload);
   if (!response.data?.success) {
-    throw new Error(response.data?.error || 'Failed to generate prescription');
+    throw new Error(response.data?.error || 'Failed to generate medical certificate');
   }
   return response.data;
 };
@@ -43,7 +43,6 @@ export const downloadDocumentBlob = async (documentId) => {
     });
     return response.data;
   } catch {
-    // Backward-compatible fallback for older route variants.
     const fallbackResponse = await axiosRequest.get(`/documents/${documentId}`, {
       responseType: 'blob',
     });
@@ -52,12 +51,12 @@ export const downloadDocumentBlob = async (documentId) => {
 };
 
 /**
- * Preview a prescription PDF without saving — streams directly.
+ * Preview a medical certificate PDF without saving — streams directly.
  * @param {object} data - same shape as generate
  * @returns {Blob}
  */
-export const previewPrescription = async (data) => {
-  const response = await axiosRequest.post('/documents/prescription/preview', {
+export const previewMedicalCertificate = async (data) => {
+  const response = await axiosRequest.post('/documents/medical-certificate/preview', {
     data,
   }, {
     responseType: 'blob',

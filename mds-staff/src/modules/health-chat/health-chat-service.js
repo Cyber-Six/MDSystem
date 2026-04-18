@@ -673,6 +673,13 @@ export const unstageFile = async (fileId) => {
  * Get the URL for a file
  */
 export const getFileUrl = (fileId) => {
+  // Virtual IDs are used for generated documents (e.g. prescription, medical certificate).
+  if (typeof fileId === 'string' && fileId.startsWith('document:')) {
+    const documentId = fileId.split(':')[1];
+    if (documentId) {
+      return `/documents/generated/download/${documentId}`;
+    }
+  }
   return `/media/record/eConsultation/${fileId}`;
 };
 
