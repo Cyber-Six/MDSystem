@@ -423,10 +423,10 @@ function generateCSV(data, meta) {
     'Chart Variant',
     'Row Type',
     'XAxis',
-    'YAxis',
     'Label',
-    'Series',
     'Value',
+    'YAxis',
+    'Series',
     'Raw Count',
     'Diastolic Value',
     'Min',
@@ -454,10 +454,10 @@ function generateCSV(data, meta) {
       row.chartVariant,
       row.rowType,
       row.xAxis,
-      row.yAxis,
       row.label,
-      row.series,
       row.value,
+      row.yAxis,
+      row.series,
       row.rawCount,
       row.diastolicValue,
       row.min,
@@ -599,10 +599,10 @@ async function generateExcel(data, meta) {
     'Chart Variant',
     'Row Type',
     'XAxis',
-    'YAxis',
     'Label',
-    'Series',
     'Value',
+    'YAxis',
+    'Series',
     'Raw Count',
     'Diastolic Value',
     'Min',
@@ -636,10 +636,10 @@ async function generateExcel(data, meta) {
       row.chartVariant,
       row.rowType,
       row.xAxis,
-      row.yAxis,
       row.label,
-      row.series,
       row.value,
+      row.yAxis,
+      row.series,
       row.rawCount,
       row.diastolicValue,
       row.min,
@@ -673,6 +673,84 @@ async function generateExcel(data, meta) {
   detailSheet.autoFilter = {
     from: { row: 6, column: 1 },
     to: { row: 6, column: detailHeaders.length },
+  };
+
+  // ── Research Ready Sheet (flat, analysis-first columns) ─
+  const researchSheet = workbook.addWorksheet('Research Ready', {
+    properties: { tabColor: { argb: 'FF0EA5E9' } },
+    views: [{ state: 'frozen', ySplit: 1 }],
+  });
+
+  const researchHeaders = [
+    'Metric Key',
+    'Metric',
+    'Label',
+    'Series',
+    'Row Type',
+    'Value',
+    'Raw Count',
+    'Diastolic Value',
+    'Median',
+    'Sample Count',
+    'Metric Total',
+    'Percent Of Metric Total',
+    'Branch',
+    'Start Date',
+    'End Date',
+    'Group By',
+    'Department Filter',
+    'Sex Filter',
+  ];
+
+  const researchHeaderRow = researchSheet.getRow(1);
+  researchHeaderRow.values = researchHeaders;
+  applyHeaderRow(researchHeaderRow);
+
+  let researchRowIndex = 2;
+  for (const row of detailRows) {
+    if (row.rowType === 'no-data') continue;
+
+    const excelRow = researchSheet.getRow(researchRowIndex);
+    excelRow.values = [
+      row.metricKey,
+      row.metric,
+      row.label,
+      row.series,
+      row.rowType,
+      row.value,
+      row.rawCount,
+      row.diastolicValue,
+      row.median,
+      row.sampleCount,
+      row.metricTotal,
+      row.percentOfTotal,
+      row.branch,
+      row.startDate,
+      row.endDate,
+      row.groupBy,
+      row.departmentFilter,
+      row.sexFilter,
+    ];
+    applyDataBorder(excelRow);
+    researchRowIndex++;
+  }
+
+  if (researchRowIndex === 2) {
+    const emptyRow = researchSheet.getRow(2);
+    emptyRow.values = ['', 'No data available for selected filters'];
+    applyDataBorder(emptyRow);
+  }
+
+  researchSheet.columns = [
+    { width: 26 }, { width: 34 }, { width: 30 }, { width: 20 }, { width: 18 },
+    { width: 14 }, { width: 14 }, { width: 16 }, { width: 12 }, { width: 14 },
+    { width: 12 }, { width: 20 }, { width: 14 }, { width: 14 }, { width: 14 },
+    { width: 12 }, { width: 18 }, { width: 14 },
+  ];
+
+  researchSheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: researchHeaders.length },
   };
 
   // ── Summary Sheet ─────────────────────────────────────────
