@@ -16,12 +16,23 @@ async function requireStaff(user, res) {
   }
 }
 
+async function requirePatient(user, res) {
+  if (!user) {
+    throwGraphQLError(res).message('Unauthorized').status(401).throw();
+  }
+}
+
 // ─── QUERIES ──────────────────────────────────────────────────────────────────
 
 const Query = {
   getDashboardStats: async (_, args, context) => {
     await requireStaff(context.user, context.res);
     return await Wrapper.Query._getDashboardStats(_, args, context);
+  },
+
+  getPatientDashboardData: async (_, args, context) => {
+    await requirePatient(context.user, context.res);
+    return await Wrapper.Query._getPatientDashboardData(_, args, context);
   },
 };
 

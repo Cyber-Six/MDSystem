@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, AlertCircle, FileText, Download } from 'lucide-react';
 import { generatePrescription, downloadDocumentBlob } from '../prescription-document-service';
-import { uploadFile } from '../health-chat-service';
 
 const FREQUENCY_OPTIONS = [
   'OD (Once daily)',
@@ -45,7 +44,6 @@ const PrescriptionPanel = ({
   patientDob,
   patientSex,
   activeTicketId,
-  sendMessage,
   consultationData,
 }) => {
   const [medications, setMedications] = useState([emptyMed()]);
@@ -149,7 +147,9 @@ const PrescriptionPanel = ({
       };
 
       // 1. Generate prescription PDF (saved to DB)
-      const result = await generatePrescription(patientId, payload);
+      const result = await generatePrescription(patientId, payload, {
+        chatId: activeTicketId || undefined,
+      });
       setDocumentId(result.documentId);
 
       // 2. Download the PDF as blob
@@ -157,25 +157,13 @@ const PrescriptionPanel = ({
       const url = URL.createObjectURL(pdfBlob);
       setPdfUrl(url);
 
-      // 3. Auto-send as file in health-chat if ticket is active
-      if (activeTicketId && sendMessage) {
-        try {
-          const filename = result.filename || `prescription_${lastName || 'patient'}.pdf`;
-          const file = new File([pdfBlob], filename, { type: 'application/pdf' });
-          const fileId = await uploadFile(file);
-          await sendMessage(activeTicketId, null, fileId, 'file');
-        } catch (sendErr) {
-          console.warn('[PrescriptionPanel] Auto-send failed, PDF still available for download:', sendErr);
-        }
-      }
-
       setSuccess(true);
     } catch (err) {
       setError(err.message || 'Failed to generate prescription.');
     } finally {
       setSubmitting(false);
     }
-  }, [medications, name, sex, diagnosis, chiefComplaints, peFindings, advice, specialInstructions, followUpDate, patientId, patientDob, activeTicketId, sendMessage, consultationData]);
+  }, [medications, name, sex, diagnosis, chiefComplaints, peFindings, advice, specialInstructions, followUpDate, patientId, patientDob, activeTicketId, consultationData]);
 
   if (!isOpen) return null;
 

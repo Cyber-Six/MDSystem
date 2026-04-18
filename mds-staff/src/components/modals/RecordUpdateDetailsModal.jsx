@@ -6,6 +6,7 @@ import React, { useState } from 'react';
  */
 const RecordUpdateDetailsModal = ({ request, onClose, onApprove, onReject }) => {
   const [rejectReason, setRejectReason] = useState('');
+  const [rejectError, setRejectError] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
 
   if (!request) return null;
@@ -17,9 +18,10 @@ const RecordUpdateDetailsModal = ({ request, onClose, onApprove, onReject }) => 
 
   const handleReject = () => {
     if (!rejectReason.trim()) {
-      alert('Please provide a reason for rejection');
+      setRejectError('Please provide a reason for rejection');
       return;
     }
+    setRejectError('');
     onReject?.(request.id, rejectReason);
     onClose();
   };
@@ -178,11 +180,19 @@ const RecordUpdateDetailsModal = ({ request, onClose, onApprove, onReject }) => 
               <div className="p-4">
                 <textarea
                   value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
+                  onChange={(e) => {
+                    setRejectReason(e.target.value);
+                    if (rejectError) setRejectError('');
+                  }}
                   rows={3}
                   placeholder="Please provide a reason for rejecting this update request..."
                   className="w-full px-3 py-2 text-sm border border-error-300 dark:border-error-700 rounded-lg bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white focus:ring-2 focus:ring-error-500 focus:border-error-500"
                 />
+                {rejectError && (
+                  <p className="mt-2 text-xs text-error-700 dark:text-error-400">
+                    {rejectError}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -196,6 +206,7 @@ const RecordUpdateDetailsModal = ({ request, onClose, onApprove, onReject }) => 
                 onClick={() => {
                   setShowRejectForm(false);
                   setRejectReason('');
+                  setRejectError('');
                 }}
                 className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors"
               >
@@ -218,7 +229,10 @@ const RecordUpdateDetailsModal = ({ request, onClose, onApprove, onReject }) => 
               </button>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setShowRejectForm(true)}
+                  onClick={() => {
+                    setShowRejectForm(true);
+                    setRejectError('');
+                  }}
                   className="px-4 py-2 text-sm font-medium text-white bg-error-500 hover:bg-error-600 rounded-lg transition-colors inline-flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -388,7 +388,7 @@ export default function PatientConsultationTab({
     setForm((prev) => (prev.diagnosis === nextDiagnosis ? prev : { ...prev, diagnosis: nextDiagnosis }));
   }, [selectedDiagnoses]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const validComplaints = form.chiefComplaints.map(c => c.trim()).filter(Boolean);
     const validTreatments = form.treatments.map(t => t.trim()).filter(Boolean);
     const validPeFindings = form.peFindings.map(p => p.trim()).filter(Boolean);
@@ -422,64 +422,73 @@ export default function PatientConsultationTab({
             diagnosisType: entry.diagnosisType,
           }))
         : [];
-
-      onSaveConsultation({
-        type: form.type,
-        diagnosis: primary ? `${primary.code} - ${primary.title}` : (form.diagnosis.trim() || 'General consultation'),
-        diagnoses: normalizedDiagnoses,
-        treatment: validTreatments.join('; '),
-        treatments: validTreatments,
-        chiefComplaints: validComplaints,
-        notes: form.notes.trim(),
-        backendPayload: {
-          consultationInput: {
+      try {
+        const saveResult = await onSaveConsultation({
+          type: form.type,
+          diagnosis: primary ? `${primary.code} - ${primary.title}` : (form.diagnosis.trim() || 'General consultation'),
+          diagnoses: normalizedDiagnoses,
+          treatment: validTreatments.join('; '),
+          treatments: validTreatments,
+          chiefComplaints: validComplaints,
+          notes: form.notes.trim(),
+          backendPayload: {
+            consultationInput: {
+              patientId: String(patient?.id || ''),
+              followUpId: null,
+              mode: form.mode,
+              type: form.type,
+              notes: form.notes.trim() || null,
+            },
+            consultationOutcomeInput: {
+              consultationId: null,
+              remarks: form.notes.trim() || null,
+              complaints: validComplaints,
+              peFindings: validPeFindings,
+              treatments: validTreatments,
+              diagnoses: normalizedDiagnoses.map(mapToBackendDiagnosis),
+            },
+            vitalSignsData: form.type !== 'Dental' && canSetVitalSigns ? (() => {
+              const vs = form.vitalSigns;
+              const h = parseFloat(vs.height_cm);
+              const w = parseFloat(vs.weight_kg);
+              const bp = vs.blood_pressure.trim();
+              const hr = parseInt(vs.heart_rate, 10);
+              const temp = parseFloat(vs.temperature);
+              if (!isNaN(h) && !isNaN(w) && bp && !isNaN(hr) && !isNaN(temp)) {
+                const result = { height_cm: h, weight_kg: w, blood_pressure: bp, heart_rate: hr, temperature: temp };
+                if (vs.notes && vs.notes.trim()) result.notes = vs.notes.trim();
+                return result;
+              }
+              return null;
+            })() : null,
+            dentalGradingData: form.type === 'Dental' && canSetDentalRecord && dentalGradingOpen ? (() => {
+              const allTeeth = [
+                ...TOOTH_LAYOUT.upper.right, ...TOOTH_LAYOUT.upper.left,
+                ...TOOTH_LAYOUT.lower.right, ...TOOTH_LAYOUT.lower.left,
+              ];
+              const ToothPlacements = allTeeth.map((toothIndex) => {
+                const code = dentalToothStates[toothIndex] ?? '✓';
+                return { toothIndex, legend: CODE_TO_ENUM[code] ?? 'PRESENT' };
+              });
+              const oralFindingsInput = dentalCatalogs.map((c) => ({
+                oralFindingId: c.id,
+                status: dentalFindings[c.id] === true ? 'true' : 'false',
+                notes: null,
+              }));
+              return { notes: dentalNotes.trim() || '', ToothPlacements, oralFindings: oralFindingsInput };
+            })() : null,
             patientId: String(patient?.id || ''),
-            followUpId: null,
-            mode: form.mode,
-            type: form.type,
-            notes: form.notes.trim() || null,
           },
-          consultationOutcomeInput: {
-            consultationId: null,
-            remarks: form.notes.trim() || null,
-            complaints: validComplaints,
-            peFindings: validPeFindings,
-            treatments: validTreatments,
-            diagnoses: normalizedDiagnoses.map(mapToBackendDiagnosis),
-          },
-          vitalSignsData: form.type !== 'Dental' && canSetVitalSigns ? (() => {
-            const vs = form.vitalSigns;
-            const h = parseFloat(vs.height_cm);
-            const w = parseFloat(vs.weight_kg);
-            const bp = vs.blood_pressure.trim();
-            const hr = parseInt(vs.heart_rate, 10);
-            const temp = parseFloat(vs.temperature);
-            if (!isNaN(h) && !isNaN(w) && bp && !isNaN(hr) && !isNaN(temp)) {
-              const result = { height_cm: h, weight_kg: w, blood_pressure: bp, heart_rate: hr, temperature: temp };
-              if (vs.notes && vs.notes.trim()) result.notes = vs.notes.trim();
-              return result;
-            }
-            return null;
-          })() : null,
-          dentalGradingData: form.type === 'Dental' && canSetDentalRecord && dentalGradingOpen ? (() => {
-            const allTeeth = [
-              ...TOOTH_LAYOUT.upper.right, ...TOOTH_LAYOUT.upper.left,
-              ...TOOTH_LAYOUT.lower.right, ...TOOTH_LAYOUT.lower.left,
-            ];
-            const ToothPlacements = allTeeth.map((toothIndex) => {
-              const code = dentalToothStates[toothIndex] ?? '✓';
-              return { toothIndex, legend: CODE_TO_ENUM[code] ?? 'PRESENT' };
-            });
-            const oralFindingsInput = dentalCatalogs.map((c) => ({
-              oralFindingId: c.id,
-              status: dentalFindings[c.id] === true ? 'true' : 'false',
-              notes: null,
-            }));
-            return { notes: dentalNotes.trim() || '', ToothPlacements, oralFindings: oralFindingsInput };
-          })() : null,
-          patientId: String(patient?.id || ''),
-        },
-      });
+        });
+
+        if (saveResult && saveResult.ok === false) {
+          setSubmitState({ ok: false, message: saveResult.message || 'Failed to save consultation. Please try again.' });
+          return;
+        }
+      } catch (err) {
+        setSubmitState({ ok: false, message: err?.message || 'Failed to save consultation. Please try again.' });
+        return;
+      }
     }
 
     setForm(INITIAL_FORM);

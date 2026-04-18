@@ -6,6 +6,11 @@
 
 import { axiosRequest } from '../../packages-core-adapter';
 
+const DASHBOARD_CACHE_TTL_MS = 5_000;
+let dashboardStatsCache = null;
+let dashboardStatsCacheAt = 0;
+let dashboardStatsInFlight = null;
+
 /**
  * GraphQL query for dashboard statistics
  */
@@ -61,21 +66,45 @@ const GET_DASHBOARD_STATS_QUERY = `
  *   recentRequests: Array<{ id: string, name: string, type: string, status: string, submitted: string }>,
  * }>}
  */
-export const fetchDashboardStats = async () => {
-  try {
-    const response = await axiosRequest.post('/dashboard', {
-      query: GET_DASHBOARD_STATS_QUERY,
+const requestDashboardStats = async () => {
+  const response = await axiosRequest.post('/dashboard', {
+    query: GET_DASHBOARD_STATS_QUERY,
+  });
+
+  // Handle GraphQL errors
+  if (response.data.errors) {
+    const error = new Error(response.data.errors[0]?.message || 'GraphQL error');
+    error.graphQLErrors = response.data.errors;
+    throw error;
+  }
+
+  return response.data.data.getDashboardStats;
+};
+
+export const fetchDashboardStats = async (options = {}) => {
+  const force = Boolean(options?.force);
+  const now = Date.now();
+
+  if (!force && dashboardStatsCache && now - dashboardStatsCacheAt < DASHBOARD_CACHE_TTL_MS) {
+    return dashboardStatsCache;
+  }
+
+  if (!force && dashboardStatsInFlight) {
+    return dashboardStatsInFlight;
+  }
+
+  dashboardStatsInFlight = requestDashboardStats()
+    .then((data) => {
+      dashboardStatsCache = data;
+      dashboardStatsCacheAt = Date.now();
+      return data;
+    })
+    .finally(() => {
+      dashboardStatsInFlight = null;
     });
 
-    // Handle GraphQL errors
-    if (response.data.errors) {
-      const error = new Error(response.data.errors[0]?.message || 'GraphQL error');
-      error.graphQLErrors = response.data.errors;
-      throw error;
-    }
-
-    // Return the data from the query
-    return response.data.data.getDashboardStats;
+  try {
+    return await dashboardStatsInFlight;
   } catch (error) {
     // Re-throw with context
     throw new Error(`Failed to fetch dashboard stats: ${error.message}`);

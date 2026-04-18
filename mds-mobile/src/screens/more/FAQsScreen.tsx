@@ -1,6 +1,6 @@
 /**
  * FAQs Screen
- * Mirrors mds-patient faqs-modal.jsx with accordion-style Q&As
+ * Patient FAQ with up-to-date website and mobile feature guidance.
  */
 
 import React, { useState } from 'react';
@@ -17,36 +17,44 @@ import { Ionicons } from '@expo/vector-icons';
 
 const FAQ_DATA = [
   {
-    q: 'How do I book an appointment?',
-    a: 'Navigate to the Appointments tab, select an appointment type, choose your preferred date and session, then submit your request.',
+    q: 'What can I do on both the website and mobile app?',
+    a: 'Both platforms support the main patient flows: record update, appointment booking, Health Chat, medicine requests, announcements, documents, and account settings.',
+  },
+  {
+    q: 'Are website and mobile data synced?',
+    a: 'Yes. The website and mobile app use the same patient account and backend data. Actions like appointment requests, chat updates, medicine requests, and document submissions appear on both after refresh.',
+  },
+  {
+    q: 'Why are some modules hidden or locked?',
+    a: 'If your initial record is still required or your account is inactive, access is restricted until the required record flow is completed and approved by staff.',
+  },
+  {
+    q: 'How do appointments work on website and mobile?',
+    a: 'Use Appointments to pick a schedule, choose date/session, upload requirements (image, PDF, or supported video), add a purpose when required, and submit. You can cancel pending or scheduled appointments from the same module.',
   },
   {
     q: 'How does Health Chat work?',
-    a: 'Health Chat connects you directly with our medical team. Create a consultation ticket describing your concern, and a staff member will join the chat to assist you.',
+    a: 'Create a ticket with your health concern, then continue in real-time chat once staff joins. You can send messages with attachments, extend an expiring session, close the ticket, and review previous sessions.',
   },
   {
-    q: 'How do I request medicine?',
-    a: 'Go to the Medicine tab, select your branch, describe your chief complaint, select the medicines you need with quantities, and submit your request.',
+    q: 'How do medicine requests work?',
+    a: 'In Medicine Request, set your branch (auto-selected for some campus emails), choose medicines, provide your purpose, and submit. If you already have a pending request, you can cancel and resubmit a new one.',
   },
   {
-    q: 'Can I cancel my appointment?',
-    a: 'Yes, you can cancel a pending or scheduled appointment from the Appointments screen. Once an appointment is in progress or completed, it cannot be cancelled.',
+    q: 'How do My Documents and document requests work?',
+    a: 'My Documents lets you upload requested files, track statuses (Requested, Pending, Recorded, Rejected), and open issued clinic documents directly in the app.',
   },
   {
-    q: 'How do I change my password?',
-    a: 'Go to More > Change Password. Enter your current password and your new password to update it.',
+    q: 'How do notification preferences work?',
+    a: 'Open Settings to manage push, email, and email fallback channels globally and per module (appointments, health chat, medicine requests, documents, EMR, and general announcements).',
   },
   {
-    q: 'What is Two-Factor Authentication?',
-    a: '2FA adds an extra layer of security by sending a verification code to your email during login. This helps protect your account even if your password is compromised.',
+    q: 'What security controls are available?',
+    a: 'In Settings > Security, you can manage password updates and authenticator-based two-factor authentication (2FA). Some password verification flows may use email OTP when required.',
   },
   {
-    q: 'How do I update my profile information?',
-    a: 'Profile information is managed by the system administrator. Contact the clinic admin to request any changes to your personal information.',
-  },
-  {
-    q: 'Who do I contact for technical issues?',
-    a: 'You can reach out through the Contact Support option in the More menu, or email the support team directly.',
+    q: 'What features are currently easier to access on the website?',
+    a: 'The website user menu includes Login Activity, Contact Support, and Feedback options. Mobile focuses on core patient care flows plus announcements and documents.',
   },
 ];
 

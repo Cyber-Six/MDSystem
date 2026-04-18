@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus, Stethoscope } from 'lucide-react';
+import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus, Stethoscope, AlertCircle, FileBadge } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { uploadFile, unstageFile } from '../health-chat-service';
 
@@ -44,7 +44,7 @@ const resolveClipboardImageFile = (item) => {
   });
 };
 
-const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) => {
+const MessageInput = ({ emitTyping, onOpenPrescription, onOpenMedicalCertificate, onOpenConsultation }) => {
   const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
 
   const [inputValue, setInputValue]   = useState('');
@@ -53,6 +53,9 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
   const [isSending, setIsSending]               = useState(false);
   const [actionLoading, setActionLoading]       = useState(null);
   const [showPlusMenu, setShowPlusMenu]         = useState(false);
+  const [actionError, setActionError]           = useState(null);
+  const [showRejectModal, setShowRejectModal]   = useState(false);
+  const [rejectReason, setRejectReason]         = useState('');
   const fileInputRef  = useRef(null);
   const textareaRef   = useRef(null);
   const plusMenuRef   = useRef(null);
@@ -68,6 +71,12 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showPlusMenu]);
 
+  useEffect(() => {
+    setActionError(null);
+    setShowRejectModal(false);
+    setRejectReason('');
+  }, [activeTicketId]);
+
   const isPending = selectedTicket?.status === 'Open';
   const isActive  = selectedTicket?.status === 'Ongoing';
   const isClosed  = ['Closed', 'Expired'].includes(selectedTicket?.status);
@@ -76,13 +85,14 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
   const stageFile = useCallback(async (file) => {
     if (!file) return;
     const allowed = ACCEPTED_TYPES.split(',');
-    if (!allowed.includes(file.type)) { alert('Unsupported file type.'); return; }
-    if (file.size > MAX_FILE_SIZE) { alert('File too large. Max 10MB.'); return; }
+    if (!allowed.includes(file.type)) { setActionError('Unsupported file type.'); return; }
+    if (file.size > MAX_FILE_SIZE) { setActionError('File too large. Max 10MB.'); return; }
     try {
+      setActionError(null);
       setIsUploading(true);
       const fileId = await uploadFile(file);
       setAttachedFile({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
-    } catch { alert('Upload failed. Please try again.'); }
+    } catch { setActionError('Upload failed. Please try again.'); }
     finally { setIsUploading(false); }
   }, []);
 
@@ -172,6 +182,7 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
   const handleSend = async () => {
     if (!canSend || !activeTicketId) return;
     try {
+      setActionError(null);
       setIsSending(true);
       emitTyping(activeTicketId, false);
       if (attachedFile) {
@@ -186,7 +197,7 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
       }
     } catch (err) {
       console.error('[MessageInput] Send failed:', err);
-      alert(`Failed to send message: ${err.message || 'Unknown error'}`);
+      setActionError(`Failed to send message: ${err.message || 'Unknown error'}`);
     }
     finally {
       setIsSending(false);
@@ -212,58 +223,159 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
 
   const handleApprove = async () => {
     if (actionLoading || !activeTicketId) return;
-    try { setActionLoading('approve'); await approveTicket(activeTicketId); }
-    catch { alert('Failed to approve.'); }
+    try {
+      setActionError(null);
+      setActionLoading('approve');
+      await approveTicket(activeTicketId);
+    }
+    catch { setActionError('Failed to approve.'); }
     finally { setActionLoading(null); }
+  };
+
+  const openRejectModal = () => {
+    if (actionLoading || !activeTicketId) return;
+    setActionError(null);
+    setRejectReason('');
+    setShowRejectModal(true);
   };
 
   const handleReject = async () => {
     if (actionLoading || !activeTicketId) return;
-    const reason = window.prompt('Reason for rejection (optional):');
-    if (reason === null) return;
-    try { setActionLoading('reject'); await rejectTicket(activeTicketId, reason || null); }
-    catch { alert('Failed to reject.'); }
+    try {
+      setActionError(null);
+      setActionLoading('reject');
+      await rejectTicket(activeTicketId, rejectReason.trim() || null);
+      setShowRejectModal(false);
+      setRejectReason('');
+    }
+    catch { setActionError('Failed to reject.'); }
     finally { setActionLoading(null); }
   };
 
   // ── Pending state ──
   if (isPending) {
     return (
-      <div className="flex-shrink-0 px-5 py-4 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
-        <p className="text-xs text-center mb-3 text-neutral-400 dark:text-neutral-500">
-          Patient is waiting — accept to start the conversation
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={handleReject}
-            disabled={!!actionLoading}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold
-                       transition-all duration-150 disabled:opacity-50
-                       border-[1.5px] border-red-200 dark:border-red-800 text-red-600 dark:text-red-400
-                       hover:bg-red-50 dark:hover:bg-red-900/20"
-          >
-            {actionLoading === 'reject'
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <XCircle className="w-4 h-4" />
-            }
-            Reject
-          </button>
-          <button
-            onClick={handleApprove}
-            disabled={!!actionLoading}
-            className="flex-[2] flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold
-                       transition-all duration-150 disabled:opacity-50
-                       bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400
-                       hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
-          >
-            {actionLoading === 'approve'
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <CheckCircle className="w-4 h-4" />
-            }
-            Accept Conversation
-          </button>
+      <>
+        <div className="flex-shrink-0 px-5 py-4 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+          {actionError && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-xs bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              {actionError}
+            </div>
+          )}
+          <p className="text-xs text-center mb-3 text-neutral-400 dark:text-neutral-500">
+            Patient is waiting — accept to start the conversation
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={openRejectModal}
+              disabled={!!actionLoading}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold
+                         transition-all duration-150 disabled:opacity-50
+                         border-[1.5px] border-red-200 dark:border-red-800 text-red-600 dark:text-red-400
+                         hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              {actionLoading === 'reject'
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <XCircle className="w-4 h-4" />
+              }
+              Reject
+            </button>
+            <button
+              onClick={handleApprove}
+              disabled={!!actionLoading}
+              className="flex-[2] flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold
+                         transition-all duration-150 disabled:opacity-50
+                         bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400
+                         hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
+            >
+              {actionLoading === 'approve'
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <CheckCircle className="w-4 h-4" />
+              }
+              Accept Conversation
+            </button>
+          </div>
         </div>
-      </div>
+
+        {showRejectModal && (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50"
+            onClick={() => {
+              if (actionLoading !== 'reject') {
+                setShowRejectModal(false);
+                setRejectReason('');
+              }
+            }}
+          >
+            <div
+              className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between p-6 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-100 dark:bg-red-900/30">
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-secondary-900 dark:text-white">
+                      Reject Ticket
+                    </h2>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (actionLoading === 'reject') return;
+                    setShowRejectModal(false);
+                    setRejectReason('');
+                  }}
+                  className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-neutral-500 dark:text-neutral-400"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
+                  Are you sure you want to reject this ticket? You can optionally provide a reason below.
+                </p>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Reason for rejection (optional)"
+                  className="w-full px-3 py-2 rounded-lg text-sm resize-none
+                             bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700
+                             text-secondary-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500
+                             focus:outline-none focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20"
+                  rows={3}
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-neutral-200 dark:border-neutral-700">
+                <button
+                  onClick={() => {
+                    if (actionLoading === 'reject') return;
+                    setShowRejectModal(false);
+                    setRejectReason('');
+                  }}
+                  className="px-4 py-2 text-sm font-medium rounded-lg transition-colors
+                             text-neutral-700 dark:text-neutral-300
+                             border border-neutral-300 dark:border-neutral-600
+                             hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReject}
+                  disabled={actionLoading === 'reject'}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-60
+                             bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white"
+                >
+                  {actionLoading === 'reject' ? 'Rejecting...' : 'Reject Ticket'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -279,6 +391,15 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
   // ── Active input ──
   return (
     <div className="flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+      {actionError && (
+        <div className="px-4 pt-3 pb-0">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            {actionError}
+          </div>
+        </div>
+      )}
+
       {/* File preview bar */}
       {attachedFile && (
         <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800">
@@ -383,6 +504,25 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
                   <Pill className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 </span>
               </button>
+
+                <div className="mx-4 border-b border-neutral-200 dark:border-white/[0.07]" />
+
+                {/* Medical Certificate */}
+                <button
+                  type="button"
+                  onClick={() => { onOpenMedicalCertificate?.(); setShowPlusMenu(false); }}
+                  disabled={isSending}
+                  className="w-full flex items-center justify-between px-5 py-4
+                             text-neutral-800 dark:text-white
+                             hover:bg-neutral-100 dark:hover:bg-white/[0.07]
+                             active:bg-neutral-200 dark:active:bg-white/10
+                             disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span className="text-[15px] font-medium tracking-[-0.01em]">Medical Certificate</span>
+                  <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-sky-100 dark:bg-[rgba(14,165,233,0.25)]">
+                    <FileBadge className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                  </span>
+                </button>
             </div>
           )}
           {/* Plus trigger button */}

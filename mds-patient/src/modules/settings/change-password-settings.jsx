@@ -341,7 +341,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
             </div>
             <button
               type="button"
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 border border-neutral-300 dark:border-[#3a322c] hover:bg-neutral-50 dark:hover:bg-[#221d1a] transition-colors disabled:opacity-50"
+              onClick={handleUseEmailInstead}
               disabled={isLoading}
               className="w-full text-sm text-accent-600 dark:text-accent-400 hover:underline py-1 transition-colors"
             >

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { fetchStaffAccounts, initiateAdminTransfer, confirmAdminTransfer } from '../staff-service';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 /**
  * Admin Transfer Component
@@ -166,7 +167,7 @@ const AdminTransfer = () => {
                   </div>
                   <div>
                     <p className="text-xs font-medium text-secondary-800 dark:text-white">{selectedStaff.name}</p>
-                    <p className="text-[10px] text-secondary-400 dark:text-neutral-500">{selectedStaff.email} · {selectedStaff.branch}</p>
+                    <p className="text-[10px] text-secondary-400 dark:text-neutral-500">{selectedStaff.email} · {formatBranchLabel(selectedStaff.branch)}</p>
                   </div>
                 </div>
               )}
@@ -234,7 +235,7 @@ const AdminTransfer = () => {
                 </div>
                 <div>
                   <p className="text-xs font-medium text-secondary-800 dark:text-white">{selectedStaff.name}</p>
-                  <p className="text-[10px] text-secondary-400 dark:text-neutral-500">{selectedStaff.email} · {selectedStaff.branch}</p>
+                  <p className="text-[10px] text-secondary-400 dark:text-neutral-500">{selectedStaff.email} · {formatBranchLabel(selectedStaff.branch)}</p>
                 </div>
               </div>
             </div>

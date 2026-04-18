@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
-import { fetchMedicalItems, fetchMedicineBatches, fetchSupplyBatches } from '../medical-inventory/medical-inventory-service';
+import { fetchMedicalItems, fetchAllBatchesForItems } from '../medical-inventory/medical-inventory-service';
 import { computeItemStats } from '../medical-inventory/inventory-seed-data';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
 import { usePermissions } from '../../context/permissions-context';
@@ -221,6 +221,56 @@ function computeInventoryAlerts(enrichedItems, batches) {
 
 const STORAGE_KEY = 'staff_notifications';
 const SEEN_INVENTORY_KEY = 'staff_seen_inventory_alerts';
+const INVENTORY_ALERTS_BOOTSTRAP_TTL_MS = 5_000;
+
+let inventoryAlertsSnapshotCache = null;
+let inventoryAlertsSnapshotCacheAt = 0;
+let inventoryAlertsSnapshotCacheKey = '';
+let inventoryAlertsSnapshotInFlight = null;
+let inventoryAlertsSnapshotInFlightKey = '';
+
+function buildInventoryAlertsSnapshotKey(allowedLocations) {
+  return [...allowedLocations].sort().join('|');
+}
+
+async function fetchInventoryAlertsSnapshot(allowedLocations, options = {}) {
+  const force = Boolean(options?.force);
+  const cacheKey = buildInventoryAlertsSnapshotKey(allowedLocations);
+  const now = Date.now();
+
+  if (
+    !force
+    && inventoryAlertsSnapshotCache
+    && inventoryAlertsSnapshotCacheKey === cacheKey
+    && now - inventoryAlertsSnapshotCacheAt < INVENTORY_ALERTS_BOOTSTRAP_TTL_MS
+  ) {
+    return inventoryAlertsSnapshotCache;
+  }
+
+  if (!force && inventoryAlertsSnapshotInFlight && inventoryAlertsSnapshotInFlightKey === cacheKey) {
+    return inventoryAlertsSnapshotInFlight;
+  }
+
+  inventoryAlertsSnapshotInFlightKey = cacheKey;
+  inventoryAlertsSnapshotInFlight = (async () => {
+    const items = await fetchMedicalItems(null, 0, 500);
+    const flatBatches = await fetchAllBatchesForItems(items, allowedLocations);
+    const enrichedItems = computeItemStats(items, flatBatches);
+    const alerts = computeInventoryAlerts(enrichedItems, flatBatches);
+    const snapshot = { alerts };
+
+    inventoryAlertsSnapshotCache = snapshot;
+    inventoryAlertsSnapshotCacheAt = Date.now();
+    inventoryAlertsSnapshotCacheKey = cacheKey;
+
+    return snapshot;
+  })().finally(() => {
+    inventoryAlertsSnapshotInFlight = null;
+    inventoryAlertsSnapshotInFlightKey = '';
+  });
+
+  return inventoryAlertsSnapshotInFlight;
+}
 
 function loadSeenInventoryIds() {
   try {
@@ -526,7 +576,7 @@ export function StaffNotificationProvider({ children }) {
         }
         if (fetchInventoryRef.current) {
           console.log('[NOTIFICATION] Triggering inventory re-fetch...');
-          fetchInventoryRef.current();
+          fetchInventoryRef.current({ force: true });
         } else {
           console.warn('[NOTIFICATION] fetchInventoryRef is null!');
         }
@@ -565,7 +615,7 @@ export function StaffNotificationProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
 
-    const fetchAndComputeAlerts = async () => {
+    const fetchAndComputeAlerts = async ({ force = false } = {}) => {
       try {
         // Skip inventory fetch if permissions are still loading or staff lacks inventory access
         if (permissionsLoading) return;
@@ -585,51 +635,9 @@ export function StaffNotificationProvider({ children }) {
         }
 
         console.log('[INVENTORY_ALERTS] Fetching items and batches for locations:', allowedLocations);
-        const items = await fetchMedicalItems(null, 0, 500);
-        
-        // Fetch batches with location filter to prevent unauthorized access
-        const batchResults = await Promise.all(
-          items.map(async (item) => {
-            const isMedicine = item.category?.toLowerCase() === 'medicine';
-            
-            // Fetch batches for each allowed location and combine them
-            const locationBatches = await Promise.all(
-              allowedLocations.map(async (location) => {
-                try {
-                  if (isMedicine) {
-                    const bs = await fetchMedicineBatches(Number(item.id), location);
-                    return bs.map((b) => ({
-                      id: b.id,
-                      medicalItemId: Number(b.medicalItemId),
-                      batchNumber: b.batchNumber,
-                      availableQuantity: Number(b.availableQuantity ?? 0),
-                      expiryDate: b.expiryDate,
-                      location: b.location,
-                    }));
-                  } else {
-                    const bs = await fetchSupplyBatches(Number(item.id), location);
-                    return bs.map((b) => ({
-                      id: b.id,
-                      medicalItemId: Number(b.supplyItemId),
-                      batchNumber: b.batchNumber,
-                      availableQuantity: Number(b.currentQuantity ?? 0),
-                      expiryDate: b.expiryDate,
-                      location: b.location,
-                    }));
-                  }
-                } catch (err) {
-                  console.warn(`[INVENTORY_ALERTS] Failed to fetch batches for item ${item.id} at location ${location}:`, err);
-                  return [];
-                }
-              })
-            );
-            return locationBatches.flat();
-          })
-        );
-        const flatBatches = batchResults.flat();
-        const enrichedItems = computeItemStats(items, flatBatches);
+        const snapshot = await fetchInventoryAlertsSnapshot(allowedLocations, { force });
         if (!isMounted) return;
-        const alerts = computeInventoryAlerts(enrichedItems, flatBatches);
+        const alerts = snapshot.alerts;
         console.log('[INVENTORY_ALERTS] Computed alerts:', alerts);
         setInventoryAlerts(alerts);
         // Prune seen IDs that no longer exist so the set doesn't grow unbounded
@@ -654,7 +662,7 @@ export function StaffNotificationProvider({ children }) {
   }, [profile, hasPermission, permissionsLoading]); // Re-run when profile, permissions, or loading state changes
 
   const refreshInventoryAlerts = useCallback(() => {
-    if (fetchInventoryRef.current) fetchInventoryRef.current();
+    if (fetchInventoryRef.current) fetchInventoryRef.current({ force: true });
   }, []);
 
   // When permissions finish loading, prune any persisted notifications from

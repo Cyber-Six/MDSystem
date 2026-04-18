@@ -181,6 +181,11 @@ const Query = {
     return result;
   },
 
+  getPatientBasicInfo: async (_, __, { user, res }) => {
+    const row = await Wrapper._getPatientBasicInfo(_, { userId: user.id }, { user, res });
+    return row || null;
+  },
+
 
 };
 

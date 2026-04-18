@@ -6,6 +6,8 @@
 
 import { sendGraphQLRequest } from './graphql-client';
 
+export type PatientIdentity = 'Student' | 'Employee' | 'Superior';
+
 export interface PatientProfile {
   name: string | null;
   firstName: string | null;
@@ -14,16 +16,49 @@ export interface PatientProfile {
   firstEmergencyContactNumber: string | null;
   secondEmergencyContactNumber: string | null;
   identifier: string | null;
+  identity: PatientIdentity | null;
 }
 
 let _cache: PatientProfile | null = null;
 let _cacheTimestamp = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+const sanitizeDisplayValue = (value: unknown): string | null => {
+  const normalized = String(value ?? '').trim();
+  const lowered = normalized.toLowerCase();
+
+  if (
+    !normalized ||
+    lowered === 'null' ||
+    lowered === 'undefined' ||
+    lowered === '--' ||
+    lowered === '—' ||
+    lowered === 'n/a' ||
+    lowered === 'na'
+  ) {
+    return null;
+  }
+
+  return normalized;
+};
+
 const extractContactNumber = (contact: any): string | null => {
   if (!contact) return null;
-  if (typeof contact === 'string') return contact;
-  if (typeof contact?.contactNumber === 'string') return contact.contactNumber;
+  if (typeof contact === 'string') return sanitizeDisplayValue(contact);
+  if (typeof contact?.contactNumber === 'string') return sanitizeDisplayValue(contact.contactNumber);
+  return null;
+};
+
+const STUDENT_EMAIL_REGEX = /^[mq][a-z]+[0-9]*@tip\.edu\.ph$/;
+const EMPLOYEE_EMAIL_REGEX = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+@tip\.edu\.ph$/;
+const SUPERIOR_EMAIL_REGEX = /^[a-z][a-z0-9]*(\.([a-z][a-z0-9]*))*\.superior@tip\.edu\.ph$/;
+
+const inferIdentityFromEmail = (email: string | null | undefined): PatientIdentity | null => {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (SUPERIOR_EMAIL_REGEX.test(normalized)) return 'Superior';
+  if (STUDENT_EMAIL_REGEX.test(normalized)) return 'Student';
+  if (EMPLOYEE_EMAIL_REGEX.test(normalized)) return 'Employee';
   return null;
 };
 
@@ -73,6 +108,7 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
   }
 
   const log = (profileData as any)?.personalLog || {};
+  const email = (profileData as any)?.loginEmail || null;
 
   const latestEmergency =
     (emergencyData as any)?.emergencyContact ||
@@ -81,17 +117,28 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       : null) ||
     null;
 
-  const nameParts = [log.first_name, log.middle_name, log.last_name, log.suffix].filter(Boolean);
+  const nameParts = [
+    sanitizeDisplayValue(log.first_name),
+    sanitizeDisplayValue(log.middle_name),
+    sanitizeDisplayValue(log.last_name),
+    sanitizeDisplayValue(log.suffix),
+  ].filter(Boolean) as string[];
+  const emailIdentity = inferIdentityFromEmail(sanitizeDisplayValue(email));
+  const identity =
+    emailIdentity === 'Superior'
+      ? 'Superior'
+      : emailIdentity;
 
   _cacheTimestamp = Date.now();
   _cache = {
     name: nameParts.length > 0 ? nameParts.join(' ') : null,
-    firstName: log.first_name || null,
-    email: (profileData as any)?.loginEmail || null,
-    contactNumber: log.contactNumber || null,
+    firstName: sanitizeDisplayValue(log.first_name),
+    email: sanitizeDisplayValue(email),
+    contactNumber: sanitizeDisplayValue(log.contactNumber),
     firstEmergencyContactNumber: extractContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: extractContactNumber(latestEmergency?.secondContact),
-    identifier: (profileData as any)?.personalRecord?.identifier || null,
+    identifier: sanitizeDisplayValue((profileData as any)?.personalRecord?.identifier),
+    identity,
   };
 
   return _cache;

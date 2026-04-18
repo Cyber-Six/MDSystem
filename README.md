@@ -1,65 +1,94 @@
 # MDSystem
 
-MDSystem is a medical data management system for the TIP ecosystem. It provides digital workflows for patients, medical staff, and doctors — covering health records, appointments, consultations, medical inventory, and document generation.
+MDSystem is a multi-application medical information platform for patient care workflows, staff operations, and medical record management. It centralizes digital services for health records, consultation support, appointment operations, medicine requests, analytics, and document handling across web and mobile channels.
 
-## Applications
+## System Summary
 
-| Application | Description |
-|---|---|
-| **Patient Portal** | Web portal for patients to manage their medical records, view appointments, submit medicine requests, and access e-consultation. |
-| **Staff Portal** | Web portal for medical staff and doctors to handle appointments, review patient records, manage medical inventory, and oversee staff roles. |
-| **Mobile App** | React Native mobile client providing patient-facing access on Android and iOS. |
-| **Backend API** | Express-based REST and GraphQL API serving both portals and the mobile app. Handles authentication, EMR, inventory, media, and document services. |
-| **Shared Core** | Platform-agnostic JavaScript package shared across the web portals and mobile app for token management, API communication, and validation. |
+MDSystem is organized as a unified ecosystem with separate user experiences and a shared backend foundation:
 
-## Features
+- Patient website for self-service healthcare tasks.
+- Staff website for medical and operational management.
+- Mobile app for patient-first access to core services.
+- Backend services for authentication, EMR, inventory, notifications, and documents.
+- Shared core package for reusable cross-platform logic.
 
-### Patient
-- Account registration and authentication
-- Initial and updated medical record forms
-- Appointment scheduling and tracking
-- Medicine request submission
-- E-consultation (chatbot-assisted)
-- Document downloads (medical certificates, prescriptions, referrals)
+The platform supports both transactional workflows (for example, record updates and appointment operations) and communication workflows (for example, health chat and notifications).
 
-### Medical Staff / Doctor
-- Patient record review and approval workflow
-- Appointment queue and availability management
-- Medical inventory tracking (stock, dispensing, transactions)
-- Document generation with tag-based templates
-- Role and permission management
-- Analytics and reports
+## Website And App Scopes
 
-## Tech Stack
+| Scope | Path | Purpose |
+| --- | --- | --- |
+| Patient Web | `mds-patient/` | Patient-facing portal for records, appointments, medicine requests, documents, and health chat. |
+| Staff Web | `mds-staff/` | Staff and medical portal for review, approvals, inventory, analytics, and role-sensitive operations. |
+| Mobile App | `mds-mobile/` | React Native app for patient workflows and notifications on iOS/Android. |
+| Backend | `Backend/` | Service layer providing API, GraphQL domains, socket events, auth, and data integration. |
+| Shared Core | `packages/core/` | Shared services for auth/token handling, HTTP requests, validation, and common logic. |
 
-| Layer | Stack |
-|---|---|
-| Backend | Node.js, Express 5, PostgreSQL, Redis, GraphQL, BullMQ |
-| Web Portals | React 19, Vite 7, React Router 7, Tailwind CSS 3 |
-| Mobile | Expo 54, React Native 0.81, TypeScript, NativeWind |
-| Document Service | Python, FastAPI, docxtpl |
-| Shared Core | ESM JavaScript, Axios |
+## Module Overview
+
+| Module Area | Description |
+| --- | --- |
+| Authentication And Security | Credential login, Google OAuth, 2FA/TOTP, session handling, rate limiting, and consent flows. |
+| EMR And Record Forms | Initial record intake, update/revision workflows, catalog-driven medical/dental data entry. |
+| Appointments | Patient scheduling and staff-side appointment management. |
+| Health Chat | Real-time chat and support workflows with socket-backed updates. |
+| Medicine And Inventory | Patient medicine request flow and staff inventory/dispensing processes. |
+| Documents | Medical document generation, access, and patient/staff retrieval flows. |
+| Notifications | In-app and push-oriented notification dispatch and acknowledgement flow. |
+| Dashboard And Analytics | Operational metrics, summaries, and export/reporting features. |
+| Role And Permissions | Staff capability boundaries and role-aware access control. |
+
+## Tools And Technology Used
+
+### Backend
+
+- Node.js
+- Express 5
+- GraphQL + REST endpoints
+- PostgreSQL
+- Redis
+- Socket.IO
+- BullMQ
+- JWT auth
+- Joi validation
+
+### Web Applications
+
+- React
+- Vite
+- React Router
+- Tailwind CSS
+- Axios
+
+### Mobile Application
+
+- Expo
+- React Native
+- TypeScript
+- React Navigation
+- AsyncStorage
+- NativeWind
+
+### Shared Utilities
+
+- Workspace shared package architecture (`@mdsystem/core`)
+- Cross-platform token service and HTTP request handling
+- Shared validation utilities and banner/notification helpers
 
 ## Repository Structure
 
 ```text
 MDSystem/
-├── Backend/          # API server and services
-├── mds-patient/      # Patient web portal
-├── mds-staff/        # Staff web portal
-├── mds-mobile/       # Mobile app
-├── packages/core/    # Shared business logic
-└── Docs/             # Project documentation
+|-- Backend/
+|-- Docs/
+|-- mds-mobile/
+|-- mds-patient/
+|-- mds-staff/
+|-- packages/
+|   `-- core/
+`-- README.md
 ```
-
-For the full file map, see [Docs/file_structure.md](Docs/file_structure.md).
-
-## Documentation
-
-- [Docs/file_structure.md](Docs/file_structure.md) — full repository structure
-- [packages/core/README.md](packages/core/README.md) — shared core package
-- [mds-mobile/README.md](mds-mobile/README.md) — mobile app notes
 
 ## License
 
-This repository is proprietary software. See [LICENSE](LICENSE) for the applicable terms.
+This repository is proprietary software. See [LICENSE](LICENSE) for terms.

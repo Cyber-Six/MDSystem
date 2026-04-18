@@ -992,14 +992,14 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
       setConsultations((prev) => [newEntry, ...prev]);
       // Stay on consultation tab instead of redirecting to history
-      return;
+      return { ok: true };
     }
 
     // Save to backend using the consultation service
     try {
       if (!entry?.backendPayload) {
         console.error('No backend payload provided');
-        return;
+        return { ok: false, message: 'Consultation payload is missing. Please try again.' };
       }
 
       const { consultationInput, consultationOutcomeInput, vitalSignsData, dentalGradingData, patientId: vsPatientId } = entry.backendPayload;
@@ -1048,9 +1048,10 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
       setConsultations(consultationsWithDetails);
       // Stay on consultation tab instead of redirecting to history
+      return { ok: true };
     } catch (err) {
       console.error('Error saving consultation:', err);
-      alert('Failed to save consultation. Please try again.');
+      return { ok: false, message: err?.message || 'Failed to save consultation. Please try again.' };
     }
   };
 

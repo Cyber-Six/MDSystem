@@ -9,13 +9,13 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 /**
  * Stage a raw File object — shared by file picker and clipboard paste.
  */
-const stageFileObject = async (file, onFileStaged, setIsUploading) => {
+const stageFileObject = async (file, onFileStaged, setIsUploading, onError) => {
   if (!ACCEPTED_MIME_LIST.includes(file.type)) {
-    alert('Unsupported file type.');
+    onError?.('Unsupported file type.');
     return;
   }
   if (file.size > MAX_FILE_SIZE) {
-    alert('File too large. Maximum size is 10MB.');
+    onError?.('File too large. Maximum size is 10MB.');
     return;
   }
   try {
@@ -24,7 +24,7 @@ const stageFileObject = async (file, onFileStaged, setIsUploading) => {
     onFileStaged?.({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
   } catch (error) {
     console.error('[FileAttachment] Upload failed:', error);
-    alert('Failed to upload file. Please try again.');
+    onError?.('Failed to upload file. Please try again.');
   } finally {
     setIsUploading(false);
   }
@@ -89,7 +89,7 @@ const resolveClipboardImageFile = (item) => {
  * Hook: attach to a textarea/input onPaste to intercept clipboard images.
  * Returns an onPaste handler that uploads pasted images as staged files.
  */
-export const useClipboardPaste = ({ onFileStaged, disabled }) => {
+export const useClipboardPaste = ({ onFileStaged, disabled, onError }) => {
   const [isUploading, setIsUploading] = useState(false);
 
   const handlePaste = useCallback((e) => {
@@ -106,7 +106,7 @@ export const useClipboardPaste = ({ onFileStaged, disabled }) => {
         if (!file) return;
         const ext = file.type.split('/')[1] || 'png';
         const named = new File([file], `paste-${Date.now()}.${ext}`, { type: file.type });
-        stageFileObject(named, onFileStaged, setIsUploading);
+        stageFileObject(named, onFileStaged, setIsUploading, onError);
       });
       return;
     }
@@ -129,7 +129,7 @@ export const useClipboardPaste = ({ onFileStaged, disabled }) => {
             for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
             const ext = mime.split('/')[1] || 'png';
             const file = new File([new Blob([ab], { type: mime })], `paste-${Date.now()}.${ext}`, { type: mime });
-            stageFileObject(file, onFileStaged, setIsUploading);
+            stageFileObject(file, onFileStaged, setIsUploading, onError);
           }
         } else if (src.startsWith('https://') || src.startsWith('http://')) {
           e.preventDefault();
@@ -140,7 +140,7 @@ export const useClipboardPaste = ({ onFileStaged, disabled }) => {
               if (blob.type.startsWith('image/') && ACCEPTED_MIME_LIST.includes(blob.type)) {
                 const ext = blob.type.split('/')[1] || 'png';
                 const file = new File([blob], `paste-${Date.now()}.${ext}`, { type: blob.type });
-                stageFileObject(file, onFileStaged, setIsUploading);
+                stageFileObject(file, onFileStaged, setIsUploading, onError);
               }
             } catch {
               // CORS or network error — silently ignore
@@ -149,7 +149,7 @@ export const useClipboardPaste = ({ onFileStaged, disabled }) => {
         }
       }
     }
-  }, [disabled, isUploading, onFileStaged]);
+  }, [disabled, isUploading, onFileStaged, onError]);
 
   return { handlePaste, isUploadingFromClipboard: isUploading };
 };
@@ -157,7 +157,7 @@ export const useClipboardPaste = ({ onFileStaged, disabled }) => {
 /**
  * File attachment button with upload functionality
  */
-export const FileAttachButton = ({ onFileStaged, disabled }) => {
+export const FileAttachButton = ({ onFileStaged, disabled, onError }) => {
   const inputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -165,7 +165,7 @@ export const FileAttachButton = ({ onFileStaged, disabled }) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
-    await stageFileObject(file, onFileStaged, setIsUploading);
+    await stageFileObject(file, onFileStaged, setIsUploading, onError);
   };
 
   return (

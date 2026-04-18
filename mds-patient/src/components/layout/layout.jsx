@@ -24,7 +24,7 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden md:ml-24">
+      <div className="flex-1 flex flex-col overflow-hidden md:ml-32">
         {/* Top Bar */}
         <TopBar onMenuClick={toggleSidebar} isSidebarOpen={sidebarOpen} />
 

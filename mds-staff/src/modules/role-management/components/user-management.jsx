@@ -16,6 +16,7 @@ import {
   setUserSuperiorStatus,
 } from '../staff-service';
 import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx';
+import { formatBranchLabel } from '../../../utils/branch-utils';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50];
 const LOGIN_HISTORY_LIMIT_OPTIONS = [10, 20, 50];
@@ -33,8 +34,8 @@ const ADMIN_REFETCH_MIN_WAIT_MS = 15000;
 const USER_BRANCH_FILTER_OPTIONS = [
   { value: 'all', label: 'All Branches' },
   { value: 'Manila', label: 'Manila' },
-  { value: 'QuezonCity', label: 'QuezonCity' },
-  { value: 'Both', label: 'Both' },
+  { value: 'QuezonCity', label: 'Quezon City' },
+  { value: 'Both', label: 'MLA & QC' },
 ];
 
 const USER_STATUS_FILTER_OPTIONS = [
@@ -47,8 +48,8 @@ const USER_STATUS_FILTER_OPTIONS = [
 
 const SEMESTRAL_BRANCH_OPTIONS = [
   { value: 'Manila', label: 'Manila' },
-  { value: 'QuezonCity', label: 'QuezonCity' },
-  { value: 'Both', label: 'Both' },
+  { value: 'QuezonCity', label: 'Quezon City' },
+  { value: 'Both', label: 'MLA & QC' },
 ];
 
 const SEMESTRAL_TARGET_OPTIONS = [
@@ -121,8 +122,7 @@ function formatWindowLabel(hours) {
 }
 
 function normalizeBranchLabel(branch) {
-  const normalized = String(branch || '').trim();
-  return normalized || '--';
+  return formatBranchLabel(branch, { fallback: '--' });
 }
 
 function normalizeTypeLabel(type) {

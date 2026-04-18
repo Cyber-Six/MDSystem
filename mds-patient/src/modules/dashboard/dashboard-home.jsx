@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnnouncementCarousel } from '../anouncement';
-import { sendGraphQLRequest } from '../../utils/graphql-client';
+import { fetchPatientDashboardData } from './dashboard-service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,33 +70,13 @@ const TYPE_DOT = {
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 const fetchDashboardData = async () => {
-  const [appointmentRes, medicineRes, recordRes, chatRes] = await Promise.allSettled([
-    sendGraphQLRequest(
-      `query { getAppointmentStatus { id status session purpose schedulerLabel scheduledDate created_at } }`,
-      {},
-      { endpoint: '/appointment/patient' }
-    ),
-    sendGraphQLRequest(
-      `query { getMedicineStatus { id status purpose created_at } }`,
-      {},
-      { endpoint: '/medical-inventory/medicine-request/patient' }
-    ),
-    sendGraphQLRequest(
-      `query GetCurrentUpdateTicket { getUpdateTicket { id status scope notes created_at } }`,
-      {}
-    ),
-    sendGraphQLRequest(
-      `query GetMyTickets($offset: Int, $limit: Int) { getMyTickets(offset: $offset, limit: $limit) { chats { id status purpose session_start } total } }`,
-      { offset: 0, limit: 50 },
-      { endpoint: '/healthchat/patient' }
-    ),
-  ]);
+  const result = await fetchPatientDashboardData();
 
   return {
-    appointment:     appointmentRes.status  === 'fulfilled' ? (appointmentRes.value?.getAppointmentStatus ?? null)      : null,
-    medicineReqs:    medicineRes.status     === 'fulfilled' ? (medicineRes.value?.getMedicineStatus ?? [])              : [],
-    updateTicket:    recordRes.status       === 'fulfilled' ? (recordRes.value?.getUpdateTicket ?? null)               : null,
-    chatData:        chatRes.status         === 'fulfilled' ? (chatRes.value?.getMyTickets ?? { chats: [], total: 0 }) : { chats: [], total: 0 },
+    appointment: result?.appointment ?? null,
+    medicineReqs: result?.medicineReqs ?? [],
+    updateTicket: result?.updateTicket ?? null,
+    chatData: result?.chatData ?? { chats: [], total: 0 },
   };
 };
 

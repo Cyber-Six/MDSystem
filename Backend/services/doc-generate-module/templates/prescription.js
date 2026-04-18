@@ -480,6 +480,39 @@ class PrescriptionTemplate extends BaseTemplate {
     const blockH = 52;
     const sigY   = pageH - bm - blockH;
 
+    // Render signature image above the signature line when available.
+    let signatureBuffer = null;
+    const signatureMeta = physician?.signature || {};
+    const signatureDataUrl = signatureMeta?.base64 || '';
+    const signaturePath = signatureMeta?.path || '';
+
+    try {
+      if (signatureDataUrl && signatureDataUrl.startsWith('data:')) {
+        const base64Part = signatureDataUrl.split(',')[1] || '';
+        if (base64Part) {
+          signatureBuffer = Buffer.from(base64Part, 'base64');
+        }
+      } else if (signatureDataUrl) {
+        signatureBuffer = Buffer.from(signatureDataUrl, 'base64');
+      } else if (signaturePath && fs.existsSync(signaturePath)) {
+        signatureBuffer = fs.readFileSync(signaturePath);
+      }
+    } catch (_) {
+      signatureBuffer = null;
+    }
+
+    if (signatureBuffer) {
+      try {
+        doc.image(signatureBuffer, sigX + 8, sigY - 20, {
+          fit: [sigW - 16, 18],
+          align: 'left',
+          valign: 'bottom',
+        });
+      } catch (_) {
+        // Skip invalid signature image payloads and proceed with text signature.
+      }
+    }
+
     // Signature line
     doc
       .strokeColor('#333')

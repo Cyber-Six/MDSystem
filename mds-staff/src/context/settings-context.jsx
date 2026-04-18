@@ -153,6 +153,11 @@ const DEFAULT_SETTINGS = {
 const SETTINGS_STORAGE_PREFIX = 'staff_settings_';
 const THEME_SWITCHING_CLASS = 'theme-switching';
 const THEME_SWITCH_ANIMATION_MS = 260;
+const SETTINGS_BOOTSTRAP_TTL_MS = 10_000;
+
+let settingsBootstrapCache = null;
+let settingsBootstrapCacheAt = 0;
+let settingsBootstrapInFlight = null;
 
 // SECURITY: Only allow alphanumeric, underscore, and hyphen in userId to prevent
 // key injection / namespace pollution in localStorage.
@@ -319,6 +324,33 @@ function saveSettings(settings) {
   }
 }
 
+async function fetchBootstrapSettings() {
+  const now = Date.now();
+  if (settingsBootstrapCache && now - settingsBootstrapCacheAt < SETTINGS_BOOTSTRAP_TTL_MS) {
+    return settingsBootstrapCache;
+  }
+
+  if (settingsBootstrapInFlight) {
+    return settingsBootstrapInFlight;
+  }
+
+  settingsBootstrapInFlight = axiosRequest
+    .get('/settings')
+    .then((res) => {
+      if (!res.data?.ok) return null;
+      const fromDb = mergeFromBackendPrefs(res.data.preferences);
+      settingsBootstrapCache = fromDb;
+      settingsBootstrapCacheAt = Date.now();
+      return fromDb;
+    })
+    .catch(() => null)
+    .finally(() => {
+      settingsBootstrapInFlight = null;
+    });
+
+  return settingsBootstrapInFlight;
+}
+
 const SettingsContext = createContext(null);
 
 export function SettingsProvider({ children }) {
@@ -344,13 +376,13 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     if (!isAuthenticated()) return; // no token — skip to avoid 401/SESSION_EXPIRED
     let cancelled = false;
-    axiosRequest.get('/settings')
-      .then((res) => {
-        if (cancelled || !res.data?.ok) return;
-        const fromDb = mergeFromBackendPrefs(res.data.preferences);
-        if (!cancelled) { setSettings(fromDb); saveSettings(fromDb); }
-      })
-      .catch(() => { /* network or auth error — localStorage fallback stays */ });
+
+    fetchBootstrapSettings().then((fromDb) => {
+      if (cancelled || !fromDb) return;
+      setSettings(fromDb);
+      saveSettings(fromDb);
+    });
+
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -6,7 +6,7 @@ import styles from './banner.module.css';
 const SLIDE_OUT_DURATION = 320; // ms — must match CSS animation duration
 
 // When Banner renders outside SettingsProvider (e.g. auth pages), use defaults.
-const FALLBACK_SETTINGS = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+const FALLBACK_SETTINGS = { ...DEFAULT_SETTINGS };
 
 /**
  * Group banners by "type:message" key, preserving first-seen order.

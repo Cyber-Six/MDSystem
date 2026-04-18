@@ -3,13 +3,14 @@ import { Loader2, RefreshCw, Lock, ShieldAlert } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { getPatientMessages } from '../health-chat-service';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
-import ChatHeader from './chat-header';
+import { ChatHeader } from './chat-header';
 import MessageBubble from './message-bubble';
 import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
 import PrescriptionPanel from './PrescriptionPanel';
+import MedicalCertificatePanel from './MedicalCertificatePanel';
 import ConsultationPanel from './ConsultationPanel';
 import ExpiryWarningBanner from './expiry-warning-banner';
 import ConfirmModal from './confirm-modal';
@@ -27,7 +28,6 @@ const ChatPanel = ({ emitTyping }) => {
     refreshMessages,
     socketError,
     activeTicketId,
-    sendMessage,
     isExtendingSession,
     extendSessionChat,
     isAdmin,
@@ -37,6 +37,7 @@ const ChatPanel = ({ emitTyping }) => {
   const { profile } = useStaffProfile();
 
   const [showPrescription, setShowPrescription] = useState(false);
+  const [showMedicalCertificate, setShowMedicalCertificate] = useState(false);
   const [showConsultation, setShowConsultation] = useState(false);
   const [consultationData, setConsultationData] = useState(null);
   const [showTakeoverConfirm, setShowTakeoverConfirm] = useState(false);
@@ -225,6 +226,7 @@ const ChatPanel = ({ emitTyping }) => {
   // Close panels when patient changes
   useEffect(() => {
     setShowPrescription(false);
+    setShowMedicalCertificate(false);
     setShowConsultation(false);
     setConsultationData(null);
   }, [selectedChatId, selectedPatientId]);
@@ -390,8 +392,22 @@ const ChatPanel = ({ emitTyping }) => {
       ) : (
         <MessageInput
           emitTyping={emitTyping}
-          onOpenPrescription={() => { setShowConsultation(false); setShowPrescription(true); }}
-          onOpenConsultation={() => { setShowPrescription(false); setConsultationData(null); setShowConsultation(true); }}
+          onOpenPrescription={() => {
+            setShowConsultation(false);
+            setShowMedicalCertificate(false);
+            setShowPrescription(true);
+          }}
+          onOpenMedicalCertificate={() => {
+            setShowConsultation(false);
+            setShowPrescription(false);
+            setShowMedicalCertificate(true);
+          }}
+          onOpenConsultation={() => {
+            setShowPrescription(false);
+            setShowMedicalCertificate(false);
+            setConsultationData(null);
+            setShowConsultation(true);
+          }}
         />
       )}
     </div>
@@ -408,6 +424,7 @@ const ChatPanel = ({ emitTyping }) => {
           const { _openPrescription, ...rest } = data;
           setConsultationData(rest);
           setShowConsultation(false);
+          setShowMedicalCertificate(false);
           setShowPrescription(true);
         } else {
           setConsultationData(data);
@@ -424,9 +441,20 @@ const ChatPanel = ({ emitTyping }) => {
       patientDob={patient?.dateOfBirth}
       patientSex={patient?.sex}
       activeTicketId={activeTicketId}
-      sendMessage={sendMessage}
       consultationData={consultationData}
     />
+
+      {/* Medical certificate side panel */}
+      <MedicalCertificatePanel
+        isOpen={showMedicalCertificate}
+        onClose={() => setShowMedicalCertificate(false)}
+        patientId={patient?.id}
+        patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
+        patientDob={patient?.dateOfBirth}
+        patientSex={patient?.sex}
+        activeTicketId={activeTicketId}
+        consultationData={consultationData}
+      />
 
     {/* Takeover confirmation modal */}
     <ConfirmModal

@@ -6,6 +6,7 @@ import { useSettings } from '../../context/settings-context';
 import { usePatientTabs } from '../../context/patient-tabs-context';
 import { useStaffProfile, clearStaffProfileCache } from '../../hooks/use-staff-profile';
 import { usePermissions } from '../../context/permissions-context';
+import { formatBranchLabel } from '../../utils/branch-utils';
 
 function formatRelativeTime(iso) {
   const date = new Date(iso);
@@ -596,7 +597,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                       </span>
                       {profile?.branch && (
                         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
-                          {profile.branch === 'Both' ? 'MLA & QC' : profile.branch}
+                          {formatBranchLabel(profile.branch)}
                         </span>
                       )}
                     </div>
