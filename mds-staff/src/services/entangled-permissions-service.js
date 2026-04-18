@@ -30,6 +30,14 @@ const GRAPHQL_ENDPOINTS = configuredEndpoints.length > 0
   ? configuredEndpoints
   : ['/rolemanagement/admin'];
 
+const ENTANGLED_PERMISSIONS_CACHE_TTL_MS = 10_000;
+
+let entangledPermissionsCache = null;
+let entangledPermissionsCacheAt = 0;
+let entangledPermissionsCacheUserId = null;
+let entangledPermissionsInFlight = null;
+let entangledPermissionsInFlightUserId = null;
+
 function decodeJwtPayload(token) {
   if (!token || typeof token !== 'string') return null;
 
@@ -125,10 +133,10 @@ async function sendGraphQL(endpoint, query, variables = {}) {
   return response?.data?.data || null;
 }
 
-async function fetchFromEndpoint(endpoint, options = {}) {
+async function fetchFromEndpoint(endpoint, options = {}, context = {}) {
   if (!options?.isAdmin) return {};
 
-  const userId = await getCurrentUserId();
+  const userId = context.userId || await getCurrentUserId();
   if (!userId) return {};
 
   const data = await sendGraphQL(endpoint, STAFF_PERMISSION_QUERY, { userId });
@@ -160,24 +168,61 @@ export function mergeEntangledPermissionMaps(baseMap = {}, overrideMap = {}) {
 export async function fetchEntangledPermissions(options = {}) {
   if (!options?.isAdmin) return {};
 
-  let lastError = null;
+  const force = Boolean(options?.force);
+  const userId = await getCurrentUserId();
+  if (!userId) return {};
 
-  for (const endpoint of GRAPHQL_ENDPOINTS) {
-    try {
-      const map = await fetchFromEndpoint(endpoint, options);
-      if (Object.keys(map).length > 0) return map;
-    } catch (error) {
-      if (isUnauthorizedError(error)) {
-        return {};
-      }
-
-      lastError = error;
-    }
+  const now = Date.now();
+  if (
+    !force
+    && entangledPermissionsCache
+    && entangledPermissionsCacheUserId === userId
+    && now - entangledPermissionsCacheAt < ENTANGLED_PERMISSIONS_CACHE_TTL_MS
+  ) {
+    return entangledPermissionsCache;
   }
 
-  if (lastError) throw lastError;
+  if (!force && entangledPermissionsInFlight && entangledPermissionsInFlightUserId === userId) {
+    return entangledPermissionsInFlight;
+  }
 
-  return {};
+  entangledPermissionsInFlightUserId = userId;
+  entangledPermissionsInFlight = (async () => {
+    let lastError = null;
+
+    for (const endpoint of GRAPHQL_ENDPOINTS) {
+      try {
+        const map = await fetchFromEndpoint(endpoint, options, { userId });
+        if (Object.keys(map).length > 0) {
+          entangledPermissionsCache = map;
+          entangledPermissionsCacheAt = Date.now();
+          entangledPermissionsCacheUserId = userId;
+          return map;
+        }
+      } catch (error) {
+        if (isUnauthorizedError(error)) {
+          entangledPermissionsCache = {};
+          entangledPermissionsCacheAt = Date.now();
+          entangledPermissionsCacheUserId = userId;
+          return {};
+        }
+
+        lastError = error;
+      }
+    }
+
+    if (lastError) throw lastError;
+
+    entangledPermissionsCache = {};
+    entangledPermissionsCacheAt = Date.now();
+    entangledPermissionsCacheUserId = userId;
+    return {};
+  })().finally(() => {
+    entangledPermissionsInFlight = null;
+    entangledPermissionsInFlightUserId = null;
+  });
+
+  return entangledPermissionsInFlight;
 }
 
 export function isEntangledPermissionAllowed(record) {
