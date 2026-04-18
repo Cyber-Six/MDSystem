@@ -8,16 +8,26 @@ const docGen = require('../../../services/doc-generate-module/index.js');
 const {
   PRESCRIPTION_DOC_TYPE,
   GENERIC_BINARY_TAG,
+  assertPdfBuffer: assertPrescriptionPdfBuffer,
   parsePrescriptionRequirementRows,
 } = require('../../../services/doc-generate-module/prescription-normalized.js');
 const {
   MEDICAL_CERTIFICATE_DOC_TYPE,
+  assertPdfBuffer: assertMedicalCertificatePdfBuffer,
   parseMedicalCertificateRequirementRows,
 } = require('../../../services/doc-generate-module/medical-certificate-normalized.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
 const { checkCredentialsStatus } = require("../../../config/middleware/activeCredential.js");
 
 const router = express.Router();
+
+function createRouteError(statusCode, errorCode, message, details = null) {
+  const err = new Error(message || errorCode);
+  err.statusCode = statusCode;
+  err.errorCode = errorCode;
+  if (details) err.details = details;
+  return err;
+}
 
 function pickFirstNonEmpty(...values) {
   for (const value of values) {
@@ -41,11 +51,59 @@ function toDateInput(value) {
   return text ? text.slice(0, 10) : fallback;
 }
 
-function sendPdfBuffer(res, buffer, filename) {
+function sendPdfBuffer(res, buffer, filename = 'document.pdf') {
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   res.setHeader('Content-Length', buffer.length);
-  res.send(buffer);
+  res.end(buffer);
+}
+
+function assertPdfBufferAnyTemplate(buffer, context = {}) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw createRouteError(
+      500,
+      'INVALID_PDF_BUFFER',
+      'Generated document buffer is empty or missing.',
+      { templateType: context.templateType || 'unknown', stage: context.stage || 'unknown' }
+    );
+  }
+
+  const header = buffer.slice(0, 4).toString('utf8');
+  if (header !== '%PDF') {
+    throw createRouteError(
+      500,
+      'INVALID_PDF_BUFFER',
+      'Generated document buffer is not a valid PDF payload.',
+      {
+        templateType: context.templateType || 'unknown',
+        stage: context.stage || 'unknown',
+        header,
+      }
+    );
+  }
+}
+
+async function resolvePatientDocumentMeta(documentId, patientId) {
+  const docResult = await db.query(
+    `SELECT pd.id, pd."patientId", pd."issuedBy", pd."created_at",
+            REPLACE(LOWER(dt.template), ' ', '-') as "templateType", dt.description
+     FROM "PatientDocuments" pd
+     JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+     WHERE pd.id = $1
+     LIMIT 1`,
+    [documentId]
+  );
+
+  if (docResult.rows.length === 0) {
+    throw createRouteError(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
+  }
+
+  const documentMeta = docResult.rows[0];
+  if (Number(documentMeta.patientId) !== Number(patientId)) {
+    throw createRouteError(403, 'FORBIDDEN', 'This document does not belong to the authenticated patient.');
+  }
+
+  return documentMeta;
 }
 
 async function resolvePatientData(patientId) {
@@ -209,6 +267,133 @@ async function getMedicalCertificateNormalizedRows(documentId) {
   }
 
   return result.rows;
+}
+
+async function buildPatientDocumentPdfBuffer(documentMeta, patientId) {
+  const documentId = documentMeta.id;
+
+  if (documentMeta.templateType === PRESCRIPTION_DOC_TYPE) {
+    const normalizedDataResult = await db.query(
+      `SELECT drt.vartag, dd.data
+       FROM "documentData" dd
+       JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+       JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+       WHERE dd."documentId" = $1`,
+      [documentId]
+    );
+
+    if (normalizedDataResult.rows.length > 0) {
+      try {
+        const prescription = parsePrescriptionRequirementRows(normalizedDataResult.rows);
+        const patient = await resolvePatientData(patientId);
+        const physician = await resolvePhysicianData(documentMeta.issuedBy);
+        physician.licenseNo = prescription.licenseNumber || physician.licenseNo;
+        physician.ptrNo = prescription.ptrNumber || physician.ptrNo;
+        physician.signature = prescription.doctorSignature || physician.signature;
+
+        const regenerated = await docGen.generateDocumentBuffer(PRESCRIPTION_DOC_TYPE, {
+          patient,
+          physician,
+          issuedDate: toDateInput(documentMeta.created_at),
+          prescription,
+        });
+
+        assertPrescriptionPdfBuffer(regenerated.buffer, {
+          templateType: PRESCRIPTION_DOC_TYPE,
+          stage: 'patient-download',
+        });
+
+        return {
+          buffer: regenerated.buffer,
+          filename: regenerated.filename || 'document.pdf',
+          mode: 'normalized-regenerated',
+        };
+      } catch (normalizedErr) {
+        logger.warn('Patient prescription regeneration failed, using legacy payload fallback', {
+          documentId,
+          patientId,
+          error: normalizedErr.message,
+        });
+      }
+    }
+  }
+
+  if (documentMeta.templateType === MEDICAL_CERTIFICATE_DOC_TYPE) {
+    const normalizedDataResult = await db.query(
+      `SELECT drt.vartag, dd.data
+       FROM "documentData" dd
+       JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+       JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+       WHERE dd."documentId" = $1`,
+      [documentId]
+    );
+
+    if (normalizedDataResult.rows.length > 0) {
+      try {
+        const certificate = parseMedicalCertificateRequirementRows(normalizedDataResult.rows);
+        const patient = await resolvePatientData(patientId);
+        const physician = await resolvePhysicianData(documentMeta.issuedBy);
+        physician.licenseNo = certificate.licenseNumber || physician.licenseNo;
+        physician.ptrNo = certificate.ptrNumber || physician.ptrNo;
+        physician.signature = certificate.doctorSignature || physician.signature;
+
+        const regenerated = await docGen.generateDocumentBuffer(MEDICAL_CERTIFICATE_DOC_TYPE, {
+          patient,
+          physician,
+          issuedDate: toDateInput(documentMeta.created_at),
+          certificate,
+        });
+
+        assertMedicalCertificatePdfBuffer(regenerated.buffer, {
+          templateType: MEDICAL_CERTIFICATE_DOC_TYPE,
+          stage: 'patient-download',
+        });
+
+        return {
+          buffer: regenerated.buffer,
+          filename: regenerated.filename || 'document.pdf',
+          mode: 'normalized-regenerated-medical-certificate',
+        };
+      } catch (normalizedErr) {
+        logger.warn('Patient medical certificate regeneration failed, using legacy payload fallback', {
+          documentId,
+          patientId,
+          error: normalizedErr.message,
+        });
+      }
+    }
+  }
+
+  const dataResult = await db.query(
+    `SELECT dd.data
+     FROM "documentData" dd
+     LEFT JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+     LEFT JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+     WHERE dd."documentId" = $1
+       AND (
+         dd."requirementId" IS NULL
+         OR LOWER(COALESCE(drt.vartag, '')) = $2
+       )
+     ORDER BY CASE WHEN dd."requirementId" IS NULL THEN 0 ELSE 1 END, dd.id ASC
+     LIMIT 1`,
+    [documentId, GENERIC_BINARY_TAG]
+  );
+
+  if (dataResult.rows.length === 0) {
+    throw createRouteError(404, 'DOCUMENT_DATA_NOT_FOUND', 'Document PDF payload was not found.');
+  }
+
+  const pdfBuffer = Buffer.from(dataResult.rows[0].data, 'base64');
+  assertPdfBufferAnyTemplate(pdfBuffer, {
+    templateType: documentMeta.templateType,
+    stage: 'legacy-payload-download',
+  });
+
+  return {
+    buffer: pdfBuffer,
+    filename: `${documentMeta.templateType}_${documentId}.pdf`,
+    mode: 'legacy-payload',
+  };
 }
 
 function toMedicalCertificateViewPayload(documentMeta, normalized) {
@@ -683,6 +868,76 @@ router.get('/my/medical-certificate/view/:documentId', jwtProtect('patient'), ch
 });
 
 /**
+ * Streams a patient-owned generated PDF for a specific template route.
+ */
+async function streamTemplatePdfForPatient(req, res, expectedTemplateType) {
+  try {
+    const { documentId } = req.params;
+    const patientId = req.user.id;
+
+    const documentMeta = await resolvePatientDocumentMeta(documentId, patientId);
+    if (documentMeta.templateType !== expectedTemplateType) {
+      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND', message: 'Document not found.' });
+    }
+
+    const pdfResult = await buildPatientDocumentPdfBuffer(documentMeta, patientId);
+    sendPdfBuffer(res, pdfResult.buffer, 'document.pdf');
+
+    logger.info('Patient template document streamed', {
+      documentId,
+      patientId,
+      templateType: expectedTemplateType,
+      mode: pdfResult.mode,
+    });
+  } catch (err) {
+    logger.error('Patient template document stream failed', {
+      error: err.message,
+      code: err.errorCode,
+      details: err.details,
+    });
+
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({
+      error: err.errorCode || 'DOWNLOAD_FAILED',
+      message: err.message,
+      details: err.details || null,
+    });
+  }
+}
+
+/**
+ * GET /documents/prescription/:documentId
+ * View/download a patient-owned prescription PDF (inline stream)
+ */
+router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE);
+});
+
+/**
+ * GET /documents/prescription/download/:documentId
+ * Alias for prescription PDF stream route
+ */
+router.get('/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE);
+});
+
+/**
+ * GET /documents/medical-certificate/:documentId
+ * View/download a patient-owned medical certificate PDF (inline stream)
+ */
+router.get('/medical-certificate/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE);
+});
+
+/**
+ * GET /documents/medical-certificate/download/:documentId
+ * Alias for medical certificate PDF stream route
+ */
+router.get('/medical-certificate/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE);
+});
+
+/**
  * GET /documents/me/download/:documentId
  * Download a specific generated document as PDF for the authenticated patient
  */
@@ -691,146 +946,30 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
     const { documentId } = req.params;
     const patientId = req.user.id;
 
-    // Verify document belongs to this patient
-    const docResult = await db.query(
-      `SELECT pd.id, pd."issuedBy", pd."created_at",
-              REPLACE(LOWER(dt.template), ' ', '-') as "templateType", dt.description
-       FROM "PatientDocuments" pd
-       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
-       WHERE pd.id = $1 AND pd."patientId" = $2`,
-      [documentId, patientId]
-    );
+    const documentMeta = await resolvePatientDocumentMeta(documentId, patientId);
+    const pdfResult = await buildPatientDocumentPdfBuffer(documentMeta, patientId);
 
-    if (docResult.rows.length === 0) {
-      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
-    }
+    sendPdfBuffer(res, pdfResult.buffer, 'document.pdf');
 
-    const doc = docResult.rows[0];
-
-    if (doc.templateType === PRESCRIPTION_DOC_TYPE) {
-      const normalizedDataResult = await db.query(
-        `SELECT drt.vartag, dd.data
-         FROM "documentData" dd
-         JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
-         JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
-         WHERE dd."documentId" = $1`,
-        [documentId]
-      );
-
-      if (normalizedDataResult.rows.length > 0) {
-        try {
-          const prescription = parsePrescriptionRequirementRows(normalizedDataResult.rows);
-          const patient = await resolvePatientData(patientId);
-          const physician = await resolvePhysicianData(doc.issuedBy);
-          physician.licenseNo = prescription.licenseNumber || physician.licenseNo;
-          physician.ptrNo = prescription.ptrNumber || physician.ptrNo;
-          physician.signature = prescription.doctorSignature || physician.signature;
-
-          const regenerated = await docGen.generateDocumentBuffer(PRESCRIPTION_DOC_TYPE, {
-            patient,
-            physician,
-            issuedDate: toDateInput(doc.created_at),
-            prescription,
-          });
-
-          sendPdfBuffer(
-            res,
-            regenerated.buffer,
-            regenerated.filename || `${doc.templateType}_${documentId}.pdf`
-          );
-
-          logger.info('Patient document downloaded', {
-            documentId,
-            patientId,
-            mode: 'normalized-regenerated',
-          });
-          return;
-        } catch (normalizedErr) {
-          logger.warn('Patient prescription regeneration failed, using legacy payload fallback', {
-            documentId,
-            patientId,
-            error: normalizedErr.message,
-          });
-        }
-      }
-    }
-
-    if (doc.templateType === MEDICAL_CERTIFICATE_DOC_TYPE) {
-      const normalizedDataResult = await db.query(
-        `SELECT drt.vartag, dd.data
-         FROM "documentData" dd
-         JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
-         JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
-         WHERE dd."documentId" = $1`,
-        [documentId]
-      );
-
-      if (normalizedDataResult.rows.length > 0) {
-        try {
-          const certificate = parseMedicalCertificateRequirementRows(normalizedDataResult.rows);
-          const patient = await resolvePatientData(patientId);
-          const physician = await resolvePhysicianData(doc.issuedBy);
-          physician.licenseNo = certificate.licenseNumber || physician.licenseNo;
-          physician.ptrNo = certificate.ptrNumber || physician.ptrNo;
-          physician.signature = certificate.doctorSignature || physician.signature;
-
-          const regenerated = await docGen.generateDocumentBuffer(MEDICAL_CERTIFICATE_DOC_TYPE, {
-            patient,
-            physician,
-            issuedDate: toDateInput(doc.created_at),
-            certificate,
-          });
-
-          sendPdfBuffer(
-            res,
-            regenerated.buffer,
-            regenerated.filename || `${doc.templateType}_${documentId}.pdf`
-          );
-
-          logger.info('Patient document downloaded', {
-            documentId,
-            patientId,
-            mode: 'normalized-regenerated-medical-certificate',
-          });
-          return;
-        } catch (normalizedErr) {
-          logger.warn('Patient medical certificate regeneration failed, using legacy payload fallback', {
-            documentId,
-            patientId,
-            error: normalizedErr.message,
-          });
-        }
-      }
-    }
-
-    // Fetch stored PDF buffer
-    const dataResult = await db.query(
-      `SELECT dd.data
-       FROM "documentData" dd
-       LEFT JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
-       LEFT JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
-       WHERE dd."documentId" = $1
-         AND (
-           dd."requirementId" IS NULL
-           OR LOWER(COALESCE(drt.vartag, '')) = $2
-         )
-       ORDER BY CASE WHEN dd."requirementId" IS NULL THEN 0 ELSE 1 END, dd.id ASC
-       LIMIT 1`,
-      [documentId, GENERIC_BINARY_TAG]
-    );
-
-    if (dataResult.rows.length === 0) {
-      return res.status(404).json({ error: 'DOCUMENT_DATA_NOT_FOUND' });
-    }
-
-    const pdfBuffer = Buffer.from(dataResult.rows[0].data, 'base64');
-    const filename = `${doc.templateType}_${documentId}.pdf`;
-    sendPdfBuffer(res, pdfBuffer, filename);
-
-    logger.info('Patient document downloaded', { documentId, patientId });
+    logger.info('Patient document downloaded', {
+      documentId,
+      patientId,
+      templateType: documentMeta.templateType,
+      mode: pdfResult.mode,
+    });
   } catch (err) {
-    logger.error('Patient document download failed', { error: err.message });
-    res.status(500).json({ error: 'DOWNLOAD_FAILED', message: err.message });
+    logger.error('Patient document download failed', {
+      error: err.message,
+      code: err.errorCode,
+      details: err.details,
+    });
+
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({
+      error: err.errorCode || 'DOWNLOAD_FAILED',
+      message: err.message,
+      details: err.details || null,
+    });
   }
 });
 

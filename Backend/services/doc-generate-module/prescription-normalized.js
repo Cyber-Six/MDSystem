@@ -54,6 +54,10 @@ function hashString(value = '') {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
+function hashBuffer(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
 function toDataUrl(base64Value, mimeType = 'image/png') {
   const text = pickFirstNonEmpty(base64Value);
   if (!text) return '';
@@ -91,6 +95,48 @@ function normalizeDoctorSignature(physician = {}) {
     hash: signatureHash || null,
     base64: dataUrl || null,
     mimeType: dataUrl ? mimeType : null,
+  };
+}
+
+function assertPdfBuffer(buffer, context = {}) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    const err = new Error('Generated prescription PDF is empty or missing.');
+    err.statusCode = 500;
+    err.errorCode = 'PRESCRIPTION_PDF_BUFFER_INVALID';
+    err.details = {
+      templateType: context.templateType || PRESCRIPTION_DOC_TYPE,
+      stage: context.stage || 'unknown',
+    };
+    throw err;
+  }
+
+  const header = buffer.slice(0, 4).toString('utf8');
+  if (header !== '%PDF') {
+    const err = new Error('Generated prescription payload is not a valid PDF buffer.');
+    err.statusCode = 500;
+    err.errorCode = 'PRESCRIPTION_PDF_BUFFER_INVALID';
+    err.details = {
+      templateType: context.templateType || PRESCRIPTION_DOC_TYPE,
+      stage: context.stage || 'unknown',
+      header,
+    };
+    throw err;
+  }
+}
+
+function createPdfAuditRecord(buffer, context = {}) {
+  assertPdfBuffer(buffer, context);
+
+  const templateType = context.templateType || PRESCRIPTION_DOC_TYPE;
+  const storagePath =
+    context.storagePath ||
+    (context.documentId ? `PatientDocuments/${context.documentId}` : null);
+
+  return {
+    templateType,
+    storagePath,
+    sha256: hashBuffer(buffer),
+    byteLength: buffer.length,
   };
 }
 
@@ -280,6 +326,8 @@ module.exports = {
   GENERIC_BINARY_TAG,
   normalizeTag,
   parseJsonSafe,
+  assertPdfBuffer,
+  createPdfAuditRecord,
   buildPrescriptionRequirementValues,
   parsePrescriptionRequirementRows,
 };

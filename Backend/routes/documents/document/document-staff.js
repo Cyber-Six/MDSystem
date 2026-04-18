@@ -11,6 +11,8 @@ const {
   PRESCRIPTION_REQUIRED_TAGS,
   GENERIC_BINARY_TAG,
   normalizeTag,
+  assertPdfBuffer: assertPrescriptionPdfBuffer,
+  createPdfAuditRecord: createPrescriptionPdfAuditRecord,
   buildPrescriptionRequirementValues,
   parsePrescriptionRequirementRows,
 } = require('../../../services/doc-generate-module/prescription-normalized.js');
@@ -18,6 +20,8 @@ const {
   MEDICAL_CERTIFICATE_TEMPLATE_NAME,
   MEDICAL_CERTIFICATE_DOC_TYPE,
   MEDICAL_CERTIFICATE_REQUIRED_TAGS,
+  assertPdfBuffer: assertMedicalCertificatePdfBuffer,
+  createPdfAuditRecord: createMedicalCertificatePdfAuditRecord,
   buildMedicalCertificateRequirementValues,
   parseMedicalCertificateRequirementRows,
 } = require('../../../services/doc-generate-module/medical-certificate-normalized.js');
@@ -1498,6 +1502,25 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
         docType,
         enrichedData
       );
+      let generatedPdfAudit = null;
+      if (isPrescriptionDocument) {
+        assertPrescriptionPdfBuffer(generatedDocument.buffer, {
+          templateType: PRESCRIPTION_DOC_TYPE,
+          stage: 'persist',
+        });
+        generatedPdfAudit = createPrescriptionPdfAuditRecord(generatedDocument.buffer, {
+          templateType: PRESCRIPTION_DOC_TYPE,
+        });
+      } else if (isMedicalCertificateDocument) {
+        assertMedicalCertificatePdfBuffer(generatedDocument.buffer, {
+          templateType: MEDICAL_CERTIFICATE_DOC_TYPE,
+          stage: 'persist',
+        });
+        generatedPdfAudit = createMedicalCertificatePdfAuditRecord(generatedDocument.buffer, {
+          templateType: MEDICAL_CERTIFICATE_DOC_TYPE,
+        });
+      }
+
       const actualPatientId = scopedPatientId;
       const client = await connect();
       let documentId;
@@ -1532,6 +1555,9 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
             issuedBy: req.user.id,
             templateId: prescriptionTemplate.templateId,
             requirementCount: PRESCRIPTION_REQUIRED_TAGS.length,
+            auditPath: `PatientDocuments/${documentId}`,
+            pdfHash: generatedPdfAudit?.sha256 || null,
+            pdfBytes: generatedPdfAudit?.byteLength || generatedDocument.buffer.length,
           });
         } else if (isMedicalCertificateDocument) {
           const medicalCertificateTemplate = await resolveMedicalCertificateTemplateRequirements(client);
@@ -1560,6 +1586,9 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
             issuedBy: req.user.id,
             templateId: medicalCertificateTemplate.templateId,
             requirementCount: MEDICAL_CERTIFICATE_REQUIRED_TAGS.length,
+            auditPath: `PatientDocuments/${documentId}`,
+            pdfHash: generatedPdfAudit?.sha256 || null,
+            pdfBytes: generatedPdfAudit?.byteLength || generatedDocument.buffer.length,
           });
         } else {
           const templateRecord = await resolveOrCreateTemplate(

@@ -50,6 +50,10 @@ function hashString(value = '') {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
+function hashBuffer(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
 function toOptionalField(value) {
   const text = pickFirstNonEmpty(value);
   if (!text) return undefined;
@@ -93,6 +97,48 @@ function normalizeDoctorSignature(physician = {}) {
     hash: signatureHash || null,
     base64: dataUrl || null,
     mimeType: dataUrl ? mimeType : null,
+  };
+}
+
+function assertPdfBuffer(buffer, context = {}) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    const err = new Error('Generated medical certificate PDF is empty or missing.');
+    err.statusCode = 500;
+    err.errorCode = 'MEDICAL_CERTIFICATE_PDF_BUFFER_INVALID';
+    err.details = {
+      templateType: context.templateType || MEDICAL_CERTIFICATE_DOC_TYPE,
+      stage: context.stage || 'unknown',
+    };
+    throw err;
+  }
+
+  const header = buffer.slice(0, 4).toString('utf8');
+  if (header !== '%PDF') {
+    const err = new Error('Generated medical certificate payload is not a valid PDF buffer.');
+    err.statusCode = 500;
+    err.errorCode = 'MEDICAL_CERTIFICATE_PDF_BUFFER_INVALID';
+    err.details = {
+      templateType: context.templateType || MEDICAL_CERTIFICATE_DOC_TYPE,
+      stage: context.stage || 'unknown',
+      header,
+    };
+    throw err;
+  }
+}
+
+function createPdfAuditRecord(buffer, context = {}) {
+  assertPdfBuffer(buffer, context);
+
+  const templateType = context.templateType || MEDICAL_CERTIFICATE_DOC_TYPE;
+  const storagePath =
+    context.storagePath ||
+    (context.documentId ? `PatientDocuments/${context.documentId}` : null);
+
+  return {
+    templateType,
+    storagePath,
+    sha256: hashBuffer(buffer),
+    byteLength: buffer.length,
   };
 }
 
@@ -250,6 +296,8 @@ module.exports = {
   MEDICAL_CERTIFICATE_CORE_TAGS,
   MEDICAL_CERTIFICATE_REQUIRED_TAGS,
   normalizeTag,
+  assertPdfBuffer,
+  createPdfAuditRecord,
   buildMedicalCertificateRequirementValues,
   parseMedicalCertificateRequirementRows,
 };
