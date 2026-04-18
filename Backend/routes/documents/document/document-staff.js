@@ -5,6 +5,15 @@ const db = require('../../../config/db.js');
 const { connect } = require('../../../config/query.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
 const docGen = require('../../../services/doc-generate-module/index.js');
+const {
+  PRESCRIPTION_TEMPLATE_NAME,
+  PRESCRIPTION_DOC_TYPE,
+  PRESCRIPTION_REQUIRED_TAGS,
+  GENERIC_BINARY_TAG,
+  normalizeTag,
+  buildPrescriptionRequirementValues,
+  parsePrescriptionRequirementRows,
+} = require('../../../services/doc-generate-module/prescription-normalized.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
 const { permissions, isMedicalPermittedPatientBased, isMedicalPermitted } = require('../../../services/permit.js');
 
@@ -103,6 +112,195 @@ async function normalizePrescriptionPatientData(patientId, incomingPatient = {})
 
   normalized.id = normalized.id || sourcePatientId;
   return normalized;
+}
+
+function createRouteError(statusCode, errorCode, message, details = null) {
+  const err = new Error(message || errorCode);
+  err.statusCode = statusCode;
+  err.errorCode = errorCode;
+  if (details) err.details = details;
+  return err;
+}
+
+function toDateInput(value) {
+  const fallback = new Date().toISOString().slice(0, 10);
+  if (!value) return fallback;
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  const text = String(value).trim();
+  return text ? text.slice(0, 10) : fallback;
+}
+
+function sendPdfBuffer(res, buffer, filename) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', buffer.length);
+  res.send(buffer);
+}
+
+async function resolvePhysicianData(physicianId, existingPhysician = {}) {
+  const base = {
+    ...(existingPhysician || {}),
+    id: physicianId || existingPhysician?.id,
+  };
+
+  if (!physicianId) return base;
+
+  try {
+    const physicianResult = await db.query(
+      `SELECT up.first_name, up.last_name,
+              mp.title, mp.designation
+       FROM "UsersPersonal" up
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = up.id
+       WHERE up.id = $1`,
+      [physicianId]
+    );
+
+    if (physicianResult.rows.length === 0) {
+      return {
+        ...base,
+        title: pickFirstNonEmpty(base.title, 'MD'),
+      };
+    }
+
+    const row = physicianResult.rows[0];
+    return {
+      ...base,
+      id: physicianId,
+      firstName: pickFirstNonEmpty(base.firstName, base.first_name, row.first_name),
+      lastName: pickFirstNonEmpty(base.lastName, base.last_name, row.last_name),
+      title: pickFirstNonEmpty(base.title, row.title, 'MD'),
+      licenseNo: pickFirstNonEmpty(base.licenseNo),
+      specialization: pickFirstNonEmpty(base.specialization, row.designation),
+    };
+  } catch (err) {
+    logger.warn('Physician enrichment lookup failed', {
+      physicianId,
+      error: err.message,
+    });
+
+    return {
+      ...base,
+      title: pickFirstNonEmpty(base.title, 'MD'),
+    };
+  }
+}
+
+async function resolveOrCreateTemplate(client, templateName, templateDescription, createdBy) {
+  const templateResult = await client.query(
+    `SELECT id, template
+     FROM "documentTemplate"
+     WHERE LOWER(template) = LOWER($1)
+     LIMIT 1`,
+    [templateName]
+  );
+
+  if (templateResult.rows.length > 0) {
+    return templateResult.rows[0];
+  }
+
+  const insertResult = await client.query(
+    `INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, template`,
+    [
+      templateName,
+      templateDescription,
+      new Date().toISOString().slice(0, 7),
+      createdBy,
+    ]
+  );
+
+  return insertResult.rows[0];
+}
+
+async function resolveOrCreateTemplateRequirement(client, templateId, tagName) {
+  let tagResult = await client.query(
+    `SELECT id
+     FROM "documentRequirementsTag"
+     WHERE LOWER(vartag) = LOWER($1)
+     LIMIT 1`,
+    [tagName]
+  );
+
+  if (tagResult.rows.length === 0) {
+    tagResult = await client.query(
+      `INSERT INTO "documentRequirementsTag" (vartag)
+       VALUES ($1)
+       RETURNING id`,
+      [tagName]
+    );
+  }
+
+  const tagId = tagResult.rows[0].id;
+
+  let requirementResult = await client.query(
+    `SELECT id
+     FROM "documentRequirements"
+     WHERE "templateId" = $1
+       AND "requirementtagId" = $2
+     LIMIT 1`,
+    [templateId, tagId]
+  );
+
+  if (requirementResult.rows.length === 0) {
+    requirementResult = await client.query(
+      `INSERT INTO "documentRequirements" ("templateId", "requirementtagId")
+       VALUES ($1, $2)
+       RETURNING id`,
+      [templateId, tagId]
+    );
+  }
+
+  return requirementResult.rows[0].id;
+}
+
+async function resolvePrescriptionTemplateRequirements(client) {
+  const templateResult = await client.query(
+    `SELECT id, template
+     FROM "documentTemplate"
+     WHERE LOWER(template) = LOWER($1)
+     LIMIT 1`,
+    [PRESCRIPTION_TEMPLATE_NAME]
+  );
+
+  if (templateResult.rows.length === 0) {
+    throw createRouteError(
+      500,
+      'PRESCRIPTION_TEMPLATE_NOT_INITIALIZED',
+      'Prescription template setup is missing. Run post_build_setup.sql first.'
+    );
+  }
+
+  const templateId = templateResult.rows[0].id;
+  const requirementsResult = await client.query(
+    `SELECT dr.id as "requirementId", drt.vartag
+     FROM "documentRequirements" dr
+     JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+     WHERE dr."templateId" = $1`,
+    [templateId]
+  );
+
+  const requirementByTag = new Map();
+  requirementsResult.rows.forEach((row) => {
+    requirementByTag.set(normalizeTag(row.vartag), row.requirementId);
+  });
+
+  const missingTags = PRESCRIPTION_REQUIRED_TAGS.filter((tag) => !requirementByTag.has(tag));
+  if (missingTags.length > 0) {
+    throw createRouteError(
+      500,
+      'PRESCRIPTION_REQUIREMENTS_NOT_INITIALIZED',
+      'Prescription requirement mapping is incomplete. Run post_build_setup.sql first.',
+      { missingTags }
+    );
+  }
+
+  return { templateId, requirementByTag };
 }
 
 // ============================================================
@@ -953,7 +1151,7 @@ router.post('/:docType/preview', jwtProtect('medical'), async (req, res) => {
       physician: data?.physician || { id: req.user.id },
     };
 
-    if (docType === 'prescription') {
+    if (docType === PRESCRIPTION_DOC_TYPE) {
       enrichedData.patient = await normalizePrescriptionPatientData(data?.patient?.id, enrichedData.patient);
     }
 
@@ -1000,36 +1198,17 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
       physician: data?.physician || { id: req.user.id },
     };
 
-    if (docType === 'prescription') {
+    if (docType === PRESCRIPTION_DOC_TYPE) {
       enrichedData.patient = await normalizePrescriptionPatientData(scopedPatientId, enrichedData.patient);
     }
 
-    // Auto-fill physician details from DB when not provided
-    if (!enrichedData.physician?.firstName) {
-      try {
-        const physicianResult = await db.query(
-          `SELECT up.first_name, up.last_name,
-                  mp.title, mp.designation
-           FROM "UsersPersonal" up
-           LEFT JOIN "MedicalPersonnel" mp ON mp.id = up.id
-           WHERE up.id = $1`,
-          [req.user.id]
-        );
-        if (physicianResult.rows.length > 0) {
-          const row = physicianResult.rows[0];
-          enrichedData.physician = {
-            id: req.user.id,
-            ...enrichedData.physician,
-            firstName: row.first_name || '',
-            lastName: row.last_name || '',
-            title: row.title || enrichedData.physician?.title || 'MD',
-            licenseNo: enrichedData.physician?.licenseNo || '',
-            specialization: row.designation || '',
-          };
-        }
-      } catch (err) {
-        logger.warn('Physician auto-fill lookup failed', { error: err.message });
-      }
+    enrichedData.physician = await resolvePhysicianData(req.user.id, enrichedData.physician);
+
+    let prescriptionRequirementValues = null;
+    if (shouldPersist && docType === PRESCRIPTION_DOC_TYPE) {
+      const prescriptionPayload = buildPrescriptionRequirementValues(enrichedData);
+      prescriptionRequirementValues = prescriptionPayload.requirementValues;
+      enrichedData.prescription = prescriptionPayload.normalizedPrescription;
     }
 
     if (shouldPersist) {
@@ -1037,51 +1216,90 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
         return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
       }
 
-      const { buffer, filename, metadata } = await docGen.generateDocumentBuffer(
+      const generatedDocument = await docGen.generateDocumentBuffer(
         docType,
         enrichedData
       );
+      const actualPatientId = scopedPatientId;
+      const client = await connect();
+      let documentId;
 
-      let templateRecord = await db.query(
-        `SELECT id FROM "documentTemplate" WHERE template = $1`,
-        [docType]
-      );
+      try {
+        await client.query('BEGIN');
 
-      if (templateRecord.rows.length === 0) {
-        templateRecord = await db.query(
-          `INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
-           VALUES ($1, $2, $3, $4) RETURNING id`,
-          [
+        if (docType === PRESCRIPTION_DOC_TYPE) {
+          const prescriptionTemplate = await resolvePrescriptionTemplateRequirements(client);
+
+          const docResult = await client.query(
+            `INSERT INTO "PatientDocuments" ("patientId", "templateId", "issuedBy", "expired_at")
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [actualPatientId, prescriptionTemplate.templateId, req.user.id, data?.expiredAt || null]
+          );
+
+          documentId = docResult.rows[0].id;
+
+          for (const tag of PRESCRIPTION_REQUIRED_TAGS) {
+            const requirementId = prescriptionTemplate.requirementByTag.get(tag);
+            await client.query(
+              `INSERT INTO "documentData" ("documentId", "requirementId", "data")
+               VALUES ($1, $2, $3)`,
+              [documentId, requirementId, prescriptionRequirementValues[tag]]
+            );
+          }
+
+          logger.info('Prescription generated and normalized rows stored', {
+            documentId,
+            patientId: actualPatientId,
+            issuedBy: req.user.id,
+            templateId: prescriptionTemplate.templateId,
+            requirementCount: PRESCRIPTION_REQUIRED_TAGS.length,
+          });
+        } else {
+          const templateRecord = await resolveOrCreateTemplate(
+            client,
             docType,
             template.displayName,
-            new Date().toISOString().slice(0, 7),
-            req.user.id,
-          ]
-        );
+            req.user.id
+          );
+
+          const payloadRequirementId = await resolveOrCreateTemplateRequirement(
+            client,
+            templateRecord.id,
+            GENERIC_BINARY_TAG
+          );
+
+          const docResult = await client.query(
+            `INSERT INTO "PatientDocuments" ("patientId", "templateId", "issuedBy", "expired_at")
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [actualPatientId, templateRecord.id, req.user.id, data?.expiredAt || null]
+          );
+
+          documentId = docResult.rows[0].id;
+
+          await client.query(
+            `INSERT INTO "documentData" ("documentId", "requirementId", "data")
+             VALUES ($1, $2, $3)`,
+            [documentId, payloadRequirementId, generatedDocument.buffer.toString('base64')]
+          );
+
+          logger.info('Generated document payload stored', {
+            documentId,
+            docType,
+            patientId: actualPatientId,
+            issuedBy: req.user.id,
+            requirementTag: GENERIC_BINARY_TAG,
+          });
+        }
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
       }
-
-      const templateId = templateRecord.rows[0].id;
-      const actualPatientId = scopedPatientId;
-
-      const docResult = await db.query(
-        `INSERT INTO "PatientDocuments" ("patientId", "templateId", "issuedBy", "expired_at")
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [actualPatientId, templateId, req.user.id, data?.expiredAt || null]
-      );
-
-      const documentId = docResult.rows[0].id;
-
-      await db.query(
-        `INSERT INTO "documentData" ("documentId", "data") VALUES ($1, $2)`,
-        [documentId, buffer.toString('base64')]
-      );
-
-      logger.info('Document generated and saved', {
-        documentId,
-        docType,
-        patientId: actualPatientId,
-        issuedBy: req.user.id,
-      });
 
       // Notify patient about the new document
       try {
@@ -1094,7 +1312,7 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
           'document:new',
           {
             documentId,
-            templateType: docType,
+            templateType: normalizeTag(docType),
             issuedBy: physicianName,
             message: `A new ${template.displayName.toLowerCase()} has been issued for you by ${physicianName}.`,
           }
@@ -1103,7 +1321,12 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
         logger.warn('Document notification failed', { error: notifErr.message, documentId });
       }
 
-      res.json({ success: true, documentId, filename, metadata });
+      res.json({
+        success: true,
+        documentId,
+        filename: generatedDocument.filename,
+        metadata: generatedDocument.metadata,
+      });
     } else {
       logger.info('Document generated (stream only)', {
         docType,
@@ -1114,9 +1337,17 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
       await docGen.downloadDocument(docType, enrichedData, res);
     }
   } catch (err) {
-    logger.error('Document generation failed', { error: err.message });
+    logger.error('Document generation failed', {
+      error: err.message,
+      code: err.errorCode,
+      details: err.details,
+    });
     if (!res.headersSent) {
-      res.status(500).json({ error: 'GENERATION_FAILED', message: err.message });
+      const statusCode = err.statusCode || 500;
+      const errorCode = err.errorCode || 'GENERATION_FAILED';
+      const payload = { error: errorCode, message: err.message };
+      if (err.details) payload.details = err.details;
+      res.status(statusCode).json(payload);
     }
   }
 });
@@ -1140,7 +1371,7 @@ router.get('/generated/patient/:patientId', jwtProtect('medical'), async (req, r
 
     const result = await db.query(
       `SELECT pd.id, pd."patientId", pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
-              dt.template as "templateType", dt.description,
+              LOWER(dt.template) as "templateType", dt.description,
               up_patient.first_name as "patientFirstName", up_patient.last_name as "patientLastName",
               up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
        FROM "PatientDocuments" pd
@@ -1184,7 +1415,8 @@ router.get('/generated/download/:documentId', jwtProtect('medical'), async (req,
     const { documentId } = req.params;
 
     const docResult = await db.query(
-      `SELECT pd.id, pd."patientId", dt.template as "templateType"
+      `SELECT pd.id, pd."patientId", pd."issuedBy", pd."created_at",
+              LOWER(dt.template) as "templateType"
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        WHERE pd.id = $1`,
@@ -1201,9 +1433,52 @@ router.get('/generated/download/:documentId', jwtProtect('medical'), async (req,
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to download this document.' });
     }
 
+    if (docMeta.templateType === PRESCRIPTION_DOC_TYPE) {
+      const normalizedDataResult = await db.query(
+        `SELECT drt.vartag, dd.data
+         FROM "documentData" dd
+         JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+         JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+         WHERE dd."documentId" = $1`,
+        [documentId]
+      );
+
+      if (normalizedDataResult.rows.length > 0) {
+        try {
+          const prescription = parsePrescriptionRequirementRows(normalizedDataResult.rows);
+          const patient = await normalizePrescriptionPatientData(docMeta.patientId, { id: docMeta.patientId });
+          const physician = await resolvePhysicianData(docMeta.issuedBy, { id: docMeta.issuedBy });
+
+          const regenerated = await docGen.generateDocumentBuffer(PRESCRIPTION_DOC_TYPE, {
+            patient,
+            physician,
+            issuedDate: toDateInput(docMeta.created_at),
+            prescription,
+          });
+
+          return sendPdfBuffer(res, regenerated.buffer, regenerated.filename || `${docMeta.templateType}_${documentId}.pdf`);
+        } catch (normalizedErr) {
+          logger.warn('Prescription normalized download regeneration failed, using legacy payload fallback', {
+            documentId,
+            error: normalizedErr.message,
+          });
+        }
+      }
+    }
+
     const dataResult = await db.query(
-      `SELECT data FROM "documentData" WHERE "documentId" = $1`,
-      [documentId]
+      `SELECT dd.data
+       FROM "documentData" dd
+       LEFT JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+       LEFT JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+       WHERE dd."documentId" = $1
+         AND (
+           dd."requirementId" IS NULL
+           OR LOWER(COALESCE(drt.vartag, '')) = $2
+         )
+       ORDER BY CASE WHEN dd."requirementId" IS NULL THEN 0 ELSE 1 END, dd.id ASC
+       LIMIT 1`,
+      [documentId, GENERIC_BINARY_TAG]
     );
 
     if (dataResult.rows.length === 0) {
@@ -1212,11 +1487,7 @@ router.get('/generated/download/:documentId', jwtProtect('medical'), async (req,
 
     const pdfBuffer = Buffer.from(dataResult.rows[0].data, 'base64');
     const filename = `${docMeta.templateType}_${documentId}.pdf`;
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.send(pdfBuffer);
+    sendPdfBuffer(res, pdfBuffer, filename);
   } catch (err) {
     logger.error('Generated document download failed', { error: err.message });
     res.status(500).json({ error: 'DOWNLOAD_FAILED', message: err.message });
@@ -1238,12 +1509,12 @@ router.get('/:docType/patient/:patientId', jwtProtect('medical'), async (req, re
 
     const result = await db.query(
       `SELECT pd.id, pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
-              dt.template as "templateType", dt.description,
+              LOWER(dt.template) as "templateType", dt.description,
               up.first_name as "issuedByFirstName", up.last_name as "issuedByLastName"
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up ON pd."issuedBy" = up.id
-       WHERE pd."patientId" = $1 AND dt.template = $2
+       WHERE pd."patientId" = $1 AND LOWER(dt.template) = LOWER($2)
        ORDER BY pd."created_at" DESC`,
       [patientId, docType]
     );
@@ -1288,7 +1559,7 @@ router.get('/:docType/patients', jwtProtect('medical'), async (req, res) => {
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up ON pd."patientId" = up.id
-       WHERE dt.template = $1
+       WHERE LOWER(dt.template) = LOWER($1)
        GROUP BY pd."patientId", up.first_name, up.last_name
        ORDER BY "lastDocumentAt" DESC`,
       [docType]
@@ -1324,14 +1595,14 @@ router.get('/:docType', jwtProtect('medical'), async (req, res) => {
     const result = await db.query(
       `SELECT pd.id, pd."patientId", pd."templateId", pd."issuedBy",
               pd."expired_at", pd."created_at",
-              dt.template as "templateType", dt.description,
+              LOWER(dt.template) as "templateType", dt.description,
               up_patient.first_name as "patientFirstName", up_patient.last_name as "patientLastName",
               up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up_patient ON pd."patientId" = up_patient.id
        LEFT JOIN "UsersPersonal" up_issuer ON pd."issuedBy" = up_issuer.id
-       WHERE dt.template = $1
+       WHERE LOWER(dt.template) = LOWER($1)
        ORDER BY pd."created_at" DESC`,
       [docType]
     );

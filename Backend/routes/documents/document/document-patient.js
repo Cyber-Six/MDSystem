@@ -4,10 +4,139 @@ const { jwtProtect } = require('../../../config/middleware/jwtProtect.js');
 const db = require('../../../config/db.js');
 const { connect } = require('../../../config/query.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
+const docGen = require('../../../services/doc-generate-module/index.js');
+const {
+  PRESCRIPTION_DOC_TYPE,
+  GENERIC_BINARY_TAG,
+  parsePrescriptionRequirementRows,
+} = require('../../../services/doc-generate-module/prescription-normalized.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
 const { checkCredentialsStatus } = require("../../../config/middleware/activeCredential.js");
 
 const router = express.Router();
+
+function pickFirstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function toDateInput(value) {
+  const fallback = new Date().toISOString().slice(0, 10);
+  if (!value) return fallback;
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  const text = String(value).trim();
+  return text ? text.slice(0, 10) : fallback;
+}
+
+function sendPdfBuffer(res, buffer, filename) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', buffer.length);
+  res.send(buffer);
+}
+
+async function resolvePatientData(patientId) {
+  const fallback = {
+    id: patientId,
+    firstName: 'Unknown',
+    lastName: '',
+    age: 'Unknown',
+    sex: 'Unknown',
+  };
+
+  if (!patientId) return fallback;
+
+  try {
+    const result = await db.query(
+      `SELECT id, first_name, middle_name, last_name, suffix, date_of_birth, sex
+       FROM "UsersPersonal"
+       WHERE id = $1`,
+      [patientId]
+    );
+
+    if (result.rows.length === 0) return fallback;
+
+    const row = result.rows[0];
+    const dob = row.date_of_birth ? new Date(row.date_of_birth) : null;
+    let age = 'Unknown';
+    if (dob && !Number.isNaN(dob.getTime())) {
+      const today = new Date();
+      let calculatedAge = today.getFullYear() - dob.getFullYear();
+      if (
+        today.getMonth() < dob.getMonth() ||
+        (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())
+      ) {
+        calculatedAge -= 1;
+      }
+      if (calculatedAge >= 0) age = String(calculatedAge);
+    }
+
+    return {
+      id: row.id,
+      firstName: pickFirstNonEmpty(row.first_name, fallback.firstName),
+      middleName: pickFirstNonEmpty(row.middle_name),
+      lastName: pickFirstNonEmpty(row.last_name),
+      suffix: pickFirstNonEmpty(row.suffix),
+      dateOfBirth: dob && !Number.isNaN(dob.getTime()) ? dob.toISOString().slice(0, 10) : undefined,
+      age,
+      sex: pickFirstNonEmpty(row.sex, fallback.sex),
+    };
+  } catch (err) {
+    logger.warn('Patient prescription enrichment lookup failed', {
+      patientId,
+      error: err.message,
+    });
+    return fallback;
+  }
+}
+
+async function resolvePhysicianData(physicianId) {
+  const fallback = {
+    id: physicianId,
+    firstName: '',
+    lastName: '',
+    title: 'MD',
+    specialization: '',
+  };
+
+  if (!physicianId) return fallback;
+
+  try {
+    const result = await db.query(
+      `SELECT up.first_name, up.last_name,
+              mp.title, mp.designation
+       FROM "UsersPersonal" up
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = up.id
+       WHERE up.id = $1`,
+      [physicianId]
+    );
+
+    if (result.rows.length === 0) return fallback;
+    const row = result.rows[0];
+    return {
+      ...fallback,
+      firstName: pickFirstNonEmpty(row.first_name),
+      lastName: pickFirstNonEmpty(row.last_name),
+      title: pickFirstNonEmpty(row.title, 'MD'),
+      specialization: pickFirstNonEmpty(row.designation),
+    };
+  } catch (err) {
+    logger.warn('Physician prescription enrichment lookup failed', {
+      physicianId,
+      error: err.message,
+    });
+    return fallback;
+  }
+}
 
 // ============================================================
 // NON-GENERATED DOCUMENTS (REQUESTS)
@@ -314,7 +443,7 @@ router.get('/my', jwtProtect("patient"), checkCredentialsStatus, async (req, res
 
     const result = await db.query(
       `SELECT pd.id, pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
-              dt.template as "templateType", dt.description,
+              LOWER(dt.template) as "templateType", dt.description,
               up.first_name as "issuedByFirstName", up.last_name as "issuedByLastName"
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
@@ -355,7 +484,8 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
 
     // Verify document belongs to this patient
     const docResult = await db.query(
-      `SELECT pd.id, dt.template as "templateType", dt.description
+      `SELECT pd.id, pd."issuedBy", pd."created_at",
+              LOWER(dt.template) as "templateType", dt.description
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        WHERE pd.id = $1 AND pd."patientId" = $2`,
@@ -368,10 +498,65 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
 
     const doc = docResult.rows[0];
 
+    if (doc.templateType === PRESCRIPTION_DOC_TYPE) {
+      const normalizedDataResult = await db.query(
+        `SELECT drt.vartag, dd.data
+         FROM "documentData" dd
+         JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+         JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+         WHERE dd."documentId" = $1`,
+        [documentId]
+      );
+
+      if (normalizedDataResult.rows.length > 0) {
+        try {
+          const prescription = parsePrescriptionRequirementRows(normalizedDataResult.rows);
+          const patient = await resolvePatientData(patientId);
+          const physician = await resolvePhysicianData(doc.issuedBy);
+
+          const regenerated = await docGen.generateDocumentBuffer(PRESCRIPTION_DOC_TYPE, {
+            patient,
+            physician,
+            issuedDate: toDateInput(doc.created_at),
+            prescription,
+          });
+
+          sendPdfBuffer(
+            res,
+            regenerated.buffer,
+            regenerated.filename || `${doc.templateType}_${documentId}.pdf`
+          );
+
+          logger.info('Patient document downloaded', {
+            documentId,
+            patientId,
+            mode: 'normalized-regenerated',
+          });
+          return;
+        } catch (normalizedErr) {
+          logger.warn('Patient prescription regeneration failed, using legacy payload fallback', {
+            documentId,
+            patientId,
+            error: normalizedErr.message,
+          });
+        }
+      }
+    }
+
     // Fetch stored PDF buffer
     const dataResult = await db.query(
-      `SELECT data FROM "documentData" WHERE "documentId" = $1`,
-      [documentId]
+      `SELECT dd.data
+       FROM "documentData" dd
+       LEFT JOIN "documentRequirements" dr ON dr.id = dd."requirementId"
+       LEFT JOIN "documentRequirementsTag" drt ON drt.id = dr."requirementtagId"
+       WHERE dd."documentId" = $1
+         AND (
+           dd."requirementId" IS NULL
+           OR LOWER(COALESCE(drt.vartag, '')) = $2
+         )
+       ORDER BY CASE WHEN dd."requirementId" IS NULL THEN 0 ELSE 1 END, dd.id ASC
+       LIMIT 1`,
+      [documentId, GENERIC_BINARY_TAG]
     );
 
     if (dataResult.rows.length === 0) {
@@ -380,11 +565,7 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
 
     const pdfBuffer = Buffer.from(dataResult.rows[0].data, 'base64');
     const filename = `${doc.templateType}_${documentId}.pdf`;
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.send(pdfBuffer);
+    sendPdfBuffer(res, pdfBuffer, filename);
 
     logger.info('Patient document downloaded', { documentId, patientId });
   } catch (err) {
@@ -404,12 +585,12 @@ router.get('/my/:docType', jwtProtect('patient'), checkCredentialsStatus, async 
 
     const result = await db.query(
       `SELECT pd.id, pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
-              dt.template as "templateType", dt.description,
+              LOWER(dt.template) as "templateType", dt.description,
               up.first_name as "issuedByFirstName", up.last_name as "issuedByLastName"
        FROM "PatientDocuments" pd
        JOIN "documentTemplate" dt ON pd."templateId" = dt.id
        LEFT JOIN "UsersPersonal" up ON pd."issuedBy" = up.id
-       WHERE pd."patientId" = $1 AND dt.template = $2
+       WHERE pd."patientId" = $1 AND LOWER(dt.template) = LOWER($2)
        ORDER BY pd."created_at" DESC`,
       [patientId, docType]
     );

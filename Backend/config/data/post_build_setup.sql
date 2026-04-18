@@ -154,6 +154,156 @@ BEGIN
   END IF;
 END$$;
 
+-- Normalized generated-document setup for Prescription
+INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
+SELECT 'Prescription', 'Prescription document template', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM "documentTemplate" WHERE LOWER(template) = LOWER('Prescription')
+);
+
+INSERT INTO "documentRequirementsTag" (vartag)
+SELECT seed.tag_name
+FROM (
+  VALUES
+    ('complaints'),
+    ('diagnosis'),
+    ('medications'),
+    ('instructions'),
+    ('follow_up')
+) AS seed(tag_name)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM "documentRequirementsTag" drt
+  WHERE LOWER(drt.vartag) = LOWER(seed.tag_name)
+);
+
+INSERT INTO "documentRequirements" ("templateId", "requirementtagId")
+SELECT dt.id, drt.id
+FROM "documentTemplate" dt
+JOIN "documentRequirementsTag" drt
+  ON LOWER(drt.vartag) IN ('complaints', 'diagnosis', 'medications', 'instructions', 'follow_up')
+WHERE LOWER(dt.template) = LOWER('Prescription')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM "documentRequirements" dr
+    WHERE dr."templateId" = dt.id
+      AND dr."requirementtagId" = drt.id
+  );
+
+-- Prevent duplicate template-tag mappings before enforcing uniqueness.
+DELETE FROM "documentRequirements" current_row
+USING "documentRequirements" older_row
+WHERE current_row.id > older_row.id
+  AND current_row."templateId" = older_row."templateId"
+  AND current_row."requirementtagId" = older_row."requirementtagId";
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_document_requirements_template_tag_unique
+ON "documentRequirements" ("templateId", "requirementtagId");
+
+-- Enforce non-null requirement references for all newly inserted rows.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM "documentData"
+    WHERE "requirementId" IS NULL
+    LIMIT 1
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conname = 'ck_documentdata_requirementid_not_null'
+        AND conrelid = '"documentData"'::regclass
+    ) THEN
+      ALTER TABLE "documentData"
+        ADD CONSTRAINT ck_documentdata_requirementid_not_null
+        CHECK ("requirementId" IS NOT NULL) NOT VALID;
+    END IF;
+  ELSE
+    ALTER TABLE "documentData"
+      ALTER COLUMN "requirementId" SET NOT NULL;
+  END IF;
+END$$;
+
+-- Ensure the normalized document tables are connected by foreign keys.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentRequirements"'::regclass
+      AND c.confrelid = '"documentTemplate"'::regclass
+      AND a.attname = 'templateId'
+  ) THEN
+    ALTER TABLE "documentRequirements"
+      ADD CONSTRAINT fk_documentrequirements_template
+      FOREIGN KEY ("templateId") REFERENCES "documentTemplate" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentRequirements"'::regclass
+      AND c.confrelid = '"documentRequirementsTag"'::regclass
+      AND a.attname = 'requirementtagId'
+  ) THEN
+    ALTER TABLE "documentRequirements"
+      ADD CONSTRAINT fk_documentrequirements_requirementtag
+      FOREIGN KEY ("requirementtagId") REFERENCES "documentRequirementsTag" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"PatientDocuments"'::regclass
+      AND c.confrelid = '"documentTemplate"'::regclass
+      AND a.attname = 'templateId'
+  ) THEN
+    ALTER TABLE "PatientDocuments"
+      ADD CONSTRAINT fk_patientdocuments_template
+      FOREIGN KEY ("templateId") REFERENCES "documentTemplate" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentData"'::regclass
+      AND c.confrelid = '"PatientDocuments"'::regclass
+      AND a.attname = 'documentId'
+  ) THEN
+    ALTER TABLE "documentData"
+      ADD CONSTRAINT fk_documentdata_document
+      FOREIGN KEY ("documentId") REFERENCES "PatientDocuments" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f'
+      AND c.conrelid = '"documentData"'::regclass
+      AND c.confrelid = '"documentRequirements"'::regclass
+      AND a.attname = 'requirementId'
+  ) THEN
+    ALTER TABLE "documentData"
+      ADD CONSTRAINT fk_documentdata_requirement
+      FOREIGN KEY ("requirementId") REFERENCES "documentRequirements" (id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+END$$;
+
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
