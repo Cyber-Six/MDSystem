@@ -11,10 +11,17 @@ import { createAxiosRequestHandler } from '@mdsystem/core/services/axios-request
 import * as bannerConfig from '@mdsystem/core/config/banner-config';
 import { BannerService } from '@mdsystem/core/services/banner-service';
 
+const getViteEnv = (key) => {
+  if (key === 'DEV_PORTAL') {
+    return import.meta.env.VITE_STAFF_DEV_PORTAL || import.meta.env.VITE_DEV_PORTAL || 'staff';
+  }
+  return import.meta.env[`VITE_${key}`];
+};
+
 // 1. Create API base URL provider with web dependencies
 export const apiBaseUrlProvider = createApiBaseUrlProvider({
   getHostname: () => window.location.hostname,
-  getEnv: (key) => import.meta.env[`VITE_${key}`]
+  getEnv: getViteEnv
 });
 
 // 2. Create token service with localStorage and window.location
