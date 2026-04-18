@@ -62,17 +62,10 @@ const inferIdentityFromEmail = (email: string | null | undefined): PatientIdenti
   return null;
 };
 
-const inferIdentityFromActiveProfile = (activeProfile: any): PatientIdentity | null => {
-  const typeName = String(activeProfile?.__typename || '').trim().toLowerCase();
-  if (typeName === 'studentprofile') return 'Student';
-  if (typeName === 'employeeprofile') return 'Employee';
-  return null;
-};
-
 export const getPatientProfile = async (): Promise<PatientProfile> => {
   if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
-  const [profileResult, emergencyResult, activeProfileResult] = await Promise.allSettled([
+  const [profileResult, emergencyResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -94,15 +87,6 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       }`,
       {},
     ),
-    sendGraphQLRequest(
-      `query GetActiveProfileFallback {
-        activeProfile: getProfile {
-          __typename
-        }
-      }`,
-      {},
-      { allowPartialData: true },
-    ),
   ]);
 
   const profileData =
@@ -123,18 +107,8 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     console.warn('[Profile Service] Active emergency contact fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
   }
 
-  const activeProfileData =
-    activeProfileResult.status === 'fulfilled'
-      ? activeProfileResult.value
-      : ((activeProfileResult as PromiseRejectedResult).reason?.data || null);
-
-  if (activeProfileResult.status === 'rejected') {
-    console.warn('[Profile Service] Active profile fallback fetch failed:', (activeProfileResult as PromiseRejectedResult).reason?.message);
-  }
-
   const log = (profileData as any)?.personalLog || {};
   const email = (profileData as any)?.loginEmail || null;
-  const activeProfile = (activeProfileData as any)?.activeProfile || null;
 
   const latestEmergency =
     (emergencyData as any)?.emergencyContact ||
@@ -150,11 +124,10 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     sanitizeDisplayValue(log.suffix),
   ].filter(Boolean) as string[];
   const emailIdentity = inferIdentityFromEmail(sanitizeDisplayValue(email));
-  const activeProfileIdentity = inferIdentityFromActiveProfile(activeProfile);
   const identity =
     emailIdentity === 'Superior'
       ? 'Superior'
-      : (activeProfileIdentity || emailIdentity);
+      : emailIdentity;
 
   _cacheTimestamp = Date.now();
   _cache = {
