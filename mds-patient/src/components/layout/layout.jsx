@@ -60,7 +60,7 @@ const Layout = ({ children, isInactive = false, allowInactiveRecordUpdate = true
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col overflow-hidden transition-[margin-left] duration-300 ${
-        sidebarExpanded ? 'md:ml-72' : 'md:ml-24'
+        sidebarExpanded ? 'md:ml-72' : 'md:ml-32'
       }`}>
         {/* Top Bar */}
         <TopBar onMenuClick={toggleSidebar} isSidebarOpen={sidebarOpen} />
