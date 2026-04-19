@@ -44,7 +44,7 @@ const StaffTopBar = ({ onMenuClick }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeNotifTab, setActiveNotifTab] = useState('inventory');
 
-  const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen, clearNotificationsByType } = useStaffNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen } = useStaffNotifications();
   const { settings, updateSettings } = useSettings();
   const { profile } = useStaffProfile();
   const { isAdmin, hasPermission } = usePermissions();
@@ -194,7 +194,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                 count: appointmentUnread,
                 urgent: false,
                 icon: (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-[14px] h-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 ),
@@ -205,7 +205,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                 count: medicineUnread,
                 urgent: false,
                 icon: (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-[14px] h-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
                 ),
@@ -216,7 +216,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                 count: inventoryCount,
                 urgent: inventoryAlerts.some((a) => a.notificationType === 'expired' || a.notificationType === 'low-stock'),
                 icon: (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-[14px] h-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 ),
@@ -227,7 +227,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                 count: chatUnread,
                 urgent: false,
                 icon: (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-[14px] h-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                   </svg>
                 ),
@@ -238,7 +238,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                 count: generalUnread,
                 urgent: false,
                 icon: (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-[14px] h-[14px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                   </svg>
                 ),
@@ -250,29 +250,41 @@ const StaffTopBar = ({ onMenuClick }) => {
             const resolvedTab = visibleKeys.includes(activeNotifTab) ? activeNotifTab : (visibleKeys[0] ?? 'general');
             if (resolvedTab !== activeNotifTab) setActiveNotifTab(resolvedTab);
 
-            // Dynamic panel width: grows with number of tabs so they never need to scroll
-            const panelWidth = allTabs.length <= 2 ? 'w-80' : allTabs.length === 3 ? 'w-96' : allTabs.length === 4 ? 'w-[440px]' : 'w-[520px]';
+            const activeTabMeta = allTabs.find((tab) => tab.key === resolvedTab) || null;
+            const activeTabUnread = activeTabMeta?.count || 0;
+            const footerLabel = resolvedTab === 'chat'
+              ? 'View Health Chat \u2192'
+              : resolvedTab === 'medicine'
+              ? 'View Requests \u2192'
+              : resolvedTab === 'appointment'
+              ? 'View Appointments \u2192'
+              : resolvedTab === 'general'
+              ? 'View General \u2192'
+              : 'View Inventory \u2192';
 
             return (
-              <div className={`absolute right-0 mt-2 ${panelWidth} bg-white dark:bg-neutral-800 rounded-xl shadow-xl border border-neutral-200 dark:border-neutral-700 z-50 flex flex-col overflow-hidden`}>
+              <div className="absolute right-0 mt-2 w-[400px] max-w-[calc(100vw-1rem)] bg-white dark:bg-neutral-800 rounded-[12px] border-[0.5px] border-neutral-200 dark:border-neutral-700 z-50 flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between bg-neutral-50 dark:bg-neutral-800/80 shrink-0">
-                  <p className="text-sm font-bold text-secondary-800 dark:text-white">Notifications</p>
-                  {unreadCount > 0 && (
-                    <button onClick={markAllAsRead} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
-                      Mark all read
-                    </button>
-                  )}
+                <div className="px-4 py-3 border-b-[0.5px] border-neutral-200 dark:border-neutral-700 flex items-center justify-between bg-white dark:bg-neutral-800 shrink-0">
+                  <p className="text-sm font-semibold text-neutral-900 dark:text-white">Notifications</p>
+                  <button
+                    type="button"
+                    onClick={markAllAsRead}
+                    disabled={unreadCount === 0}
+                    className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Mark all read
+                  </button>
                 </div>
 
                 {/* Notifications-disabled banner */}
                 {!settings.channels?.web && (
-                  <div className="px-4 py-2.5 bg-warning-50 dark:bg-warning-900/20 border-b border-warning-200 dark:border-warning-800 shrink-0">
-                    <p className="text-xs text-warning-700 dark:text-warning-300 font-medium">
+                  <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b-[0.5px] border-amber-200 dark:border-amber-700/50 shrink-0">
+                    <p className="text-[11px] text-amber-700 dark:text-amber-200 font-medium">
                       Web notifications are disabled.{' '}
                       <button
                         onClick={() => { setShowNotifications(false); navigate('/settings'); }}
-                        className="underline hover:text-warning-900 dark:hover:text-warning-100"
+                        className="underline hover:text-amber-900 dark:hover:text-amber-100"
                       >
                         Enable in Settings
                       </button>
@@ -281,7 +293,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                 )}
 
                 {/* Tabs — equal-width flex row, no horizontal scroll */}
-                <div className="flex border-b border-neutral-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-800">
+                <div className="flex border-b-[0.5px] border-neutral-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-800">
                   {allTabs.map((tab) => (
                     <button
                       key={tab.key}
@@ -289,27 +301,27 @@ const StaffTopBar = ({ onMenuClick }) => {
                         setActiveNotifTab(tab.key);
                         if (tab.key === 'inventory') markInventoryAlertsAsSeen();
                       }}
-                      className={`flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2.5 text-[11px] font-semibold transition-colors border-b-2 ${
+                      className={`relative flex-1 flex flex-col items-center justify-center gap-[3px] px-1.5 py-2 text-[10px] font-medium transition-colors ${
                         resolvedTab === tab.key
-                          ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-900/10'
-                          : 'border-transparent text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700/50'
+                          ? 'text-[#BA7517] dark:text-amber-400 bg-white dark:bg-neutral-800 after:content-[\"\" ] after:absolute after:left-2 after:right-2 after:bottom-0 after:h-[2px] after:rounded-full after:bg-[#BA7517] dark:after:bg-amber-400'
+                          : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700'
                       }`}
                     >
-                      <span className={`${resolvedTab === tab.key ? 'text-primary-500 dark:text-primary-400' : ''}`}>{tab.icon}</span>
-                      <span className="leading-none">{tab.label}</span>
-                      {tab.count > 0 && (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
-                          tab.urgent ? 'bg-error-500 text-white' : 'bg-primary-500 text-white'
-                        }`}>
-                          {tab.count}
-                        </span>
-                      )}
+                      <span className="relative inline-flex items-center justify-center w-[14px] h-[14px]">
+                        {tab.icon}
+                        {tab.count > 0 && (
+                          <span className="absolute -top-[7px] -right-[10px] min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[9px] font-semibold leading-none inline-flex items-center justify-center">
+                            {tab.count > 99 ? '99+' : tab.count}
+                          </span>
+                        )}
+                      </span>
+                      <span className="leading-none truncate max-w-full">{tab.label}</span>
                     </button>
                   ))}
                 </div>
 
                 {/* Tab Content */}
-                <div className="max-h-80 overflow-y-auto flex-1">
+                <div className="max-h-[320px] overflow-y-auto flex-1 bg-white dark:bg-neutral-800">
 
                   {/* ── No permissions state ── */}
                   {allTabs.length === 1 && resolvedTab === 'general' && generalNotifs.length === 0 && (
@@ -319,8 +331,8 @@ const StaffTopBar = ({ onMenuClick }) => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                         </svg>
                       </div>
-                      <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">No module access</p>
-                      <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">Contact your administrator to be assigned module permissions.</p>
+                      <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">No module access</p>
+                      <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">Contact your administrator to be assigned module permissions.</p>
                     </div>
                   )}
 
@@ -328,46 +340,55 @@ const StaffTopBar = ({ onMenuClick }) => {
                   {resolvedTab === 'inventory' && (
                     inventoryAlerts.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-                        <div className="p-2.5 rounded-full bg-success-100 dark:bg-success-900/30 mb-2">
-                          <svg className="w-5 h-5 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 mb-2">
+                          <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         </div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">All clear</p>
-                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">No inventory alerts at this time.</p>
+                        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">All clear</p>
+                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">No inventory alerts at this time.</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-neutral-100 dark:divide-neutral-700/50">
+                      <div className="divide-y-[0.5px] divide-neutral-200 dark:divide-neutral-700">
                         {inventoryAlerts.map((alert) => {
                           const isLowStock = alert.notificationType === 'low-stock';
-                          const isExpired  = alert.notificationType === 'expired';
-                          const dotColor   = isExpired ? 'bg-error-500' : isLowStock ? 'bg-warning-500' : 'bg-primary-500';
-                          const labelColor = isExpired
-                            ? 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400'
-                            : isLowStock
-                            ? 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400'
-                            : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400';
-                          const rowBg = isExpired
-                            ? 'bg-error-50/40 dark:bg-error-900/10'
-                            : isLowStock
-                            ? 'bg-warning-50/40 dark:bg-warning-900/10'
-                            : '';
-                          const label = isExpired ? 'Expired' : isLowStock ? 'Low Stock' : 'Expiring Soon';
+                          const daysLeft = Number.isFinite(Number(alert.daysLeft)) ? Number(alert.daysLeft) : null;
+                          const dotColor = isLowStock ? 'bg-[#BA7517]' : 'bg-red-500';
+                          const label = isLowStock ? 'Low stock' : 'Expiring';
+                          const quantity = Number.isFinite(Number(alert.currentQuantity)) ? Number(alert.currentQuantity) : null;
+                          const location = alert.location || alert.locationName || '—';
+                          const batch = alert.batchNumber ? `Batch ${alert.batchNumber}` : 'Batch —';
+                          const metaLine = isLowStock
+                            ? `${quantity ?? '—'} unit${quantity === 1 ? '' : 's'} · ${location} · ${batch}`
+                            : `${daysLeft !== null ? (daysLeft < 0 ? `expired ${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? '' : 's'} ago` : `expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`) : 'expires soon'} · ${batch} · ${location}`;
+                          const rowStamp = isLowStock
+                            ? 'now'
+                            : daysLeft !== null
+                            ? (daysLeft < 0 ? 'urgent' : `${daysLeft}d`)
+                            : 'soon';
+
                           return (
                             <button
                               key={alert.id}
                               type="button"
                               onClick={() => { setShowNotifications(false); navigate('/inventory'); }}
-                              className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${rowBg}`}
+                              className="w-full text-left px-4 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
                             >
                               <div className="flex items-start gap-2.5">
-                                <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
-                                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{alert.itemName}</p>
-                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${labelColor}`}>{label}</span>
+                                <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${dotColor}`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2 mb-0.5">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <p className="text-[13px] font-medium text-neutral-900 dark:text-white truncate leading-tight m-0">{alert.itemName}</p>
+                                      <span className={`text-[10px] font-medium px-2 py-[1px] rounded-[20px] shrink-0 ${isLowStock ? 'bg-amber-50 dark:bg-amber-950/30 text-[#BA7517] dark:text-amber-300 border border-amber-200 dark:border-amber-700/50' : 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-700/50'}`}>
+                                        {label}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-neutral-400 dark:text-neutral-500 shrink-0">{rowStamp}</span>
                                   </div>
-                                  <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-1 leading-snug m-0">{alert.detail}</p>
+                                  <p className="text-[11.5px] text-neutral-500 dark:text-neutral-400 truncate leading-snug m-0">
+                                    {metaLine}
+                                  </p>
                                 </div>
                               </div>
                             </button>
@@ -386,21 +407,23 @@ const StaffTopBar = ({ onMenuClick }) => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         </div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">No new appointments</p>
-                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">New patient bookings will appear here.</p>
+                        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">No new appointments</p>
+                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">New patient bookings will appear here.</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-neutral-100 dark:divide-neutral-700/50">
+                      <div className="divide-y-[0.5px] divide-neutral-100 dark:divide-neutral-700">
                         {appointmentNotifs.map((notif) => (
                           <button key={notif.id} type="button" onClick={() => handleNotifClick(notif)}
-                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className="w-full text-left px-4 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
                           >
                             <div className="flex items-start gap-2.5">
-                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
-                              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
-                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
-                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
+                              <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${notif.unread ? 'bg-blue-500' : 'bg-neutral-400'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-0.5">
+                                  <p className="text-[13px] font-medium text-neutral-900 dark:text-white truncate leading-tight m-0">{notif.title}</p>
+                                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500 shrink-0">{formatRelativeTime(notif.time)}</span>
+                                </div>
+                                <p className="text-[11.5px] text-neutral-500 dark:text-neutral-400 truncate leading-snug m-0">{notif.message}</p>
                               </div>
                             </div>
                           </button>
@@ -418,29 +441,28 @@ const StaffTopBar = ({ onMenuClick }) => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                           </svg>
                         </div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">No requests</p>
-                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">No new medicine requests.</p>
+                        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">No requests</p>
+                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">No new medicine requests.</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-neutral-100 dark:divide-neutral-700/50">
+                      <div className="divide-y-[0.5px] divide-neutral-100 dark:divide-neutral-700">
                         {medicineNotifs.map((notif) => (
                           <button key={notif.id} type="button" onClick={() => handleNotifClick(notif)}
-                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className="w-full text-left px-4 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
                           >
                             <div className="flex items-start gap-2.5">
-                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
-                              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
-                                  {notif.location && (
-                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 shrink-0">{notif.location}</span>
-                                  )}
+                              <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${notif.unread ? 'bg-[#BA7517]' : 'bg-neutral-400'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-0.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <p className="text-[13px] font-medium text-neutral-900 dark:text-white truncate leading-tight m-0">{notif.title}</p>
+                                    <span className="text-[10px] font-medium px-2 py-[1px] rounded-[20px] bg-amber-50 dark:bg-amber-950/30 text-[#BA7517] dark:text-amber-300 border border-amber-200 dark:border-amber-700/50 shrink-0">Request</span>
+                                  </div>
+                                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500 shrink-0">{formatRelativeTime(notif.time)}</span>
                                 </div>
-                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-1 leading-snug m-0">{notif.message}</p>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">Pending</span>
-                                  <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
-                                </div>
+                                <p className="text-[11.5px] text-neutral-500 dark:text-neutral-400 truncate leading-snug m-0">
+                                  {notif.message}
+                                </p>
                               </div>
                             </div>
                           </button>
@@ -458,21 +480,23 @@ const StaffTopBar = ({ onMenuClick }) => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                           </svg>
                         </div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">No messages</p>
-                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">No new health chat notifications.</p>
+                        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">No messages</p>
+                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">No new health chat notifications.</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-neutral-100 dark:divide-neutral-700/50">
+                      <div className="divide-y-[0.5px] divide-neutral-100 dark:divide-neutral-700">
                         {chatNotifs.map((notif) => (
                           <button key={notif.id} type="button" onClick={() => handleNotifClick(notif)}
-                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className="w-full text-left px-4 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
                           >
                             <div className="flex items-start gap-2.5">
-                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
-                              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
-                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
-                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
+                              <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${notif.unread ? 'bg-blue-500' : 'bg-neutral-400'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-0.5">
+                                  <p className="text-[13px] font-medium text-neutral-900 dark:text-white truncate leading-tight m-0">{notif.title}</p>
+                                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500 shrink-0">{formatRelativeTime(notif.time)}</span>
+                                </div>
+                                <p className="text-[11.5px] text-neutral-500 dark:text-neutral-400 truncate leading-snug m-0">{notif.message}</p>
                               </div>
                             </div>
                           </button>
@@ -490,21 +514,28 @@ const StaffTopBar = ({ onMenuClick }) => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                           </svg>
                         </div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">No announcements</p>
-                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">No general notifications yet.</p>
+                        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">No announcements</p>
+                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">No general notifications yet.</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-neutral-100 dark:divide-neutral-700/50">
+                      <div className="divide-y-[0.5px] divide-neutral-100 dark:divide-neutral-700">
                         {generalNotifs.map((notif) => (
                           <button key={notif.id} type="button" onClick={() => markAsRead(notif.id)}
-                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className="w-full text-left px-4 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
                           >
                             <div className="flex items-start gap-2.5">
-                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
-                              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
-                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
-                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
+                              <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${notif.unread ? 'bg-blue-500' : 'bg-neutral-400'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-0.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <p className="text-[13px] font-medium text-neutral-900 dark:text-white truncate leading-tight m-0">{notif.title}</p>
+                                    {notif.from && (
+                                      <span className="text-[10px] font-medium px-2 py-[1px] rounded-[20px] bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-600 shrink-0">Staff</span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500 shrink-0">{formatRelativeTime(notif.time)}</span>
+                                </div>
+                                <p className="text-[11.5px] text-neutral-500 dark:text-neutral-400 truncate leading-snug m-0">{notif.message}</p>
                               </div>
                             </div>
                           </button>
@@ -516,14 +547,7 @@ const StaffTopBar = ({ onMenuClick }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="px-4 py-2 border-t border-neutral-200 dark:border-neutral-700 shrink-0 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-2">
-                  {resolvedTab === 'medicine' && medicineNotifs.length > 0 && (
-                    <button type="button" onClick={() => clearNotificationsByType('medicine')}
-                      className="flex-1 text-center text-[11px] font-medium text-error-600 dark:text-error-400 hover:text-error-700 dark:hover:text-error-300 transition-colors"
-                    >
-                      Clear All
-                    </button>
-                  )}
+                <div className="px-4 py-2.5 border-t-[0.5px] border-neutral-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-800 flex items-center justify-between gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -540,19 +564,11 @@ const StaffTopBar = ({ onMenuClick }) => {
                         navigate('/inventory');
                       }
                     }}
-                    className="flex-1 text-center text-[11px] font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                    className="text-[11px] font-medium text-[#BA7517] dark:text-amber-400 hover:text-[#9a5f12] dark:hover:text-amber-300 transition-colors"
                   >
-                    {resolvedTab === 'chat'
-                      ? 'Go to Health Chat →'
-                      : resolvedTab === 'medicine'
-                      ? 'Go to Request Tab →'
-                      : resolvedTab === 'appointment'
-                      ? 'Go to Appointments →'
-                      : resolvedTab === 'general'
-                      ? 'Dismiss announcements'
-                      : 'Go to Inventory →'
-                    }
+                    {footerLabel}
                   </button>
+                  <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{activeTabUnread} unread</span>
                 </div>
               </div>
             );

@@ -442,6 +442,8 @@ const StaffAnalytics = () => {
               startDate={startDate}
               endDate={endDate}
               groupBy={groupBy}
+              department={selectedDepartment}
+              sex={selectedSex}
             />
           ))}
         </div>

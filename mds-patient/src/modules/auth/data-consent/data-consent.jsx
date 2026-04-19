@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter.js';
 import DOMPurify from 'dompurify';
 
@@ -196,6 +196,29 @@ const DataConsent = ({
     consentData.data_consent_version && 
     consentData.data_consent_version !== consentData.required_version;
 
+  const consentHtml = useMemo(() => {
+    if (!consentData?.consent_text) return '';
+
+    const sanitizedHtml = DOMPurify.sanitize(consentData.consent_text);
+    const version = consentData.required_version;
+
+    if (!version) return sanitizedHtml;
+    if (/·\s*v[\w.-]+/i.test(sanitizedHtml)) return sanitizedHtml;
+
+    const versionMarkup = ` <span class="text-neutral-400 font-normal">· v${version}</span>`;
+    const strongLastUpdatedPattern = /(<strong[^>]*>\s*Last\s*updated\s*:?\s*<\/strong>\s*[^<]+)/i;
+    if (strongLastUpdatedPattern.test(sanitizedHtml)) {
+      return sanitizedHtml.replace(strongLastUpdatedPattern, `$1${versionMarkup}`);
+    }
+
+    const plainLastUpdatedPattern = /(Last\s*updated\s*:?\s*[^<\n\r]+)/i;
+    if (plainLastUpdatedPattern.test(sanitizedHtml)) {
+      return sanitizedHtml.replace(plainLastUpdatedPattern, `$1${versionMarkup}`);
+    }
+
+    return sanitizedHtml;
+  }, [consentData]);
+
   return (
     <>
       {/* Main Modal Overlay */}
@@ -210,15 +233,15 @@ const DataConsent = ({
         <div className="relative w-full max-w-3xl max-h-[90vh] bg-white rounded-xl shadow-xl flex flex-col overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
-            <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center justify-between px-6 py-2 border-b border-neutral-200">
+            <div className="flex items-center gap-3 min-w-0">
               <svg className="w-10 h-10 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
               <div className="min-w-0">
-                <h2 className="text-base font-semibold text-secondary-900 leading-tight">Data Consent Policy</h2>
-                <p className="text-xs text-neutral-500 mt-0.5 leading-tight">
+                <h2 className="text-base font-semibold text-secondary-900 leading-snug m-0">Data Consent Policy</h2>
+                <p className="text-xs text-neutral-500 mt-0 leading-tight m-0 pb-1">
                   {purpose === 'register'
                     ? 'Required for Account Registration'
                     : isNewVersion
@@ -229,7 +252,7 @@ const DataConsent = ({
             </div>
             <button
               onClick={handleCloseClick}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors flex-shrink-0 ml-3"
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors flex-shrink-0 ml-2 self-start mt-0.5"
               aria-label="Close modal"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -239,7 +262,7 @@ const DataConsent = ({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-5 py-4" ref={scrollContainerRef} onScroll={handleScroll}>
+          <div className="flex-1 overflow-y-auto px-6 pt-2.5 pb-4" ref={scrollContainerRef} onScroll={handleScroll}>
             {loading ? (
               <div className="flex flex-col items-center justify-center py-10">
                 <svg className="animate-spin h-8 w-8 text-primary-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -283,23 +306,18 @@ const DataConsent = ({
                 {/* Consent Text from Backend */}
                 {consentData?.consent_text ? (
                   <div
-                    className="text-sm text-secondary-700 leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(consentData.consent_text) }}
+                    className="text-sm text-secondary-700 leading-relaxed
+                             [&_h1]:m-0 [&_h1]:text-[15px] [&_h1]:font-medium [&_h1]:leading-6 [&_h1]:mt-4 [&_h1]:mb-2
+                             [&_h2]:m-0 [&_h2]:text-[15px] [&_h2]:font-medium [&_h2]:leading-6 [&_h2]:mt-4 [&_h2]:mb-2
+                             [&_h3]:m-0 [&_h3]:text-[15px] [&_h3]:font-medium [&_h3]:leading-6 [&_h3]:mt-4 [&_h3]:mb-2
+                             [&_h1:first-child]:mt-1 [&_h2:first-child]:mt-1 [&_h3:first-child]:mt-1
+                             [&_p]:m-0 [&_p]:text-sm [&_p]:leading-relaxed [&_p]:mb-3 [&_strong]:font-semibold"
+                    dangerouslySetInnerHTML={{ __html: consentHtml }}
                   />
                 ) : (
                   <p className="text-sm text-secondary-700 leading-relaxed">
                     I consent to the collection and use of my data in accordance with the MDSystem Privacy Policy.
                   </p>
-                )}
-
-                {/* Version Badge */}
-                {consentData && (
-                  <div className="mt-5 pt-3 border-t border-neutral-100 flex items-center gap-2">
-                    <span className="text-xs text-neutral-400">Document version:</span>
-                    <span className="text-xs font-mono font-semibold text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded">
-                      {consentData.required_version}
-                    </span>
-                  </div>
                 )}
               </div>
             )}
@@ -307,7 +325,7 @@ const DataConsent = ({
 
           {/* Footer */}
           {!loading && consentData && (
-            <div className="flex-shrink-0 px-5 py-3 border-t border-neutral-200 bg-neutral-50">
+            <div className="flex-shrink-0 px-6 py-3 border-t border-neutral-200 bg-neutral-50">
               <form onSubmit={handleSubmit}>
                 {/* Checkbox */}
                 <label className="flex items-start gap-2.5 mb-3 cursor-pointer group">
