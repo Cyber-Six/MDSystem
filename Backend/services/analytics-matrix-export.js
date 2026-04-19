@@ -156,6 +156,28 @@ function metricLabel(metricKey) {
   return EXPORT_META[metricKey]?.label || metricKey;
 }
 
+function normalizeWhitespace(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function matrixMetricDisplayLabel(metricKey, state) {
+  const base = metricLabel(metricKey);
+  let compact = base;
+
+  // Sex and age dimensions are already represented by matrix columns or active filters.
+  compact = compact.replace(/\s+by\s+sex\b/i, '');
+  compact = compact.replace(/\s+by\s+age\s*group\b/i, '');
+
+  // Department/program context is shown either via section headers or active filter context.
+  compact = compact.replace(/\s+by\s+department\b/i, '');
+  if (!state.departmentAll) {
+    compact = compact.replace(/\s+by\s+program\b/i, '');
+  }
+
+  compact = normalizeWhitespace(compact);
+  return compact || base;
+}
+
 function isPercentageMetric(metricKey, unit = '') {
   if (String(unit || '').toLowerCase() === 'percentage') return true;
   return metricKey === 'oral-findings-percentages';
@@ -307,6 +329,10 @@ function dedupePoints(points = []) {
   return Array.from(grouped.values());
 }
 
+function isTotalLabel(label) {
+  return normalizeWhitespace(label).toLowerCase() === 'total';
+}
+
 function flattenMetricPoints(metricKey, result = {}) {
   const points = [];
   const labels = Array.isArray(result.labels) ? result.labels : [];
@@ -412,7 +438,7 @@ function buildSummaryRows(structured, sheetConfig, state) {
     for (const metricKey of sheet.metrics) {
       const scopedRows = structured[sheet.name]?.[metricKey]?.[departmentKey] || [];
       rows.push({
-        rowLabel: metricLabel(metricKey),
+        rowLabel: matrixMetricDisplayLabel(metricKey, state),
         category: sheet.name,
         totalValue: sumFinite(scopedRows.map((row) => row.grandTotal)),
         itemCount: scopedRows.length,
@@ -973,7 +999,7 @@ function buildVisibleTotals(rows, layout, state) {
 }
 
 function metricSectionTitle(metricKey, state) {
-  const base = metricLabel(metricKey);
+  const base = matrixMetricDisplayLabel(metricKey, state);
 
   if (!state.departmentAll && !state.ageAll && !state.sexAll) {
     return `${base} — ${state.department} · ${state.ageLabel} · ${state.sexLabel}`;
@@ -1049,17 +1075,22 @@ function renderSheetTableBlocks(sheet, sheetName, metrics, structured, state, la
       const rows = metricRowsByDepartment[department] || [];
       if (rows.length === 0) continue;
 
+      // Avoid duplicated TOTAL rows: keep detail rows in body and compute one explicit footer total.
+      const detailRows = rows.filter((row) => !isTotalLabel(row.label));
+      const rowsForBody = detailRows;
+      const rowsForTotals = detailRows.length > 0 ? detailRows : rows;
+
       if (state.departmentAll) {
         styleSectionRow(sheet, rowIndex, department, layout.columns.length);
         rowIndex++;
       }
 
       const compactSectionTotal = layout.mode === 'compact'
-        ? sumFinite(rows.map((row) => readValueFromRowByLayout(row, { type: 'count' }, state)))
+        ? sumFinite(rowsForTotals.map((row) => readValueFromRowByLayout(row, { type: 'count' }, state)))
         : 0;
 
       let stripe = 0;
-      for (const row of rows) {
+      for (const row of rowsForBody) {
         const excelRow = sheet.getRow(rowIndex);
 
         const labelCell = excelRow.getCell(1);
@@ -1096,7 +1127,7 @@ function renderSheetTableBlocks(sheet, sheetName, metrics, structured, state, la
         rowIndex++;
       }
 
-      const totals = buildVisibleTotals(rows, layout, state);
+      const totals = buildVisibleTotals(rowsForTotals, layout, state);
       const totalRow = sheet.getRow(rowIndex);
       writeLabelCell(totalRow.getCell(1), 'TOTAL');
 
