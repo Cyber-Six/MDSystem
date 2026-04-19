@@ -794,6 +794,7 @@ router.post('/requests/:documentId', jwtProtect("patient"), checkCredentialsStat
 router.get('/my', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
     logger.debug('Fetching patient documents', { patientId: req.user.id });
+    return res.status(501).json({ error: 'NOT_IMPLEMENTED', message: 'This endpoint is not implemented yet. Please use /documents/requests to view and manage your document submissions.' });
     const patientId = req.user.id;
 
     const result = await db.query(
