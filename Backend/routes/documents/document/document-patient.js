@@ -289,7 +289,7 @@ function toPrescriptionViewPayload(documentMeta, normalized) {
     followUpDate: normalized.followUpDate || null,
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
-    downloadPath: `/documents/patient/prescription/download/${documentMeta.id}`,
+    downloadPath: `/documents/prescription/download/${documentMeta.id}`,
   };
 }
 
@@ -488,7 +488,7 @@ function toMedicalCertificateViewPayload(documentMeta, normalized) {
     remarks: normalized.remarks || '',
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
-    downloadPath: `/documents/patient/medical-certificate/download/${documentMeta.id}`,
+    downloadPath: `/documents/medical-certificate/download/${documentMeta.id}`,
   };
 }
 
@@ -984,122 +984,56 @@ async function streamTemplatePdfForPatient(req, res, expectedTemplateType, dispo
 }
 
 /**
- * GET /documents/patient/prescription/:documentId/view
+ * GET /documents/prescription/view/:documentId
  * View a patient-owned prescription PDF (inline stream)
  */
-router.get('/patient/prescription/:documentId/view', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
-});
-
-/**
- * GET /documents/patient/prescription/:documentId/download
- * Download a patient-owned prescription PDF (attachment stream)
- */
-router.get('/patient/prescription/:documentId/download', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
-});
-
-/**
- * GET /documents/patient/medical-certificate/:documentId/view
- * View a patient-owned medical certificate PDF (inline stream)
- */
-router.get('/patient/medical-certificate/:documentId/view', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
-});
-
-/**
- * GET /documents/patient/medical-certificate/:documentId/download
- * Download a patient-owned medical certificate PDF (attachment stream)
- */
-router.get('/patient/medical-certificate/:documentId/download', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
-});
-
-/**
- * GET /documents/patient/prescription/view/:documentId
- * Backward-compatible alias for older patient view route shape
- */
-router.get('/patient/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy prescription view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
-  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
-});
-
-/**
- * GET /documents/patient/prescription/download/:documentId
- * Backward-compatible alias for older patient download route shape
- */
-router.get('/patient/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy prescription download route accessed', { documentId: req.params.documentId, patientId: req.user.id });
-  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
-});
-
-/**
- * GET /documents/patient/medical-certificate/view/:documentId
- * Backward-compatible alias for older patient view route shape
- */
-router.get('/patient/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy medical certificate view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
-  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
-});
-
-/**
- * GET /documents/patient/medical-certificate/download/:documentId
- * Backward-compatible alias for older patient download route shape
- */
-router.get('/patient/medical-certificate/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy medical certificate download route accessed', { documentId: req.params.documentId, patientId: req.user.id });
-  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
-});
-
-/**
- * GET /documents/prescription/view/:documentId
- * Legacy route retained for compatibility
- */
 router.get('/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy prescription view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
+  logger.debug(`[PATIENT] PDF route hit: prescription ${req.params.documentId}`);
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/prescription/:documentId
- * Legacy route retained for compatibility
+ * Compatibility alias for inline prescription view
  */
 router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy prescription route accessed', { documentId: req.params.documentId, patientId: req.user.id });
+  logger.debug(`[PATIENT] PDF route hit: prescription ${req.params.documentId} (alias)`);
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/prescription/download/:documentId
- * Legacy route retained for compatibility
+ * Download a patient-owned prescription PDF (attachment stream)
  */
 router.get('/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy prescription download route accessed', { documentId: req.params.documentId, patientId: req.user.id });
+  logger.debug(`[PATIENT] PDF route hit: prescription ${req.params.documentId} (download)`);
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
 });
 
 /**
  * GET /documents/medical-certificate/view/:documentId
- * Legacy route retained for compatibility
+ * View a patient-owned medical certificate PDF (inline stream)
  */
 router.get('/medical-certificate/view/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
-  logger.debug('Legacy medical certificate view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
+  logger.debug(`[PATIENT] PDF route hit: medical-certificate ${req.params.documentId}`);
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/medical-certificate/:documentId
- * Legacy route retained for compatibility
+ * Compatibility alias for inline medical certificate view
  */
 router.get('/medical-certificate/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug(`[PATIENT] PDF route hit: medical-certificate ${req.params.documentId} (alias)`);
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/medical-certificate/download/:documentId
- * Legacy route retained for compatibility
+ * Download a patient-owned medical certificate PDF (attachment stream)
  */
 router.get('/medical-certificate/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug(`[PATIENT] PDF route hit: medical-certificate ${req.params.documentId} (download)`);
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
 });
 
