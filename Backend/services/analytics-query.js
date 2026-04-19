@@ -889,7 +889,7 @@ async function oralFindingsPercentages(branch, startDate, endDate, options = {})
           false
         ) AS finding_present
       FROM filtered_population fp
-      INNER JOIN "oralFindingCatalog" ofc ON COALESCE(ofc."isValid", true) = true
+      INNER JOIN "oralFindingCatalog" ofc ON COALESCE(ofc."isActive", true) = true
       LEFT JOIN "DentalRecord" dr
         ON dr."patientId" = fp.id
        AND dr.created_at BETWEEN $1 AND $2
