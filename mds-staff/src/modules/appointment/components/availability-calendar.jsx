@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Sun, Clock, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Sun, Clock, X, ChevronLeft, ChevronRight, Minus, Plus, AlertTriangle } from 'lucide-react';
 
 /**
  * Availability Calendar Component
@@ -7,25 +7,29 @@ import { Sun, Clock, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
  * Color-coded: Green (open) / Amber (>70% booked) / Red (full/suspended) / Blue (event override)
  * SRS §3.4.2
  */
-const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler, editForm, customDates = [], onEditSessionLimit, monthAvailability = {}, onMonthChange }) => {
-  // Inline editor state
-  const [editPopup, setEditPopup] = useState(null); // { dateStr, session: 'morning'|'afternoon', x, y }
-  const [editValue, setEditValue] = useState(0);
+const AvailabilityCalendar = ({
+  selectedDate,
+  onSelectDate,
+  events,
+  slotDefaults,
+  activeScheduler,
+  editForm,
+  customDates = [],
+  monthAvailability = {},
+  onMonthChange,
+  onSaveDateSlots,
+  onAddCustomDate,
+  onRemoveCustomDate,
+  onEditSessionLimit,
+}) => {
   const [saving, setSaving] = useState(false);
+  const [inlineEditor, setInlineEditor] = useState(null);
+  const [editorDraft, setEditorDraft] = useState({ morningAllowed: 0, afternoonAllowed: 0 });
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const popupRef = useRef(null);
-
-  // Close popup when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (popupRef.current && !popupRef.current.contains(e.target)) {
-        setEditPopup(null);
-      }
-    };
-    if (editPopup) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [editPopup]);
+  const cellRefs = useRef({});
+  const morningInputRef = useRef(null);
+  const afternoonInputRef = useRef(null);
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth()); // Current month
@@ -99,8 +103,8 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
 
   const customDateSet = useMemo(() => new Set(Object.keys(customDateMap)), [customDateMap]);
 
-  // Build slot data per day using real availability from API
-  const bookedSlots = useMemo(() => {
+  // Build slot data per day using real availability from API.
+  const daySlots = useMemo(() => {
     const checkDayAvailable = (dayOfWeek, dateStr) => {
       const dayName = dayIndexToName[dayOfWeek];
       const customDate = customDateMap[dateStr];
@@ -145,32 +149,31 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(year, month, d).getDay();
 
-      if (!checkDayAvailable(dayOfWeek, dateStr)) {
-        data[dateStr] = { isClosed: true, isExcluded: checkIsExcluded(dateStr) };
-        continue;
-      }
+      const isAvailable = checkDayAvailable(dayOfWeek, dateStr);
+      const isExcluded = checkIsExcluded(dateStr);
+      const customEntry = customDateMap[dateStr];
 
       const isCustom = checkIsCustomDate(dayOfWeek, dateStr);
       const dayEvent = events.find((e) => dateStr >= e.startDate && dateStr <= e.endDate);
 
-      if (dayEvent && dayEvent.effect === 'Suspend') {
-        data[dateStr] = { isSuspended: true, event: dayEvent, isCustomDate: isCustom };
-        continue;
-      }
-
-      // Resolve slot data: API (ScheduleDateEntity) > custom date overrides > scheduler defaults
       const apiData = monthAvailability[dateStr];
-      const customEntry = customDateMap[dateStr];
 
-      // Priority: API data (has real DB values) > custom date entry > scheduler defaults
-      const morningAllowed = apiData?.morningAllowed ?? customEntry?.morningAllowed ?? slotDefaults?.morning ?? 0;
-      const afternoonAllowed = apiData?.afternoonAllowed ?? customEntry?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0;
+      // Priority: API data (has real DB values) > custom date entry > scheduler defaults.
+      const fallbackMorning = slotDefaults?.morning ?? 0;
+      const fallbackAfternoon = slotDefaults?.afternoon ?? 0;
+      const morningAllowed = apiData?.morningAllowed ?? customEntry?.morningAllowed ?? (isAvailable ? fallbackMorning : 0);
+      const afternoonAllowed = apiData?.afternoonAllowed ?? customEntry?.afternoonAllowed ?? (isAvailable ? fallbackAfternoon : 0);
       const morningRegistered = apiData?.morningRegistered ?? 0;
       const morningPending = apiData?.morningPending ?? 0;
       const afternoonRegistered = apiData?.afternoonRegistered ?? 0;
       const afternoonPending = apiData?.afternoonPending ?? 0;
 
       data[dateStr] = {
+        isAvailable,
+        isUnscheduled: !isAvailable && !customDateSet.has(dateStr),
+        isClosed: !isAvailable,
+        isExcluded,
+        isSuspended: dayEvent?.effect === 'Suspend',
         morningAllowed,
         afternoonAllowed,
         morningBooked: morningRegistered + morningPending,
@@ -181,80 +184,136 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         afternoonPending,
         event: dayEvent || null,
         isCustomDate: isCustom,
-        // Distinguish between a SlotCustomDate entry vs a modified-slot scheduled day
+        // Distinguish between a SlotCustomDate entry vs a modified-slot scheduled day.
         isSlotCustomDate: customDateSet.has(dateStr),
       };
     }
     return data;
   }, [year, month, daysInMonth, events, currentSchedulePerWeek, customDateSet, customDateMap, dayIndexToName, monthAvailability, slotDefaults]);
 
-  const getDayStatus = (dateStr) => {
-    const info = bookedSlots[dateStr];
-    if (!info) return 'none';
-    if (info.isClosed && info.isExcluded) return 'excluded';
-    if (info.isClosed) return 'closed';
-    if (info.isSuspended) return 'suspended';
+  const formatDateLabel = useCallback((dateStr) => {
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }, []);
+
+  const getSubtitle = useCallback((info) => {
+    if (!info) return 'Not scheduled';
+    if (info.isUnscheduled) return 'Not scheduled';
+    if (info.isSlotCustomDate) return 'Custom date';
+    return 'Regular slot';
+  }, []);
+
+  const getDayUtilization = (info) => {
+    if (!info) return { capacity: 0, booked: 0, ratio: 0 };
+    const capacity = Math.max(0, (info.morningAllowed || 0) + (info.afternoonAllowed || 0));
+    const booked = Math.max(0, (info.morningBooked || 0) + (info.afternoonBooked || 0));
+    const ratio = capacity > 0 ? Math.min(booked / capacity, 1) : 0;
+    return { capacity, booked, ratio };
+  };
+
+  const getDayStatus = (info) => {
+    if (!info || info.isUnscheduled) return 'none';
+    if (info.isSuspended) return 'full';
     if (info.event) return 'event';
 
-    // Use per-day capacity (already resolved from API > customDate > defaults)
-    const totalCapacity = (info.morningAllowed || 0) + (info.afternoonAllowed || 0);
-    const totalBooked = (info.morningBooked || 0) + (info.afternoonBooked || 0);
-
-    // Staff explicitly disabled this date (set both to 0)
-    if (totalCapacity === 0) return 'disabled';
-
-    // Custom date indicator takes priority if no bookings yet
-    if (info.isCustomDate && totalBooked === 0) return 'custom';
-
-    const ratio = totalCapacity > 0 ? totalBooked / totalCapacity : 0;
-
+    const { capacity, ratio } = getDayUtilization(info);
+    if (capacity <= 0 || info.isExcluded) return 'disabled';
+    if (info.isSlotCustomDate || info.isCustomDate) return 'custom';
     if (ratio >= 1) return 'full';
-    if (ratio >= 0.7) return 'partial';
-    if (info.isCustomDate) return 'custom';
+    if (ratio >= 0.7) return 'filling';
     return 'open';
   };
 
-  const statusColors = {
-    open: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30',
-    partial: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30',
-    full: 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30',
-    suspended: 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200',
-    event: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/30',
-    custom: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30',
-    disabled: 'bg-neutral-100 dark:bg-neutral-700/40 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700/60',
-    excluded: 'bg-rose-50 dark:bg-rose-900/20 text-rose-400 dark:text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/30',
-    closed: 'bg-neutral-50 dark:bg-neutral-700/50 text-neutral-400 dark:text-neutral-500',
-    none: 'bg-transparent text-neutral-300 dark:text-neutral-600',
-  };
+  const estimateDropdownHeight = useCallback((info, mode = 'actions') => {
+    if (mode === 'slots') {
+      return info?.isUnscheduled ? 236 : 214;
+    }
 
-  const statusDots = {
-    open: 'bg-emerald-500',
-    partial: 'bg-amber-500',
-    full: 'bg-rose-500',
-    suspended: 'bg-rose-500',
-    event: 'bg-sky-500',
-    custom: 'bg-violet-500',
-    disabled: 'bg-neutral-400',
-    excluded: 'bg-rose-400',
-    closed: '',
-    none: '',
-  };
+    if (info?.isUnscheduled) return 126;
+    if (info?.isSlotCustomDate) return 154;
+    return 126;
+  }, []);
 
-  // Compute fill ratio for capacity bar
-  const getFillRatio = (dateStr) => {
-    const info = bookedSlots[dateStr];
-    if (!info || info.isClosed || info.isSuspended) return 0;
-    const totalCapacity = (info.morningAllowed || 0) + (info.afternoonAllowed || 0);
-    const totalBooked = (info.morningBooked || 0) + (info.afternoonBooked || 0);
-    return totalCapacity > 0 ? Math.min(totalBooked / totalCapacity, 1) : 0;
-  };
+  const updateDropdownPosition = useCallback((dateStr, info, mode = 'actions') => {
+    const anchor = cellRefs.current[dateStr];
+    if (!anchor) return;
 
-  const getFillBarColor = (ratio) => {
-    if (ratio >= 1) return 'bg-rose-500';
-    if (ratio >= 0.7) return 'bg-amber-500';
-    if (ratio > 0) return 'bg-emerald-500';
-    return 'bg-neutral-200 dark:bg-neutral-600';
-  };
+    const rect = anchor.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const menuWidth = mode === 'slots'
+      ? Math.min(320, viewportWidth - 24)
+      : Math.min(300, viewportWidth - 24);
+    const menuHeight = estimateDropdownHeight(info, mode);
+    const gap = 8;
+    const edgePadding = 12;
+
+    let left = rect.left + (rect.width / 2) - (menuWidth / 2);
+    left = Math.max(edgePadding, Math.min(left, viewportWidth - menuWidth - edgePadding));
+
+    const showAbove = rect.bottom + gap + menuHeight > viewportHeight - edgePadding;
+    let top = showAbove ? rect.top - menuHeight - gap : rect.bottom + gap;
+    top = Math.max(edgePadding, Math.min(top, viewportHeight - menuHeight - edgePadding));
+
+    setDropdownPos({ top, left });
+  }, [estimateDropdownHeight]);
+
+  const closeInlineEditor = useCallback(() => {
+    setInlineEditor(null);
+    setSaving(false);
+    onSelectDate?.(null, false);
+  }, [onSelectDate]);
+
+  // Close popup when clicking outside.
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (popupRef.current && popupRef.current.contains(e.target)) return;
+      closeInlineEditor();
+    };
+
+    if (inlineEditor) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+
+    return undefined;
+  }, [inlineEditor, closeInlineEditor]);
+
+  // Reposition on viewport changes.
+  useEffect(() => {
+    if (!inlineEditor) return undefined;
+
+    const info = daySlots[inlineEditor.dateStr];
+    const syncPos = () => {
+      updateDropdownPosition(inlineEditor.dateStr, info, inlineEditor.mode || 'actions');
+    };
+
+    syncPos();
+    window.addEventListener('resize', syncPos);
+    window.addEventListener('scroll', syncPos, true);
+    return () => {
+      window.removeEventListener('resize', syncPos);
+      window.removeEventListener('scroll', syncPos, true);
+    };
+  }, [inlineEditor, daySlots, updateDropdownPosition]);
+
+  // Auto-focus target slot when opening from a badge click.
+  useEffect(() => {
+    if (!inlineEditor || inlineEditor.mode !== 'slots') return;
+    const focusSlot = inlineEditor.focusSlot;
+    const targetRef = focusSlot === 'afternoon' ? afternoonInputRef : morningInputRef;
+    const timer = setTimeout(() => {
+      targetRef.current?.focus();
+      targetRef.current?.select();
+    }, 10);
+    return () => clearTimeout(timer);
+  }, [inlineEditor]);
 
   // Build calendar grid
   const calendarCells = [];
@@ -276,63 +335,265 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     calendarCells.push({ day: i, isOtherMonth: true });
   }
 
-  // Handle session count click for inline editing
-  const handleSessionClick = (e, dateStr, session) => {
-    e.stopPropagation(); // Prevent triggering date selection
-    const rect = e.currentTarget.getBoundingClientRect();
-    const info = bookedSlots[dateStr];
-    const currentValue = session === 'morning'
-      ? (info?.morningAllowed ?? slotDefaults?.morning ?? 0)
-      : (info?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0);
-    setEditValue(currentValue);
-    setEditPopup({
-      dateStr,
-      session,
-      x: rect.left + rect.width / 2,
-      y: rect.bottom + 4,
+  const openActionMenu = (dateStr) => {
+    const info = daySlots[dateStr];
+    if (!info) return;
+    if (dateStr < todayStr) return;
+
+    setInlineEditor({ dateStr, mode: 'actions', focusSlot: null });
+    onSelectDate?.(dateStr, true);
+    updateDropdownPosition(dateStr, info, 'actions');
+  };
+
+  const openSlotEditor = (dateStr, focusSlot = null) => {
+    const info = daySlots[dateStr];
+    if (!info) return;
+    if (dateStr < todayStr) return;
+
+    setEditorDraft({
+      morningAllowed: info.morningAllowed ?? 0,
+      afternoonAllowed: info.afternoonAllowed ?? 0,
+    });
+    setInlineEditor({ dateStr, mode: 'slots', focusSlot });
+    onSelectDate?.(dateStr, true);
+    updateDropdownPosition(dateStr, info, 'slots');
+  };
+
+  const handleSessionBadgeClick = (e, dateStr, session) => {
+    e.stopPropagation();
+    openSlotEditor(dateStr, session);
+  };
+
+  const updateDraftValue = (field, value) => {
+    if (value === '') {
+      setEditorDraft((prev) => ({ ...prev, [field]: '' }));
+      return;
+    }
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed) || parsed < 0) return;
+    setEditorDraft((prev) => ({ ...prev, [field]: parsed }));
+  };
+
+  const stepDraftValue = (field, delta) => {
+    setEditorDraft((prev) => {
+      const current = Number.parseInt(prev[field], 10);
+      const safeCurrent = Number.isNaN(current) ? 0 : current;
+      return {
+        ...prev,
+        [field]: Math.max(0, safeCurrent + delta),
+      };
     });
   };
 
-  // Handle save of edited session limit
-  const handleSaveSession = async () => {
-    if (!editPopup || !onEditSessionLimit) return;
+  const normalizedDraft = {
+    morningAllowed: editorDraft.morningAllowed === '' || editorDraft.morningAllowed == null ? 0 : Number(editorDraft.morningAllowed),
+    afternoonAllowed: editorDraft.afternoonAllowed === '' || editorDraft.afternoonAllowed == null ? 0 : Number(editorDraft.afternoonAllowed),
+  };
+
+  const persistDateSlots = async (targetDate, morningAllowed, afternoonAllowed) => {
+    const original = daySlots[targetDate] || {};
+
+    if (onSaveDateSlots) {
+      await onSaveDateSlots(targetDate, morningAllowed, afternoonAllowed);
+      return;
+    }
+
+    if (!onEditSessionLimit) return;
+
+    if ((original.morningAllowed ?? 0) !== morningAllowed) {
+      await onEditSessionLimit(targetDate, 'morning', morningAllowed);
+    }
+    if ((original.afternoonAllowed ?? 0) !== afternoonAllowed) {
+      await onEditSessionLimit(targetDate, 'afternoon', afternoonAllowed);
+    }
+  };
+
+  const handleSaveExistingDate = async () => {
+    if (!inlineEditor) return;
+    const targetDate = inlineEditor.dateStr;
+
     setSaving(true);
     try {
-      const val = editValue === '' || editValue == null ? 0 : Number(editValue);
-      await onEditSessionLimit(editPopup.dateStr, editPopup.session, val);
-      setEditPopup(null);
+      await persistDateSlots(targetDate, normalizedDraft.morningAllowed, normalizedDraft.afternoonAllowed);
+      closeInlineEditor();
     } catch (err) {
-      console.error('Failed to save session limit:', err);
+      console.error('Failed to save date slots:', err);
     } finally {
       setSaving(false);
     }
   };
 
+  const handleSaveNewCustomDate = async () => {
+    if (!inlineEditor || !onAddCustomDate) return;
+    setSaving(true);
+    try {
+      await onAddCustomDate(
+        inlineEditor.dateStr,
+        normalizedDraft.morningAllowed,
+        normalizedDraft.afternoonAllowed,
+      );
+      closeInlineEditor();
+    } catch (err) {
+      console.error('Failed to add custom date slots:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDisableCurrentDate = async () => {
+    if (!inlineEditor) return;
+    setSaving(true);
+    try {
+      await persistDateSlots(inlineEditor.dateStr, 0, 0);
+      closeInlineEditor();
+    } catch (err) {
+      console.error('Failed to disable date:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReEnableRegularDate = async () => {
+    if (!inlineEditor) return;
+    setSaving(true);
+    try {
+      const morningDefault = slotDefaults?.morning ?? 0;
+      const afternoonDefault = slotDefaults?.afternoon ?? 0;
+      await persistDateSlots(inlineEditor.dateStr, morningDefault, afternoonDefault);
+      closeInlineEditor();
+    } catch (err) {
+      console.error('Failed to re-enable date:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteCustomDate = async () => {
+    if (!inlineEditor || !onRemoveCustomDate) return;
+    setSaving(true);
+    try {
+      await onRemoveCustomDate(inlineEditor.dateStr);
+      closeInlineEditor();
+    } catch (err) {
+      console.error('Failed to delete custom date:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderSlotEditor = () => {
+    const rowClass = 'grid grid-cols-2 gap-1.5';
+    const morningCardClass = 'min-w-0 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 p-1.5';
+    const afternoonCardClass = 'min-w-0 rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50/80 dark:bg-sky-900/30 p-1.5';
+
+    return (
+      <div className={rowClass}>
+        <div className={morningCardClass}>
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+              <Sun className="h-3.5 w-3.5" />
+              Morning
+            </span>
+            <span className="text-[10px] text-secondary-700 dark:text-neutral-300">Slots</span>
+          </div>
+          <div className="grid grid-cols-[26px_minmax(0,1fr)_26px] items-center gap-1">
+            <button
+              type="button"
+              onClick={() => stepDraftValue('morningAllowed', -1)}
+              className="h-7 w-[26px] rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 p-0 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/40"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <input
+              ref={morningInputRef}
+              type="text"
+              inputMode="numeric"
+              value={editorDraft.morningAllowed}
+              onChange={(e) => updateDraftValue('morningAllowed', e.target.value)}
+              onBlur={() => {
+                if (editorDraft.morningAllowed === '' || editorDraft.morningAllowed == null) {
+                  setEditorDraft((prev) => ({ ...prev, morningAllowed: 0 }));
+                }
+              }}
+              className="h-7 min-w-0 w-full rounded-md border border-amber-300 dark:border-amber-700 bg-white/90 dark:bg-neutral-800 px-1.5 text-center text-sm font-semibold text-secondary-900 dark:text-white outline-none focus:border-primary-500"
+            />
+            <button
+              type="button"
+              onClick={() => stepDraftValue('morningAllowed', 1)}
+              className="h-7 w-[26px] rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 p-0 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/40"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className={afternoonCardClass}>
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300">
+              <Clock className="h-3.5 w-3.5" />
+              Afternoon
+            </span>
+            <span className="text-[10px] text-secondary-700 dark:text-neutral-300">Slots</span>
+          </div>
+          <div className="grid grid-cols-[26px_minmax(0,1fr)_26px] items-center gap-1">
+            <button
+              type="button"
+              onClick={() => stepDraftValue('afternoonAllowed', -1)}
+              className="h-7 w-[26px] rounded-md border border-sky-300 dark:border-sky-700 bg-sky-50/80 dark:bg-sky-900/30 p-0 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-sky-100 dark:hover:bg-sky-900/40"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <input
+              ref={afternoonInputRef}
+              type="text"
+              inputMode="numeric"
+              value={editorDraft.afternoonAllowed}
+              onChange={(e) => updateDraftValue('afternoonAllowed', e.target.value)}
+              onBlur={() => {
+                if (editorDraft.afternoonAllowed === '' || editorDraft.afternoonAllowed == null) {
+                  setEditorDraft((prev) => ({ ...prev, afternoonAllowed: 0 }));
+                }
+              }}
+              className="h-7 min-w-0 w-full rounded-md border border-sky-300 dark:border-sky-700 bg-white/90 dark:bg-neutral-800 px-1.5 text-center text-sm font-semibold text-secondary-900 dark:text-white outline-none focus:border-primary-500"
+            />
+            <button
+              type="button"
+              onClick={() => stepDraftValue('afternoonAllowed', 1)}
+              className="h-7 w-[26px] rounded-md border border-sky-300 dark:border-sky-700 bg-sky-50/80 dark:bg-sky-900/30 p-0 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-sky-100 dark:hover:bg-sky-900/40"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800">
       {/* Month navigation */}
-      <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-700 px-4 py-3">
         <div className="flex items-center gap-1">
           <button
             onClick={() => navigateMonth(-1)}
-            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+            className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-1.5 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700"
           >
-            <ChevronLeft className="w-4 h-4 text-secondary-600 dark:text-neutral-300" />
+            <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={() => navigateMonth(1)}
-            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+            className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-1.5 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700"
           >
-            <ChevronRight className="w-4 h-4 text-secondary-600 dark:text-neutral-300" />
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-        <h3 className="text-base font-bold text-secondary-800 dark:text-white tracking-wide">
+        <h3 className="text-base font-bold tracking-wide text-secondary-700 dark:text-neutral-300">
           {monthNames[month]} {year}
         </h3>
         {!isCurrentMonth && (
           <button
             onClick={goToToday}
-            className="px-2.5 py-1 text-xs font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors border border-primary-200 dark:border-primary-800"
+            className="rounded-md border border-primary-200 dark:border-primary-800 px-2.5 py-1 text-xs font-semibold text-primary-600 dark:text-primary-400 transition-colors hover:bg-primary-50 dark:hover:bg-primary-900/20"
           >
             Today
           </button>
@@ -341,9 +602,9 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       </div>
 
       {/* Day labels */}
-      <div className="grid grid-cols-7 bg-neutral-50 dark:bg-neutral-900/30 border-b border-neutral-200 dark:border-neutral-700">
+      <div className="grid grid-cols-7 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800">
         {dayLabels.map((label) => (
-          <div key={label} className="text-center py-2 text-xs sm:text-sm font-semibold text-secondary-600 dark:text-neutral-300 uppercase tracking-wider">
+          <div key={label} className="py-1.5 text-center text-xs font-semibold uppercase tracking-wider text-secondary-700 dark:text-neutral-300 sm:text-sm">
             <span className="sm:hidden">{label.charAt(0)}</span>
             <span className="hidden sm:inline">{label}</span>
           </div>
@@ -351,101 +612,188 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 relative">
+      <div className="relative grid grid-cols-7">
         {calendarCells.map((cell, idx) => {
           if (cell.isOtherMonth) {
             return (
-              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[80px] sm:min-h-[100px] border-b border-r border-neutral-100 dark:border-neutral-700/50 bg-neutral-25 dark:bg-neutral-800/50">
-                <span className="text-xs sm:text-sm text-neutral-300 dark:text-neutral-600">{cell.day}</span>
+              <div key={`other-${idx}`} className="min-h-[72px] border-b border-r border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-1 opacity-40 overflow-hidden sm:p-1.5 md:min-h-0 md:aspect-square">
+                <span className="text-xs text-secondary-700 dark:text-neutral-300 sm:text-sm">{cell.day}</span>
               </div>
             );
           }
 
-          const status = getDayStatus(cell.dateStr);
-          const isSelected = cell.dateStr === selectedDate;
+          const slotInfo = daySlots[cell.dateStr] || {
+            isUnscheduled: true,
+            morningAllowed: 0,
+            afternoonAllowed: 0,
+            morningBooked: 0,
+            afternoonBooked: 0,
+          };
+
+          const isPastDate = cell.dateStr < todayStr;
+          const isSelected = cell.dateStr === selectedDate || inlineEditor?.dateStr === cell.dateStr;
           const isToday = cell.dateStr === todayStr;
-          const isAvailable = status !== 'closed' && status !== 'none';
-          const isInteractive = status !== 'none'; // Staff can interact with all non-empty dates
-          const slotInfo = bookedSlots[cell.dateStr];
-          const fillRatio = getFillRatio(cell.dateStr);
+          const showBadgeCounts = !slotInfo.isUnscheduled;
+          const canOpen = !isPastDate;
+          const utilization = getDayUtilization(slotInfo);
+          const dayStatus = getDayStatus(slotInfo);
+
+          const statusBackgroundClass = {
+            open: 'bg-emerald-50/90 dark:bg-emerald-900/25',
+            filling: 'bg-amber-50/90 dark:bg-amber-900/30',
+            disabled: 'bg-amber-50/95 dark:bg-amber-900/30',
+            full: 'bg-rose-50/90 dark:bg-rose-900/30',
+            event: 'bg-sky-50/90 dark:bg-sky-900/30',
+            custom: 'bg-violet-50/90 dark:bg-violet-900/40',
+            none: 'bg-neutral-100/90 dark:bg-neutral-700/50',
+          }[dayStatus];
+
+          const statusHoverClass = {
+            open: 'hover:bg-emerald-100 dark:hover:bg-emerald-900/40',
+            filling: 'hover:bg-amber-100 dark:hover:bg-amber-900/30',
+            disabled: 'hover:bg-amber-100 dark:hover:bg-amber-900/40',
+            full: 'hover:bg-rose-100 dark:hover:bg-rose-900/30',
+            event: 'hover:bg-sky-100 dark:hover:bg-sky-900/30',
+            custom: 'hover:bg-violet-100 dark:hover:bg-violet-900/40',
+            none: 'hover:bg-neutral-200 dark:hover:bg-neutral-700/70',
+          }[dayStatus];
+
+          const statusDotClass = {
+            open: 'bg-emerald-400',
+            filling: 'bg-amber-400',
+            disabled: 'bg-orange-400',
+            full: 'bg-rose-400',
+            event: 'bg-sky-400',
+            custom: 'bg-violet-400',
+            none: '',
+          }[dayStatus];
+
+          const statusTitle = {
+            open: 'Open',
+            filling: 'Filling (>70%)',
+            disabled: 'Disabled',
+            full: 'Full/blocked',
+            event: 'Event override',
+            custom: 'Custom date',
+            none: 'Not scheduled',
+          }[dayStatus];
+
+          const dayNumberColorClass = dayStatus === 'custom'
+            ? 'text-violet-500 dark:text-violet-300'
+            : dayStatus === 'open'
+              ? 'text-emerald-500 dark:text-emerald-300'
+              : dayStatus === 'filling'
+                ? 'text-amber-600 dark:text-amber-300'
+                  : dayStatus === 'disabled'
+                    ? 'text-orange-600 dark:text-orange-300'
+                : dayStatus === 'full'
+                  ? 'text-rose-600 dark:text-rose-300'
+                  : dayStatus === 'event'
+                    ? 'text-sky-600 dark:text-sky-300'
+                    : 'text-secondary-700 dark:text-neutral-300';
+
+          const barFillPercent = utilization.booked > 0
+            ? Math.max(Math.round(utilization.ratio * 100), 4)
+            : 0;
+
+          const barColorClass = utilization.ratio >= 1
+            ? 'bg-rose-500'
+            : utilization.ratio >= 0.7
+              ? 'bg-amber-500'
+              : dayStatus === 'disabled'
+                ? 'bg-orange-500'
+              : dayStatus === 'custom'
+                ? 'bg-violet-500'
+                : dayStatus === 'event'
+                  ? 'bg-sky-500'
+                  : 'bg-emerald-500';
 
           return (
             <div
               key={cell.dateStr}
-              onClick={() => onSelectDate(cell.dateStr, isInteractive)}
-              className={`p-1 sm:p-1.5 min-h-[80px] sm:min-h-[100px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative group ${
-                isSelected
-                  ? 'ring-2 ring-primary-500 ring-inset bg-primary-50/80 dark:bg-primary-900/20'
-                  : statusColors[status]
-              }`}
+              ref={(node) => {
+                if (node) {
+                  cellRefs.current[cell.dateStr] = node;
+                } else {
+                  delete cellRefs.current[cell.dateStr];
+                }
+              }}
+              onClick={() => {
+                if (!canOpen) return;
+                openActionMenu(cell.dateStr);
+              }}
+              className={`group relative min-h-[72px] border-b border-r border-neutral-200 dark:border-neutral-700 px-1.5 pt-1 pb-3 transition-colors overflow-hidden sm:px-2 sm:pt-1.5 sm:pb-3 md:min-h-0 md:aspect-square ${
+                canOpen ? `cursor-pointer ${statusHoverClass}` : 'cursor-not-allowed'
+              } ${isSelected ? 'ring-2 ring-inset ring-primary-500' : ''} ${
+                statusBackgroundClass
+              } ${isPastDate ? 'opacity-50 saturate-50' : ''}`}
             >
-              {/* Date number row */}
-              <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-sm sm:text-base font-bold leading-none ${
-                  isToday
-                    ? 'bg-primary-500 text-white w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center'
-                    : isSelected
-                      ? 'text-primary-700 dark:text-primary-400'
-                      : ''
-                }`}>
+              <div className="mb-0.5 flex items-start justify-between">
+                <span
+                  className={`text-sm font-bold leading-none sm:text-base ${
+                    isToday
+                      ? 'rounded-md border border-amber-300 dark:border-amber-700 bg-white dark:bg-neutral-800 px-1.5 py-0.5 text-amber-700 dark:text-amber-300'
+                      : dayNumberColorClass
+                  }`}
+                >
                   {cell.day}
                 </span>
-                <div className="flex items-center gap-0.5">
-                  {slotInfo?.isSlotCustomDate && (
-                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-violet-500" title="Custom date" />
-                  )}
-                  {slotInfo?.isCustomDate && !slotInfo?.isSlotCustomDate && (
-                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-fuchsia-400" title="Modified slots" />
-                  )}
-                  {statusDots[status] && !slotInfo?.isCustomDate && (
-                    <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${statusDots[status]}`} />
+
+                <div className="flex items-center gap-1">
+                  {dayStatus !== 'none' && (
+                    <span className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} title={statusTitle} />
                   )}
                 </div>
               </div>
 
-              {/* Morning/Afternoon counts - compact chips */}
-              {status !== 'closed' && status !== 'none' && slotInfo && !slotInfo.isSuspended && (
-                <div className="flex items-center gap-1 mt-1">
-                  {/* Morning chip */}
+              {showBadgeCounts && (
+                <div className="mt-0.5 flex flex-col gap-0.5">
                   <button
-                    onClick={(e) => handleSessionClick(e, cell.dateStr, 'morning')}
-                    className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 sm:py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/25 border border-amber-300 dark:border-amber-700/50 hover:border-amber-400 dark:hover:border-amber-600 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 transition-all group/btn shadow-xs"
-                    title="Click to edit morning limit"
+                    type="button"
+                    onClick={(e) => {
+                      if (!canOpen) return;
+                      handleSessionBadgeClick(e, cell.dateStr, 'morning');
+                    }}
+                    className="flex w-full items-center justify-center gap-1 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                    title="Edit morning slots"
                   >
-                    <Sun className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                    <span className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-300 group-hover/btn:text-amber-700 dark:group-hover/btn:text-amber-200 tabular-nums">
-                      {slotInfo.morningBooked}/{slotInfo.morningAllowed}
-                    </span>
+                    <Sun className="h-3.5 w-3.5" />
+                    <span className="tabular-nums">{`${slotInfo.morningBooked}/${slotInfo.morningAllowed}`}</span>
                   </button>
-                  {/* Afternoon chip */}
+
                   <button
-                    onClick={(e) => handleSessionClick(e, cell.dateStr, 'afternoon')}
-                    className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 sm:py-1.5 rounded-lg bg-sky-50 dark:bg-sky-900/25 border border-sky-300 dark:border-sky-700/50 hover:border-sky-400 dark:hover:border-sky-600 hover:bg-sky-100/60 dark:hover:bg-sky-900/40 transition-all group/btn shadow-xs"
-                    title="Click to edit afternoon limit"
+                    type="button"
+                    onClick={(e) => {
+                      if (!canOpen) return;
+                      handleSessionBadgeClick(e, cell.dateStr, 'afternoon');
+                    }}
+                    className="flex w-full items-center justify-center gap-1 rounded-md border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-900/20 px-1.5 py-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 transition-colors hover:bg-sky-100 dark:hover:bg-sky-900/30"
+                    title="Edit afternoon slots"
                   >
-                    <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-sky-600 dark:text-sky-400 flex-shrink-0" />
-                    <span className="text-xs sm:text-sm font-bold text-sky-900 dark:text-sky-300 group-hover/btn:text-sky-700 dark:group-hover/btn:text-sky-200 tabular-nums">
-                      {slotInfo.afternoonBooked}/{slotInfo.afternoonAllowed}
-                    </span>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="tabular-nums">{`${slotInfo.afternoonBooked}/${slotInfo.afternoonAllowed}`}</span>
                   </button>
                 </div>
               )}
 
-              {slotInfo?.isSuspended && (
-                <p className="text-xs sm:text-xs text-rose-500 dark:text-rose-400 mt-1 font-semibold">Suspended</p>
+              {slotInfo.isSuspended && (
+                <div className="mt-0.5 flex items-center justify-center gap-1 rounded-md bg-rose-50 dark:bg-rose-900/20 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300">
+                  <AlertTriangle className="h-3 w-3" />
+                  Suspended
+                </div>
               )}
+
               {slotInfo?.event && !slotInfo?.isSuspended && (
-                <p className="text-xs sm:text-xs text-sky-600 dark:text-sky-400 mt-0.5 truncate hidden sm:block font-medium">
+                <p className="mt-0.5 truncate text-center text-[10px] font-medium text-sky-700 dark:text-sky-300">
                   {slotInfo.event.name}
                 </p>
               )}
 
-              {/* Capacity utilization bar */}
-              {isAvailable && slotInfo && !slotInfo.isSuspended && (
-                <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-neutral-100 dark:bg-neutral-700">
+              {!slotInfo.isUnscheduled && utilization.capacity > 0 && (
+                <div className="absolute bottom-0 left-0 right-0 h-[4px] bg-neutral-300/50 dark:bg-neutral-700/70">
                   <div
-                    className={`h-full transition-all duration-300 ${getFillBarColor(fillRatio)}`}
-                    style={{ width: `${Math.max(fillRatio * 100, fillRatio > 0 ? 4 : 0)}%` }}
+                    className={`h-full transition-all ${barColorClass}`}
+                    style={{ width: `${barFillPercent}%` }}
                   />
                 </div>
               )}
@@ -453,97 +801,167 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
           );
         })}
 
-        {/* Inline Edit Popup */}
-        {editPopup && (
+        {inlineEditor && (
           <div
             ref={popupRef}
-            className="fixed z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-2xl p-3.5 min-w-[200px]"
+            className={`fixed z-50 max-w-[calc(100vw-24px)] rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-2 ${inlineEditor.mode === 'slots' ? 'w-[304px]' : 'w-[286px]'}`}
             style={{
-              left: `${editPopup.x}px`,
-              top: `${editPopup.y}px`,
-              transform: 'translateX(-50%)',
+              left: `${dropdownPos.left}px`,
+              top: `${dropdownPos.top}px`,
             }}
           >
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  editPopup.session === 'morning'
-                    ? 'bg-amber-100 dark:bg-amber-900/40'
-                    : 'bg-sky-100 dark:bg-sky-900/40'
-                }`}>
-                  {editPopup.session === 'morning' ? (
-                    <Sun className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            {(() => {
+              const info = daySlots[inlineEditor.dateStr] || { isUnscheduled: true };
+              const subtitle = getSubtitle(info);
+              const isCustom = info.isSlotCustomDate;
+              const isDisabled = !info.isUnscheduled && (info.morningAllowed ?? 0) === 0 && (info.afternoonAllowed ?? 0) === 0;
+              const isDisabledRegular = isDisabled && !isCustom;
+              const isSlotMode = inlineEditor.mode === 'slots';
+
+              return (
+                <>
+                  <div className="mb-1 flex items-start justify-between">
+                    <div className="flex flex-col" style={{ gap: '3px' }}>
+                      <p className="m-0 text-sm font-bold leading-[1.2] text-secondary-700 dark:text-neutral-300">{formatDateLabel(inlineEditor.dateStr)}</p>
+                      <p className="m-0 text-xs leading-[1.2] text-secondary-500 dark:text-neutral-400">{subtitle}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeInlineEditor}
+                      className="rounded-md p-0.5 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-secondary-900 dark:hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {isSlotMode ? (
+                    <>
+                      {renderSlotEditor()}
+
+                      {info.isUnscheduled ? (
+                        <div className="mt-2 grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInlineEditor((prev) => prev ? { ...prev, mode: 'actions', focusSlot: null } : prev);
+                              updateDropdownPosition(inlineEditor.dateStr, info, 'actions');
+                            }}
+                            disabled={saving}
+                            className="rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-sm font-semibold text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50"
+                          >
+                            Back
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveNewCustomDate}
+                            disabled={saving}
+                            className="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-50"
+                          >
+                            {saving ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleSaveExistingDate}
+                          disabled={saving}
+                          className="mt-2 w-full rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-50"
+                        >
+                          {saving ? 'Saving...' : 'Save'}
+                        </button>
+                      )}
+                    </>
+                  ) : info.isUnscheduled ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorDraft({
+                          morningAllowed: slotDefaults?.morning ?? 25,
+                          afternoonAllowed: slotDefaults?.afternoon ?? 25,
+                        });
+                        setInlineEditor((prev) => prev ? { ...prev, mode: 'slots', focusSlot: null } : prev);
+                        updateDropdownPosition(inlineEditor.dateStr, info, 'slots');
+                      }}
+                      className="w-full rounded-lg border border-dashed border-neutral-200 dark:border-neutral-700 px-3 py-2.5 text-sm font-semibold text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                    >
+                      Add custom date
+                    </button>
+                  ) : isCustom ? (
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleDisableCurrentDate}
+                        disabled={saving || isDisabled}
+                        className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                      >
+                        {isDisabled ? 'Disabled' : 'Disable'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteCustomDate}
+                        disabled={saving}
+                        className="rounded-lg border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 text-sm font-semibold text-rose-700 dark:text-rose-300 transition-colors hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-50"
+                      >
+                        {saving ? 'Deleting...' : 'Delete custom date'}
+                      </button>
+                    </div>
                   ) : (
-                    <Clock className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                    <>
+                      {isDisabledRegular ? (
+                        <button
+                          type="button"
+                          onClick={handleReEnableRegularDate}
+                          disabled={saving}
+                          className="w-full rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-300 transition-colors hover:bg-emerald-100 dark:hover:bg-emerald-900/30 disabled:opacity-50"
+                        >
+                          {saving ? 'Applying...' : 'Re-enable date'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleDisableCurrentDate}
+                          disabled={saving}
+                          className="w-full rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                        >
+                          {saving ? 'Applying...' : 'Disable this date'}
+                        </button>
+                      )}
+                    </>
                   )}
-                </div>
-                <div>
-                  <span className="text-sm font-bold text-secondary-800 dark:text-white capitalize block leading-tight">
-                    {editPopup.session} Limit
-                  </span>
-                  <span className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">
-                    {new Date(editPopup.dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => setEditPopup(null)}
-                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
-              >
-                <X className="w-3.5 h-3.5 text-secondary-400" />
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={editValue}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '') { setEditValue(''); return; }
-                  const num = parseInt(val, 10);
-                  if (!isNaN(num) && num >= 0) setEditValue(num);
-                }}
-                onBlur={() => { if (editValue === '' || editValue == null) setEditValue(0); }}
-                className="flex-1 px-3 py-2 text-base font-bold text-center border border-neutral-200 dark:border-neutral-600 rounded-lg bg-neutral-50 dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveSession();
-                  if (e.key === 'Escape') setEditPopup(null);
-                }}
-              />
-              <button
-                onClick={handleSaveSession}
-                disabled={saving}
-                className="px-3.5 py-2 text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-              >
-                {saving ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <Check className="w-3.5 h-3.5" />
-                )}
-                Save
-              </button>
-            </div>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
 
       {/* Legend */}
-      <div className="px-4 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="text-xs font-semibold text-secondary-400 dark:text-neutral-500 uppercase tracking-wider mr-1">Status</span>
-        {[
-          { color: 'bg-emerald-500', label: 'Open' },
-          { color: 'bg-amber-500', label: 'Filling (>70%)' },
-          { color: 'bg-rose-500', label: 'Full' },
-          { color: 'bg-sky-500', label: 'Event' },
-          { color: 'bg-violet-500', label: 'Custom Date' },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${color} ring-1 ring-black/5`} />
-            <span className="text-xs sm:text-xs text-secondary-600 dark:text-neutral-400 font-medium">{label}</span>
-          </div>
-        ))}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-4 py-2.5">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-secondary-700 dark:text-neutral-300">Status</span>
+        <div className="flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          Open
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+          <span className="h-2 w-2 rounded-full bg-amber-500" />
+          Filling (&gt;70%)
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+          <span className="h-2 w-2 rounded-full bg-orange-500" />
+          Disabled
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+          <span className="h-2 w-2 rounded-full bg-rose-500" />
+          Full
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+          <span className="h-2 w-2 rounded-full bg-sky-500" />
+          Event
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+          <span className="h-2 w-2 rounded-full bg-violet-500" />
+          Custom Date
+        </div>
       </div>
     </div>
   );

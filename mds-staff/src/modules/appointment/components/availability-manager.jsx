@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check, X, Trash2, Save, FileText, Trash } from 'lucide-react';
+import { Plus, Minus, Settings, ChevronDown, Sun, Clock, Calendar, MapPin, Users, Check, X, Trash2 } from 'lucide-react';
 
 /**
  * Normalize a date value (string, Date, or number) to YYYY-MM-DD format.
@@ -26,7 +26,6 @@ const normalizeDate = (val) => {
 import AvailabilityCalendar from './availability-calendar';
 import EventModal from './event-modal';
 import WhitelistManager from './whitelist-manager';
-import DaySlotEditor from './day-slot-editor';
 import DateOccupancyModal from './date-occupancy-modal';
 import {
   listAllSchedulers,
@@ -38,7 +37,6 @@ import {
   listAllRequirements,
   updateDateIdentity,
   listWhitelist,
-  getScheduleAvailability,
   getMonthAvailability,
   listCustomDates,
   setCustomDates as setCustomDatesAPI,
@@ -95,8 +93,6 @@ const AvailabilityManager = () => {
 
   // Day slot editor state
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
-  const [dayOverrideData, setDayOverrideData] = useState(null);
-  const [loadingDayData, setLoadingDayData] = useState(false);
 
   // Custom dates state
   const [customDates, setCustomDates] = useState([]);
@@ -113,6 +109,7 @@ const AvailabilityManager = () => {
   // Month availability state (real booking data for calendar)
   const [monthAvailability, setMonthAvailability] = useState({});
   const [currentMonthRange, setCurrentMonthRange] = useState(null); // { startDate, endDate }
+  const [requiredDocsEnabled, setRequiredDocsEnabled] = useState(false);
 
   // Derive slot defaults from the active scheduler (or editForm for immediate reflection)
   const slotDefaults = editForm
@@ -214,24 +211,9 @@ const AvailabilityManager = () => {
     }
   };
 
-  // Handle calendar date selection — read-only, never creates DB rows
+  // Keep selected date in sync for calendar highlight state.
   const handleDateSelect = (dateStr) => {
-    setSelectedCalendarDate(dateStr);
-    if (!activeScheduler?.id || !dateStr) {
-      setDayOverrideData(null);
-      return;
-    }
-
-    // For closed dates: show the "Add as custom date" prompt
-    if (!isDateAvailable(dateStr)) {
-      setDayOverrideData(null);
-      return;
-    }
-
-    // Use already-loaded monthAvailability data (no API call = no ScheduleDateEntity creation)
-    // For dates without an entity yet, dayOverrideData stays null and DaySlotEditor
-    // falls back to scheduler defaults.
-    setDayOverrideData(monthAvailability[dateStr] || null);
+    setSelectedCalendarDate(dateStr || null);
   };
 
   // Returns true if dateStr is strictly before today (past date)
@@ -242,29 +224,7 @@ const AvailabilityManager = () => {
     return normalizeDate(dateStr) < todayStr;
   };
 
-  // Check if a specific date is available (in schedule or custom dates)
-  const isDateAvailable = (dateStr) => {
-    if (!dateStr || !editForm) return false;
-    const normalized = normalizeDate(dateStr);
-    const d = new Date(normalized + 'T00:00:00');
-    const dayOfWeek = d.getDay();
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayName = dayNames[dayOfWeek];
-
-    // Check if there's an Exclude custom date — blocks even regular schedule days
-    const customDate = customDates.find(cd => normalizeDate(cd.scheduledDate) === normalized);
-    if (customDate?.type === 'Exclude') return false;
-
-    // Check if it's in the regular schedule
-    if (editForm.schedulePerWeek?.includes(dayName)) return true;
-
-    // Check if it's an Include custom date
-    if (customDate?.type === 'Include') return true;
-
-    return false;
-  };
-
-  // Handle adding a date as custom date from DaySlotEditor
+  // Handle adding a date as custom date from the calendar inline dropdown.
   const handleAddCustomDateFromEditor = async (dateStr, morning, afternoon) => {
     if (!activeScheduler?.id) return;
     if (isPastDate(dateStr)) {
@@ -272,14 +232,15 @@ const AvailabilityManager = () => {
       return;
     }
     try {
-      await setCustomDatesAPI(activeScheduler.id, [{ scheduledDate: dateStr }]);
+      await setCustomDatesAPI(activeScheduler.id, [{
+        scheduledDate: dateStr,
+        morningAllowed: morning,
+        afternoonAllowed: afternoon,
+      }]);
       await loadCustomDates(activeScheduler.id);
       // Sync containsCustomDates flag locally
       setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
       setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: true } : s));
-      // Now load the day data
-      const data = await getScheduleAvailability(activeScheduler.id, dateStr);
-      setDayOverrideData(data);
       // Refresh month availability
       if (currentMonthRange) {
         loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
@@ -314,16 +275,18 @@ const AvailabilityManager = () => {
     );
   };
 
-  // Handle saving day override
-  const handleSaveDayOverride = async (input) => {
-    if (!activeScheduler?.id || !selectedCalendarDate) return;
-    if (isPastDate(selectedCalendarDate)) {
+  // Save both slot values for a date from the inline dropdown.
+  const handleSaveDateSlots = async (dateStr, morningAllowed, afternoonAllowed) => {
+    if (!activeScheduler?.id || !dateStr) return;
+    if (isPastDate(dateStr)) {
       setError('Cannot add, create, or change past dates');
       throw new Error('Cannot add, create, or change past dates');
     }
     try {
-      const updated = await updateDateIdentity(activeScheduler.id, selectedCalendarDate, input);
-      setDayOverrideData(updated);
+      await updateDateIdentity(activeScheduler.id, dateStr, {
+        morningAllowed,
+        afternoonAllowed,
+      });
       // Refresh month availability to update calendar view
       if (currentMonthRange) {
         loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
@@ -334,44 +297,6 @@ const AvailabilityManager = () => {
     }
   };
 
-  // Handle editing session limit from calendar inline popup
-  const handleEditSessionLimit = async (dateStr, session, value) => {
-    if (!activeScheduler?.id) return;
-    if (isPastDate(dateStr)) {
-      setError('Cannot add, create, or change past dates');
-      throw new Error('Cannot add, create, or change past dates');
-    }
-    try {
-      const input = session === 'morning'
-        ? { morningAllowed: value }
-        : { afternoonAllowed: value };
-      const result = await updateDateIdentity(activeScheduler.id, dateStr, input);
-      // Update the day slot editor if this is the currently selected date
-      if (dateStr === selectedCalendarDate) {
-        setDayOverrideData(result);
-      }
-      // Refresh month availability to update calendar view
-      if (currentMonthRange) {
-        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to update session limit');
-      throw err;
-    }
-  };
-
-  // Core helper: execute a disable/remove action, optionally after pre-cancelling bookings
-  const _doDisableDate = async (dateStr) => {
-    const result = await updateDateIdentity(activeScheduler.id, dateStr, {
-      morningAllowed: 0,
-      afternoonAllowed: 0,
-    });
-    setDayOverrideData(result);
-    if (currentMonthRange) {
-      loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-    }
-  };
-
   const _doUnsetCustomDate = async (normalized) => {
     await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
     const remaining = await listCustomDates(activeScheduler.id, 0, 1);
@@ -379,7 +304,6 @@ const AvailabilityManager = () => {
     setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
     setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
     setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
-    setDayOverrideData(null);
     if (currentMonthRange) {
       loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
     }
@@ -399,63 +323,13 @@ const AvailabilityManager = () => {
     }
   };
 
-  // Handle disabling a date (set both sessions to 0)
-  const handleDisableDate = async (dateStr) => {
-    if (!activeScheduler?.id || !dateStr) return;
-    if (isPastDate(dateStr)) {
-      setError('Cannot add, create, or change past dates');
-      return;
-    }
-    await _withOccupancyCheck(
-      dateStr,
-      'Disable this date',
-      async () => {
-        try {
-          await _doDisableDate(dateStr);
-        } catch (err) {
-          setError(err.message || 'Failed to disable date');
-        }
-      },
-      async () => {
-        try {
-          await cancelDateAppointments(activeScheduler.id, dateStr);
-          await _doDisableDate(dateStr);
-        } catch (err) {
-          setError(err.message || 'Failed to cancel appointments and disable date');
-        }
-      },
-    );
-  };
-
-  // Handle re-enabling a disabled date (reset to scheduler defaults)
-  const handleResetDate = async (dateStr) => {
-    if (!activeScheduler?.id || !dateStr) return;
-    if (isPastDate(dateStr)) {
-      setError('Cannot add, create, or change past dates');
-      return;
-    }
-    try {
-      const result = await updateDateIdentity(activeScheduler.id, dateStr, {
-        morningAllowed: activeScheduler.morningAllowed,
-        afternoonAllowed: activeScheduler.afternoonAllowed,
-      });
-      setDayOverrideData(result);
-      if (currentMonthRange) {
-        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to reset date');
-    }
-  };
-
   const handleSelectScheduler = (sched) => {
     setActiveScheduler(sched);
     setEditForm({ ...sched });
     setIsCreatingNew(false);
     setShowDropdown(false);
-    // Clear day slot editor state
+    // Clear selected calendar state
     setSelectedCalendarDate(null);
-    setDayOverrideData(null);
     // Immediately clear stale data from previous scheduler so calendar shows clean state
     setMonthAvailability({});
     setCustomDates([]);
@@ -471,13 +345,13 @@ const AvailabilityManager = () => {
       morningAllowed: '',
       afternoonAllowed: '',
     });
+    setRequiredDocsEnabled(false);
   };
 
   const handleCreateNew = () => {
     setIsCreatingNew(true);
-    // Clear day slot editor state
+    // Clear selected calendar state
     setSelectedCalendarDate(null);
-    setDayOverrideData(null);
     // Clear custom dates state
     setCustomDates([]);
     setShowCustomDatePicker(false);
@@ -501,6 +375,7 @@ const AvailabilityManager = () => {
     setRequirements([]);
     setPendingRequirements([]);
     setRequirementForm({ label: '', isActive: true });
+    setRequiredDocsEnabled(false);
     setShowDropdown(false);
   };
 
@@ -560,6 +435,44 @@ const AvailabilityManager = () => {
       afternoonAllowed: '',
     });
     setShowCustomDatePicker(false);
+  };
+
+  const getCustomInputValue = (field, fallback = 25) => {
+    const raw = customDateInput[field];
+    if (raw === '' || raw == null) return fallback;
+    const parsed = parseInt(raw, 10);
+    if (isNaN(parsed) || parsed < 0) return fallback;
+    return parsed;
+  };
+
+  const stepCustomInputValue = (field, delta, fallback = 25) => {
+    setCustomDateInput((prev) => {
+      const raw = prev[field];
+      const parsed = raw === '' || raw == null ? fallback : parseInt(raw, 10) || 0;
+      return {
+        ...prev,
+        [field]: Math.max(0, parsed + delta),
+      };
+    });
+  };
+
+  const toggleCustomDatePicker = () => {
+    if (showCustomDatePicker) {
+      setShowCustomDatePicker(false);
+      setCustomDateInput({
+        scheduledDate: '',
+        morningAllowed: '',
+        afternoonAllowed: '',
+      });
+      return;
+    }
+
+    setShowCustomDatePicker(true);
+    setCustomDateInput((prev) => ({
+      ...prev,
+      morningAllowed: prev.morningAllowed === '' ? 25 : prev.morningAllowed,
+      afternoonAllowed: prev.afternoonAllowed === '' ? 25 : prev.afternoonAllowed,
+    }));
   };
 
   // Handle removing a custom date
@@ -742,11 +655,14 @@ const AvailabilityManager = () => {
   const loadRequirements = useCallback(async (schedulerId) => {
     if (!schedulerId) {
       setRequirements([]);
+      setRequiredDocsEnabled(false);
       return;
     }
     try {
       const reqs = await listAllRequirements(schedulerId, 0, 50);
-      setRequirements(reqs || []);
+      const entries = reqs || [];
+      setRequirements(entries);
+      setRequiredDocsEnabled(entries.length > 0);
     } catch (err) {
       console.error('Failed to load requirements:', err);
     }
@@ -761,6 +677,7 @@ const AvailabilityManager = () => {
 
     try {
       setRequirementSaving(true);
+      setRequiredDocsEnabled(true);
 
       if (isCreatingNew) {
         // Add to pending requirements (will be saved when scheduler is created)
@@ -828,24 +745,24 @@ const AvailabilityManager = () => {
         <div className="relative">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
-            className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors shadow-sm min-w-[180px] max-w-[280px]"
+            className="flex min-w-[140px] max-w-[240px] items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-2 py-1.5 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700"
           >
             {activeScheduler ? (
               <>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${activeScheduler.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
-                <span className="text-base font-medium text-secondary-900 dark:text-white truncate">
+                <span className="truncate text-sm font-medium text-secondary-700 dark:text-neutral-300">
                   {activeScheduler.label}
                 </span>
               </>
             ) : (
-              <span className="text-base text-secondary-500 dark:text-neutral-400">Select scheduler...</span>
+              <span className="text-sm text-secondary-700 dark:text-neutral-300">Select scheduler...</span>
             )}
-            <ChevronDown className={`w-4 h-4 text-secondary-400 ml-auto transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`ml-auto h-3.5 w-3.5 text-secondary-700 dark:text-neutral-300 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
           </button>
 
           {/* Dropdown Menu - Longer to show more schedulers */}
           {showDropdown && (
-            <div className="absolute z-30 top-full left-0 mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl min-w-[280px] max-h-[400px] overflow-y-auto">
+            <div className="absolute left-0 top-full z-30 mt-1 max-h-[400px] min-w-[280px] overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
               {schedulers.length > 0 ? (
                 schedulers.map((sched) => {
                   const isSelected = activeScheduler?.id === sched.id;
@@ -853,14 +770,14 @@ const AvailabilityManager = () => {
                     <button
                       key={sched.id}
                       onClick={() => handleSelectScheduler(sched)}
-                      className={`w-full px-3 py-2.5 flex items-center gap-2.5 text-left hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors ${
+                      className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
                         isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : ''
                       }`}
                     >
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sched.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-base font-medium truncate ${isSelected ? 'text-primary-700 dark:text-primary-400' : 'text-secondary-800 dark:text-white'}`}>
+                          <span className={`truncate text-base font-medium ${isSelected ? 'text-primary-600 dark:text-primary-400' : 'text-secondary-700 dark:text-neutral-300'}`}>
                             {sched.label}
                           </span>
                           {sched.patientType && (
@@ -873,16 +790,16 @@ const AvailabilityManager = () => {
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
+                        <p className="mt-0.5 text-xs text-secondary-700 dark:text-neutral-300">
                           {sched.location} • AM {sched.morningAllowed} • PM {sched.afternoonAllowed}
                         </p>
                       </div>
-                      {isSelected && <Check className="w-4 h-4 text-primary-500 flex-shrink-0" />}
+                      {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-primary-600 dark:text-primary-400" />}
                     </button>
                   );
                 })
               ) : (
-                <div className="px-3 py-4 text-center text-base text-secondary-500 dark:text-neutral-400">
+                <div className="px-3 py-4 text-center text-base text-secondary-700 dark:text-neutral-300">
                   No schedulers yet
                 </div>
               )}
@@ -893,22 +810,22 @@ const AvailabilityManager = () => {
         {/* Create New Scheduler Button - Always visible */}
         <button
           onClick={handleCreateNew}
-          className="flex items-center gap-2 px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white text-base font-medium rounded-lg transition-colors shadow-sm"
+          className="flex items-center gap-1.5 rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-500 px-2 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-600"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">New Scheduler</span>
         </button>
       </div>
 
       {/* No Scheduler State */}
       {!activeScheduler && schedulers.length === 0 && !isCreatingNew && (
-        <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 text-center">
-          <Calendar className="w-12 h-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" />
-          <h3 className="text-xl font-semibold text-secondary-700 dark:text-neutral-300 mb-2">No Schedulers</h3>
-          <p className="text-base text-secondary-500 dark:text-neutral-400 mb-4">Create a scheduler to start managing appointments</p>
+        <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-8 text-center">
+          <Calendar className="mx-auto mb-3 h-12 w-12 text-secondary-700 dark:text-neutral-300" />
+          <h3 className="mb-2 text-xl font-semibold text-secondary-700 dark:text-neutral-300">No Schedulers</h3>
+          <p className="mb-4 text-base text-secondary-700 dark:text-neutral-300">Create a scheduler to start managing appointments</p>
           <button
             onClick={handleCreateNew}
-            className="px-4 py-2 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+            className="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-500 px-4 py-2 text-base font-medium text-white transition-colors hover:bg-primary-600"
           >
             Create Scheduler
           </button>
@@ -917,28 +834,9 @@ const AvailabilityManager = () => {
 
       {/* Main Content: Calendar (Left) + Settings Panel (Right) */}
       {(activeScheduler || isCreatingNew) && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Calendar Panel - 2/3 width */}
-          <div className="lg:col-span-8 flex flex-col gap-3">
-            {/* Day Slot Editor - Above calendar */}
-            {!isCreatingNew && activeScheduler && (
-              <DaySlotEditor
-                selectedDate={selectedCalendarDate}
-                scheduler={activeScheduler}
-                dayOverride={dayOverrideData}
-                onSave={handleSaveDayOverride}
-                loading={loadingDayData}
-                events={events}
-                customDates={customDates}
-                isDateAvailable={selectedCalendarDate ? isDateAvailable(selectedCalendarDate) : false}
-                onAddCustomDate={handleAddCustomDateFromEditor}
-                onRemoveCustomDate={handleRemoveCustomDateFromEditor}
-                onDisableDate={handleDisableDate}
-                onResetDate={handleResetDate}
-              />
-            )}
-
-            {/* Calendar */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* Calendar + Custom Dates */}
+          <div className="flex flex-col gap-3 lg:col-span-8">
             <div className="flex-1">
               {!isCreatingNew && activeScheduler ? (
                 <AvailabilityCalendar
@@ -949,528 +847,524 @@ const AvailabilityManager = () => {
                   activeScheduler={activeScheduler}
                   editForm={editForm}
                   customDates={customDates}
-                  onEditSessionLimit={handleEditSessionLimit}
                   monthAvailability={monthAvailability}
                   onMonthChange={handleMonthChange}
-                  allowSelectClosed={true}
+                  onSaveDateSlots={handleSaveDateSlots}
+                  onAddCustomDate={handleAddCustomDateFromEditor}
+                  onRemoveCustomDate={handleRemoveCustomDateFromEditor}
                 />
               ) : (
-                <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 text-center text-secondary-500 dark:text-neutral-400">
-                  <Calendar className="w-10 h-10 mx-auto mb-3 text-neutral-300 dark:text-neutral-600" />
+                <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-8 text-center text-secondary-700 dark:text-neutral-300">
+                  <Calendar className="mx-auto mb-3 h-10 w-10 text-secondary-700 dark:text-neutral-300" />
                   <p className="text-base">Save the scheduler to view calendar</p>
                 </div>
               )}
             </div>
+
+            {!isCreatingNew && activeScheduler?.id && (
+              <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3.5">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div className="flex flex-col" style={{ gap: '3px' }}>
+                    <h4 className="m-0 text-base font-semibold leading-[1.2] text-secondary-700 dark:text-neutral-300">Custom Dates</h4>
+                    <p className="m-0 text-xs leading-[1.25] text-secondary-700 dark:text-neutral-300">
+                      Set slot counts per date. Both AM &amp; PM at 0 = Excluded (blocked).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleCustomDatePicker}
+                    className="rounded-md border border-primary-200 dark:border-primary-800 px-2.5 py-0.5 text-sm font-semibold text-primary-600 dark:text-primary-400 transition-colors hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                  >
+                    {showCustomDatePicker ? 'Close' : '+ Add Date'}
+                  </button>
+                </div>
+
+                {showCustomDatePicker && (
+                  <div className="mb-2.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-2.5">
+                    <div className="mb-1.5">
+                      <label className="mb-0.5 block text-xs font-semibold uppercase tracking-wider text-secondary-700 dark:text-neutral-300">Date</label>
+                      <input
+                        type="date"
+                        min={(() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })()}
+                        value={customDateInput.scheduledDate}
+                        onChange={(e) => setCustomDateInput({ ...customDateInput, scheduledDate: e.target.value })}
+                        className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-sm text-secondary-700 dark:text-neutral-300 outline-none focus:border-primary-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 p-2">
+                        <p className="mb-1 flex items-center gap-1 text-xs font-semibold leading-[1.2] text-amber-700 dark:text-amber-300">
+                          <Sun className="h-3.5 w-3.5" /> Morning
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => stepCustomInputValue('morningAllowed', -1, 25)}
+                            className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 p-0.5 text-secondary-700 dark:text-neutral-300"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={customDateInput.morningAllowed}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') { setCustomDateInput({ ...customDateInput, morningAllowed: '' }); return; }
+                              const num = parseInt(val, 10);
+                              if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, morningAllowed: num });
+                            }}
+                            onBlur={() => {
+                              if (customDateInput.morningAllowed === '' || customDateInput.morningAllowed == null) {
+                                setCustomDateInput({ ...customDateInput, morningAllowed: 25 });
+                              }
+                            }}
+                            className="h-7 flex-1 rounded-md border border-amber-300 dark:border-amber-700 bg-white/90 dark:bg-neutral-800 px-2 text-center text-sm font-semibold text-secondary-900 dark:text-white outline-none focus:border-primary-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => stepCustomInputValue('morningAllowed', 1, 25)}
+                            className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 p-0.5 text-secondary-700 dark:text-neutral-300"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50/80 dark:bg-sky-900/30 p-2">
+                        <p className="mb-1 flex items-center gap-1 text-xs font-semibold leading-[1.2] text-sky-700 dark:text-sky-300">
+                          <Clock className="h-3.5 w-3.5" /> Afternoon
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => stepCustomInputValue('afternoonAllowed', -1, 25)}
+                            className="rounded-md border border-sky-300 dark:border-sky-700 bg-sky-50/80 dark:bg-sky-900/30 p-0.5 text-secondary-700 dark:text-neutral-300"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={customDateInput.afternoonAllowed}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') { setCustomDateInput({ ...customDateInput, afternoonAllowed: '' }); return; }
+                              const num = parseInt(val, 10);
+                              if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, afternoonAllowed: num });
+                            }}
+                            onBlur={() => {
+                              if (customDateInput.afternoonAllowed === '' || customDateInput.afternoonAllowed == null) {
+                                setCustomDateInput({ ...customDateInput, afternoonAllowed: 25 });
+                              }
+                            }}
+                            className="h-7 flex-1 rounded-md border border-sky-300 dark:border-sky-700 bg-white/90 dark:bg-neutral-800 px-2 text-center text-sm font-semibold text-secondary-900 dark:text-white outline-none focus:border-primary-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => stepCustomInputValue('afternoonAllowed', 1, 25)}
+                            className="rounded-md border border-sky-300 dark:border-sky-700 bg-sky-50/80 dark:bg-sky-900/30 p-0.5 text-secondary-700 dark:text-neutral-300"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const m = getCustomInputValue('morningAllowed', 25);
+                      const a = getCustomInputValue('afternoonAllowed', 25);
+                      const isExclude = m === 0 && a === 0;
+                      return (
+                        <p className={`mt-1.5 rounded-md px-2 py-0.5 text-center text-xs font-semibold leading-[1.2] ${
+                          isExclude
+                            ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                            : 'bg-white dark:bg-neutral-800 text-secondary-700 dark:text-neutral-300'
+                        }`}>
+                          {isExclude ? 'Will be Excluded (blocked)' : 'Will be Included (open)'}
+                        </p>
+                      );
+                    })()}
+
+                    {customDateInput.scheduledDate && isPastDate(customDateInput.scheduledDate) && (
+                      <p className="mt-1.5 text-center text-xs font-semibold leading-[1.2] text-rose-700 dark:text-rose-300">
+                        Cannot add, create, or change past dates
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleAddCustomDate}
+                      disabled={!customDateInput.scheduledDate || saving || isPastDate(customDateInput.scheduledDate)}
+                      className="mt-1.5 w-full rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      + Add Custom Date
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleCustomDatePicker}
+                      className="mt-1 w-full text-xs font-medium text-secondary-700 dark:text-neutral-300 hover:text-secondary-900 dark:hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {customDates.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {customDates.map((cd) => {
+                      const normalized = normalizeDate(cd.scheduledDate);
+                      const dateObj = normalized ? new Date(`${normalized}T00:00:00`) : null;
+                      const dateLabel = dateObj && !isNaN(dateObj.getTime())
+                        ? dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                        : normalized || 'Unknown';
+                      const isPast = isPastDate(normalized);
+                      const isOpen = !isPast && cd.type !== 'Exclude';
+                      const mSlots = cd.morningAllowed ?? 0;
+                      const aSlots = cd.afternoonAllowed ?? 0;
+
+                      return (
+                        <div
+                          key={cd.id || normalized}
+                          className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                            isPast
+                              ? 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 opacity-60'
+                              : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${isOpen ? 'bg-sky-50 dark:bg-sky-900/20' : 'bg-rose-50 dark:bg-rose-900/20'}`} />
+                            <span className="truncate font-medium text-secondary-700 dark:text-neutral-300">{dateLabel}</span>
+                            <span className="text-xs text-secondary-700 dark:text-neutral-300">AM {mSlots} / PM {aSlots}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                              isPast
+                                ? 'bg-white dark:bg-neutral-800 text-secondary-700 dark:text-neutral-300'
+                                : isOpen
+                                  ? 'bg-white dark:bg-neutral-800 text-secondary-700 dark:text-neutral-300'
+                                  : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                            }`}>
+                              {isPast ? 'Past' : isOpen ? 'Open' : 'Blocked'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomDate(normalized)}
+                            className="rounded p-1 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-rose-700 dark:hover:text-rose-300"
+                            title="Delete custom date"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm italic leading-[1.25] text-secondary-700 dark:text-neutral-300">No custom dates configured</p>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Settings Panel - 1/3 width */}
+          {/* Settings Panel */}
           <div className="lg:col-span-4">
-            <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-              {/* Panel Header */}
-              <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-secondary-500 dark:text-neutral-400" />
-                  <h3 className="text-base font-semibold text-secondary-800 dark:text-white">
+            <div className="flex h-full flex-col overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800">
+              <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-700 px-4 py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <Settings className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" />
+                  <h3 className="m-0 text-base font-semibold leading-[1.2] text-secondary-700 dark:text-neutral-300">
                     {isCreatingNew ? 'New Scheduler' : 'Scheduler Settings'}
                   </h3>
                 </div>
                 {hasChanges && !isCreatingNew && (
-                  <span className="px-2 py-0.5 text-xs font-medium bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 rounded">
+                  <span className="rounded bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
                     Unsaved changes
                   </span>
                 )}
               </div>
 
-              {/* Edit Form */}
               {editForm && (
-                <div className="p-4 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
-                  {/* Name */}
-                  <div>
-                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
-                      Scheduler Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.label || ''}
-                      onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
-                      placeholder="e.g., General Consultation"
-                      className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  {/* Location & Patient Type */}
-                  <div className="grid grid-cols-2 gap-3">
+                <>
+                  <div className="flex-1 space-y-4 overflow-y-auto p-4">
                     <div>
-                      <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
-                        <MapPin className="w-3.5 h-3.5 inline mr-1.5" />
-                        Location
-                      </label>
-                      <select
-                        value={editForm.location || allowedLocations[0] || 'Arlegui'}
-                        onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                        className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                      >
-                        {allowedLocations.includes('Arlegui') && <option value="Arlegui">Arlegui</option>}
-                        {allowedLocations.includes('Casal') && <option value="Casal">Casal</option>}
-                        {allowedLocations.includes('QuezonCity') && <option value="QuezonCity">Quezon City</option>}
-                      </select>
+                      <label className="mb-1.5 block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Scheduler Name *</label>
+                      <input
+                        type="text"
+                        value={editForm.label || ''}
+                        onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
+                        placeholder="e.g., General Consultation"
+                        className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-secondary-700 dark:text-neutral-300 outline-none placeholder:text-secondary-700 dark:text-neutral-300 focus:border-primary-500"
+                      />
                     </div>
-                    <div>
-                      <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
-                        <Users className="w-3.5 h-3.5 inline mr-1.5" />
-                        Patient Type
-                      </label>
-                      <select
-                        value={editForm.patientType || ''}
-                        onChange={(e) => setEditForm({ ...editForm, patientType: e.target.value || null })}
-                        className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="">All Types</option>
-                        <option value="Student">Student</option>
-                        <option value="Employee">Employee</option>
-                      </select>
-                    </div>
-                  </div>
 
-                  {/* Slots - Compact Horizontal Layout */}
-                  <div>
-                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
-                      Available Slots per Session
-                    </label>
-                    <div className="flex gap-4">
-                      {/* Morning */}
-                      <div className="flex items-center gap-2">
-                        <Sun className="w-4 h-4 text-accent-600 dark:text-accent-400" />
-                        <span className="text-sm font-medium text-secondary-600 dark:text-neutral-400">Morning</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={editForm.morningAllowed}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '') { setEditForm({ ...editForm, morningAllowed: '' }); return; }
-                            const num = parseInt(val, 10);
-                            if (!isNaN(num) && num >= 0) setEditForm({ ...editForm, morningAllowed: num });
-                          }}
-                          onBlur={() => {
-                            if (editForm.morningAllowed === '' || editForm.morningAllowed == null) {
-                              setEditForm({ ...editForm, morningAllowed: 0 });
-                            }
-                          }}
-                          className="w-16 px-2 py-1.5 text-center text-base font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        />
-                      </div>
-                      {/* Afternoon */}
-                      <div className="flex items-center gap-2">
-                        <Moon className="w-4 h-4 text-warning-600 dark:text-warning-400" />
-                        <span className="text-sm font-medium text-secondary-600 dark:text-neutral-400">Afternoon</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={editForm.afternoonAllowed}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '') { setEditForm({ ...editForm, afternoonAllowed: '' }); return; }
-                            const num = parseInt(val, 10);
-                            if (!isNaN(num) && num >= 0) setEditForm({ ...editForm, afternoonAllowed: num });
-                          }}
-                          onBlur={() => {
-                            if (editForm.afternoonAllowed === '' || editForm.afternoonAllowed == null) {
-                              setEditForm({ ...editForm, afternoonAllowed: 0 });
-                            }
-                          }}
-                          className="w-16 px-2 py-1.5 text-center text-base font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Available Days */}
-                  <div>
-                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
-                      Available Days
-                    </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {DAYS.map((day) => {
-                        const isActive = editForm.schedulePerWeek?.includes(day);
-                        const isSunday = day === 'Sunday';
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => toggleDay(day)}
-                            title={isSunday && !isActive ? 'Sunday is disabled by default. Enable it or use Custom Dates below.' : ''}
-                            className={`px-2.5 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                              isActive
-                                ? 'bg-primary-500 text-white shadow-sm'
-                                : isSunday
-                                  ? 'bg-neutral-200 dark:bg-neutral-600 text-neutral-400 dark:text-neutral-500 hover:bg-neutral-300 dark:hover:bg-neutral-500'
-                                  : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-                            }`}
-                          >
-                            {day.slice(0, 3)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1.5">
-                      Sunday is disabled by default. Use Custom Dates for specific Sundays.
-                    </p>
-                  </div>
-
-                  {/* Custom Dates Section */}
-                  {!isCreatingNew && activeScheduler?.id && (
-                    <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-base font-semibold text-secondary-700 dark:text-neutral-300">
-                          <Calendar className="w-4 h-4 inline mr-1" />
-                          Custom Dates
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1.5 block text-sm font-semibold text-secondary-700 dark:text-neutral-300">
+                          <MapPin className="mr-1 inline h-3.5 w-3.5" />
+                          Location
                         </label>
+                        <select
+                          value={editForm.location || allowedLocations[0] || 'Arlegui'}
+                          onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                          className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-secondary-700 dark:text-neutral-300 outline-none focus:border-primary-500"
+                        >
+                          {allowedLocations.includes('Arlegui') && <option value="Arlegui">Arlegui</option>}
+                          {allowedLocations.includes('Casal') && <option value="Casal">Casal</option>}
+                          {allowedLocations.includes('QuezonCity') && <option value="QuezonCity">Quezon City</option>}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-semibold text-secondary-700 dark:text-neutral-300">
+                          <Users className="mr-1 inline h-3.5 w-3.5" />
+                          Patient Type
+                        </label>
+                        <select
+                          value={editForm.patientType || ''}
+                          onChange={(e) => setEditForm({ ...editForm, patientType: e.target.value || null })}
+                          className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-secondary-700 dark:text-neutral-300 outline-none focus:border-primary-500"
+                        >
+                          <option value="">All Types</option>
+                          <option value="Student">Student</option>
+                          <option value="Employee">Employee</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Available Slots per Session</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 p-2">
+                          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                            <Sun className="h-3.5 w-3.5" /> Morning
+                          </p>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editForm.morningAllowed}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') { setEditForm({ ...editForm, morningAllowed: '' }); return; }
+                              const num = parseInt(val, 10);
+                              if (!isNaN(num) && num >= 0) setEditForm({ ...editForm, morningAllowed: num });
+                            }}
+                            onBlur={() => {
+                              if (editForm.morningAllowed === '' || editForm.morningAllowed == null) {
+                                setEditForm({ ...editForm, morningAllowed: 0 });
+                              }
+                            }}
+                            className="w-full rounded-md border border-amber-300 dark:border-amber-700 bg-white/90 dark:bg-neutral-800 px-2 py-1.5 text-center text-sm font-semibold text-secondary-900 dark:text-white outline-none focus:border-primary-500"
+                          />
+                        </div>
+                        <div className="rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50/80 dark:bg-sky-900/30 p-2">
+                          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300">
+                            <Clock className="h-3.5 w-3.5" /> Afternoon
+                          </p>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editForm.afternoonAllowed}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') { setEditForm({ ...editForm, afternoonAllowed: '' }); return; }
+                              const num = parseInt(val, 10);
+                              if (!isNaN(num) && num >= 0) setEditForm({ ...editForm, afternoonAllowed: num });
+                            }}
+                            onBlur={() => {
+                              if (editForm.afternoonAllowed === '' || editForm.afternoonAllowed == null) {
+                                setEditForm({ ...editForm, afternoonAllowed: 0 });
+                              }
+                            }}
+                            className="w-full rounded-md border border-sky-300 dark:border-sky-700 bg-white/90 dark:bg-neutral-800 px-2 py-1.5 text-center text-sm font-semibold text-secondary-900 dark:text-white outline-none focus:border-primary-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Available Days</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {DAYS.map((day) => {
+                          const isActiveDay = editForm.schedulePerWeek?.includes(day);
+                          const isSunday = day === 'Sunday';
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => toggleDay(day)}
+                              title={isSunday && !isActiveDay ? 'Sunday is disabled by default. Enable it or use Custom Dates below.' : ''}
+                              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                                isActiveDay
+                                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                                    : 'bg-white dark:bg-neutral-800 text-secondary-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                              }`}
+                            >
+                              {day.slice(0, 3)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+                        Sunday is disabled by default. Use Custom Dates for specific Sundays.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-2.5">
+                      <label className="flex cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editForm.isActive ?? true}
+                          onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })}
+                          className="mt-0.5 h-4 w-4 rounded border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Active</span>
+                          <span className="block text-xs text-secondary-700 dark:text-neutral-300">Open and accepting appointments</span>
+                        </span>
+                      </label>
+
+                      <label className="flex cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editForm.purposeRequired ?? false}
+                          onChange={(e) => setEditForm({ ...editForm, purposeRequired: e.target.checked })}
+                          className="mt-0.5 h-4 w-4 rounded border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Require Purpose</span>
+                          <span className="block text-xs text-secondary-700 dark:text-neutral-300">Patients must provide a reason for their visit</span>
+                        </span>
+                      </label>
+
+                      <label className="flex cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editForm.whitelistOnly ?? false}
+                          onChange={(e) => setEditForm({ ...editForm, whitelistOnly: e.target.checked })}
+                          className="mt-0.5 h-4 w-4 rounded border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Whitelist Only</span>
+                          <span className="block text-xs text-secondary-700 dark:text-neutral-300">Only whitelisted can see this scheduler</span>
+                        </span>
+                      </label>
+
+                      <label className="flex cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={requiredDocsEnabled}
+                          onChange={(e) => setRequiredDocsEnabled(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Required Documents</span>
+                          <span className="block text-xs text-secondary-700 dark:text-neutral-300">Patients must upload documents before booking</span>
+                        </span>
+                      </label>
+
+                      {editForm.whitelistOnly && !isCreatingNew && activeScheduler?.id && (
                         <button
                           type="button"
-                          onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
-                          className="text-sm text-primary-500 hover:text-primary-600 font-medium"
+                          onClick={() => setShowWhitelistPanel(true)}
+                          className="w-full rounded-lg border border-primary-200 dark:border-primary-800 px-3 py-2 text-sm font-semibold text-primary-600 dark:text-primary-400 transition-colors hover:bg-primary-50 dark:hover:bg-primary-900/20"
                         >
-                          {showCustomDatePicker ? 'Cancel' : '+ Add Date'}
+                          Manage Whitelist ({whitelistCount})
                         </button>
-                      </div>
-                      <p className="text-xs text-secondary-400 dark:text-neutral-500 mb-2">
-                        Set slot counts per date. Both AM &amp; PM at 0 = Excluded (blocked).
-                      </p>
-
-                      {/* Add Custom Date Form */}
-                      {showCustomDatePicker && (
-                        <div className="mb-3 p-3 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg space-y-2">
-                          <input
-                            type="date"
-                            min={(() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })()}
-                            value={customDateInput.scheduledDate}
-                            onChange={(e) => setCustomDateInput({ ...customDateInput, scheduledDate: e.target.value })}
-                            className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                          />
-                          <div className="flex gap-2">
-                            <div className="flex-1">
-                              <label className="text-xs text-secondary-500 dark:text-neutral-400 flex items-center gap-1 mb-1">
-                                <Sun className="w-3 h-3" /> Morning
-                              </label>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder={String(editForm?.morningAllowed ?? 25)}
-                                value={customDateInput.morningAllowed}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === '') { setCustomDateInput({ ...customDateInput, morningAllowed: '' }); return; }
-                                  const num = parseInt(val, 10);
-                                  if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, morningAllowed: num });
-                                }}
-                                className="w-full px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <label className="text-xs text-secondary-500 dark:text-neutral-400 flex items-center gap-1 mb-1">
-                                <Moon className="w-3 h-3" /> Afternoon
-                              </label>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder={String(editForm?.afternoonAllowed ?? 25)}
-                                value={customDateInput.afternoonAllowed}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === '') { setCustomDateInput({ ...customDateInput, afternoonAllowed: '' }); return; }
-                                  const num = parseInt(val, 10);
-                                  if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, afternoonAllowed: num });
-                                }}
-                                className="w-full px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                              />
-                            </div>
-                          </div>
-                          {(() => {
-                            const m = customDateInput.morningAllowed === '' || customDateInput.morningAllowed == null
-                              ? (editForm?.morningAllowed ?? 25) : (parseInt(customDateInput.morningAllowed, 10) || 0);
-                            const a = customDateInput.afternoonAllowed === '' || customDateInput.afternoonAllowed == null
-                              ? (editForm?.afternoonAllowed ?? 25) : (parseInt(customDateInput.afternoonAllowed, 10) || 0);
-                            const isExclude = m === 0 && a === 0;
-                            return (
-                              <div className={`text-xs px-2 py-1 rounded text-center font-medium ${
-                                isExclude
-                                  ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
-                                  : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                              }`}>
-                                {isExclude ? 'Will be Excluded (blocked)' : 'Will be Included (open)'}
-                              </div>
-                            );
-                          })()}
-                          {customDateInput.scheduledDate && isPastDate(customDateInput.scheduledDate) && (
-                            <p className="text-xs text-error-600 dark:text-error-400 text-center font-medium">
-                              Cannot add, create, or change past dates
-                            </p>
-                          )}
-                          <button
-                            type="button"
-                            onClick={handleAddCustomDate}
-                            disabled={!customDateInput.scheduledDate || saving || isPastDate(customDateInput.scheduledDate)}
-                            className="w-full px-3 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 bg-primary-500 hover:bg-primary-600"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add Custom Date
-                          </button>
-                        </div>
                       )}
 
-                      {/* Custom Dates List */}
-                      {customDates.length > 0 ? (
-                        <div className="space-y-1 max-h-40 overflow-y-auto">
-                          {customDates.map((cd) => {
-                            const normalized = normalizeDate(cd.scheduledDate);
-                            const dateObj = normalized ? new Date(normalized + 'T00:00:00') : null;
-                            const dateLabel = dateObj && !isNaN(dateObj.getTime())
-                              ? dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-                              : normalized || 'Unknown';
-                            const isExclude = cd.type === 'Exclude';
-                            const isPast = isPastDate(normalized);
-                            const mSlots = cd.morningAllowed ?? '—';
-                            const aSlots = cd.afternoonAllowed ?? '—';
-                            return (
-                              <div
-                                key={cd.id || normalized}
-                                className={`flex items-center justify-between px-2 py-1.5 rounded text-sm ${
-                                  isPast
-                                    ? 'bg-neutral-50 dark:bg-neutral-700/30 opacity-60'
-                                    : isExclude
-                                      ? 'bg-rose-50 dark:bg-rose-900/20'
-                                      : 'bg-violet-50 dark:bg-violet-900/20'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPast ? 'bg-neutral-400' : isExclude ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                                  <span className={`font-medium truncate ${
-                                    isPast
-                                      ? 'text-neutral-500 dark:text-neutral-400'
-                                      : isExclude
-                                        ? 'text-rose-700 dark:text-rose-400'
-                                        : 'text-violet-700 dark:text-violet-400'
-                                  }`}>
-                                    {dateLabel}
-                                  </span>
-                                  <span className="text-xs text-secondary-500 dark:text-neutral-400 flex-shrink-0">
-                                    AM {mSlots} / PM {aSlots}
-                                  </span>
-                                  {isPast ? (
-                                    <span className="text-xs px-1 py-0.5 rounded flex-shrink-0 bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400">
-                                      Past
-                                    </span>
-                                  ) : (
-                                    <span className={`text-xs px-1 py-0.5 rounded flex-shrink-0 ${
-                                      isExclude
-                                        ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
-                                        : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                                    }`}>
-                                      {isExclude ? 'Blocked' : 'Open'}
-                                    </span>
-                                  )}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveCustomDate(normalized)}
-                                  className="p-1 text-neutral-400 hover:text-error-500 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors flex-shrink-0"
-                                  title="Delete custom date"
+                      {requiredDocsEnabled && (
+                        <div className="space-y-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-2.5">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={requirementForm.label}
+                              onChange={(e) => setRequirementForm({ ...requirementForm, label: e.target.value })}
+                              placeholder="e.g., Medical Certificate"
+                              className="flex-1 rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-2.5 py-1.5 text-sm text-secondary-700 dark:text-neutral-300 outline-none placeholder:text-secondary-700 dark:text-neutral-300 focus:border-primary-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleSaveRequirement}
+                              disabled={requirementSaving || !requirementForm.label.trim()}
+                              className="rounded-md border border-primary-200 dark:border-primary-800 bg-primary-500 px-2.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              + Add
+                            </button>
+                          </div>
+
+                          <div className="max-h-40 space-y-1 overflow-y-auto">
+                            {(isCreatingNew ? pendingRequirements : requirements).length === 0 ? (
+                              <p className="py-2 text-center text-xs text-secondary-700 dark:text-neutral-300">No requirements added yet</p>
+                            ) : (
+                              (isCreatingNew ? pendingRequirements : requirements).map((req) => (
+                                <div
+                                  key={req.label}
+                                  className="flex items-center justify-between rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-2 py-1.5"
                                 >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            );
-                          })}
+                                  <span className="truncate text-sm text-secondary-700 dark:text-neutral-300">{req.label}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRequirement(req.label)}
+                                    disabled={saving}
+                                    className="rounded p-1 text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <p className="text-xs text-secondary-400 dark:text-neutral-500 italic">
-                          No custom dates configured
-                        </p>
                       )}
                     </div>
-                  )}
 
-                  {/* Options */}
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={editForm.isActive ?? true}
-                        onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })}
-                        className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Notes (Optional)</label>
+                      <textarea
+                        value={editForm.notes || ''}
+                        onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                        placeholder="Internal notes about this scheduler..."
+                        rows={3}
+                        className="w-full resize-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-secondary-700 dark:text-neutral-300 outline-none placeholder:text-secondary-700 dark:text-neutral-300 focus:border-primary-500"
                       />
-                      <div>
-                        <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Active</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Open and accepting appointments</p>
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={editForm.purposeRequired ?? false}
-                        onChange={(e) => setEditForm({ ...editForm, purposeRequired: e.target.checked })}
-                        className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Require Purpose</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Patients must provide a reason for their visit</p>
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={editForm.whitelistOnly ?? false}
-                        onChange={(e) => setEditForm({ ...editForm, whitelistOnly: e.target.checked })}
-                        className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Whitelist Only</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted can see this scheduler</p>
-                      </div>
-                    </label>
-                    {/* Manage Whitelist Button */}
-                    {editForm.whitelistOnly && !isCreatingNew && activeScheduler?.id && (
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-neutral-200 dark:border-neutral-700 px-4 py-3">
+                    {!isCreatingNew && editForm?.id ? (
                       <button
-                        type="button"
-                        onClick={() => setShowWhitelistPanel(true)}
-                        className="mt-1 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                        onClick={handleDeleteScheduler}
+                        disabled={saving}
+                        className="rounded-lg border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-300 transition-colors hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-50"
                       >
-                        <Users className="w-3.5 h-3.5" />
-                        Manage Whitelist ({whitelistCount})
+                        Delete
                       </button>
-                    )}
-                  </div>
-
-                  {/* Notes */}
-                  <div>
-                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
-                      Notes (Optional)
-                    </label>
-                    <textarea
-                      value={editForm.notes || ''}
-                      onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                      placeholder="Internal notes about this scheduler..."
-                      rows={2}
-                      className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 resize-none"
-                    />
-                  </div>
-
-                  {/* Requirements Section */}
-                  <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
-                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-3">
-                      <FileText className="w-4 h-4 inline mr-2" />
-                      Required Documents
-                    </label>
-
-                    <>
-                      {/* Add Requirement Form - Inline */}
-                      <div className="mb-3 flex gap-2">
-                        <input
-                          type="text"
-                          value={requirementForm.label}
-                          onChange={(e) => setRequirementForm({ ...requirementForm, label: e.target.value })}
-                          placeholder="e.g., Medical Certificate"
-                          className="flex-1 px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500"
-                        />
-                        <button
-                          onClick={handleSaveRequirement}
-                          disabled={requirementSaving || !requirementForm.label.trim()}
-                          className="flex items-center gap-2 px-3 py-2 text-base bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                          title="Add requirement"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span className="hidden sm:inline">Add</span>
-                        </button>
-                      </div>
-
-                      {/* Requirements List */}
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {(isCreatingNew ? pendingRequirements : requirements).length === 0 ? (
-                          <p className="text-base text-neutral-500 dark:text-neutral-400 py-2 text-center">
-                            No requirements added yet
-                          </p>
-                        ) : (
-                          (isCreatingNew ? pendingRequirements : requirements).map((req) => (
-                            <div
-                              key={req.label}
-                              className="flex items-center justify-between p-2.5 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg border border-neutral-200 dark:border-neutral-600"
-                            >
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <input
-                                  type="checkbox"
-                                  checked={req.isActive ?? req.isRequired ?? false}
-                                  readOnly
-                                  className="w-3.5 h-3.5 rounded"
-                                />
-                                <span className="text-base text-secondary-700 dark:text-neutral-300 truncate">
-                                  {req.label}
-                                </span>
-                              </div>
-                              <button
-                                onClick={() => handleDeleteRequirement(req.label)}
-                                disabled={saving}
-                                className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-                                title="Delete requirement"
-                              >
-                                <Trash className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2">
-                {/* Delete Button (only for existing) */}
-                {!isCreatingNew && editForm?.id && (
-                  <button
-                    onClick={handleDeleteScheduler}
-                    disabled={saving}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
-                )}
-
-                <div className="flex items-center gap-2 ml-auto">
-                  {/* Cancel Button */}
-                  {(hasChanges || isCreatingNew) && (
-                    <button
-                      onClick={handleCancelEdit}
-                      disabled={saving}
-                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      Cancel
-                    </button>
-                  )}
-
-                  {/* Save Button */}
-                  <button
-                    onClick={handleSaveScheduler}
-                    disabled={saving || (!hasChanges && !isCreatingNew)}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {saving ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Saving...
-                      </>
                     ) : (
-                      <>
-                        <Save className="w-3.5 h-3.5" />
-                        {isCreatingNew ? 'Create' : 'Save Changes'}
-                      </>
+                      <span />
                     )}
-                  </button>
-                </div>
-              </div>
+
+                    <div className="flex items-center gap-2">
+                      {(hasChanges || isCreatingNew) && (
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={saving}
+                          className="rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-2 text-sm font-semibold text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleSaveScheduler}
+                        disabled={saving || (!hasChanges && !isCreatingNew)}
+                        className="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {saving ? 'Saving...' : isCreatingNew ? 'Create' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
