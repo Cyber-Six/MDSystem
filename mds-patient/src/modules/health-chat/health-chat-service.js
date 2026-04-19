@@ -260,11 +260,19 @@ const normalizeTemplateType = (templateType = '') =>
 const resolvePatientDocumentRoute = (documentId, templateType = '', mode = 'view') => {
   const normalizedType = normalizeTemplateType(templateType);
   const normalizedMode = String(mode).trim().toLowerCase() === 'download' ? 'download' : 'view';
+
+  const resolveTemplatePath = (template) => {
+    if (normalizedMode === 'view') {
+      return `/documents/${template}/view/${documentId}`;
+    }
+    return `/documents/${template}/download/${documentId}`;
+  };
+
   if (normalizedType === 'prescription') {
-    return `/documents/patient/prescription/${normalizedMode}/${documentId}`;
+    return resolveTemplatePath('prescription');
   }
   if (normalizedType === 'medical-certificate') {
-    return `/documents/patient/medical-certificate/${normalizedMode}/${documentId}`;
+    return resolveTemplatePath('medical-certificate');
   }
   return `/documents/my/download/${documentId}`;
 };

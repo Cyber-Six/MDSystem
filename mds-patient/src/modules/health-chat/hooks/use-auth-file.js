@@ -63,12 +63,19 @@ const resolveGeneratedDocumentPath = (url = '') => {
   const templateType = extractTemplateTypeFromUrl(url);
   const mode = extractModeFromUrl(url);
 
+  const resolveTemplatePath = (template) => {
+    if (mode === 'view') {
+      return `/documents/${template}/view/${documentId}`;
+    }
+    return `/documents/${template}/download/${documentId}`;
+  };
+
   if (templateType === 'prescription') {
-    return `/documents/patient/prescription/${mode}/${documentId}`;
+    return resolveTemplatePath('prescription');
   }
 
   if (templateType === 'medical-certificate') {
-    return `/documents/patient/medical-certificate/${mode}/${documentId}`;
+    return resolveTemplatePath('medical-certificate');
   }
 
   return `/documents/my/download/${documentId}`;

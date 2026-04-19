@@ -110,11 +110,19 @@ const fetchPdfBlobSingleFlight = async (path) => {
 const resolvePatientDocumentPath = (documentId, templateType = '', mode = 'download') => {
   const normalizedType = normalizeTemplateType(templateType);
   const normalizedMode = normalizeDocumentMode(mode);
+
+  const resolveTemplatePath = (template) => {
+    if (normalizedMode === 'view') {
+      return `/documents/${template}/view/${documentId}`;
+    }
+    return `/documents/${template}/download/${documentId}`;
+  };
+
   if (normalizedType === 'prescription') {
-    return `/documents/patient/prescription/${normalizedMode}/${documentId}`;
+    return resolveTemplatePath('prescription');
   }
   if (normalizedType === 'medical-certificate') {
-    return `/documents/patient/medical-certificate/${normalizedMode}/${documentId}`;
+    return resolveTemplatePath('medical-certificate');
   }
   return `/documents/my/download/${documentId}`;
 };

@@ -5,7 +5,7 @@ import {
   getRequestedDocuments,
   uploadRequestedDocument,
 } from '../../services/documents-service';
-import { axiosRequest } from '../../packages-core-adapter';
+import { axiosRequest, bannerService } from '../../packages-core-adapter';
 import DocumentNotificationModal from './document-notification-modal';
 
 const TYPE_LABELS = {
@@ -234,8 +234,10 @@ export default function MyDocumentsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      setError('Failed to download document.');
+    } catch (err) {
+      const message = err?.message || 'Failed to download document.';
+      setError(message);
+      bannerService.showBanner({ type: 'error', message });
     } finally {
       setDownloading(null);
       actionLocksRef.current.delete(lockKey);
@@ -251,8 +253,10 @@ export default function MyDocumentsPage() {
       const blob = await downloadMyDocument(doc, { mode: 'view' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
-    } catch {
-      setError('Failed to open document.');
+    } catch (err) {
+      const message = err?.message || 'Failed to open document.';
+      setError(message);
+      bannerService.showBanner({ type: 'error', message });
     } finally {
       setDownloading(null);
       actionLocksRef.current.delete(lockKey);

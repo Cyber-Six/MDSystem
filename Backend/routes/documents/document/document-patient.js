@@ -832,7 +832,7 @@ router.get('/my', jwtProtect("patient"), checkCredentialsStatus, async (req, res
  * GET /documents/my/prescription/view/:documentId
  * View one normalized prescription document payload for the authenticated patient
  */
-router.get('/my/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/my/prescription/view/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
     const { documentId } = req.params;
     const patientId = req.user.id;
@@ -887,7 +887,7 @@ router.get('/my/prescription/view/:documentId', jwtProtect('patient'), checkCred
  * GET /documents/my/medical-certificate/view/:documentId
  * View one normalized medical certificate payload for the authenticated patient
  */
-router.get('/my/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/my/medical-certificate/view/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
     const { documentId } = req.params;
     const patientId = req.user.id;
@@ -987,7 +987,7 @@ async function streamTemplatePdfForPatient(req, res, expectedTemplateType, dispo
  * GET /documents/prescription/view/:documentId
  * View a patient-owned prescription PDF (inline stream)
  */
-router.get('/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/prescription/view/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   logger.debug(`[PATIENT] PDF route hit: prescription ${req.params.documentId}`);
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
@@ -996,7 +996,7 @@ router.get('/prescription/view/:documentId', jwtProtect('patient'), checkCredent
  * GET /documents/prescription/:documentId
  * Compatibility alias for inline prescription view
  */
-router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/prescription/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   logger.debug(`[PATIENT] PDF route hit: prescription ${req.params.documentId} (alias)`);
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
@@ -1005,7 +1005,7 @@ router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsS
  * GET /documents/prescription/download/:documentId
  * Download a patient-owned prescription PDF (attachment stream)
  */
-router.get('/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/prescription/download/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   logger.debug(`[PATIENT] PDF route hit: prescription ${req.params.documentId} (download)`);
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
 });
@@ -1023,7 +1023,7 @@ router.get('/medical-certificate/view/:documentId', jwtProtect("patient"), check
  * GET /documents/medical-certificate/:documentId
  * Compatibility alias for inline medical certificate view
  */
-router.get('/medical-certificate/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/medical-certificate/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   logger.debug(`[PATIENT] PDF route hit: medical-certificate ${req.params.documentId} (alias)`);
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
@@ -1032,7 +1032,7 @@ router.get('/medical-certificate/:documentId', jwtProtect('patient'), checkCrede
  * GET /documents/medical-certificate/download/:documentId
  * Download a patient-owned medical certificate PDF (attachment stream)
  */
-router.get('/medical-certificate/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/medical-certificate/download/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   logger.debug(`[PATIENT] PDF route hit: medical-certificate ${req.params.documentId} (download)`);
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
 });
@@ -1041,7 +1041,7 @@ router.get('/medical-certificate/download/:documentId', jwtProtect('patient'), c
  * GET /documents/me/download/:documentId
  * Download a specific generated document as PDF for the authenticated patient
  */
-router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/my/download/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
     const { documentId } = req.params;
     const patientId = req.user.id;
@@ -1084,7 +1084,7 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
  * GET /documents/me/:docType
  * List documents of a specific type for the authenticated patient
  */
-router.get('/my/:docType', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/my/:docType', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
     const { docType } = req.params;
     const patientId = req.user.id;
