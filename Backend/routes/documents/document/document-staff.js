@@ -2261,6 +2261,7 @@ router.get('/prescription/download/:documentId', jwtProtect('medical'), async (r
  * View a generated medical certificate PDF (inline stream)
  */
 router.get('/medical-certificate/view/:documentId', jwtProtect('medical'), async (req, res) => {
+  logger.info('Staff PDF route hit', req.params.documentId);
   await streamTemplatePdfForStaff(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
 
