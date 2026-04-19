@@ -188,6 +188,46 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
   return { clause, params, nextIndex: startIdx };
 }
 
+function employeeDepartmentScopedFilterClause(department, paramIndex) {
+  const cleanedDepartment = typeof department === 'string' ? department.trim() : '';
+  if (!cleanedDepartment) {
+    return { clause: '', params: [], nextIndex: paramIndex };
+  }
+
+  return {
+    clause: `AND (
+      ep.department = $${paramIndex}
+      OR NOT EXISTS (
+        SELECT 1
+        FROM "employee_profile" ep_all
+        WHERE ep_all.department = $${paramIndex}
+      )
+    )`,
+    params: [cleanedDepartment],
+    nextIndex: paramIndex + 1,
+  };
+}
+
+function studentProgramScopedFilterClause(program, paramIndex) {
+  const cleanedProgram = typeof program === 'string' ? program.trim() : '';
+  if (!cleanedProgram) {
+    return { clause: '', params: [], nextIndex: paramIndex };
+  }
+
+  return {
+    clause: `AND (
+      spg.label = $${paramIndex}
+      OR NOT EXISTS (
+        SELECT 1
+        FROM "student_programs" spg_all
+        WHERE spg_all.label = $${paramIndex}
+      )
+    )`,
+    params: [cleanedProgram],
+    nextIndex: paramIndex + 1,
+  };
+}
+
 // ============================================================
 // DATE GROUPING HELPER
 // ============================================================
@@ -557,18 +597,28 @@ async function lifestyleRisks(branch, startDate, endDate, options = {}) {
   `, [...baseParams, ...pf.params]);
 
   if (result.rows.length === 0) {
-    return { labels: [], values: [], total: 0 };
+    return { labels: [], values: [], rawCounts: [], total: 0, unit: 'percentage' };
   }
 
   const row = result.rows[0];
   const labels = ['Smokers', 'Alcohol Consumers', 'Vape Users'];
-  const values = [
-    parseInt(row.smokers),
-    parseInt(row.alcohol_consumers),
-    parseInt(row.vape_users)
+  const rawCounts = [
+    parseInt(row.smokers || 0),
+    parseInt(row.alcohol_consumers || 0),
+    parseInt(row.vape_users || 0)
   ];
-  const total = parseInt(row.total_records);
-  return { labels, values, total };
+  const total = parseInt(row.total_records || 0);
+  const values = total > 0
+    ? rawCounts.map((count) => roundNumber((count / total) * 100, 2))
+    : rawCounts.map(() => 0);
+
+  return {
+    labels,
+    values,
+    rawCounts,
+    total,
+    unit: 'percentage',
+  };
 }
 
 /**
@@ -905,7 +955,7 @@ async function oralFindingsPercentages(branch, startDate, endDate, options = {})
     FROM patient_finding_flags
     GROUP BY finding_name
     ORDER BY yes_count DESC, finding_name ASC
-    LIMIT 12
+    LIMIT 10
   `, allParams);
 
   const labels = [];
@@ -1075,9 +1125,19 @@ async function patientPopulationByBranch(branch, startDate, endDate, options = {
 
   const byCampus = new Map(result.rows.map((row) => [row.campus, parseInt(row.count)]));
   const labels = ['Manila', 'Quezon City'];
-  const values = [byCampus.get('Manila') || 0, byCampus.get('Quezon City') || 0];
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return { labels, values, total };
+  const rawCounts = [byCampus.get('Manila') || 0, byCampus.get('Quezon City') || 0];
+  const total = rawCounts.reduce((sum, value) => sum + value, 0);
+  const values = total > 0
+    ? rawCounts.map((count) => roundNumber((count / total) * 100, 2))
+    : rawCounts.map(() => 0);
+
+  return {
+    labels,
+    values,
+    rawCounts,
+    total,
+    unit: 'percentage',
+  };
 }
 
 /**
@@ -1296,79 +1356,27 @@ async function inventoryReportSummary(branch, startDate, endDate, options = {}) 
     consumedSupply = parseInt(fallbackSupplyConsumption.rows[0]?.count || 0);
   }
 
-  const medicineLocationClause = branch === 'Manila'
-    ? `AND mb.location IN ('Arlegui', 'Casal')`
-    : branch === 'QuezonCity'
-      ? `AND mb.location = 'QuezonCity'`
-      : '';
+  const medicineStock = parseInt(medicineStockResult.rows[0]?.count || 0);
+  const medicalSupplyStock = parseInt(supplyStockResult.rows[0]?.count || 0);
+  const consumedMedicine = parseInt(consumedMedicineResult.rows[0]?.count || 0);
 
-  const supplyLocationClause = branch === 'Manila'
-    ? `AND sb.location IN ('Arlegui', 'Casal')`
-    : branch === 'QuezonCity'
-      ? `AND sb.location = 'QuezonCity'`
-      : '';
-
-  const lowStockResult = await db.query(`
-    SELECT COUNT(*)::int AS count FROM (
-      SELECT DISTINCT mi.id
-      FROM "MedicalItems" mi
-      WHERE mi.active = true AND mi.category::text = 'Medicine'
-        AND EXISTS (
-          SELECT 1
-          FROM (
-            SELECT mb.location,
-              COALESCE(SUM(CASE WHEN me."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
-            FROM "MedicineBatch" mb
-            LEFT JOIN "MedicineEntity" me ON me."batchId" = mb.id
-            WHERE mb."medicalItemId" = mi.id
-              AND (mb."expiryDate" IS NULL OR mb."expiryDate" > NOW())
-              ${medicineLocationClause}
-            GROUP BY mb.location
-          ) med_stock
-          WHERE med_stock.branch_stock <= 10
-        )
-      UNION
-      SELECT DISTINCT mi.id
-      FROM "MedicalItems" mi
-      WHERE mi.active = true AND mi.category::text = 'Supply'
-        AND EXISTS (
-          SELECT 1
-          FROM (
-            SELECT sb.location,
-              COALESCE(SUM(CASE WHEN se."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
-            FROM "SupplyBatch" sb
-            LEFT JOIN "SupplyEntity" se ON se."batchId" = sb.id
-            WHERE sb."supplyItemId" = mi.id
-              AND (sb."expiryDate" IS NULL OR sb."expiryDate" > NOW())
-              ${supplyLocationClause}
-            GROUP BY sb.location
-          ) sup_stock
-          WHERE sup_stock.branch_stock <= 10
-        )
-    ) low_items
-  `);
-
-  const labels = [
-    'Current Medicine Stock',
-    'Current Supply Stock',
-    'Consumed Medicine Units',
-    'Consumed Supply Units',
-    'Low Stock Items',
-  ];
-
-  const values = [
-    parseInt(medicineStockResult.rows[0]?.count || 0),
-    parseInt(supplyStockResult.rows[0]?.count || 0),
-    parseInt(consumedMedicineResult.rows[0]?.count || 0),
-    consumedSupply,
-    parseInt(lowStockResult.rows[0]?.count || 0),
-  ];
+  const labels = ['Current Stock', 'Consumed Units'];
+  const medicineSeries = [medicineStock, consumedMedicine];
+  const medicalSupplySeries = [medicalSupplyStock, consumedSupply];
+  const values = labels.map((_, index) => (
+    (medicineSeries[index] || 0) + (medicalSupplySeries[index] || 0)
+  ));
 
   return {
     labels,
     values,
+    series: [
+      { name: 'Medicine', values: medicineSeries },
+      { name: 'MedicalSupply', values: medicalSupplySeries },
+    ],
     total: values.reduce((sum, value) => sum + value, 0),
     source: hasSupplyLog ? 'SupplyTransactionLog' : 'SupplyEntityFallback',
+    chartVariant: 'stacked-area',
   };
 }
 
@@ -1535,7 +1543,7 @@ async function consultationsBySex(branch, startDate, endDate, options = {}) {
 }
 
 /**
- * Top 5 diagnoses per sex — returns matrix data for grouped bar
+ * Top 10 diagnoses per sex — returns matrix data for grouped bar
  * Shape: labels (diagnoses), series: [{ sex, values }]
  */
 async function topDiagnosesBySex(branch, startDate, endDate, options = {}) {
@@ -1543,7 +1551,7 @@ async function topDiagnosesBySex(branch, startDate, endDate, options = {}) {
   const baseParams1 = [startDate, endDate, ...bf.params];
   const pf1 = profileFilterClause(options, 'p.id', baseParams1.length + 1);
 
-  // First get top 5 diagnoses overall
+  // First get top 10 diagnoses overall
   const topResult = await db.query(`
     SELECT COALESCE(icd.title, cd."diagnosisName") as diagnosis, COUNT(*) as total
     FROM "ConsultationDiagnosis" cd
@@ -1553,13 +1561,13 @@ async function topDiagnosesBySex(branch, startDate, endDate, options = {}) {
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     LEFT JOIN "ICDLookup" icd ON cd."icdId" = icd.id
     WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause} ${pf1.clause}
-    GROUP BY diagnosis ORDER BY total DESC LIMIT 5
+    GROUP BY diagnosis ORDER BY total DESC LIMIT 10
   `, [...baseParams1, ...pf1.params]);
 
   const topLabels = topResult.rows.map(r => r.diagnosis);
   if (topLabels.length === 0) return { labels: [], values: [], series: [], total: 0, chartVariant: 'grouped-bar' };
 
-  // Then get count per (diagnosis, sex) for those top 5
+  // Then get count per (diagnosis, sex) for those top 10
   const bf2 = branchFilter(branch, 'up', topLabels.length + 3);
   const placeholders = topLabels.map((_, i) => `$${i + 3}`).join(', ');
   const baseParams2 = [startDate, endDate, ...topLabels, ...bf2.params];
@@ -1648,7 +1656,7 @@ async function consultationsByAgeGroup(branch, startDate, endDate, options = {})
 }
 
 /**
- * Average BMI per age group
+ * BMI distribution by age group (box-plot ready)
  */
 async function bmiByAgeGroup(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
@@ -1656,8 +1664,7 @@ async function bmiByAgeGroup(branch, startDate, endDate, options = {}) {
   const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
   const result = await db.query(`
     SELECT ${AGE_BRACKET_EXPR} as age_group,
-      ROUND(AVG(vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric, 2) as avg_bmi,
-      COUNT(*) as sample_count
+      (vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric as bmi_value
     FROM "VitalSigns" vs
     INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
@@ -1665,14 +1672,45 @@ async function bmiByAgeGroup(branch, startDate, endDate, options = {}) {
       AND vs.height_cm > 0 AND vs.weight_kg > 0
       AND up.date_of_birth IS NOT NULL
       ${bf.clause} ${pf.clause}
-    GROUP BY 1
-    ORDER BY ${AGE_BRACKET_ORDER}
+    ORDER BY ${AGE_BRACKET_ORDER}, bmi_value
   `, [...baseParams, ...pf.params]);
 
-  const labels = result.rows.map(r => r.age_group);
-  const values = result.rows.map(r => parseFloat(r.avg_bmi));
-  const total = result.rows.reduce((sum, r) => sum + parseInt(r.sample_count), 0);
-  return { labels, values, total };
+  const groupedValues = AGE_GROUP_CANONICAL.reduce((acc, ageGroup) => {
+    acc.set(ageGroup, []);
+    return acc;
+  }, new Map());
+
+  for (const row of result.rows) {
+    const ageGroup = row.age_group;
+    const bmiValue = Number(row.bmi_value);
+    if (!groupedValues.has(ageGroup)) {
+      groupedValues.set(ageGroup, []);
+    }
+    if (Number.isFinite(bmiValue) && bmiValue > 0) {
+      groupedValues.get(ageGroup).push(bmiValue);
+    }
+  }
+
+  const boxPlot = [];
+  for (const ageGroup of AGE_GROUP_CANONICAL) {
+    const valuesForGroup = toFiniteNumbers(groupedValues.get(ageGroup)).filter((value) => value > 0);
+    if (valuesForGroup.length === 0) continue;
+    const summary = buildBoxSummary(valuesForGroup, 2);
+    if (!summary) continue;
+    boxPlot.push({ name: ageGroup, ...summary });
+  }
+
+  const labels = boxPlot.map((row) => row.name);
+  const values = boxPlot.map((row) => row.median);
+  const total = boxPlot.reduce((sum, row) => sum + Number(row.count || 0), 0);
+
+  return {
+    labels,
+    values,
+    boxPlot,
+    total,
+    chartVariant: 'box-plot',
+  };
 }
 
 /**
@@ -1739,13 +1777,9 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
   const params = [startDate, endDate];
   let paramIndex = 3;
 
-  // Trim and validate department input
-  const cleanedDept = options.department ? String(options.department).trim() : '';
-  const deptCteFilter = cleanedDept ? `AND ep.department = $${paramIndex}` : '';
-  if (cleanedDept) {
-    params.push(cleanedDept);
-    paramIndex++;
-  }
+  const scopedDeptFilter = employeeDepartmentScopedFilterClause(options.department, paramIndex);
+  params.push(...scopedDeptFilter.params);
+  paramIndex = scopedDeptFilter.nextIndex;
 
   const bf = branchFilter(branch, 'up', paramIndex);
   params.push(...bf.params);
@@ -1771,7 +1805,7 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
       FROM "patientUpdateLog" pul
       INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Employee'
       INNER JOIN "employee_profile" ep ON ep."profileId" = pr.id
-      WHERE pul.status = 'Approved' AND ep.department IS NOT NULL ${deptCteFilter}
+      WHERE pul.status = 'Approved' AND ep.department IS NOT NULL ${scopedDeptFilter.clause}
       ORDER BY pul."patientId", pul.created_at DESC
     )
     SELECT pd.department, COUNT(*) as count
@@ -1796,13 +1830,9 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
   const params = [startDate, endDate];
   let paramIndex = 3;
 
-  // Trim and validate department input
-  const cleanedDept = options.department ? String(options.department).trim() : '';
-  const programCteFilter = cleanedDept ? `AND spg.label = $${paramIndex}` : '';
-  if (cleanedDept) {
-    params.push(cleanedDept);
-    paramIndex++;
-  }
+  const scopedProgramFilter = studentProgramScopedFilterClause(options.department, paramIndex);
+  params.push(...scopedProgramFilter.params);
+  paramIndex = scopedProgramFilter.nextIndex;
 
   const bf = branchFilter(branch, 'up', paramIndex);
   params.push(...bf.params);
@@ -1829,7 +1859,7 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
       INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Student'
       INNER JOIN "student_profile" sp ON sp."profileId" = pr.id
       INNER JOIN "student_programs" spg ON spg.id = sp."programId"
-      WHERE pul.status = 'Approved' AND spg.label IS NOT NULL ${programCteFilter}
+      WHERE pul.status = 'Approved' AND spg.label IS NOT NULL ${scopedProgramFilter.clause}
       ORDER BY pul."patientId", pul.created_at DESC
     )
     SELECT pp.program, COUNT(*) as count
@@ -1855,13 +1885,9 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
   const params = [startDate, endDate];
   let paramIndex = 3;
 
-  // Trim and validate department input
-  const cleanedDept = options.department ? String(options.department).trim() : '';
-  const deptCteFilter = cleanedDept ? `AND ep.department = $${paramIndex}` : '';
-  if (cleanedDept) {
-    params.push(cleanedDept);
-    paramIndex++;
-  }
+  const scopedDeptFilter = employeeDepartmentScopedFilterClause(options.department, paramIndex);
+  params.push(...scopedDeptFilter.params);
+  paramIndex = scopedDeptFilter.nextIndex;
 
   const bf = branchFilter(branch, 'up', paramIndex);
   params.push(...bf.params);
@@ -1887,7 +1913,7 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
       FROM "patientUpdateLog" pul
       INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Employee'
       INNER JOIN "employee_profile" ep ON ep."profileId" = pr.id
-      WHERE pul.status = 'Approved' AND ep.department IS NOT NULL ${deptCteFilter}
+      WHERE pul.status = 'Approved' AND ep.department IS NOT NULL ${scopedDeptFilter.clause}
       ORDER BY pul."patientId", pul.created_at DESC
     )
     SELECT pd.department,
@@ -2058,7 +2084,7 @@ const QUERY_HANDLERS = {
   },
   'lifestyle-risks': {
     handler: lifestyleRisks,
-    description: 'Lifestyle risk factors prevalence (smoking, alcohol, vaping)',
+    description: 'Lifestyle risk factors prevalence percentage (smoking, alcohol, vaping)',
   },
   'allergy-by-type': {
     handler: allergyByType,
@@ -2105,7 +2131,7 @@ const QUERY_HANDLERS = {
   },
   'patient-population-by-branch': {
     handler: patientPopulationByBranch,
-    description: 'Patient population split by Manila vs Quezon City',
+    description: 'Patient population percentage split by Manila vs Quezon City',
   },
   'most-consumed-medicine': {
     handler: mostConsumedMedicine,
@@ -2121,7 +2147,7 @@ const QUERY_HANDLERS = {
   },
   'inventory-report-summary': {
     handler: inventoryReportSummary,
-    description: 'Inventory summary report with stock, consumption, and low-stock counts',
+    description: 'Inventory report summary stacked by Medicine vs MedicalSupply',
   },
   'appointments-accommodated-trends': {
     handler: appointmentsAccommodatedTrends,
@@ -2140,7 +2166,7 @@ const QUERY_HANDLERS = {
   },
   'top-diagnoses-by-sex': {
     handler: topDiagnosesBySex,
-    description: 'Top diagnoses grouped by patient sex (grouped bar)',
+    description: 'Top 10 diagnoses grouped by patient sex (grouped bar)',
   },
   'patients-by-age-group': {
     handler: patientsByAgeGroup,
@@ -2152,7 +2178,7 @@ const QUERY_HANDLERS = {
   },
   'bmi-by-age-group': {
     handler: bmiByAgeGroup,
-    description: 'Average BMI per age group',
+    description: 'BMI distribution by age group (box plot)',
   },
   'diagnoses-by-age-group': {
     handler: diagnosesByAgeGroup,
@@ -2205,6 +2231,16 @@ const CHART_CONTEXT_OVERRIDES = Object.freeze({
     key: 'oralFindings',
     title: 'Oral Findings Prevalence',
     datasetContext: 'booleanOralHealthPrevalence',
+  },
+  'consultations-by-department': {
+    key: 'employeeDepartmentConsultations',
+    title: 'Consultations by Department (Employee)',
+    datasetContext: 'employeeDepartmentConsultations',
+  },
+  'consultations-by-program': {
+    key: 'studentProgramConsultations',
+    title: 'Consultations by Program (Student)',
+    datasetContext: 'studentProgramConsultations',
   },
 });
 

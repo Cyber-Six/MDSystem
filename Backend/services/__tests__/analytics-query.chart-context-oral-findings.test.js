@@ -158,4 +158,94 @@ describe('analytics-query chartContext and oral findings prevalence', () => {
     });
     expect(mockDbQuery).toHaveBeenCalledTimes(1);
   });
+
+  test('returns lifestyle risks as percentages with raw counts', async () => {
+    mockDbQuery.mockResolvedValueOnce({
+      rows: [{ smokers: '5', alcohol_consumers: '4', vape_users: '1', total_records: '10' }],
+    });
+
+    const result = await analytics.executeQuery(
+      'lifestyle-risks',
+      'Both',
+      '2026-01-01',
+      '2026-03-31',
+      {}
+    );
+
+    expect(result).toMatchObject({
+      labels: ['Smokers', 'Alcohol Consumers', 'Vape Users'],
+      rawCounts: [5, 4, 1],
+      values: [50, 40, 10],
+      total: 10,
+      unit: 'percentage',
+    });
+  });
+
+  test('returns patient population by branch as percentages', async () => {
+    mockDbQuery.mockResolvedValueOnce({
+      rows: [
+        { campus: 'Manila', count: '30' },
+        { campus: 'Quezon City', count: '10' },
+      ],
+    });
+
+    const result = await analytics.executeQuery(
+      'patient-population-by-branch',
+      'Both',
+      '2026-01-01',
+      '2026-03-31',
+      {}
+    );
+
+    expect(result).toMatchObject({
+      labels: ['Manila', 'Quezon City'],
+      rawCounts: [30, 10],
+      values: [75, 25],
+      total: 40,
+      unit: 'percentage',
+    });
+  });
+
+  test('returns inventory report summary as two-series stacked payload', async () => {
+    mockDbQuery
+      .mockResolvedValueOnce({ rows: [{ count: '50' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '30' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '20' }] })
+      .mockResolvedValueOnce({ rows: [{ table_ref: 'SupplyTransactionLog' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '8' }] });
+
+    const result = await analytics.executeQuery(
+      'inventory-report-summary',
+      'Both',
+      '2026-01-01',
+      '2026-03-31',
+      {}
+    );
+
+    expect(result.labels).toEqual(['Current Stock', 'Consumed Units']);
+    expect(result.series).toEqual([
+      { name: 'Medicine', values: [50, 20] },
+      { name: 'MedicalSupply', values: [30, 8] },
+    ]);
+    expect(result.values).toEqual([80, 28]);
+    expect(result.chartVariant).toBe('stacked-area');
+  });
+
+  test('uses top 10 cap for diagnoses by sex ranking', async () => {
+    mockDbQuery
+      .mockResolvedValueOnce({ rows: [{ diagnosis: 'Acute Bronchitis', total: '7' }] })
+      .mockResolvedValueOnce({ rows: [{ diagnosis: 'Acute Bronchitis', sex: 'Female', count: '7' }] });
+
+    const result = await analytics.executeQuery(
+      'top-diagnoses-by-sex',
+      'Both',
+      '2026-01-01',
+      '2026-03-31',
+      {}
+    );
+
+    expect(result.labels).toEqual(['Acute Bronchitis']);
+    const [topDiagnosisSql] = mockDbQuery.mock.calls[0];
+    expect(topDiagnosisSql).toContain('LIMIT 10');
+  });
 });
