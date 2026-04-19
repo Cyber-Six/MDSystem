@@ -6,6 +6,7 @@
   "scripts": {
     "test": "jest --runInBand",
     "test:documents": "jest --runInBand routes/documents/document/__tests__/document-*.integration.test.js",
+    "test:dashboard": "jest --runInBand routes/dashboard/__tests__/dashboard-patient.integration.test.js",
     "start": "node server.js",
     "setup:totp-key": "node -e \"const fs=require('fs'),crypto=require('crypto'),path=require('path');const envPath=path.resolve(__dirname,'.env');const key=crypto.randomBytes(32).toString('hex');const line='\\nTOTP_ENCRYPTION_KEY='+key+'\\n';if(fs.existsSync(envPath)){const contents=fs.readFileSync(envPath,'utf8');if(contents.includes('TOTP_ENCRYPTION_KEY=')){console.log('TOTP_ENCRYPTION_KEY already set in .env — skipping.\\nTo rotate, manually delete the old line and re-run.');process.exit(0);}fs.appendFileSync(envPath,line);}else{fs.writeFileSync(envPath,line);}console.log('✅ TOTP_ENCRYPTION_KEY written to .env');console.log('⚠  Back up this key — losing it means all TOTP secrets will be unreadable.');\""
   },
