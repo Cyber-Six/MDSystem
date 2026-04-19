@@ -56,6 +56,38 @@ function buildDataTypeMappings(values = []) {
     .filter((entry) => entry.normalized);
 }
 
+function normalizeFilterInput(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === undefined || raw === null) return undefined;
+  const cleaned = String(raw).trim();
+  if (!cleaned || cleaned.toLowerCase() === 'all') return undefined;
+  return cleaned;
+}
+
+function pickFilterValue(sources, keys) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const key of keys) {
+      const normalized = normalizeFilterInput(source[key]);
+      if (normalized) return normalized;
+    }
+  }
+  return undefined;
+}
+
+function resolveAnalyticsFilters(primary = {}, secondary = {}) {
+  const nestedPrimary = primary && typeof primary.filters === 'object' ? primary.filters : {};
+  const nestedSecondary = secondary && typeof secondary.filters === 'object' ? secondary.filters : {};
+  const sources = [primary, nestedPrimary, secondary, nestedSecondary];
+
+  return {
+    groupBy: pickFilterValue(sources, ['groupBy', 'group_by', 'group']),
+    department: pickFilterValue(sources, ['department', 'departmentFilter', 'dept', 'program']),
+    sex: pickFilterValue(sources, ['sex', 'gender']),
+    ageGroup: pickFilterValue(sources, ['ageGroup', 'age_group', 'age']),
+  };
+}
+
 /**
  * GET /analytics/queries
  * List available query types
@@ -110,7 +142,8 @@ router.get('/reports', jwtProtect('medical'), async (req, res) => {
 router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
   try {
     const { dataType } = req.params;
-    const { branch, startDate, endDate, groupBy, sex, department, ageGroup } = req.query;
+    const { branch, startDate, endDate } = req.query;
+    const { groupBy, sex, department, ageGroup } = resolveAnalyticsFilters(req.query);
     const requestedDataType = String(dataType || '').trim();
     const normalizedDataType = normalizeDataTypeKey(requestedDataType);
 
@@ -158,6 +191,9 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
       branch,
       startDate,
       endDate,
+      department: department || null,
+      sex: sex || null,
+      ageGroup: ageGroup || null,
       userId: req.user.id,
     });
 
@@ -190,7 +226,8 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
  */
 router.post('/batch', jwtProtect('medical'), async (req, res) => {
   try {
-    const { dataTypes, branch, startDate, endDate, groupBy, department, sex, ageGroup } = req.body;
+    const { dataTypes, branch, startDate, endDate } = req.body;
+    const { groupBy, department, sex, ageGroup } = resolveAnalyticsFilters(req.body, req.query);
     const dataTypeMappings = buildDataTypeMappings(dataTypes);
 
     if (!Array.isArray(dataTypes) || dataTypes.length === 0 || dataTypeMappings.length === 0) {
@@ -236,6 +273,9 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
       branch,
       startDate,
       endDate,
+      department: department || null,
+      sex: sex || null,
+      ageGroup: ageGroup || null,
       userId: req.user.id,
     });
 
@@ -431,7 +471,8 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     if (!params) return;
 
     const { format, branch, startDate, endDate } = params;
-    const { dataTypes: rawDataTypes, preset, groupBy, sex, department, ageGroup } = req.body;
+    const { dataTypes: rawDataTypes, preset } = req.body;
+    const { groupBy, sex, department, ageGroup } = resolveAnalyticsFilters(req.body, req.query);
     const normalizedRawDataTypes = Array.isArray(rawDataTypes)
       ? rawDataTypes
         .map((value) => normalizeDataTypeKey(String(value ?? '').trim()))
@@ -456,6 +497,8 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
       startDate,
       endDate,
       groupBy: groupBy || null,
+      department: department || null,
+      sex: sex || null,
       ageGroup: ageGroup || null,
       dataTypes: dataTypes.length,
       preset: preset || null,
@@ -571,7 +614,8 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
  */
 router.post('/export/single', jwtProtect('medical'), async (req, res) => {
   try {
-    const { dataType, branch, startDate, endDate, groupBy, sex, department, ageGroup } = req.body;
+    const { dataType, branch, startDate, endDate } = req.body;
+    const { groupBy, sex, department, ageGroup } = resolveAnalyticsFilters(req.body, req.query);
     const requestedDataType = String(dataType || '').trim();
     const normalizedDataType = normalizeDataTypeKey(requestedDataType);
 
@@ -602,6 +646,9 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
       branch,
       startDate,
       endDate,
+      department: department || null,
+      sex: sex || null,
+      ageGroup: ageGroup || null,
       userId: req.user.id,
     });
 

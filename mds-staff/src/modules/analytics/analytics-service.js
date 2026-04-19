@@ -349,7 +349,7 @@ export const EXPORT_PRESETS = {
  * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset?, groupBy?, department?, sex? }
  */
 export async function exportAnalytics(format, opts) {
-  const { branch, startDate, endDate, dataTypes, preset, groupBy, department, sex } = opts;
+  const { branch, startDate, endDate, dataTypes, preset, groupBy, department, sex, ageGroup } = opts;
   const body = {
     format,
     branch,
@@ -359,8 +359,22 @@ export async function exportAnalytics(format, opts) {
     preset,
     groupBy
   };
-  if (department) body.department = department;
-  if (sex) body.sex = sex;
+  const filters = {};
+  if (department) {
+    body.department = department;
+    filters.department = department;
+  }
+  if (sex) {
+    body.sex = sex;
+    filters.sex = sex;
+  }
+  if (ageGroup) {
+    body.ageGroup = ageGroup;
+    filters.ageGroup = ageGroup;
+  }
+  if (Object.keys(filters).length > 0) {
+    body.filters = filters;
+  }
 
   const response = await axiosRequest.post('/analytics/export', body, { responseType: 'blob' });
   triggerDownload(response);
@@ -372,7 +386,7 @@ export async function exportAnalytics(format, opts) {
  * @param {Object} opts - { branch, startDate, endDate, groupBy?, department?, sex? }
  */
 export async function exportSingleMetric(dataType, opts) {
-  const { branch, startDate, endDate, groupBy, department, sex } = opts;
+  const { branch, startDate, endDate, groupBy, department, sex, ageGroup } = opts;
   const body = {
     dataType,
     branch,
@@ -380,8 +394,22 @@ export async function exportSingleMetric(dataType, opts) {
     endDate,
     groupBy,
   };
-  if (department) body.department = department;
-  if (sex) body.sex = sex;
+  const filters = {};
+  if (department) {
+    body.department = department;
+    filters.department = department;
+  }
+  if (sex) {
+    body.sex = sex;
+    filters.sex = sex;
+  }
+  if (ageGroup) {
+    body.ageGroup = ageGroup;
+    filters.ageGroup = ageGroup;
+  }
+  if (Object.keys(filters).length > 0) {
+    body.filters = filters;
+  }
 
   const response = await axiosRequest.post('/analytics/export/single', body, { responseType: 'blob' });
   triggerDownload(response);
