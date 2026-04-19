@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   getMyDocuments, 
   downloadMyDocument,
@@ -66,6 +66,7 @@ export default function MyDocumentsPage() {
   const [filter, setFilter] = useState('requested');
   // Staged files: { documentId: { file: File, fileId: string (staged UUID) } }
   const [stagedFiles, setStagedFiles] = useState({});
+  const actionLocksRef = useRef(new Set());
 
   const { subscribe } = usePatientNotifications();
 
@@ -230,9 +231,12 @@ export default function MyDocumentsPage() {
   };
 
   const handleDownload = async (doc) => {
+    const lockKey = `doc:${doc.id}`;
+    if (actionLocksRef.current.has(lockKey)) return;
+    actionLocksRef.current.add(lockKey);
     setDownloading(doc.id);
     try {
-      const blob = await downloadMyDocument(doc.id);
+      const blob = await downloadMyDocument(doc, { mode: 'download' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -245,19 +249,24 @@ export default function MyDocumentsPage() {
       setError('Failed to download document.');
     } finally {
       setDownloading(null);
+      actionLocksRef.current.delete(lockKey);
     }
   };
 
   const handleView = async (doc) => {
+    const lockKey = `doc:${doc.id}`;
+    if (actionLocksRef.current.has(lockKey)) return;
+    actionLocksRef.current.add(lockKey);
     setDownloading(doc.id);
     try {
-      const blob = await downloadMyDocument(doc.id);
+      const blob = await downloadMyDocument(doc, { mode: 'view' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
     } catch {
       setError('Failed to open document.');
     } finally {
       setDownloading(null);
+      actionLocksRef.current.delete(lockKey);
     }
   };
 

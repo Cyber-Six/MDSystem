@@ -4,6 +4,7 @@ import {
   getRequiredDocuments,
   getGeneratedDocuments,
   downloadGeneratedDocumentBlob,
+  viewGeneratedDocumentBlob,
   requestDocument,
   approveDocument,
   rejectDocument,
@@ -168,6 +169,7 @@ export default function PatientDocumentsTab({ patient, canManageDocuments = true
   const [generatedLoading, setGeneratedLoading] = useState(false);
   const [generatedError, setGeneratedError] = useState('');
   const [downloadingGeneratedId, setDownloadingGeneratedId] = useState(null);
+  const [viewingGeneratedId, setViewingGeneratedId] = useState(null);
   
   // Preview modal state
   const [previewModal, setPreviewModal] = useState({ isOpen: false, fileUrl: null, fileType: null, fileName: null });
@@ -369,7 +371,7 @@ export default function PatientDocumentsTab({ patient, canManageDocuments = true
     setDownloadingGeneratedId(documentId);
     setGeneratedError('');
     try {
-      const blob = await downloadGeneratedDocumentBlob(documentId);
+      const blob = await downloadGeneratedDocumentBlob(documentId, templateType);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -382,6 +384,32 @@ export default function PatientDocumentsTab({ patient, canManageDocuments = true
       setGeneratedError(err.message || 'Failed to download generated document');
     } finally {
       setDownloadingGeneratedId(null);
+    }
+  };
+
+  const handleViewGenerated = async (documentId, templateType) => {
+    setViewingGeneratedId(documentId);
+    setGeneratedError('');
+    try {
+      const blob = await viewGeneratedDocumentBlob(documentId, templateType);
+      const url = URL.createObjectURL(blob);
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      // Delay revocation so the new tab can fully initialize the PDF object URL.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      setGeneratedError(err.message || 'Failed to open generated document');
+    } finally {
+      setViewingGeneratedId(null);
     }
   };
 
@@ -613,6 +641,7 @@ export default function PatientDocumentsTab({ patient, canManageDocuments = true
             <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60 -mx-3 -mb-3">
               {generatedDocuments.map((doc) => {
                 const isDownloading = downloadingGeneratedId === doc.id;
+                const isViewingGenerated = viewingGeneratedId === doc.id;
                 return (
                   <div key={doc.id} className="px-3 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors">
                     <div className="flex items-start justify-between gap-3">
@@ -628,23 +657,43 @@ export default function PatientDocumentsTab({ patient, canManageDocuments = true
                           <span>Patient: {doc.patient?.name || patient?.name || 'Unknown'}</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDownloadGenerated(doc.id, doc.templateType)}
-                        disabled={isDownloading}
-                        className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1 shrink-0"
-                      >
-                        {isDownloading ? (
-                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
-                          </svg>
-                        )}
-                        Download
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleViewGenerated(doc.id, doc.templateType)}
+                          disabled={isViewingGenerated}
+                          className="px-2.5 py-1 text-xs font-medium text-secondary-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-700/70 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {isViewingGenerated ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleDownloadGenerated(doc.id, doc.templateType)}
+                          disabled={isDownloading}
+                          className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {isDownloading ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                            </svg>
+                          )}
+                          Download
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

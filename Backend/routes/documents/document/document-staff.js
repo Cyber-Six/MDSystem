@@ -668,7 +668,7 @@ async function attachGeneratedDocumentToHealthChat({
   const isPrescription = normalizedLabel === PRESCRIPTION_DOC_TYPE;
   const isMedicalCertificate = normalizedLabel === MEDICAL_CERTIFICATE_DOC_TYPE;
   const documentViewPath = isPrescription || isMedicalCertificate
-    ? `/documents/patient/${normalizedLabel}/${documentId}/view`
+    ? `/documents/patient/${normalizedLabel}/view/${documentId}`
     : `/documents/generated/download/${documentId}`;
   const logText = `${documentLabel} issued by ${physicianName}. View PDF Document: ${documentViewPath}`;
   const virtualDocumentFileId = isPrescription || isMedicalCertificate

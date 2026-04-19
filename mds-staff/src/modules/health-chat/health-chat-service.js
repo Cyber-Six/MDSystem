@@ -701,12 +701,34 @@ export const unstageFile = async (fileId) => {
 /**
  * Get the URL for a file
  */
+const normalizeTemplateType = (templateType = '') =>
+  String(templateType).trim().toLowerCase().replace(/\s+/g, '-');
+
+const resolveStaffDocumentRoute = (documentId, templateType = '', mode = 'view') => {
+  const normalizedType = normalizeTemplateType(templateType);
+  const normalizedMode = String(mode).trim().toLowerCase() === 'download' ? 'download' : 'view';
+  if (normalizedType === 'prescription') {
+    return `/documents/prescription/${normalizedMode}/${documentId}`;
+  }
+  if (normalizedType === 'medical-certificate') {
+    return `/documents/medical-certificate/${normalizedMode}/${documentId}`;
+  }
+  return `/documents/generated/download/${documentId}`;
+};
+
 export const getFileUrl = (fileId) => {
   // Virtual IDs are used for generated documents (e.g. prescription, medical certificate).
   if (typeof fileId === 'string' && fileId.startsWith('document:')) {
-    const documentId = fileId.split(':')[1];
-    if (documentId) {
-      return `/documents/generated/download/${documentId}`;
+    // Backward compatible formats:
+    // - document:<documentId>
+    // - document:<templateType>:<documentId>
+    const [, segmentA, segmentB] = fileId.split(':');
+    if (segmentA && segmentB) {
+      return resolveStaffDocumentRoute(segmentB, segmentA, 'view');
+    }
+
+    if (segmentA) {
+      return resolveStaffDocumentRoute(segmentA, '', 'view');
     }
   }
   return `/media/record/eConsultation/${fileId}`;
