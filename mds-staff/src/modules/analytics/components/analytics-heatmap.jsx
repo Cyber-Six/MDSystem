@@ -11,6 +11,16 @@
  *   variant  – 'heatmap' | 'grouped-bar' (default from data.chartVariant)
  */
 import React, { useMemo } from 'react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
 
 // Tailwind-safe color palette (green intensity scale)
 const HEAT_COLORS = [
@@ -27,9 +37,9 @@ const HEAT_COLORS = [
 
 // Colour palette for grouped-bar series (one colour per series)
 const BAR_COLORS = [
-  'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
-  'bg-rose-500', 'bg-purple-500', 'bg-cyan-500',
-  'bg-orange-500', 'bg-teal-500',
+  '#3b82f6', '#10b981', '#f59e0b',
+  '#f43f5e', '#8b5cf6', '#06b6d4',
+  '#f97316', '#14b8a6',
 ];
 
 function clamp(v, min, max) {
@@ -112,68 +122,90 @@ function HeatmapTable({ labels, series }) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Grouped Bar chart (pure CSS, no recharts)
+// Grouped Bar chart (recharts)
 // ──────────────────────────────────────────────────────────────
-function GroupedBarChart({ labels, series }) {
-  const maxVal = useMemo(() => {
-    const all = series.flatMap(s => s.values);
-    return all.length > 0 ? Math.max(...all) : 1;
-  }, [series]);
+function GroupedBarChart({ labels, series, dark = false }) {
+  const chartData = useMemo(
+    () => labels.map((label, index) => {
+      const row = { name: label };
+      series.forEach((entry) => {
+        row[entry.name] = Number(entry.values?.[index] || 0);
+      });
+      return row;
+    }),
+    [labels, series]
+  );
+
+  const hasDecimals = useMemo(
+    () => series.some((entry) => (entry.values || []).some((value) => {
+      const numericValue = Number(value);
+      return Number.isFinite(numericValue) && !Number.isInteger(numericValue);
+    })),
+    [series]
+  );
+
+  const gridColor = dark ? '#404040' : '#e5e7eb';
+  const tickColor = dark ? '#a3a3a3' : '#6b7280';
+  const tooltipStyle = {
+    backgroundColor: dark ? '#171717' : '#ffffff',
+    border: `1px solid ${dark ? '#404040' : '#e5e7eb'}`,
+    borderRadius: '8px',
+    fontSize: '12px',
+    padding: '8px 10px',
+  };
+  const minChartWidth = Math.max(520, labels.length * 95);
 
   return (
-    <div className="space-y-3">
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 mb-2">
-        {series.map((s, i) => (
-          <div key={s.name} className="flex items-center gap-1.5">
-            <div className={`w-3 h-3 rounded-sm flex-shrink-0 ${BAR_COLORS[i % BAR_COLORS.length]}`} />
-            <span className="text-xs text-gray-600">{s.name}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Grouped bars */}
-      <div className="overflow-x-auto">
-        <div className="flex items-end gap-4 min-w-max px-1 pb-1">
-          {labels.map((label, li) => (
-            <div key={label} className="flex flex-col items-center gap-2 min-w-[80px]">
-              {/* Value labels row */}
-              <div className="flex justify-center gap-1 w-full">
-                {series.map((s, si) => {
-                  const val = s.values[li];
-                  return (
-                    <div key={s.name} className="text-[10px] font-medium text-gray-400 w-5 text-center">
-                      {val > 0 ? val.toLocaleString() : ''}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Group of bars */}
-              <div className="flex items-end gap-1 h-48">
-                {series.map((s, si) => {
-                  const pct = maxVal > 0 ? (s.values[li] / maxVal) * 100 : 0;
-                  const val = s.values[li];
-                  return (
-                    <div
-                      key={s.name}
-                      className={`w-5 rounded-t-sm flex-shrink-0 ${BAR_COLORS[si % BAR_COLORS.length]} transition-all`}
-                      style={{ height: `${Math.max(pct, 2)}%` }}
-                      title={`${s.name}: ${val?.toLocaleString()}`}
-                    />
-                  );
-                })}
-              </div>
-              {/* X-axis label */}
-              <span
-                className="text-[10px] text-gray-500 text-center leading-tight mt-0.5 max-w-[72px]"
-                style={{ wordBreak: 'break-word' }}
-                title={label}
-              >
-                {truncateText(label, 2, 18)}
-              </span>
-            </div>
-          ))}
-        </div>
+    <div className="overflow-x-auto">
+      <div style={{ width: `${minChartWidth}px`, height: '300px' }} className="min-w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={chartData}
+            margin={{ top: 8, right: 16, left: -6, bottom: 34 }}
+            barGap={4}
+            barCategoryGap="22%"
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: 11, fill: tickColor }}
+              tickFormatter={(value) => truncateText(value, 2, 20)}
+              axisLine={false}
+              tickLine={false}
+              interval={0}
+              angle={-25}
+              textAnchor="end"
+              height={66}
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: tickColor }}
+              axisLine={false}
+              tickLine={false}
+              allowDecimals={hasDecimals}
+            />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              formatter={(value, name) => [
+                Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }),
+                name,
+              ]}
+            />
+            <Legend
+              iconSize={10}
+              wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+              formatter={(value) => <span style={{ color: tickColor }}>{value}</span>}
+            />
+            {series.map((entry, index) => (
+              <Bar
+                key={entry.name}
+                dataKey={entry.name}
+                fill={BAR_COLORS[index % BAR_COLORS.length]}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={30}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -182,7 +214,7 @@ function GroupedBarChart({ labels, series }) {
 // ──────────────────────────────────────────────────────────────
 // Main export
 // ──────────────────────────────────────────────────────────────
-export default function AnalyticsHeatmap({ data, title }) {
+export default function AnalyticsHeatmap({ data, title, dark = false }) {
   if (!data || !data.labels || !data.series || data.series.length === 0) {
     return (
       <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
@@ -199,7 +231,7 @@ export default function AnalyticsHeatmap({ data, title }) {
         <p className="text-xs font-medium text-gray-500 mb-2">{title}</p>
       )}
       {variant === 'grouped-bar' ? (
-        <GroupedBarChart labels={data.labels} series={data.series} />
+        <GroupedBarChart labels={data.labels} series={data.series} dark={dark} />
       ) : (
         <HeatmapTable labels={data.labels} series={data.series} />
       )}

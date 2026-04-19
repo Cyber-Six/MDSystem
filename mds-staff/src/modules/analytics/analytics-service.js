@@ -81,7 +81,7 @@ export const CHART_TYPE_MAP = {
   'oral-findings-percentages': 'bar',
   'vital-signs-box-plot': 'box-plot',
   'patient-credential-status': 'pie',
-  'patient-population-by-branch': 'bar',
+  'patient-population-by-branch': 'pie',
   'most-consumed-medicine': 'bar',
   'most-consumed-supply': 'bar',
   'inventory-consumption-trends': 'stacked-area',

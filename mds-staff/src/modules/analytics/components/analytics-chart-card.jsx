@@ -161,7 +161,7 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
         ) : chartType === 'box-plot' ? (
           <AnalyticsBoxPlotChart data={boxPlotData} />
         ) : chartType === 'heatmap' || chartType === 'grouped-bar' ? (
-          <AnalyticsHeatmap data={data?.data} />
+          <AnalyticsHeatmap data={data?.data} dark={dark} />
         ) : (
           <AnalyticsPieChart data={fullChartData} isDoughnut={chartType === 'doughnut'} dark={dark} />
         )}
