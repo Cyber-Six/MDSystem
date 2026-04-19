@@ -9,17 +9,22 @@ const {
   PRESCRIPTION_DOC_TYPE,
   GENERIC_BINARY_TAG,
   assertPdfBuffer: assertPrescriptionPdfBuffer,
+  createPdfAuditRecord: createPrescriptionPdfAuditRecord,
   parsePrescriptionRequirementRows,
 } = require('../../../services/doc-generate-module/prescription-normalized.js');
 const {
   MEDICAL_CERTIFICATE_DOC_TYPE,
   assertPdfBuffer: assertMedicalCertificatePdfBuffer,
+  createPdfAuditRecord: createMedicalCertificatePdfAuditRecord,
   parseMedicalCertificateRequirementRows,
 } = require('../../../services/doc-generate-module/medical-certificate-normalized.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
 const { checkCredentialsStatus } = require("../../../config/middleware/activeCredential.js");
 
 const router = express.Router();
+const configuredCorsOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : [];
 
 function createRouteError(statusCode, errorCode, message, details = null) {
   const err = new Error(message || errorCode);
@@ -51,9 +56,25 @@ function toDateInput(value) {
   return text ? text.slice(0, 10) : fallback;
 }
 
-function sendPdfBuffer(res, buffer, filename = 'document.pdf') {
+function applyPdfCorsHeaders(req, res) {
+  const requestOrigin = req.headers.origin;
+  if (!requestOrigin) return;
+
+  if (configuredCorsOrigins.length > 0 && !configuredCorsOrigins.includes(requestOrigin)) {
+    return;
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Content-Disposition, Content-Length');
+  res.setHeader('Vary', 'Origin');
+}
+
+function sendPdfBuffer(req, res, buffer, filename = 'document.pdf', disposition = 'inline') {
+  const resolvedDisposition = disposition === 'attachment' ? 'attachment' : 'inline';
+  applyPdfCorsHeaders(req, res);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `${resolvedDisposition}; filename="${filename}"`);
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -249,7 +270,7 @@ function toPrescriptionViewPayload(documentMeta, normalized) {
     followUpDate: normalized.followUpDate || null,
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
-    downloadPath: `/documents/me/download/${documentMeta.id}`,
+    downloadPath: `/documents/patient/prescription/${documentMeta.id}/download`,
   };
 }
 
@@ -311,6 +332,11 @@ async function buildPatientDocumentPdfBuffer(documentMeta, patientId) {
           buffer: regenerated.buffer,
           filename: regenerated.filename || 'document.pdf',
           mode: 'normalized-regenerated',
+          audit: createPrescriptionPdfAuditRecord(regenerated.buffer, {
+            templateType: PRESCRIPTION_DOC_TYPE,
+            documentId,
+            storagePath: `PatientDocuments/${documentId}`,
+          }),
         };
       } catch (normalizedErr) {
         logger.warn('Patient prescription regeneration failed, using legacy payload fallback', {
@@ -357,6 +383,11 @@ async function buildPatientDocumentPdfBuffer(documentMeta, patientId) {
           buffer: regenerated.buffer,
           filename: regenerated.filename || 'document.pdf',
           mode: 'normalized-regenerated-medical-certificate',
+          audit: createMedicalCertificatePdfAuditRecord(regenerated.buffer, {
+            templateType: MEDICAL_CERTIFICATE_DOC_TYPE,
+            documentId,
+            storagePath: `PatientDocuments/${documentId}`,
+          }),
         };
       } catch (normalizedErr) {
         logger.warn('Patient medical certificate regeneration failed, using legacy payload fallback', {
@@ -393,10 +424,26 @@ async function buildPatientDocumentPdfBuffer(documentMeta, patientId) {
     stage: 'legacy-payload-download',
   });
 
+  let audit = null;
+  if (documentMeta.templateType === PRESCRIPTION_DOC_TYPE) {
+    audit = createPrescriptionPdfAuditRecord(pdfBuffer, {
+      templateType: PRESCRIPTION_DOC_TYPE,
+      documentId,
+      storagePath: `PatientDocuments/${documentId}`,
+    });
+  } else if (documentMeta.templateType === MEDICAL_CERTIFICATE_DOC_TYPE) {
+    audit = createMedicalCertificatePdfAuditRecord(pdfBuffer, {
+      templateType: MEDICAL_CERTIFICATE_DOC_TYPE,
+      documentId,
+      storagePath: `PatientDocuments/${documentId}`,
+    });
+  }
+
   return {
     buffer: pdfBuffer,
     filename: `${documentMeta.templateType}_${documentId}.pdf`,
     mode: 'legacy-payload',
+    audit,
   };
 }
 
@@ -422,7 +469,7 @@ function toMedicalCertificateViewPayload(documentMeta, normalized) {
     remarks: normalized.remarks || '',
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
-    downloadPath: `/documents/me/download/${documentMeta.id}`,
+    downloadPath: `/documents/patient/medical-certificate/${documentMeta.id}/download`,
   };
 }
 
@@ -874,7 +921,7 @@ router.get('/my/medical-certificate/view/:documentId', jwtProtect('patient'), ch
 /**
  * Streams a patient-owned generated PDF for a specific template route.
  */
-async function streamTemplatePdfForPatient(req, res, expectedTemplateType) {
+async function streamTemplatePdfForPatient(req, res, expectedTemplateType, disposition = 'inline') {
   try {
     const { documentId } = req.params;
     const patientId = req.user.id;
@@ -885,13 +932,17 @@ async function streamTemplatePdfForPatient(req, res, expectedTemplateType) {
     }
 
     const pdfResult = await buildPatientDocumentPdfBuffer(documentMeta, patientId);
-    sendPdfBuffer(res, pdfResult.buffer, 'document.pdf');
+    sendPdfBuffer(req, res, pdfResult.buffer, 'document.pdf', disposition);
 
     logger.info('Patient template document streamed', {
       documentId,
       patientId,
       templateType: expectedTemplateType,
+      disposition,
       mode: pdfResult.mode,
+      auditPath: pdfResult.audit?.filePath || pdfResult.audit?.storagePath || null,
+      pdfHash: pdfResult.audit?.sha256 || null,
+      pdfBytes: pdfResult.audit?.byteLength || pdfResult.buffer.length,
     });
   } catch (err) {
     logger.error('Patient template document stream failed', {
@@ -910,51 +961,115 @@ async function streamTemplatePdfForPatient(req, res, expectedTemplateType) {
 }
 
 /**
- * GET /documents/prescription/view/:documentId
+ * GET /documents/patient/prescription/:documentId/view
  * View a patient-owned prescription PDF (inline stream)
  */
+router.get('/patient/prescription/:documentId/view', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
+});
+
+/**
+ * GET /documents/patient/prescription/:documentId/download
+ * Download a patient-owned prescription PDF (attachment stream)
+ */
+router.get('/patient/prescription/:documentId/download', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
+});
+
+/**
+ * GET /documents/patient/medical-certificate/:documentId/view
+ * View a patient-owned medical certificate PDF (inline stream)
+ */
+router.get('/patient/medical-certificate/:documentId/view', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
+});
+
+/**
+ * GET /documents/patient/medical-certificate/:documentId/download
+ * Download a patient-owned medical certificate PDF (attachment stream)
+ */
+router.get('/patient/medical-certificate/:documentId/download', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
+});
+
+/**
+ * GET /documents/patient/prescription/view/:documentId
+ * Backward-compatible alias for older patient view route shape
+ */
+router.get('/patient/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
+});
+
+/**
+ * GET /documents/patient/prescription/download/:documentId
+ * Backward-compatible alias for older patient download route shape
+ */
+router.get('/patient/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
+});
+
+/**
+ * GET /documents/patient/medical-certificate/view/:documentId
+ * Backward-compatible alias for older patient view route shape
+ */
+router.get('/patient/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
+});
+
+/**
+ * GET /documents/patient/medical-certificate/download/:documentId
+ * Backward-compatible alias for older patient download route shape
+ */
+router.get('/patient/medical-certificate/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
+});
+
+/**
+ * GET /documents/prescription/view/:documentId
+ * Legacy route retained for compatibility
+ */
 router.get('/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE);
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/prescription/:documentId
- * Backward-compatible alias for prescription inline stream route
+ * Legacy route retained for compatibility
  */
 router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE);
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/prescription/download/:documentId
- * Alias for prescription PDF stream route
+ * Legacy route retained for compatibility
  */
 router.get('/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE);
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
 });
 
 /**
  * GET /documents/medical-certificate/view/:documentId
- * View a patient-owned medical certificate PDF (inline stream)
+ * Legacy route retained for compatibility
  */
 router.get('/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE);
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/medical-certificate/:documentId
- * Backward-compatible alias for medical certificate inline stream route
+ * Legacy route retained for compatibility
  */
 router.get('/medical-certificate/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE);
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
 
 /**
  * GET /documents/medical-certificate/download/:documentId
- * Alias for medical certificate PDF stream route
+ * Legacy route retained for compatibility
  */
 router.get('/medical-certificate/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
-  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE);
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
 });
 
 /**
@@ -969,13 +1084,17 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
     const documentMeta = await resolvePatientDocumentMeta(documentId, patientId);
     const pdfResult = await buildPatientDocumentPdfBuffer(documentMeta, patientId);
 
-    sendPdfBuffer(res, pdfResult.buffer, 'document.pdf');
+    sendPdfBuffer(req, res, pdfResult.buffer, 'document.pdf', 'attachment');
 
     logger.info('Patient document downloaded', {
       documentId,
       patientId,
       templateType: documentMeta.templateType,
       mode: pdfResult.mode,
+      disposition: 'attachment',
+      auditPath: pdfResult.audit?.filePath || pdfResult.audit?.storagePath || null,
+      pdfHash: pdfResult.audit?.sha256 || null,
+      pdfBytes: pdfResult.audit?.byteLength || pdfResult.buffer.length,
     });
   } catch (err) {
     logger.error('Patient document download failed', {

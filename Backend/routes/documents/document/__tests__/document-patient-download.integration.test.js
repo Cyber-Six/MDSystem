@@ -48,6 +48,13 @@ jest.mock('../../../../services/doc-generate-module/index.js', () => ({
 jest.mock('../../../../services/doc-generate-module/prescription-normalized.js', () => ({
   PRESCRIPTION_DOC_TYPE: 'prescription',
   GENERIC_BINARY_TAG: 'payload',
+  createPdfAuditRecord: jest.fn((buffer, context = {}) => ({
+    templateType: context.templateType || 'prescription',
+    storagePath: context.storagePath || null,
+    filePath: context.filePath || context.storagePath || null,
+    sha256: 'mock-prescription-sha256',
+    byteLength: Buffer.isBuffer(buffer) ? buffer.length : 0,
+  })),
   parsePrescriptionRequirementRows: jest.fn(() => ({
     diagnosis: 'Upper respiratory tract infection',
     chiefComplaints: 'Cough',
@@ -69,6 +76,13 @@ jest.mock('../../../../services/doc-generate-module/prescription-normalized.js',
 
 jest.mock('../../../../services/doc-generate-module/medical-certificate-normalized.js', () => ({
   MEDICAL_CERTIFICATE_DOC_TYPE: 'medical-certificate',
+  createPdfAuditRecord: jest.fn((buffer, context = {}) => ({
+    templateType: context.templateType || 'medical-certificate',
+    storagePath: context.storagePath || null,
+    filePath: context.filePath || context.storagePath || null,
+    sha256: 'mock-medical-certificate-sha256',
+    byteLength: Buffer.isBuffer(buffer) ? buffer.length : 0,
+  })),
   parseMedicalCertificateRequirementRows: jest.fn(() => ({
     purpose: 'Fitness to Work',
     diagnosis: 'Medically fit',
@@ -155,11 +169,11 @@ describe('Patient document PDF routes', () => {
     });
   };
 
-  test('GET /documents/prescription/view/:id returns a valid inline PDF stream', async () => {
+  test('GET /documents/patient/prescription/:id/view returns a valid inline PDF stream', async () => {
     setupPrescriptionRegenerationMocks();
 
     const response = await request(app)
-      .get('/documents/prescription/view/55')
+      .get('/documents/patient/prescription/55/view')
       .buffer(true)
       .parse(binaryParser);
 
@@ -169,11 +183,25 @@ describe('Patient document PDF routes', () => {
     expect(response.body.length).toBeGreaterThan(0);
   });
 
-  test('GET /documents/prescription/download/:id returns a valid inline PDF stream', async () => {
+  test('GET /documents/patient/prescription/:id/download returns a valid attachment PDF stream', async () => {
     setupPrescriptionRegenerationMocks();
 
     const response = await request(app)
-      .get('/documents/prescription/download/55')
+      .get('/documents/patient/prescription/55/download')
+      .buffer(true)
+      .parse(binaryParser);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
+    expect(response.headers['content-disposition']).toMatch(/attachment/i);
+    expect(response.body.length).toBeGreaterThan(0);
+  });
+
+  test('GET /documents/patient/medical-certificate/:id/view returns a valid inline PDF stream', async () => {
+    setupMedicalCertificateRegenerationMocks();
+
+    const response = await request(app)
+      .get('/documents/patient/medical-certificate/77/view')
       .buffer(true)
       .parse(binaryParser);
 
@@ -183,31 +211,17 @@ describe('Patient document PDF routes', () => {
     expect(response.body.length).toBeGreaterThan(0);
   });
 
-  test('GET /documents/medical-certificate/view/:id returns a valid inline PDF stream', async () => {
+  test('GET /documents/patient/medical-certificate/:id/download returns a valid attachment PDF stream', async () => {
     setupMedicalCertificateRegenerationMocks();
 
     const response = await request(app)
-      .get('/documents/medical-certificate/view/77')
+      .get('/documents/patient/medical-certificate/77/download')
       .buffer(true)
       .parse(binaryParser);
 
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/inline/i);
-    expect(response.body.length).toBeGreaterThan(0);
-  });
-
-  test('GET /documents/medical-certificate/download/:id returns a valid inline PDF stream', async () => {
-    setupMedicalCertificateRegenerationMocks();
-
-    const response = await request(app)
-      .get('/documents/medical-certificate/download/77')
-      .buffer(true)
-      .parse(binaryParser);
-
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/inline/i);
+    expect(response.headers['content-disposition']).toMatch(/attachment/i);
     expect(response.body.length).toBeGreaterThan(0);
   });
 });

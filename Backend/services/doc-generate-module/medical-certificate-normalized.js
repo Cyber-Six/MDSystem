@@ -133,10 +133,12 @@ function createPdfAuditRecord(buffer, context = {}) {
   const storagePath =
     context.storagePath ||
     (context.documentId ? `PatientDocuments/${context.documentId}` : null);
+  const filePath = context.filePath || storagePath;
 
   return {
     templateType,
     storagePath,
+    filePath,
     sha256: hashBuffer(buffer),
     byteLength: buffer.length,
   };
