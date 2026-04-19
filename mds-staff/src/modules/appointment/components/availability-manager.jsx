@@ -834,10 +834,10 @@ const AvailabilityManager = () => {
 
       {/* Main Content: Calendar (Left) + Settings Panel (Right) */}
       {(activeScheduler || isCreatingNew) && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
           {/* Calendar + Custom Dates */}
           <div className="flex flex-col gap-3 lg:col-span-8">
-            <div className="flex-1">
+            <div>
               {!isCreatingNew && activeScheduler ? (
                 <AvailabilityCalendar
                   selectedDate={selectedCalendarDate}
@@ -1381,46 +1381,46 @@ const AvailabilityManager = () => {
 
       {/* Delete Confirmation Modal */}
       {deleteModal && deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-sm mx-4 p-6 border border-neutral-200 dark:border-neutral-700">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-[560px] rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
-              <h3 className="text-xl font-semibold text-secondary-900 dark:text-white">
+              <h3 className="m-0 text-xl font-semibold leading-[1.2] text-secondary-900 dark:text-white">
                 Confirm Deletion
               </h3>
             </div>
 
-            <p className="text-secondary-700 dark:text-neutral-300 mb-6">
+            <p className="mb-5 text-base leading-[1.5] text-secondary-700 dark:text-neutral-300">
               Are you sure you want to delete <span className="font-semibold text-secondary-900 dark:text-white">"{deleteTarget.label}"</span>?
               {deleteTarget.type === 'scheduler' && ' This cannot be undone.'}
             </p>
 
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => {
                   setDeleteModal(false);
                   setDeleteTarget(null);
                 }}
                 disabled={saving}
-                className="flex-1 px-4 py-2.5 text-base font-medium text-secondary-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors disabled:opacity-50"
+                className="rounded-lg px-4 py-2.5 text-base font-medium text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700/60 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={saving}
-                className="flex-1 px-4 py-2.5 text-base font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-base font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                     Deleting...
                   </>
                 ) : (
                   <>
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                     Delete
                   </>
                 )}
