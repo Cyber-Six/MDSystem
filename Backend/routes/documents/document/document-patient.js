@@ -793,6 +793,7 @@ router.post('/requests/:documentId', jwtProtect("patient"), checkCredentialsStat
  */
 router.get('/my', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
   try {
+    logger.debug('Fetching patient documents', { patientId: req.user.id });
     const patientId = req.user.id;
 
     const result = await db.query(
