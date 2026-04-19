@@ -155,6 +155,10 @@ function sendPdfBuffer(res, buffer, filename = 'document.pdf', disposition = 'in
   const resolvedDisposition = disposition === 'attachment' ? 'attachment' : 'inline';
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `${resolvedDisposition}; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('Content-Length', buffer.length);
   res.end(buffer);
 }

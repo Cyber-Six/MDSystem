@@ -54,6 +54,10 @@ function toDateInput(value) {
 function sendPdfBuffer(res, buffer, filename = 'document.pdf') {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('Content-Length', buffer.length);
   res.end(buffer);
 }
