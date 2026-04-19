@@ -319,15 +319,6 @@ async function consultationsByType(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const baseParams = [startDate, endDate, ...bf.params];
   const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
-  logger.error(`
-    SELECT c.type, COUNT(*) as count
-    FROM "Consultation" c
-    INNER JOIN "Patients" p ON c."patientId" = p.id
-    INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
-    GROUP BY c.type ORDER BY count DESC`);
-
-  logger.error('Query params:', [...baseParams, ...pf.params]);
   
   const result = await db.query(`
     SELECT c.type, COUNT(*) as count
