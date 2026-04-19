@@ -289,7 +289,7 @@ function toPrescriptionViewPayload(documentMeta, normalized) {
     followUpDate: normalized.followUpDate || null,
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
-    downloadPath: `/documents/patient/prescription/${documentMeta.id}/download`,
+    downloadPath: `/documents/patient/prescription/download/${documentMeta.id}`,
   };
 }
 
@@ -488,7 +488,7 @@ function toMedicalCertificateViewPayload(documentMeta, normalized) {
     remarks: normalized.remarks || '',
     expiredAt: documentMeta.expired_at,
     createdAt: documentMeta.created_at,
-    downloadPath: `/documents/patient/medical-certificate/${documentMeta.id}/download`,
+    downloadPath: `/documents/patient/medical-certificate/download/${documentMeta.id}`,
   };
 }
 

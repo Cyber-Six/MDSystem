@@ -110,6 +110,14 @@ const binaryParser = (res, callback) => {
   res.on('end', () => callback(null, Buffer.concat(chunks)));
 };
 
+const expectPdfStreamResponse = (response, disposition) => {
+  expect(response.status).toBe(200);
+  expect(response.headers['content-type']).toMatch(/application\/pdf/i);
+  expect(response.headers['content-disposition']).toMatch(new RegExp(`^${disposition};\\s*filename=`, 'i'));
+  expect(response.body.length).toBeGreaterThan(4);
+  expect(response.body.slice(0, 4).toString('utf8')).toBe('%PDF');
+};
+
 describe('Patient document PDF routes', () => {
   let app;
 
@@ -177,10 +185,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/inline/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'inline');
   });
 
   test('GET /documents/patient/prescription/:id/view returns a valid inline PDF stream', async () => {
@@ -191,10 +196,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/inline/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'inline');
   });
 
   test('GET /documents/patient/prescription/download/:id returns a valid attachment PDF stream', async () => {
@@ -205,10 +207,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/attachment/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'attachment');
   });
 
   test('GET /documents/patient/prescription/:id/download returns a valid attachment PDF stream', async () => {
@@ -219,10 +218,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/attachment/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'attachment');
   });
 
   test('GET /documents/patient/medical-certificate/view/:id returns a valid inline PDF stream', async () => {
@@ -233,10 +229,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/inline/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'inline');
   });
 
   test('GET /documents/patient/medical-certificate/:id/view returns a valid inline PDF stream', async () => {
@@ -247,10 +240,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/inline/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'inline');
   });
 
   test('GET /documents/patient/medical-certificate/download/:id returns a valid attachment PDF stream', async () => {
@@ -261,10 +251,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/attachment/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'attachment');
   });
 
   test('GET /documents/patient/medical-certificate/:id/download returns a valid attachment PDF stream', async () => {
@@ -275,10 +262,7 @@ describe('Patient document PDF routes', () => {
       .buffer(true)
       .parse(binaryParser);
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.headers['content-disposition']).toMatch(/attachment/i);
-    expect(response.body.length).toBeGreaterThan(0);
+    expectPdfStreamResponse(response, 'attachment');
   });
 
   test('returns 403 when patient attempts to access another patient\'s document', async () => {
@@ -296,7 +280,7 @@ describe('Patient document PDF routes', () => {
     });
 
     const response = await request(app)
-      .get('/documents/patient/prescription/view/55');
+      .get('/documents/patient/prescription/55/view');
 
     expect(response.status).toBe(403);
     expect(response.body.error).toBe('FORBIDDEN');
@@ -306,7 +290,7 @@ describe('Patient document PDF routes', () => {
     mockDbQuery.mockResolvedValueOnce({ rows: [] });
 
     const response = await request(app)
-      .get('/documents/patient/prescription/view/9999');
+      .get('/documents/patient/prescription/download/9999');
 
     expect(response.status).toBe(404);
     expect(response.body.error).toBe('DOCUMENT_NOT_FOUND');
@@ -330,7 +314,7 @@ describe('Patient document PDF routes', () => {
       .mockResolvedValueOnce({ rows: [{ data: Buffer.from('not-a-pdf').toString('base64') }] });
 
     const response = await request(app)
-      .get('/documents/patient/prescription/view/55');
+      .get('/documents/patient/prescription/55/view');
 
     expect(response.status).toBe(500);
     expect(response.body.error).toBe('INVALID_PDF_BUFFER');
