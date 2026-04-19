@@ -1019,6 +1019,7 @@ router.get('/patient/medical-certificate/:documentId/download', jwtProtect('pati
  * Backward-compatible alias for older patient view route shape
  */
 router.get('/patient/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy prescription view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
 
@@ -1027,6 +1028,7 @@ router.get('/patient/prescription/view/:documentId', jwtProtect('patient'), chec
  * Backward-compatible alias for older patient download route shape
  */
 router.get('/patient/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy prescription download route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
 });
 
@@ -1035,6 +1037,7 @@ router.get('/patient/prescription/download/:documentId', jwtProtect('patient'), 
  * Backward-compatible alias for older patient view route shape
  */
 router.get('/patient/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy medical certificate view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
 
@@ -1043,6 +1046,7 @@ router.get('/patient/medical-certificate/view/:documentId', jwtProtect('patient'
  * Backward-compatible alias for older patient download route shape
  */
 router.get('/patient/medical-certificate/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy medical certificate download route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'attachment');
 });
 
@@ -1051,6 +1055,7 @@ router.get('/patient/medical-certificate/download/:documentId', jwtProtect('pati
  * Legacy route retained for compatibility
  */
 router.get('/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy prescription view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
 
@@ -1059,6 +1064,7 @@ router.get('/prescription/view/:documentId', jwtProtect('patient'), checkCredent
  * Legacy route retained for compatibility
  */
 router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy prescription route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'inline');
 });
 
@@ -1067,6 +1073,7 @@ router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsS
  * Legacy route retained for compatibility
  */
 router.get('/prescription/download/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy prescription download route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE, 'attachment');
 });
 
