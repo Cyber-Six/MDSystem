@@ -70,16 +70,35 @@ function applyPdfCorsHeaders(req, res) {
   res.setHeader('Vary', 'Origin');
 }
 
-function sendPdfBuffer(req, res, buffer, filename = 'document.pdf', disposition = 'inline') {
+function sendPdfBuffer(req, res, buffer, filename = 'document.pdf', disposition = 'inline', context = {}) {
+  assertPdfBufferAnyTemplate(buffer, {
+    templateType: context.templateType || 'unknown',
+    stage: context.stage || 'patient-stream',
+  });
+
   const resolvedDisposition = disposition === 'attachment' ? 'attachment' : 'inline';
+  const resolvedFilename = pickFirstNonEmpty(filename, 'document.pdf');
+
   applyPdfCorsHeaders(req, res);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `${resolvedDisposition}; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `${resolvedDisposition}; filename="${resolvedFilename}"`);
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', buffer.length);
+
+  logger.info('Patient PDF stream prepared', {
+    patientId: req.user?.id || null,
+    path: req.originalUrl,
+    templateType: context.templateType || 'unknown',
+    stage: context.stage || 'patient-stream',
+    disposition: resolvedDisposition,
+    filename: resolvedFilename,
+    bufferLength: buffer.length,
+  });
+
   res.end(buffer);
 }
 
@@ -932,7 +951,10 @@ async function streamTemplatePdfForPatient(req, res, expectedTemplateType, dispo
     }
 
     const pdfResult = await buildPatientDocumentPdfBuffer(documentMeta, patientId);
-    sendPdfBuffer(req, res, pdfResult.buffer, 'document.pdf', disposition);
+    sendPdfBuffer(req, res, pdfResult.buffer, pdfResult.filename || 'document.pdf', disposition, {
+      templateType: expectedTemplateType,
+      stage: 'patient-template-stream',
+    });
 
     logger.info('Patient template document streamed', {
       documentId,
@@ -1084,7 +1106,10 @@ router.get('/my/download/:documentId', jwtProtect('patient'), checkCredentialsSt
     const documentMeta = await resolvePatientDocumentMeta(documentId, patientId);
     const pdfResult = await buildPatientDocumentPdfBuffer(documentMeta, patientId);
 
-    sendPdfBuffer(req, res, pdfResult.buffer, 'document.pdf', 'attachment');
+    sendPdfBuffer(req, res, pdfResult.buffer, pdfResult.filename || 'document.pdf', 'attachment', {
+      templateType: documentMeta.templateType,
+      stage: 'patient-generic-download',
+    });
 
     logger.info('Patient document downloaded', {
       documentId,

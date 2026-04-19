@@ -190,4 +190,116 @@ describe('Patient dashboard GraphQL endpoint', () => {
     expect(mockGetUserUpdateTicket).toHaveBeenCalledTimes(1);
     expect(mockAutoExpireTickets).toHaveBeenCalledWith(101);
   });
+
+  test('POST /dashboard/patient without GraphQL query returns JSON summary payload', async () => {
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '2001',
+            status: 'Scheduled',
+            session: 'Morning',
+            purpose: 'General checkup',
+            schedulerLabel: 'Medical',
+            scheduledDate: '2026-04-20',
+            created_at: '2026-04-19T07:00:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '3001',
+            status: 'Pending',
+            purpose: 'Pain relief',
+            created_at: '2026-04-19T07:10:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '9001',
+            status: 'Open',
+            purpose: 'Follow-up concern',
+            session_start: '2026-04-19T07:20:00.000Z',
+          },
+          {
+            id: '9002',
+            status: 'Closed',
+            purpose: 'Closed session',
+            session_start: '2026-04-18T07:20:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ total: 2 }] })
+      .mockResolvedValueOnce({ rows: [{ credentials_status: 'Active' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '5001',
+            templateType: 'prescription',
+            created_at: '2026-04-18T07:20:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ total: 4 }] })
+      .mockResolvedValueOnce({ rows: [{ total: 1 }] });
+
+    mockGetUserUpdateTicket.mockResolvedValueOnce({
+      id: '4001',
+      status: 'Pending',
+      scope: 'Medical',
+      notes: 'Update pending review',
+      created_at: '2026-04-19T07:30:00.000Z',
+    });
+
+    mockAutoExpireTickets.mockResolvedValueOnce();
+
+    const response = await request(app)
+      .post('/dashboard/patient')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    expect(response.body.pending).toEqual({
+      total: 4,
+      appointments: 1,
+      medRequests: 1,
+      healthChats: 1,
+      documents: 1,
+    });
+
+    expect(response.body.patientStatus).toEqual({
+      credentials: 'Active',
+      hasPendingUpdate: true,
+    });
+
+    expect(response.body.appointments).toEqual({
+      latest: {
+        id: '2001',
+        status: 'Scheduled',
+        session: 'Morning',
+        purpose: 'General checkup',
+        schedulerLabel: 'Medical',
+        scheduledDate: '2026-04-20',
+        created_at: '2026-04-19T07:00:00.000Z',
+      },
+      total: 1,
+      active: 1,
+    });
+
+    expect(response.body.medRequests.total).toBe(1);
+    expect(response.body.healthChats.total).toBe(2);
+    expect(response.body.documents.total).toBe(4);
+    expect(response.body.documents.recent).toHaveLength(1);
+    expect(response.body.appointment?.id).toBe('2001');
+    expect(response.body.medicineReqs).toHaveLength(1);
+    expect(response.body.chatData?.total).toBe(2);
+
+    expect(mockDbQuery).toHaveBeenCalledTimes(8);
+    expect(mockGetUserUpdateTicket).toHaveBeenCalledTimes(1);
+    expect(mockAutoExpireTickets).toHaveBeenCalledWith(101);
+  });
 });

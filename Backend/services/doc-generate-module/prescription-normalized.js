@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const logger = require('../../utils/logger.js');
 
 const PRESCRIPTION_TEMPLATE_NAME = 'Prescription';
 const PRESCRIPTION_DOC_TYPE = 'prescription';
@@ -133,13 +134,24 @@ function createPdfAuditRecord(buffer, context = {}) {
     (context.documentId ? `PatientDocuments/${context.documentId}` : null);
   const filePath = context.filePath || storagePath;
 
-  return {
+  const auditRecord = {
     templateType,
     storagePath,
     filePath,
     sha256: hashBuffer(buffer),
     byteLength: buffer.length,
   };
+
+  logger.info('Prescription PDF buffer audit', {
+    templateType: auditRecord.templateType,
+    stage: context.stage || 'unknown',
+    storagePath: auditRecord.storagePath,
+    filePath: auditRecord.filePath,
+    sha256: auditRecord.sha256,
+    byteLength: auditRecord.byteLength,
+  });
+
+  return auditRecord;
 }
 
 function normalizeMedications(medications = []) {
