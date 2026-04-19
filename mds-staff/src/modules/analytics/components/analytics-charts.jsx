@@ -39,8 +39,29 @@ const tooltipStyle = {
 
 // ── Bar Chart ────────────────────────────────────────────────────────────────
 
-const AnalyticsBarChart = memo(({ data, dark = false }) => {
+const AnalyticsBarChart = memo(({
+  data,
+  dark = false,
+  tooltipFormatter,
+  tooltipLabelFormatter,
+  allowDecimals = false,
+  isPercentage = false,
+}) => {
   if (!data?.length) return <EmptyState />;
+
+  const defaultTooltipFormatter = (value, seriesName) => {
+    if (!isPercentage) return [value, seriesName];
+    const numericValue = Number(value);
+    const percentage = Number.isFinite(numericValue) ? numericValue.toFixed(2) : '0.00';
+    return [`${percentage}%`, seriesName || 'Percentage'];
+  };
+
+  const percentageTickFormatter = (value) => {
+    if (!isPercentage) return value;
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return '0%';
+    return `${numericValue}%`;
+  };
 
   return (
     <ResponsiveContainer width="100%" height={280}>
@@ -61,9 +82,16 @@ const AnalyticsBarChart = memo(({ data, dark = false }) => {
           tick={{ fontSize: 11, fill: dark ? '#a3a3a3' : '#6b7280' }}
           axisLine={false}
           tickLine={false}
-          allowDecimals={false}
+          allowDecimals={allowDecimals}
+          tickFormatter={percentageTickFormatter}
+          domain={isPercentage ? [0, 100] : undefined}
         />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }} />
+        <Tooltip
+          contentStyle={tooltipStyle}
+          cursor={{ fill: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }}
+          formatter={tooltipFormatter || defaultTooltipFormatter}
+          labelFormatter={tooltipLabelFormatter}
+        />
         <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
           {data.map((_, i) => (
             <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />

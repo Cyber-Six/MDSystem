@@ -1,4 +1,4 @@
-import React, { useState, useCallback, memo } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import { exportAnalytics, EXPORT_PRESETS, QUERY_CATEGORIES, CHART_TYPE_MAP } from '../analytics-service';
 
 const FORMAT_OPTIONS = [
@@ -46,10 +46,10 @@ const SCOPE_OPTIONS = [
 
 /** Friendly labels for individual metric selection */
 const METRIC_LABELS = {
-  'consultations-by-type': 'Consultations by Type',
-  'consultations-by-mode': 'Consultations by Mode',
-  'consultation-trends': 'Consultation Trends',
-  'top-diagnoses': 'Top 10 Diagnoses',
+  'consultations-by-type': 'Consultations by Service Type (Medical vs Dental)',
+  'consultations-by-mode': 'Consultations by Mode of Delivery (Onsite vs Virtual)',
+  'consultation-trends': 'Consultation Trends Over Time',
+  'top-diagnoses': 'Most Frequent Diagnoses Recorded',
   'diagnoses-by-type': 'Diagnoses by Type',
   'bmi-trends': 'BMI Trends',
   'blood-pressure-trends': 'Blood Pressure Trends',
@@ -64,7 +64,7 @@ const METRIC_LABELS = {
   'appointments-accommodated-trends': 'Appointments Accommodated Trends',
   'female-reproductive-health': 'Female Reproductive Health',
   'lifestyle-statistics': 'Lifestyle Statistics (Mean / Median / Mode)',
-  'oral-findings-percentages': 'Oral Finding Percentages',
+  'oral-findings-percentages': 'Oral Findings Prevalence',
   'vital-signs-box-plot': 'Vital Signs Box Plot',
   'patient-credential-status': 'Patient Credential Status',
   'patient-population-by-branch': 'Patient Population by Branch',
@@ -117,6 +117,14 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
     : 'Default';
   const departmentLabel = department || 'All Departments';
   const sexLabel = sex || 'All Sex';
+
+  const scopeMetrics = useMemo(() => {
+    if (scope === 'custom') return selectedMetrics;
+    if (scope === 'full-report') return ALL_METRIC_KEYS;
+    return QUERY_CATEGORIES[scope]?.queries || [];
+  }, [scope, selectedMetrics]);
+
+  const includesOralFindings = scopeMetrics.includes('oral-findings-percentages');
 
   const toggleMetric = useCallback((metric) => {
     setSelectedMetrics(prev =>
@@ -280,6 +288,11 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
               <span>Sex</span>
               <span className="font-medium text-secondary-700 dark:text-neutral-200">{sexLabel}</span>
             </div>
+            {includesOralFindings && (
+              <div className="pt-1 text-[10px] text-secondary-600 dark:text-neutral-300">
+                Oral Findings Prevalence (Boolean-based percentages).
+              </div>
+            )}
           </div>
 
           {/* Error */}

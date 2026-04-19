@@ -14,51 +14,6 @@ import {
   getDateRangeForPeriod,
 } from './analytics-service';       
 
-// ── Friendly display names ───────────────────────────────────────────────────
-
-const QUERY_LABELS = {
-  'consultations-by-type': 'By Type',
-  'consultations-by-mode': 'By Mode',
-  'consultation-trends': 'Trends',
-  'top-diagnoses': 'Top Diagnoses',
-  'diagnoses-by-type': 'By Type',
-  'bmi-trends': 'BMI Trends',
-  'blood-pressure-trends': 'BP Trends',
-  'immunization-coverage': 'Immunization',
-  'dental-procedures': 'Dental Procedures',
-  'lifestyle-risks': 'Lifestyle Risks',
-  'allergy-by-type': 'By Type',
-  'allergy-by-severity': 'By Severity',
-  'appointments-by-category': 'By Category',
-  'appointments-by-status': 'By Status',
-  'appointments-by-session': 'By Session',
-  'appointments-accommodated-trends': 'Accommodated Trends',
-  // EMR / General / Inventory
-  'female-reproductive-health': 'Female Reproductive Health',
-  'lifestyle-statistics': 'Lifestyle Statistics',
-  'oral-findings-percentages': 'Oral Finding Percentages',
-  'vital-signs-box-plot': 'Vital Signs Box Plot',
-  'patient-credential-status': 'Credential Status',
-  'patient-population-by-branch': 'Population by Branch',
-  'most-consumed-medicine': 'Most Consumed Medicine',
-  'most-consumed-supply': 'Most Consumed Supply',
-  'inventory-consumption-trends': 'Consumption Trends',
-  'inventory-report-summary': 'Inventory Report',
-  // Demographics
-  'patients-by-sex': 'Patients by Sex',
-  'consultations-by-sex': 'Consultations by Sex',
-  'top-diagnoses-by-sex': 'Top Diagnoses by Sex',
-  'patients-by-age-group': 'Patients by Age Group',
-  'consultations-by-age-group': 'Consultations by Age Group',
-  'bmi-by-age-group': 'BMI by Age Group',
-  'diagnoses-by-age-group': 'Diagnoses by Age Group',
-  'consultations-by-department': 'Consultations by Department',
-  'consultations-by-program': 'Consultations by Program',
-  'lifestyle-risks-by-department': 'Lifestyle Risks by Department',
-  'sex-age-group-matrix': 'Sex × Age Group Matrix',
-  'diagnoses-sex-age': 'Diagnoses by Sex & Age',
-};
-
 // ── All query keys ───────────────────────────────────────────────────────────
 
 const ALL_QUERY_KEYS = Object.keys(CHART_TYPE_MAP);
@@ -103,6 +58,14 @@ function getQueriesForCategory(category, demoDimension = 'all') {
     return DEMOGRAPHIC_DIMENSION_QUERIES[demoDimension] || QUERY_CATEGORIES.demographics?.queries || [];
   }
   return QUERY_CATEGORIES[category]?.queries || [];
+}
+
+function resolveMetadataChartTitle(metricResult) {
+  const metadataTitle = metricResult?.data?.chartContext?.title;
+  if (typeof metadataTitle === 'string' && metadataTitle.trim()) {
+    return metadataTitle.trim();
+  }
+  return 'No Data Available';
 }
 
 /**
@@ -433,7 +396,7 @@ const StaffAnalytics = () => {
             <AnalyticsChartCard
               key={queryKey}
               dataType={queryKey}
-              title={QUERY_LABELS[queryKey] || queryKey}
+              title={resolveMetadataChartTitle(cache.get(queryKey))}
               data={cache.get(queryKey)}
               loading={loading && !cache.has(queryKey)}
               error={cache.get(queryKey)?.error}

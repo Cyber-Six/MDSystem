@@ -27,7 +27,7 @@ export const QUERY_CATEGORIES = {
   },
   clinical: {
     label: 'Clinical Data',
-    queries: ['immunization-coverage', 'dental-procedures'],
+    queries: ['immunization-coverage', 'dental-procedures', 'oral-findings-percentages'],
   },
   lifestyle: {
     label: 'Lifestyle & Allergies',
@@ -329,11 +329,11 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
 /** Export presets mirror – used to populate presets in the UI without an API call */
 export const EXPORT_PRESETS = {
   'full-report':    { label: 'Full Analytics Report',       description: 'All analytics metrics combined' },
-  'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: type, status, trends' },
+  'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: service type, mode of delivery, and trends' },
   'diagnoses':      { label: 'Diagnoses Report',            description: 'Diagnosis metrics: top ICD-10, type distribution' },
   'vitals':         { label: 'Vital Signs Report',          description: 'BMI, blood pressure, and distribution analysis' },
   'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and accommodated trends' },
-  'clinical':       { label: 'Clinical Data Report',        description: 'Immunization coverage and dental procedures' },
+  'clinical':       { label: 'Clinical Data Report',        description: 'Immunization, dental procedures, and oral findings prevalence' },
   'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors, statistics, and allergy data' },
   'emr':            { label: 'EMR Report',                  description: 'Reproductive health, oral findings, and vital-sign analytics' },
   'general':        { label: 'General Population Report',   description: 'Credential status and branch population comparison' },

@@ -15,6 +15,8 @@ import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
  */
 const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, branch, startDate, endDate, groupBy, department, sex }) => {
   const chartType = CHART_TYPE_MAP[dataType] || data?.data?.chartVariant || 'bar';
+  const isOralFindingsPrevalence = dataType === 'oral-findings-percentages';
+  const isPercentageMetric = String(data?.data?.unit || '').toLowerCase() === 'percentage';
   const [exporting, setExporting] = useState(false);
 
   const handleExport = useCallback(async () => {
@@ -50,6 +52,14 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
 
   const stackedAreaSeries = Array.isArray(data?.data?.series) ? data.data.series : [];
   const boxPlotData = Array.isArray(data?.data?.boxPlot) ? data.data.boxPlot : [];
+  const chartAriaLabel = `${title || 'Analytics chart'} visualization`;
+
+  const oralFindingsTooltipFormatter = useCallback((value, _seriesName, item) => {
+    const finding = item?.payload?.name || 'finding';
+    const numericValue = Number(value);
+    const percentage = Number.isFinite(numericValue) ? numericValue.toFixed(2) : '0.00';
+    return [`${percentage}%`, `Percentage of patients with ${finding}`];
+  }, []);
 
   const total = data?.data?.total ?? 0;
 
@@ -87,7 +97,7 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
       </div>
 
       {/* Card Body */}
-      <div className="p-3">
+      <div className="p-3" role="img" aria-label={chartAriaLabel}>
         {loading ? (
           <div className="flex items-center justify-center h-[280px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
@@ -100,7 +110,13 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
             <p className="text-xs">Failed to load data</p>
           </div>
         ) : chartType === 'bar' ? (
-          <AnalyticsBarChart data={chartData} dark={dark} />
+          <AnalyticsBarChart
+            data={chartData}
+            dark={dark}
+            allowDecimals={isPercentageMetric || isOralFindingsPrevalence}
+            isPercentage={isPercentageMetric}
+            tooltipFormatter={isOralFindingsPrevalence ? oralFindingsTooltipFormatter : undefined}
+          />
         ) : chartType === 'line' ? (
           <AnalyticsLineChart data={chartData} dark={dark} />
         ) : chartType === 'stacked-area' ? (
