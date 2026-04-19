@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback } from 'react';
+import React, { memo, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   AnalyticsBarChart,
   AnalyticsLineChart,
@@ -9,6 +9,12 @@ import {
 import AnalyticsHeatmap from './analytics-heatmap';
 import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
 
+const BAR_PAGINATION_SIZE = 8;
+const BAR_PAGINATION_TYPES = new Set([
+  'consultations-by-department',
+  'consultations-by-program',
+]);
+
 /**
  * Analytics Chart Card
  * Consistent card wrapper for each analytics chart with title, total, and loading states.
@@ -18,6 +24,7 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
   const isOralFindingsPrevalence = dataType === 'oral-findings-percentages';
   const isPercentageMetric = String(data?.data?.unit || '').toLowerCase() === 'percentage';
   const [exporting, setExporting] = useState(false);
+  const [barPage, setBarPage] = useState(0);
 
   const handleExport = useCallback(async () => {
     if (!branch || !startDate || !endDate) return;
@@ -32,12 +39,42 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
   }, [dataType, branch, startDate, endDate, groupBy, department, sex]);
 
   // Transform {labels, values} -> [{name, value}]
-  const chartData = data?.data
+  const fullChartData = data?.data
     ? data.data.labels.map((label, i) => ({
         name: label,
         value: data.data.values[i] || 0,
       }))
     : [];
+
+  const shouldPaginateBars = chartType === 'bar' && BAR_PAGINATION_TYPES.has(dataType);
+  const totalBarPages = shouldPaginateBars
+    ? Math.max(1, Math.ceil(fullChartData.length / BAR_PAGINATION_SIZE))
+    : 1;
+
+  useEffect(() => {
+    setBarPage(0);
+  }, [dataType, startDate, endDate, groupBy, department, sex]);
+
+  useEffect(() => {
+    if (barPage < totalBarPages) return;
+    setBarPage(Math.max(0, totalBarPages - 1));
+  }, [barPage, totalBarPages]);
+
+  const paginatedChartData = useMemo(() => {
+    if (!shouldPaginateBars) return fullChartData;
+    const startIndex = barPage * BAR_PAGINATION_SIZE;
+    return fullChartData.slice(startIndex, startIndex + BAR_PAGINATION_SIZE);
+  }, [shouldPaginateBars, fullChartData, barPage]);
+
+  const showBarPaginationControls = shouldPaginateBars && totalBarPages > 1;
+
+  const handleBarPrev = useCallback(() => {
+    setBarPage((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const handleBarNext = useCallback(() => {
+    setBarPage((prev) => Math.min(totalBarPages - 1, prev + 1));
+  }, [totalBarPages]);
 
   // Transform multi-series payload -> [{ name, <seriesName>: value, ... }]
   const stackedAreaData = data?.data?.labels && Array.isArray(data?.data?.series)
@@ -111,22 +148,44 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
           </div>
         ) : chartType === 'bar' ? (
           <AnalyticsBarChart
-            data={chartData}
+            data={paginatedChartData}
             dark={dark}
             allowDecimals={isPercentageMetric || isOralFindingsPrevalence}
             isPercentage={isPercentageMetric}
             tooltipFormatter={isOralFindingsPrevalence ? oralFindingsTooltipFormatter : undefined}
           />
         ) : chartType === 'line' ? (
-          <AnalyticsLineChart data={chartData} dark={dark} />
+          <AnalyticsLineChart data={fullChartData} dark={dark} />
         ) : chartType === 'stacked-area' ? (
           <AnalyticsStackedAreaChart data={stackedAreaData} series={stackedAreaSeries} dark={dark} />
         ) : chartType === 'box-plot' ? (
           <AnalyticsBoxPlotChart data={boxPlotData} />
         ) : chartType === 'heatmap' || chartType === 'grouped-bar' ? (
-          <AnalyticsHeatmap data={data?.data} />
+          <AnalyticsHeatmap data={data?.data} dark={dark} />
         ) : (
-          <AnalyticsPieChart data={chartData} isDoughnut={chartType === 'doughnut'} dark={dark} />
+          <AnalyticsPieChart data={fullChartData} isDoughnut={chartType === 'doughnut'} dark={dark} />
+        )}
+
+        {showBarPaginationControls && (
+          <div className="mt-2 flex items-center justify-end gap-2 text-[11px]">
+            <button
+              onClick={handleBarPrev}
+              disabled={barPage === 0}
+              className="px-2 py-0.5 rounded border border-neutral-200 dark:border-neutral-600 text-secondary-600 dark:text-neutral-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Prev
+            </button>
+            <span className="text-secondary-500 dark:text-neutral-400">
+              Page {barPage + 1} of {totalBarPages}
+            </span>
+            <button
+              onClick={handleBarNext}
+              disabled={barPage >= totalBarPages - 1}
+              className="px-2 py-0.5 rounded border border-neutral-200 dark:border-neutral-600 text-secondary-600 dark:text-neutral-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         )}
       </div>
     </div>

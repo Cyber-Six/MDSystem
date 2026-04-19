@@ -71,7 +71,19 @@ const METRIC_LABELS = {
   'most-consumed-medicine': 'Most Consumed Medicine',
   'most-consumed-supply': 'Most Consumed Supply',
   'inventory-consumption-trends': 'Inventory Consumption Trends',
-  'inventory-report-summary': 'Inventory Report Summary',
+  'inventory-report-summary': 'Inventory Report Summary (Medicine vs MedicalSupply)',
+  'patients-by-sex': 'Patients by Sex',
+  'consultations-by-sex': 'Consultations by Sex',
+  'top-diagnoses-by-sex': 'Top Diagnoses by Sex (Top 10)',
+  'patients-by-age-group': 'Patients by Age Group',
+  'consultations-by-age-group': 'Consultations by Age Group',
+  'bmi-by-age-group': 'BMI Distribution by Age Group (Box Plot)',
+  'consultations-by-department': 'Consultations by Department (Employee)',
+  'consultations-by-program': 'Consultations by Program (Student)',
+  'lifestyle-risks-by-department': 'Lifestyle Risks by Department',
+  'diagnoses-by-age-group': 'Diagnoses by Age Group',
+  'sex-age-group-matrix': 'Sex x Age Group Matrix',
+  'diagnoses-sex-age': 'Diagnoses by Sex and Age',
 };
 
 const ALL_METRIC_KEYS = Object.keys(CHART_TYPE_MAP);
