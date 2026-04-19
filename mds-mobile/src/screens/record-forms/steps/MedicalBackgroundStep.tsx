@@ -72,7 +72,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
     createFn: (name: string) => createAllergenCatalogEntry(name, allergenTypeForCreate),
     nameKey: 'allergen',
   });
-  const [allergenTypeForCreate, setAllergenTypeForCreate] = useState('Drug');
+  const [allergenTypeForCreate, setAllergenTypeForCreate] = useState('Other');
   const hospitalizationOthers = useCatalogSearch({
     catalog: catalogs.hospitalizationCatalog,
     searchFn: (q: string) => searchDomainCatalog('Hospitalization', q),
@@ -623,6 +623,8 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
               isDark={isDark}
               placeholder="Search or add medications..."
             />
+            <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.medicationReason || ''} onChangeText={v => onUpdateBg({ medicationReason: v })}
+              placeholder="Reason for taking medication" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} multiline />
             <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.medicationNotes || ''} onChangeText={v => onUpdateBg({ medicationNotes: v })}
               placeholder="Medication notes (optional)" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} multiline />
           </>
@@ -704,6 +706,14 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                 <TextInput style={inputStyle} value={bg.gradeOS} onChangeText={v => onUpdateBg({ gradeOS: v })}
                   placeholder="e.g. 20/20, -1.75" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
               </View>
+            </View>
+            <View style={{ marginTop: 8 }}>
+              <DatePickerInput
+                label="Visual Acuity Date"
+                value={bg.visualAcuityDate || ''}
+                onChange={v => onUpdateBg({ visualAcuityDate: v })}
+                isDark={isDark}
+              />
             </View>
           </>
         )}

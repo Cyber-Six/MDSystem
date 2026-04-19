@@ -173,16 +173,20 @@ export const createEmptyFormData = (): FormData => ({
       { name: '', relationship: '', contactNumber: '', address: '' },
     ],
   },
-  medicalHistory: { self: {}, family: {}, familyWhoHasIt: {} },
+  medicalHistory: {
+    self: {}, family: {}, familyWhoHasIt: {},
+    selfOther: '', selfOtherChecked: false,
+    familyOther: '', familyOtherWhoHasIt: '', familyOtherChecked: false,
+  },
   medicalBackground: {
     immunizations: {}, immunizationDetails: {}, immunizationOther: '',
     hasAllergies: '', allergies: {}, allergyOther: '', allergyNotes: '',
     hasHospitalization: '', hospitalizationConditions: {}, hospitalizationDates: {}, hospitalizationDate: '', hospitalizationDischargeDate: '', hospitalizationNotes: '',
     hasOperation: '', operationConditions: {}, operationDates: {}, operationDate: '', operationNotes: '',
     hasMedications: '', selectedMedications: {}, medicationReason: '', medicationNotes: '', medicationDescription: '',
-    smoker: '', smokerSticksPerDay: '', smokerYears: '',
-    alcoholDrinker: '', alcoholFrequency: '',
-    vaper: '', vapeType: '', vapeFrequency: '', yearsVaping: '',
+    smoker: 'no', smokerSticksPerDay: '', smokerYears: '',
+    alcoholDrinker: 'no', alcoholFrequency: '',
+    vaper: 'no', vapeType: '', vapeFrequency: '', yearsVaping: '',
     eyeglasses: false, contactLenses: false, gradeOD: '', gradeOS: '', visualAcuityDate: '',
   },
   dentalHistory: {
@@ -220,6 +224,23 @@ export const getUpdateTicketStatus = async (): Promise<{
     );
     return data.getUpdateTicket ?? null;
   } catch { return null; }
+};
+
+/**
+ * Ensure an update ticket exists for the current user.
+ * Returns current InProgress/Revision ticket ID, or creates a new one.
+ * Non-blocking helper for initial form bootstrap.
+ */
+export const ensureUpdateTicket = async (scope = 'Both'): Promise<string | null> => {
+  try {
+    const existing = await fetchCurrentUpdateTicket();
+    if (existing?.id && (existing.status === 'InProgress' || existing.status === 'Revision')) {
+      return existing.id;
+    }
+    return await createUpdateTicket(scope);
+  } catch {
+    return null;
+  }
 };
 
 const createUpdateTicket = async (scope = 'Both'): Promise<string> => {

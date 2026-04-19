@@ -5,9 +5,74 @@ import { validatePassword, passwordsMatch } from '@mdsystem/core/validation/pass
 import DataConsent from './data-consent';
 
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '';
-const TOTAL_STEPS = 4;
 
-const Register = ({ onBackToLogin }) => {
+const OtpInput = ({ value, onChange, disabled }) => {
+  const inputsRef = useRef([]);
+  const digits = value.padEnd(6, ' ').split('').slice(0, 6);
+
+  const handleChange = (i, e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(-1);
+    const next = [...digits];
+    next[i] = val;
+    onChange(next.join('').replace(/ /g, ''));
+    if (val && i < 5) inputsRef.current[i + 1]?.focus();
+  };
+
+  const handleKeyDown = (i, e) => {
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      if (digits[i]) {
+        const next = [...digits];
+        next[i] = '';
+        onChange(next.join('').replace(/ /g, ''));
+        if (i > 0) inputsRef.current[i - 1]?.focus();
+      } else if (i > 0) {
+        const next = [...digits];
+        next[i - 1] = '';
+        onChange(next.join('').replace(/ /g, ''));
+        inputsRef.current[i - 1]?.focus();
+      }
+    }
+    if (e.key === 'ArrowLeft' && i > 0) inputsRef.current[i - 1]?.focus();
+    if (e.key === 'ArrowRight' && i < 5) inputsRef.current[i + 1]?.focus();
+  };
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted) {
+      onChange(pasted);
+      inputsRef.current[Math.min(pasted.length, 5)]?.focus();
+    }
+    e.preventDefault();
+  };
+
+  return (
+    <div className="flex items-center w-full" style={{ justifyContent: 'space-between' }} onPaste={handlePaste}>
+      {digits.map((d, i) => (
+        <input
+          key={i}
+          ref={(el) => (inputsRef.current[i] = el)}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={d.trim()}
+          onChange={(e) => handleChange(i, e)}
+          onKeyDown={(e) => handleKeyDown(i, e)}
+          disabled={disabled}
+          autoFocus={i === 0}
+          className={`w-11 sm:w-12 h-12 sm:h-14 text-center text-lg font-semibold font-mono
+            bg-neutral-50 text-secondary-900
+            border rounded-lg
+            focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+            transition-all duration-150 disabled:opacity-50
+            ${d.trim() ? 'border-primary-400' : 'border-neutral-300'}`}
+        />
+      ))}
+    </div>
+  );
+};
+
+const Register = ({ onBackToLogin, onStepChange }) => {
   const navigate = useNavigate();
 
   // Multi-step state
@@ -35,6 +100,10 @@ const Register = ({ onBackToLogin }) => {
   const [recaptchaToken, setRecaptchaToken] = useState('');
   const [recaptchaWidgetId, setRecaptchaWidgetId] = useState(null);
   const recaptchaRef = useRef(null);
+
+  useEffect(() => {
+    onStepChange?.(currentStep);
+  }, [currentStep, onStepChange]);
 
   // ── reCAPTCHA v2 setup ────────────────────────────────────────────────
   const renderRecaptcha = useCallback(() => {
@@ -309,7 +378,7 @@ const Register = ({ onBackToLogin }) => {
         </div>
       )}
 
-      <form onSubmit={handleInitialRegistration} className="space-y-3">
+      <form onSubmit={handleInitialRegistration} className="space-y-2.5 sm:space-y-3">
         <div>
           <label htmlFor="email" className="block text-xs font-medium text-secondary-700 mb-1.5">
             Email Address
@@ -435,21 +504,22 @@ const Register = ({ onBackToLogin }) => {
                    text-white font-semibold py-2.5 rounded-md text-sm
                    transition-all duration-200 
                    disabled:opacity-50 disabled:cursor-not-allowed
-                   flex items-center justify-center shadow-md hover:shadow-lg mt-4"
+                   flex items-center justify-center shadow-md hover:shadow-lg mt-3 sm:mt-4"
         >
           {loading ? 'Creating Account...' : 'Create Account'}
         </button>
       </form>
 
       {onBackToLogin && (
-        <div className="text-center mt-6">
+        <div className="text-center mt-4 sm:mt-6">
+          <span className="text-xs text-secondary-500">Already have an account? </span>
           <button
             onClick={onBackToLogin}
             className="text-xs font-medium text-accent-600
                      hover:text-accent-700
                      transition-colors hover:underline"
           >
-            ← Back to Login
+            Sign In
           </button>
         </div>
       )}
@@ -459,54 +529,40 @@ const Register = ({ onBackToLogin }) => {
   // Step 2: Verify OTP
   const renderVerifyOtpStep = () => (
     <div className="w-full max-w-md mx-auto">
-      <div className="text-center mb-8">
-        <div className="bg-primary-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
-          <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <div className="text-center mb-5 sm:mb-6">
+        <div className="w-16 h-16 rounded-xl bg-primary-100 flex items-center justify-center mx-auto mb-3">
+          <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-secondary-900 mb-3">
-          Enter Verification Code
+        <h2 className="text-2xl font-bold text-secondary-900 mb-1">
+          Verify your email
         </h2>
         <p className="text-sm text-neutral-600 leading-relaxed">
-          We've sent a code to<br />
-          <span className="font-semibold text-secondary-900">{formData.email}</span>
+          We've sent a 6-digit code to<br />
+          <span className="font-semibold text-secondary-900 break-all">{formData.email}</span>
         </p>
       </div>
 
       {error && (
-          <div className="mb-5 p-3 bg-error-50 border border-error-300 rounded-lg">
-          <p className="text-error-600 text-xs text-center mb-0">{error}</p>
+          <div className="mb-4 p-3 bg-error-50 border border-error-300 rounded-lg">
+          <p className="text-error-600 text-sm sm:text-xs text-center mb-0">{error}</p>
         </div>
       )}
 
       {successMessage && (
-        <div className="mb-5 p-3 bg-success-50 border border-success-300 rounded-lg">
-          <p className="text-success-600 text-xs text-center mb-0">{successMessage}</p>
+        <div className="mb-4 p-3 bg-success-50 border border-success-300 rounded-lg">
+          <p className="text-success-600 text-sm sm:text-xs text-center mb-0">{successMessage}</p>
         </div>
       )}
 
-      <form onSubmit={handleVerifyOTP} className="space-y-5">
-        <div>
-          <label htmlFor="otp" className="block text-sm font-medium text-secondary-700 mb-2 text-center">
-            Verification Code
+      <form onSubmit={handleVerifyOTP} className="space-y-3 sm:space-y-4">
+        <div className="space-y-2">
+          <label className="block text-sm sm:text-xs font-medium text-secondary-700 text-left">
+            Verification code
           </label>
-          <input
-            id="otp"
-            type="text"
-            placeholder="000000"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            maxLength={6}
-            required
-            disabled={loading}
-            className="w-full px-4 py-4 bg-neutral-50
-                     text-secondary-900 text-center text-2xl font-mono tracking-widest
-                     border-2 border-neutral-300
-                     rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                     placeholder:text-neutral-400 placeholder:text-xl
-                     transition-all duration-200 disabled:opacity-50"
-          />
+          <OtpInput value={otp} onChange={setOtp} disabled={loading} />
         </div>
 
         <button
@@ -514,32 +570,45 @@ const Register = ({ onBackToLogin }) => {
           disabled={loading}
           className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
                   
-                   text-white font-semibold py-2.5 rounded-md text-sm
+                   text-white font-semibold py-3 sm:py-2.5 rounded-md text-base sm:text-sm
                    transition-all duration-200 
                    disabled:opacity-50 disabled:cursor-not-allowed
                    flex items-center justify-center shadow-md hover:shadow-lg"
         >
-          {loading ? 'Verifying...' : 'Verify Code'}
+          {loading ? 'Verifying...' : 'Verify code'}
         </button>
 
         {/* reCAPTCHA widget for resend */}
         {RECAPTCHA_SITE_KEY && (
-          <div className="flex justify-center mt-2">
+          <div className="flex justify-center">
             <div ref={recaptchaRef} />
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={handleResendOTP}
-          disabled={loading}
-          className="w-full bg-neutral-100 hover:bg-neutral-200
-                   text-secondary-700 font-medium py-2.5 rounded-md 
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={handleResendOTP}
+            disabled={loading}
+            className="w-full bg-neutral-100 hover:bg-neutral-200
+                   text-secondary-700 font-medium py-3 sm:py-2.5 rounded-md
                    border border-neutral-300
-                   transition-all duration-200 disabled:opacity-50 text-sm"
-        >
-          Resend Code
-        </button>
+                   transition-all duration-200 disabled:opacity-50 text-base sm:text-sm"
+          >
+            Resend code
+          </button>
+          <button
+            type="button"
+            onClick={() => { setCurrentStep(1); setOtp(''); setError(''); setSuccessMessage(''); }}
+            disabled={loading}
+            className="w-full bg-white hover:bg-neutral-50
+                   text-secondary-700 font-medium py-3 sm:py-2.5 rounded-md
+                   border border-neutral-300
+                   transition-all duration-200 disabled:opacity-50 text-base sm:text-sm"
+          >
+            Go back
+          </button>
+        </div>
       </form>
     </div>
   );
@@ -617,25 +686,6 @@ const Register = ({ onBackToLogin }) => {
 
   return (
   <div className="w-full">
-    {/* Step Progress Bar */}
-    <div className="mb-8">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-xs font-medium text-neutral-600">
-          Step {currentStep} of {TOTAL_STEPS}
-        </span>
-        <span className="text-xs font-medium text-neutral-600">
-          {Math.round((currentStep / TOTAL_STEPS) * 100)}%
-        </span>
-      </div>
-
-      <div className="w-full bg-neutral-200 rounded-full h-2 overflow-hidden">
-        <div
-          className="bg-primary-500 h-2 rounded-full transition-all duration-300 ease-out"
-          style={{ width: `${(currentStep / TOTAL_STEPS) * 100}%` }}
-        />
-      </div>
-    </div>
-
     {/* Step Content */}
     <div className="transition-opacity duration-300">
       {renderStep()}

@@ -124,6 +124,103 @@ const EXPORT_PRESETS = {
   },
 };
 
+const EXPORT_CATEGORIES = [
+  {
+    name: 'Consultations',
+    metrics: [
+      'consultations-by-type',
+      'consultations-by-mode',
+      'consultation-trends',
+      'consultations-by-sex',
+      'consultations-by-department',
+      'consultations-by-program',
+      'consultations-by-age-group',
+    ],
+  },
+  {
+    name: 'Diagnoses',
+    metrics: [
+      'top-diagnoses',
+      'diagnoses-by-type',
+      'top-diagnoses-by-sex',
+      'diagnoses-by-age-group',
+      'diagnoses-sex-age',
+    ],
+  },
+  {
+    name: 'Patients',
+    metrics: [
+      'patients-by-sex',
+      'patients-by-age-group',
+      'patient-population-by-branch',
+      'patient-credential-status',
+      'sex-age-group-matrix',
+    ],
+  },
+  {
+    name: 'Appointments',
+    metrics: [
+      'appointments-by-status',
+      'appointments-by-category',
+      'appointments-by-session',
+      'appointments-accommodated-trends',
+    ],
+  },
+  {
+    name: 'Vitals & BMI',
+    metrics: [
+      'vital-signs-box-plot',
+      'bmi-trends',
+      'bmi-by-age-group',
+      'blood-pressure-trends',
+    ],
+  },
+  {
+    name: 'Lifestyle & Risks',
+    metrics: [
+      'lifestyle-risks',
+      'lifestyle-statistics',
+      'lifestyle-risks-by-department',
+    ],
+  },
+  {
+    name: 'Inventory',
+    metrics: [
+      'inventory-report-summary',
+      'most-consumed-medicine',
+      'most-consumed-supply',
+      'inventory-consumption-trends',
+    ],
+  },
+  {
+    name: 'Clinical Others',
+    metrics: [
+      'immunization-coverage',
+      'dental-procedures',
+      'oral-findings-percentages',
+      'allergy-by-type',
+      'allergy-by-severity',
+      'female-reproductive-health',
+    ],
+  },
+];
+
+const METRIC_CATEGORY_MAP = Object.freeze(
+  EXPORT_CATEGORIES.reduce((acc, category) => {
+    for (const metricKey of category.metrics) {
+      acc[metricKey] = category.name;
+    }
+    return acc;
+  }, {})
+);
+
+const CATEGORY_ORDER = Object.freeze(
+  EXPORT_CATEGORIES.reduce((acc, category, index) => {
+    acc[category.name] = index;
+    return acc;
+  }, {})
+);
+
 // ============================================================
 // SHARED HELPERS
 // ============================================================
@@ -181,6 +278,184 @@ function branchLabel(branch) {
   return branch;
 }
 
+function formatFilterValue(value, fallback = 'All') {
+  if (value === undefined || value === null) return fallback;
+  const normalized = String(value).trim();
+  return normalized ? normalized : fallback;
+}
+
+function normalizeNumeric(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sumSeriesValues(values = []) {
+  return values.reduce((sum, value) => sum + normalizeNumeric(value), 0);
+}
+
+function metricTrendType(dataType) {
+  return [
+    'consultation-trends',
+    'bmi-trends',
+    'blood-pressure-trends',
+    'inventory-consumption-trends',
+    'appointments-accommodated-trends',
+  ].includes(dataType);
+}
+
+function percentOfTotal(value, total) {
+  const parsedTotal = normalizeNumeric(total);
+  if (parsedTotal <= 0) return '';
+  return Number(((normalizeNumeric(value) / parsedTotal) * 100).toFixed(2));
+}
+
+/**
+ * Flatten analytics result maps into row-based records so CSV and Excel can
+ * include the same chart-level details users see in the UI.
+ */
+function buildDetailedRows(data, meta = {}) {
+  const rows = [];
+  const branch = branchLabel(meta.branch);
+  const startDate = meta.startDate || '';
+  const endDate = meta.endDate || '';
+  const groupBy = formatFilterValue(meta.groupBy, 'Default');
+  const departmentFilter = formatFilterValue(meta.department, 'All');
+  const sexFilter = formatFilterValue(meta.sex, 'All');
+
+  for (const [dataType, result] of Object.entries(data)) {
+    const exportMeta = EXPORT_META[dataType] || {};
+    const labels = Array.isArray(result?.labels) ? result.labels : [];
+    const values = Array.isArray(result?.values) ? result.values : [];
+    const series = Array.isArray(result?.series) ? result.series : [];
+    const boxPlot = Array.isArray(result?.boxPlot) ? result.boxPlot : [];
+    const rawCounts = Array.isArray(result?.rawCounts) ? result.rawCounts : [];
+    const diastolicValues = Array.isArray(result?.diastolicValues) ? result.diastolicValues : [];
+    const metricTotal = normalizeNumeric(result?.total);
+    const chartType = exportMeta.chartType || '';
+    const chartVariant = result?.chartVariant || chartType || 'bar';
+    const isTrend = metricTrendType(dataType);
+    const isBP = dataType === 'blood-pressure-trends';
+    const isBoxPlot = dataType === 'vital-signs-box-plot';
+    const showPercentage = shouldShowPercentageColumn(result, { isTrend, isBP, isBoxPlot });
+
+    const baseRow = {
+      metricKey: dataType,
+      metric: exportMeta.label || dataType,
+      chartType,
+      chartVariant,
+      xAxis: exportMeta.xAxis || 'Label',
+      yAxis: exportMeta.yAxis || 'Value',
+      metricTotal,
+      itemCount: labels.length,
+      branch,
+      startDate,
+      endDate,
+      groupBy,
+      departmentFilter,
+      sexFilter,
+    };
+
+    if (boxPlot.length > 0) {
+      for (const item of boxPlot) {
+        rows.push({
+          ...baseRow,
+          rowType: 'box-plot',
+          label: item.name || '',
+          series: '',
+          value: normalizeNumeric(item.median),
+          rawCount: '',
+          diastolicValue: '',
+          min: normalizeNumeric(item.min),
+          q1: normalizeNumeric(item.q1),
+          median: normalizeNumeric(item.median),
+          q3: normalizeNumeric(item.q3),
+          max: normalizeNumeric(item.max),
+          sampleCount: normalizeNumeric(item.count),
+          percentOfTotal: '',
+        });
+      }
+      continue;
+    }
+
+    if (series.length > 0) {
+      const longestSeriesLength = Math.max(
+        labels.length,
+        ...series.map((entry) => (Array.isArray(entry.values) ? entry.values.length : 0)),
+        0
+      );
+
+      for (let i = 0; i < longestSeriesLength; i++) {
+        const label = labels[i] || `Item ${i + 1}`;
+        for (const entry of series) {
+          const entryValues = Array.isArray(entry.values) ? entry.values : [];
+          const value = normalizeNumeric(entryValues[i]);
+          rows.push({
+            ...baseRow,
+            rowType: chartVariant === 'heatmap' ? 'matrix-value' : 'series-value',
+            label,
+            series: entry.name || 'Series',
+            value,
+            rawCount: '',
+            diastolicValue: '',
+            min: '',
+            q1: '',
+            median: '',
+            q3: '',
+            max: '',
+            sampleCount: '',
+            percentOfTotal: showPercentage ? percentOfTotal(value, metricTotal) : '',
+          });
+        }
+      }
+      continue;
+    }
+
+    const rowCount = Math.max(labels.length, values.length, rawCounts.length, diastolicValues.length);
+    if (rowCount === 0) {
+      rows.push({
+        ...baseRow,
+        rowType: 'no-data',
+        label: '',
+        series: '',
+        value: '',
+        rawCount: '',
+        diastolicValue: '',
+        min: '',
+        q1: '',
+        median: '',
+        q3: '',
+        max: '',
+        sampleCount: '',
+        percentOfTotal: '',
+      });
+      continue;
+    }
+
+    for (let i = 0; i < rowCount; i++) {
+      const label = labels[i] || `Item ${i + 1}`;
+      const value = normalizeNumeric(values[i]);
+      rows.push({
+        ...baseRow,
+        rowType: isBP ? 'blood-pressure' : (rawCounts.length > 0 ? 'percentage-with-count' : 'value'),
+        label,
+        series: '',
+        value,
+        rawCount: rawCounts.length > 0 ? normalizeNumeric(rawCounts[i]) : '',
+        diastolicValue: diastolicValues.length > 0 ? normalizeNumeric(diastolicValues[i]) : '',
+        min: '',
+        q1: '',
+        median: '',
+        q3: '',
+        max: '',
+        sampleCount: '',
+        percentOfTotal: showPercentage ? percentOfTotal(value, metricTotal) : '',
+      });
+    }
+  }
+
+  return rows;
+}
+
 /**
  * Percent-of-total is only meaningful for count-like distributions.
  * Avoid rendering % for derived metrics (e.g. medians, averages, precomputed percentages).
@@ -205,13 +480,184 @@ function shouldShowPercentageColumn(result, { isTrend = false, isBP = false, isB
   return true;
 }
 
+function normalizeNumericOrBlank(value) {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string' && value.trim() === '') return '';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : '';
+}
+
+function isBlankValue(value) {
+  return value === undefined
+    || value === null
+    || (typeof value === 'string' && value.trim() === '');
+}
+
+function isGhostDateRangeLabel(label) {
+  return /^\d{4}-\d{2}-\d{2}\s+to\s+\d{4}-\d{2}-\d{2}$/i.test(String(label || '').trim());
+}
+
+function categoryForMetric(metricKey) {
+  return METRIC_CATEGORY_MAP[metricKey] || 'Clinical Others';
+}
+
+function excelColumnName(index) {
+  let value = Math.max(1, Number(index) || 1);
+  let columnName = '';
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    columnName = String.fromCharCode(65 + remainder) + columnName;
+    value = Math.floor((value - 1) / 26);
+  }
+  return columnName;
+}
+
+function autoFitWorksheetColumns(sheet, { minWidth = 12, maxWidth = 45 } = {}) {
+  sheet.columns.forEach((column) => {
+    let widest = minWidth;
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      const value = cell.value;
+      let text = '';
+
+      if (value && typeof value === 'object' && value.richText) {
+        text = value.richText.map((item) => item.text || '').join('');
+      } else {
+        text = value === undefined || value === null ? '' : String(value);
+      }
+
+      widest = Math.max(widest, text.length + 2);
+    });
+
+    column.width = Math.min(maxWidth, Math.max(minWidth, widest));
+  });
+}
+
+function buildResearchRows(data) {
+  const rows = [];
+
+  for (const [metricKey, result] of Object.entries(data || {})) {
+    const exportMeta = EXPORT_META[metricKey] || {};
+    const metric = exportMeta.label || metricKey;
+    const labels = Array.isArray(result?.labels) ? result.labels : [];
+    const values = Array.isArray(result?.values) ? result.values : [];
+    const series = Array.isArray(result?.series) ? result.series : [];
+    const boxPlot = Array.isArray(result?.boxPlot) ? result.boxPlot : [];
+    const isTrend = metricTrendType(metricKey);
+    const isBP = metricKey === 'blood-pressure-trends';
+    const isBoxPlot = metricKey === 'vital-signs-box-plot';
+    const showPercentage = shouldShowPercentageColumn(result, { isTrend, isBP, isBoxPlot });
+
+    const pushRow = ({ label, value, percentOfTotal = '', min = '', q1 = '', median = '', q3 = '', max = '', sampleCount = '' }) => {
+      if (isGhostDateRangeLabel(label)) return;
+      if (isBlankValue(value)) return;
+
+      rows.push({
+        category: categoryForMetric(metricKey),
+        metricKey,
+        metric,
+        label,
+        value,
+        percentOfTotal,
+        min,
+        q1,
+        median,
+        q3,
+        max,
+        sampleCount,
+      });
+    };
+
+    if (boxPlot.length > 0) {
+      for (const item of boxPlot) {
+        const medianValue = normalizeNumericOrBlank(item?.median);
+        pushRow({
+          label: item?.name || '',
+          value: medianValue,
+          min: normalizeNumericOrBlank(item?.min),
+          q1: normalizeNumericOrBlank(item?.q1),
+          median: medianValue,
+          q3: normalizeNumericOrBlank(item?.q3),
+          max: normalizeNumericOrBlank(item?.max),
+          sampleCount: normalizeNumericOrBlank(item?.count),
+        });
+      }
+      continue;
+    }
+
+    if (series.length > 0) {
+      const longestSeriesLength = Math.max(
+        labels.length,
+        ...series.map((entry) => (Array.isArray(entry.values) ? entry.values.length : 0)),
+        0
+      );
+
+      for (let i = 0; i < longestSeriesLength; i++) {
+        const label = labels[i] || `Item ${i + 1}`;
+        for (const entry of series) {
+          const value = normalizeNumericOrBlank(Array.isArray(entry.values) ? entry.values[i] : undefined);
+          pushRow({
+            label,
+            value,
+            percentOfTotal: showPercentage ? percentOfTotal(value, result?.total) : '',
+          });
+        }
+      }
+      continue;
+    }
+
+    const rowCount = Math.max(labels.length, values.length);
+    for (let i = 0; i < rowCount; i++) {
+      const label = labels[i] || `Item ${i + 1}`;
+      const value = normalizeNumericOrBlank(values[i]);
+      pushRow({
+        label,
+        value,
+        percentOfTotal: showPercentage ? percentOfTotal(value, result?.total) : '',
+      });
+    }
+  }
+
+  rows.sort((left, right) => {
+    const categoryDelta = (CATEGORY_ORDER[left.category] || 999) - (CATEGORY_ORDER[right.category] || 999);
+    if (categoryDelta !== 0) return categoryDelta;
+
+    if (left.metric !== right.metric) {
+      return String(left.metric).localeCompare(String(right.metric));
+    }
+
+    return String(left.label).localeCompare(String(right.label));
+  });
+
+  return rows;
+}
+
+function buildSummaryRows(data, researchRows) {
+  const itemCounts = researchRows.reduce((acc, row) => {
+    acc[row.metricKey] = (acc[row.metricKey] || 0) + 1;
+    return acc;
+  }, {});
+
+  return Object.entries(data || {})
+    .map(([metricKey, result]) => ({
+      metricName: EXPORT_META[metricKey]?.label || metricKey,
+      category: categoryForMetric(metricKey),
+      totalValue: normalizeNumeric(result?.total),
+      itemCount: itemCounts[metricKey] || 0,
+    }))
+    .sort((left, right) => {
+      const categoryDelta = (CATEGORY_ORDER[left.category] || 999) - (CATEGORY_ORDER[right.category] || 999);
+      if (categoryDelta !== 0) return categoryDelta;
+      return String(left.metricName).localeCompare(String(right.metricName));
+    });
+}
+
 // ============================================================
 // CSV EXPORT
 // ============================================================
 
 /**
- * Generate CSV string from analytics data.
- * Each data type gets its own section separated by a blank line.
+ * Generate cleaned CSV from analytics data.
+ * The first 8 rows are metadata comments, followed by analysis-ready rows.
  *
  * @param {Object} data - Map of dataType → { labels, values, total }
  * @param {Object} meta - { branch, startDate, endDate }
@@ -219,46 +665,53 @@ function shouldShowPercentageColumn(result, { isTrend = false, isBP = false, isB
  */
 function generateCSV(data, meta) {
   const lines = [];
+  const researchRows = buildResearchRows(data);
+  const generatedAt = meta.generatedAt || new Date().toISOString();
+  const branch = branchLabel(meta.branch);
+  const dateRange = `${meta.startDate} to ${meta.endDate}`;
+  const groupBy = formatFilterValue(meta.groupBy, 'Default');
+  const departmentFilter = formatFilterValue(meta.department, 'All');
+  const sexFilter = formatFilterValue(meta.sex, 'All');
 
-  // Header info
-  lines.push(`# Analytics Export`);
-  lines.push(`# Branch: ${branchLabel(meta.branch)}`);
-  lines.push(`# Date Range: ${meta.startDate} to ${meta.endDate}`);
-  lines.push(`# Generated: ${new Date().toISOString()}`);
-  lines.push('');
+  // 8 metadata lines (kept as comments for easy skipping in external tools).
+  lines.push(`# MDSystem Analytics Clean Export`);
+  lines.push(`# Branch: ${branch}`);
+  lines.push(`# Date Range: ${dateRange}`);
+  lines.push(`# Group By: ${groupBy}`);
+  lines.push(`# Department Filter: ${departmentFilter}`);
+  lines.push(`# Sex Filter: ${sexFilter}`);
+  lines.push(`# Generated: ${generatedAt}`);
+  lines.push('# Columns: Category,Metric,Label,Value,% of Total,Min,Q1,Median,Q3,Max,Sample Count');
 
-  // Summary section
-  lines.push('Section,Total');
-  for (const [dataType, result] of Object.entries(data)) {
-    const label = EXPORT_META[dataType]?.label || dataType;
-    lines.push(`"${label}",${result.total || 0}`);
-  }
-  lines.push('');
+  // Clean research table.
+  lines.push([
+    'Category',
+    'Metric',
+    'Label',
+    'Value',
+    '% of Total',
+    'Min',
+    'Q1',
+    'Median',
+    'Q3',
+    'Max',
+    'Sample Count',
+  ].map(csvEscape).join(','));
 
-  // Detailed sections
-  for (const [dataType, result] of Object.entries(data)) {
-    const meta_ = EXPORT_META[dataType];
-    if (!meta_ || !result.labels) continue;
-
-    lines.push(`# ${meta_.label}`);
-
-    if (meta_.hasSeries && result.series?.length) {
-      // Multi-series: one column per series
-      const seriesNames = result.series.map(s => csvEscape(s.name));
-      lines.push(`${csvEscape(meta_.xAxis)},${seriesNames.join(',')}`);
-      for (let i = 0; i < result.labels.length; i++) {
-        const vals = result.series.map(s => s.values[i] || 0).join(',');
-        lines.push(`${csvEscape(result.labels[i])},${vals}`);
-      }
-    } else {
-      lines.push(`${csvEscape(meta_.xAxis)},${csvEscape(meta_.yAxis)}`);
-      for (let i = 0; i < result.labels.length; i++) {
-        lines.push(`${csvEscape(result.labels[i])},${result.values[i] || 0}`);
-      }
-    }
-
-    lines.push(`Total,${result.total || 0}`);
-    lines.push('');
+  for (const row of researchRows) {
+    lines.push([
+      row.category,
+      row.metric,
+      row.label,
+      row.value,
+      row.percentOfTotal,
+      row.min,
+      row.q1,
+      row.median,
+      row.q3,
+      row.max,
+      row.sampleCount,
+    ].map(csvEscape).join(','));
   }
 
   return lines.join('\r\n');
@@ -277,7 +730,7 @@ function csvEscape(value) {
 // ============================================================
 
 /**
- * Generate Excel workbook with summary + per-metric sheets.
+ * Generate Excel workbook with a Summary sheet and category-based worksheets.
  *
  * @param {Object} data - Map of dataType → { labels, values, total }
  * @param {Object} meta - { branch, startDate, endDate }
@@ -288,112 +741,135 @@ async function generateExcel(data, meta) {
   workbook.creator = 'MDSystem Analytics';
   workbook.created = new Date();
 
-  const headerStyle = {
+  const researchRows = buildResearchRows(data);
+  const summaryRows = buildSummaryRows(data, researchRows);
+
+  const headerStyle = Object.freeze({
     font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 },
-    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F4F4F' } },
+    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } },
     alignment: { horizontal: 'center', vertical: 'middle' },
     border: {
       top: { style: 'thin' }, bottom: { style: 'thin' },
       left: { style: 'thin' }, right: { style: 'thin' },
     },
-  };
-
-  const cellBorder = {
-    top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-    left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-    right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-  };
-
-  // ── Summary Sheet ─────────────────────────────────────────
-  const summarySheet = workbook.addWorksheet('Summary', {
-    properties: { tabColor: { argb: 'FF4CAF50' } },
   });
 
-  // Title rows
-  summarySheet.mergeCells('A1:C1');
-  const titleCell = summarySheet.getCell('A1');
-  titleCell.value = 'MDSystem Analytics Export';
-  titleCell.font = { bold: true, size: 16, color: { argb: 'FF2F4F4F' } };
-  titleCell.alignment = { horizontal: 'center' };
+  const baseBorder = Object.freeze({
+    top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+    bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+    left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+    right: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+  });
 
-  summarySheet.mergeCells('A2:C2');
-  summarySheet.getCell('A2').value = `Branch: ${branchLabel(meta.branch)}  |  ${meta.startDate} to ${meta.endDate}`;
-  summarySheet.getCell('A2').font = { size: 10, color: { argb: 'FF666666' } };
-  summarySheet.getCell('A2').alignment = { horizontal: 'center' };
+  const applyHeaderRow = (row) => {
+    row.eachCell((cell) => {
+      cell.font = headerStyle.font;
+      cell.fill = headerStyle.fill;
+      cell.alignment = headerStyle.alignment;
+      cell.border = headerStyle.border;
+    });
+  };
 
-  // Summary table
-  const summaryHeaderRow = summarySheet.getRow(4);
-  summaryHeaderRow.values = ['Metric', 'Total', 'Items'];
-  summaryHeaderRow.eachCell(cell => Object.assign(cell, headerStyle));
+  const applyAlternatingDataStyle = (row, dataIndex) => {
+    const fillColor = dataIndex % 2 === 0 ? 'FFF3F4F6' : 'FFFFFFFF';
+    row.eachCell((cell) => {
+      cell.border = baseBorder;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
+      cell.alignment = { vertical: 'middle' };
+    });
+  };
 
-  let row = 5;
-  for (const [dataType, result] of Object.entries(data)) {
-    const label = EXPORT_META[dataType]?.label || dataType;
-    const dataRow = summarySheet.getRow(row);
-    dataRow.values = [label, result.total || 0, result.labels?.length || 0];
-    dataRow.eachCell(cell => { cell.border = cellBorder; });
-    row++;
+  const setSheetTitle = (sheet, title, columnCount) => {
+    const safeColumns = Math.max(1, columnCount);
+    const endColumn = excelColumnName(safeColumns);
+    sheet.mergeCells(`A1:${endColumn}1`);
+    const titleCell = sheet.getCell('A1');
+    titleCell.value = title;
+    titleCell.font = { bold: true, size: 14, color: { argb: 'FF1E293B' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  };
+
+  // ── Summary Sheet (must be first) ───────────────────────
+  const summarySheet = workbook.addWorksheet('Summary', {
+    properties: { tabColor: { argb: 'FF4CAF50' } },
+    views: [{ state: 'frozen', ySplit: 2 }],
+  });
+
+  const summaryHeaders = ['Metric Name', 'Category', 'Total Count/Value', 'Number of Items'];
+  setSheetTitle(summarySheet, 'Analytics Summary', summaryHeaders.length);
+  const summaryHeaderRow = summarySheet.getRow(2);
+  summaryHeaderRow.values = summaryHeaders;
+  applyHeaderRow(summaryHeaderRow);
+
+  let summaryRowIndex = 3;
+  for (const row of summaryRows) {
+    const excelRow = summarySheet.getRow(summaryRowIndex);
+    excelRow.values = [row.metricName, row.category, row.totalValue, row.itemCount];
+    applyAlternatingDataStyle(excelRow, summaryRowIndex - 3);
+    summaryRowIndex++;
   }
 
-  summarySheet.columns = [
-    { width: 35 },
-    { width: 15 },
-    { width: 12 },
-  ];
+  if (summaryRows.length === 0) {
+    const emptySummaryRow = summarySheet.getRow(3);
+    emptySummaryRow.values = ['No data available for selected filters', '', '', ''];
+    applyAlternatingDataStyle(emptySummaryRow, 0);
+  }
 
-  // ── Per-Metric Sheets ─────────────────────────────────────
-  for (const [dataType, result] of Object.entries(data)) {
-    const meta_ = EXPORT_META[dataType];
-    if (!meta_ || !result.labels) continue;
+  summarySheet.autoFilter = {
+    from: { row: 2, column: 1 },
+    to: { row: 2, column: summaryHeaders.length },
+  };
+  autoFitWorksheetColumns(summarySheet);
 
-    // Sheet name limited to 31 chars (Excel limitation)
-    const sheetName = meta_.label.substring(0, 31);
-    const sheet = workbook.addWorksheet(sheetName);
-
-    // Title
-    sheet.mergeCells('A1:B1');
-    const sTitleCell = sheet.getCell('A1');
-    sTitleCell.value = meta_.label;
-    sTitleCell.font = { bold: true, size: 13, color: { argb: 'FF2F4F4F' } };
-
-    sheet.mergeCells('A2:B2');
-    sheet.getCell('A2').value = `Total: ${result.total || 0}`;
-    sheet.getCell('A2').font = { size: 10, color: { argb: 'FF666666' } };
-
-    // Table header
-    const hRow = sheet.getRow(4);
-    if (meta_.hasSeries && result.series?.length) {
-      hRow.values = [meta_.xAxis, ...result.series.map(s => s.name)];
-    } else {
-      hRow.values = [meta_.xAxis, meta_.yAxis];
-    }
-    hRow.eachCell(cell => Object.assign(cell, headerStyle));
-
-    // Data rows
-    for (let i = 0; i < result.labels.length; i++) {
-      const r = sheet.getRow(5 + i);
-      if (meta_.hasSeries && result.series?.length) {
-        r.values = [result.labels[i], ...result.series.map(s => s.values[i] || 0)];
-      } else {
-        r.values = [result.labels[i], result.values[i] || 0];
-      }
-      r.eachCell(cell => { cell.border = cellBorder; });
-    }
-
-    // Total row
-    const totalRow = sheet.getRow(5 + result.labels.length);
-    totalRow.values = ['Total', result.total || 0];
-    totalRow.eachCell(cell => {
-      cell.font = { bold: true };
-      cell.border = cellBorder;
+  // ── Category Sheets ──────────────────────────────────────
+  for (const category of EXPORT_CATEGORIES) {
+    const sheet = workbook.addWorksheet(category.name.substring(0, 31), {
+      views: [{ state: 'frozen', ySplit: 2 }],
     });
 
-    const colCount = (meta_.hasSeries && result.series?.length) ? 1 + result.series.length : 2;
-    sheet.columns = [
-      { width: 35 },
-      ...Array(colCount - 1).fill({ width: 18 }),
-    ];
+    const rows = researchRows.filter((row) => row.category === category.name);
+    const includesPercent = rows.some((row) => !isBlankValue(row.percentOfTotal));
+    const isVitalsSheet = category.name === 'Vitals & BMI';
+
+    const headers = ['Metric', 'Label', 'Value'];
+    if (includesPercent) headers.push('% of Total');
+    if (isVitalsSheet) {
+      headers.push('Min', 'Q1', 'Median', 'Q3', 'Max', 'Sample Count');
+    }
+
+    setSheetTitle(sheet, category.name, headers.length);
+    const headerRow = sheet.getRow(2);
+    headerRow.values = headers;
+    applyHeaderRow(headerRow);
+
+    let rowIndex = 3;
+    if (rows.length === 0) {
+      const emptyRow = sheet.getRow(rowIndex);
+      const emptyValues = new Array(headers.length).fill('');
+      emptyValues[0] = 'No data available for selected filters';
+      emptyRow.values = emptyValues;
+      applyAlternatingDataStyle(emptyRow, 0);
+      rowIndex++;
+    } else {
+      for (const row of rows) {
+        const output = [row.metric, row.label, row.value];
+        if (includesPercent) output.push(row.percentOfTotal);
+        if (isVitalsSheet) {
+          output.push(row.min, row.q1, row.median, row.q3, row.max, row.sampleCount);
+        }
+
+        const dataRow = sheet.getRow(rowIndex);
+        dataRow.values = output;
+        applyAlternatingDataStyle(dataRow, rowIndex - 3);
+        rowIndex++;
+      }
+    }
+
+    sheet.autoFilter = {
+      from: { row: 2, column: 1 },
+      to: { row: 2, column: headers.length },
+    };
+    autoFitWorksheetColumns(sheet);
   }
 
   return workbook;
@@ -413,20 +889,17 @@ async function generateExcel(data, meta) {
  */
 async function generatePDF(data, meta) {
   const sections = [];
-  const isTrendType = (dt) => [
-    'consultation-trends',
-    'bmi-trends',
-    'blood-pressure-trends',
-    'inventory-consumption-trends',
-    'appointments-accommodated-trends',
-  ].includes(dt);
+  const groupBy = formatFilterValue(meta.groupBy, 'Default');
+  const departmentFilter = formatFilterValue(meta.department, 'All');
+  const sexFilter = formatFilterValue(meta.sex, 'All');
+  const filterSummary = `Group By: ${groupBy} | Department: ${departmentFilter} | Sex: ${sexFilter}`;
 
   for (const [dataType, result] of Object.entries(data)) {
     const exportMeta = EXPORT_META[dataType];
     if (!exportMeta || !result.labels || result.labels.length === 0) continue;
 
     const maxRows = 10;
-    const isTrend = isTrendType(dataType);
+    const isTrend = metricTrendType(dataType);
     const isBP = dataType === 'blood-pressure-trends';
     const isBoxPlot = dataType === 'vital-signs-box-plot';
 
@@ -462,7 +935,7 @@ async function generatePDF(data, meta) {
       isBP,
       isBoxPlot,
       showPercentage,
-      summary: `Total Records: ${result.total || 0}  |  Items shown: ${tableLabels.length}${result.labels.length > maxRows ? ` of ${result.labels.length}` : ''}`,
+      summary: `Total Records: ${result.total || 0}  |  Items shown: ${tableLabels.length}${result.labels.length > maxRows ? ` of ${result.labels.length}` : ''}  |  ${filterSummary}`,
     });
   }
 
@@ -472,11 +945,13 @@ async function generatePDF(data, meta) {
     const label = EXPORT_META[dataType]?.label || dataType;
     summary[label] = result.total || 0;
   }
+  summary.reportDateRange = `${meta.startDate} to ${meta.endDate}`;
+  summary.appliedFilters = filterSummary;
 
   const docData = {
     report: {
       title: meta.title || 'Analytics Report',
-      subtitle: `${meta.startDate} to ${meta.endDate}`,
+      subtitle: `${meta.startDate} to ${meta.endDate} | ${filterSummary}`,
       branch: branchLabel(meta.branch),
       dateRange: { startDate: meta.startDate, endDate: meta.endDate },
       generatedAt: new Date().toISOString(),
@@ -517,18 +992,15 @@ async function generateSingleMetricPDF(dataType, result, meta) {
   const exportMeta = EXPORT_META[dataType];
   if (!exportMeta) throw new Error(`Unknown export type: ${dataType}`);
 
-  const isTrend = [
-    'consultation-trends',
-    'bmi-trends',
-    'blood-pressure-trends',
-    'inventory-consumption-trends',
-    'appointments-accommodated-trends',
-  ].includes(dataType);
+  const isTrend = metricTrendType(dataType);
   const isBP = dataType === 'blood-pressure-trends';
   const isBoxPlot = dataType === 'vital-signs-box-plot';
   const showPercentage = shouldShowPercentageColumn(result, { isTrend, isBP, isBoxPlot });
   const groupBy = result.groupBy || meta.groupBy || 'monthly';
   const groupLabel = groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
+  const departmentFilter = formatFilterValue(meta.department, 'All');
+  const sexFilter = formatFilterValue(meta.sex, 'All');
+  const filterSubtitle = `Dept: ${departmentFilter} | Sex: ${sexFilter}`;
 
   const doc = pdf.createDocument({ size: 'letter', margins: { top: 50, bottom: 50, left: 54, right: 54 } });
 
@@ -537,7 +1009,7 @@ async function generateSingleMetricPDF(dataType, result, meta) {
     ? `${exportMeta.label} (${groupLabel})`
     : exportMeta.label;
 
-  pdf.addHeader(doc, reportTitle, `${meta.startDate} to ${meta.endDate}`, {
+  pdf.addHeader(doc, reportTitle, `${meta.startDate} to ${meta.endDate} | ${filterSubtitle}`, {
     clinicName: 'TIP Medical-Dental Services',
     address: meta.branch === 'QuezonCity'
       ? 'Quezon City Campus, Philippines'
@@ -548,7 +1020,9 @@ async function generateSingleMetricPDF(dataType, result, meta) {
   pdf.addSectionHeading(doc, 'Report Information');
   pdf.addField(doc, 'Branch', branchLabel(meta.branch));
   pdf.addField(doc, 'Date Range', `${meta.startDate} to ${meta.endDate}`);
-  if (isTrend) pdf.addField(doc, 'Grouping', groupLabel);
+  if (isTrend || meta.groupBy) pdf.addField(doc, 'Grouping', groupLabel);
+  pdf.addField(doc, 'Department Filter', departmentFilter);
+  pdf.addField(doc, 'Sex Filter', sexFilter);
   pdf.addField(doc, 'Total Records', String(result.total || 0));
   pdf.addField(doc, 'Generated', new Date().toLocaleString('en-US'));
   doc.moveDown(0.5);

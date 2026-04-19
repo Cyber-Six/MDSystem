@@ -254,12 +254,49 @@ export const unstageFile = async (fileId) => {
   await axiosRequest.delete(`/media/unstage/${fileId}`);
 };
 
+const normalizeTemplateType = (templateType = '') =>
+  String(templateType).trim().toLowerCase().replace(/\s+/g, '-');
+
+const resolvePatientDocumentRoute = (documentId, templateType = '', mode = 'view') => {
+  const normalizedType = normalizeTemplateType(templateType);
+  const normalizedMode = String(mode).trim().toLowerCase() === 'download' ? 'download' : 'view';
+
+  const resolveTemplatePath = (template) => {
+    if (normalizedMode === 'view') {
+      return `/documents/${template}/view/${documentId}`;
+    }
+    return `/documents/${template}/download/${documentId}`;
+  };
+
+  if (normalizedType === 'prescription') {
+    return resolveTemplatePath('prescription');
+  }
+  if (normalizedType === 'medical-certificate') {
+    return resolveTemplatePath('medical-certificate');
+  }
+  return `/documents/my/download/${documentId}`;
+};
+
 /**
  * Get the URL for a file in a message
  * @param {string} fileId - The file UUID
  * @returns {string} The file URL
  */
 export const getFileUrl = (fileId) => {
+  // Virtual IDs are used for generated documents (e.g. prescription, medical certificate).
+  if (typeof fileId === 'string' && fileId.startsWith('document:')) {
+    // Backward compatible formats:
+    // - document:<documentId>
+    // - document:<templateType>:<documentId>
+    const [, segmentA, segmentB] = fileId.split(':');
+    if (segmentA && segmentB) {
+      return resolvePatientDocumentRoute(segmentB, segmentA, 'view');
+    }
+
+    if (segmentA) {
+      return resolvePatientDocumentRoute(segmentA, '', 'view');
+    }
+  }
   return `/media/record/eConsultation/${fileId}`;
 };
 

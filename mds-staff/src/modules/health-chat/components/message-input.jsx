@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus, Stethoscope, AlertCircle } from 'lucide-react';
+import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus, Stethoscope, AlertCircle, FileBadge } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { uploadFile, unstageFile } from '../health-chat-service';
 
@@ -44,7 +44,7 @@ const resolveClipboardImageFile = (item) => {
   });
 };
 
-const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) => {
+const MessageInput = ({ emitTyping, onOpenPrescription, onOpenMedicalCertificate, onOpenConsultation }) => {
   const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
 
   const [inputValue, setInputValue]   = useState('');
@@ -504,6 +504,25 @@ const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) =>
                   <Pill className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 </span>
               </button>
+
+                <div className="mx-4 border-b border-neutral-200 dark:border-white/[0.07]" />
+
+                {/* Medical Certificate */}
+                <button
+                  type="button"
+                  onClick={() => { onOpenMedicalCertificate?.(); setShowPlusMenu(false); }}
+                  disabled={isSending}
+                  className="w-full flex items-center justify-between px-5 py-4
+                             text-neutral-800 dark:text-white
+                             hover:bg-neutral-100 dark:hover:bg-white/[0.07]
+                             active:bg-neutral-200 dark:active:bg-white/10
+                             disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span className="text-[15px] font-medium tracking-[-0.01em]">Medical Certificate</span>
+                  <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-sky-100 dark:bg-[rgba(14,165,233,0.25)]">
+                    <FileBadge className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                  </span>
+                </button>
             </div>
           )}
           {/* Plus trigger button */}

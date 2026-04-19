@@ -18,6 +18,7 @@ const Auth = () => {
   const [activeView, setActiveView] = useState(getViewFromPath());
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isVerificationView, setIsVerificationView] = useState(false);
+  const [registerStep, setRegisterStep] = useState(1);
 
   // Blur button when panel closes to remove focus styling
   useEffect(() => {
@@ -33,6 +34,7 @@ const Auth = () => {
 
   const handleViewChange = (view) => {
     setActiveView(view);
+    setRegisterStep(1);
     navigate(`/auth/${view}`, { replace: true });
   };
 
@@ -99,13 +101,13 @@ const Auth = () => {
                 <img
                   src="/MDSystem.png"
                   alt="MDSystem Logo"
-                  className="h-14 w-14 sm:h-20 sm:w-20 mx-auto"
+                  className="h-16 w-16 sm:h-20 sm:w-20 mx-auto"
                 />
                 <div style={{ marginTop: '4px' }}>
-                  <h1 className="text-xl sm:text-2xl font-bold text-secondary-900 font-heading" style={{ lineHeight: 1.3, margin: 0 }}>
+                  <h1 className="text-2xl sm:text-2xl font-bold text-secondary-900 font-heading" style={{ lineHeight: 1.3, margin: 0 }}>
                     Patient Portal
                   </h1>
-                  <p className="text-xs sm:text-sm text-neutral-600" style={{ lineHeight: 1.3, margin: '3px 0 0 0' }}>
+                  <p className="text-sm text-neutral-600" style={{ lineHeight: 1.3, margin: '3px 0 0 0' }}>
                     Sign in to your patient account
                   </p>
                 </div>
@@ -117,25 +119,27 @@ const Auth = () => {
               <Login onVerificationViewChange={setIsVerificationView} />
             </div>
             
-            {/* Register Link - Always show for patient portal */}
-            <div className="mt-6 pt-4 pb-[max(env(safe-area-inset-bottom),20px)] border-t border-neutral-200 text-center">
-              <p className="text-xs text-neutral-600 mb-2">
-                Don't have an account?
-              </p>
-              <button 
-                onClick={() => handleViewChange('register')}
-                className="text-accent-600 font-semibold text-xs hover:text-accent-700 transition-colors hover:underline"
-              >
-                Register
-              </button>
-            </div>
+            {/* Register Link - Show only on main login form */}
+            {!isVerificationView && (
+              <div className="mt-6 pt-4 pb-[max(env(safe-area-inset-bottom),20px)] border-t border-neutral-200 flex items-center justify-center gap-1.5 text-center">
+                <span className="text-sm sm:text-xs text-neutral-500">
+                  Don't have an account?
+                </span>
+                <button
+                  onClick={() => handleViewChange('register')}
+                  className="text-primary-500 font-semibold text-sm sm:text-xs hover:text-primary-600 transition-colors"
+                >
+                  Register
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Centered Register Modal */}
       {activeView === 'register' && (
-        <div className="fixed inset-0 flex items-center justify-center z-20 px-4 py-8">
+        <div className="fixed inset-0 flex items-center justify-center z-20 px-2 md:px-4 py-2 md:py-8 overflow-y-auto">
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -143,12 +147,12 @@ const Auth = () => {
           />
           
           {/* Modal Card */}
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div className="px-5 sm:px-6 md:px-8 py-6 sm:py-8">
+          <div className="relative w-full max-w-[420px] bg-white rounded-2xl shadow-2xl overflow-hidden md:overflow-y-auto md:max-h-[90vh]">
+            <div className="px-4 md:px-6 lg:px-8 pt-3 pb-4 md:py-5 flex flex-col">
               {/* Close Button */}
               <button
                 onClick={() => handleViewChange('login')}
-                className="absolute top-4 right-4 p-2 hover:bg-neutral-100 rounded-full transition-colors z-30"
+                className="absolute top-3 right-3 md:top-4 md:right-4 p-2 hover:bg-neutral-100 rounded-full transition-colors z-30"
                 aria-label="Close register modal"
               >
                 <svg className="w-6 h-6 text-secondary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -157,25 +161,29 @@ const Auth = () => {
               </button>
 
               {/* Header */}
-              <div className="text-center mb-8">
-                <img 
-                  src="/MDSystem.png" 
-                  alt="MDSystem Logo" 
-                  className="h-20 w-20 mx-auto mb-4"
-                />
-                <h2 className="text-2xl font-bold text-secondary-900 font-heading mb-1">
-                  Create Account
-                </h2>
-                <p className="text-xs text-neutral-600">
-                  Join our healthcare platform
-                </p>
-              </div>
+              {registerStep === 1 && (
+                <div className="text-center mb-2 md:mb-4">
+                  <img
+                    src="/MDSystem.png"
+                    alt="MDSystem Logo"
+                    className="h-11 w-11 md:h-14 md:w-14 mx-auto mb-2"
+                  />
+                  <h2 className="text-xl md:text-2xl font-bold text-secondary-900 font-heading mb-0.5">
+                    Create Account
+                  </h2>
+                  <p className="text-xs md:text-sm text-neutral-600">
+                    Join our healthcare platform
+                  </p>
+                </div>
+              )}
 
               {/* Register Component */}
-              <Register onBackToLogin={() => {
-                handleViewChange('login');
-                setIsPanelOpen(true);
-              }} />
+              <div className={`flex-1 min-h-0 md:flex-none ${registerStep === 1 ? '' : 'pt-8 md:pt-0'}`}>
+                <Register onBackToLogin={() => {
+                  handleViewChange('login');
+                  setIsPanelOpen(true);
+                }} onStepChange={setRegisterStep} />
+              </div>
             </div>
           </div>
         </div>

@@ -23,7 +23,7 @@ const ErrorBanner = ({ message }) =>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
-      <p className="text-xs text-error-600 leading-relaxed">{message}</p>
+      <p className="text-sm sm:text-xs text-error-600 leading-relaxed">{message}</p>
     </div>
   ) : null;
 
@@ -116,7 +116,7 @@ const PrimaryBtn = ({ loading, loadingLabel, label, disabled, type = 'submit', o
     onClick={onClick}
     className={`w-full flex items-center justify-center gap-2
       bg-primary-500 hover:bg-primary-600 active:bg-primary-700
-      text-white font-semibold text-sm py-3 rounded-lg
+      text-white font-semibold text-base sm:text-sm py-3 rounded-lg
       transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
       shadow-sm hover:shadow-tip
       ${className}`}
@@ -132,7 +132,7 @@ const GhostBtn = ({ label, onClick, disabled, type = 'button' }) => (
     disabled={disabled}
     className="w-full flex items-center justify-center gap-1.5
       bg-white hover:bg-neutral-50 active:bg-neutral-100
-      text-secondary-600 font-medium text-sm py-2.5 rounded-lg
+      text-secondary-600 font-medium text-base sm:text-sm py-3 sm:py-2.5 rounded-lg
       border border-neutral-300
       transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
   >
@@ -433,7 +433,7 @@ const Login = ({ onVerificationViewChange }) => {
           <ErrorBanner message={error} />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label className="block text-xs font-medium text-secondary-600" style={{ margin: 0, textAlign: 'left' }}>
+            <label className="block text-sm sm:text-xs font-medium text-secondary-600" style={{ margin: 0, textAlign: 'left' }}>
               Authenticator code
             </label>
             <OtpInput value={totpCode} onChange={setTotpCode} disabled={isLoading} />
@@ -446,7 +446,7 @@ const Login = ({ onVerificationViewChange }) => {
           <div className="flex" style={{ gap: '8px', paddingTop: '8px', flexDirection: 'column' }}>
             <GhostBtn label="Go back" onClick={() => { setShowTotpVerify(false); setVerificationKey(''); setTotpCode(''); setError(''); }} disabled={isLoading} />
             <button type="button" onClick={handleUseEmailInstead} disabled={isLoading}
-              className="w-full text-xs text-accent-600 hover:text-accent-700 hover:underline py-1 transition-colors disabled:opacity-50">
+              className="w-full text-sm sm:text-xs text-accent-600 hover:text-accent-700 hover:underline py-1 transition-colors disabled:opacity-50">
               Use email code instead
             </button>
           </div>
@@ -473,7 +473,7 @@ const Login = ({ onVerificationViewChange }) => {
           <ErrorBanner message={error} />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label className="block text-xs font-medium text-secondary-600" style={{ margin: 0, textAlign: 'left' }}>
+            <label className="block text-sm sm:text-xs font-medium text-secondary-600" style={{ margin: 0, textAlign: 'left' }}>
               Verification code
             </label>
             <OtpInput value={twoFactorCode} onChange={setTwoFactorCode} disabled={isLoading} />
@@ -483,14 +483,14 @@ const Login = ({ onVerificationViewChange }) => {
 
           <div className="flex" style={{ gap: '8px', paddingTop: '6px' }}>
             <button type="button" onClick={handleResend2FA} disabled={isLoading}
-              className="flex-1 bg-neutral-50 hover:bg-neutral-100 text-secondary-600 font-medium text-sm
-                py-2.5 rounded-lg border border-neutral-300 transition-all duration-200 disabled:opacity-50">
+              className="flex-1 bg-neutral-50 hover:bg-neutral-100 text-secondary-600 font-medium text-base sm:text-sm
+                py-3 sm:py-2.5 rounded-lg border border-neutral-300 transition-all duration-200 disabled:opacity-50">
               Resend code
             </button>
             <button type="button" disabled={isLoading}
               onClick={() => { setShowTwoFactor(false); setVerificationKey(''); setTwoFactorCode(''); }}
-              className="flex-1 bg-white hover:bg-neutral-50 text-secondary-600 font-medium text-sm
-                py-2.5 rounded-lg border border-neutral-300 transition-all duration-200 disabled:opacity-50">
+              className="flex-1 bg-white hover:bg-neutral-50 text-secondary-600 font-medium text-base sm:text-sm
+                py-3 sm:py-2.5 rounded-lg border border-neutral-300 transition-all duration-200 disabled:opacity-50">
               Go back
             </button>
           </div>
@@ -504,9 +504,9 @@ const Login = ({ onVerificationViewChange }) => {
       <div className="w-full max-w-md mx-auto">
         <ErrorBanner message={error} />
 
-        <form onSubmit={handleInitialLogin} className="mt-2.5 space-y-3">
+        <form onSubmit={handleInitialLogin} className="mt-3.5 sm:mt-2.5 space-y-3">
           <div>
-            <label htmlFor="email" className="block text-xs font-medium text-secondary-700 mb-1">
+            <label htmlFor="email" className="block text-sm sm:text-xs font-medium text-secondary-700 mb-1">
               Email address
             </label>
             <input
@@ -514,7 +514,7 @@ const Login = ({ onVerificationViewChange }) => {
               placeholder="your.email@tip.edu.ph"
               value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }}
               required disabled={isLoading}
-              className="w-full px-3.5 py-2.5 text-sm bg-neutral-50 text-secondary-900
+              className="w-full px-4 sm:px-3.5 py-3 sm:py-2.5 text-base sm:text-sm bg-neutral-50 text-secondary-900
                 border border-neutral-300 rounded-lg
                 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
                 placeholder:text-neutral-400 transition-all duration-200
@@ -523,17 +523,10 @@ const Login = ({ onVerificationViewChange }) => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label htmlFor="password" className="block text-xs font-medium text-secondary-700">
+            <div className="mb-1">
+              <label htmlFor="password" className="block text-sm sm:text-xs font-medium text-secondary-700">
                 Password
               </label>
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-xs text-accent-600 hover:text-accent-700 hover:underline transition-colors font-medium"
-              >
-                Forgot password?
-              </button>
             </div>
             <div className="relative">
               <input
@@ -542,7 +535,7 @@ const Login = ({ onVerificationViewChange }) => {
                 placeholder="Enter your password"
                 value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }}
                 required disabled={isLoading}
-                className="w-full px-3.5 py-2.5 pr-10 text-sm bg-neutral-50 text-secondary-900
+                className="w-full px-4 sm:px-3.5 py-3 sm:py-2.5 pr-10 text-base sm:text-sm bg-neutral-50 text-secondary-900
                   border border-neutral-300 rounded-lg
                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
                   placeholder:text-neutral-400 transition-all duration-200
@@ -564,6 +557,16 @@ const Login = ({ onVerificationViewChange }) => {
                 )}
               </button>
             </div>
+            <div className="flex justify-end mt-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm sm:text-xs text-accent-600 hover:text-accent-700 hover:underline transition-colors font-medium"
+              >
+                Forgot password?
+              </button>
+            </div>
+
           </div>
 
           {captchaRequired && (
@@ -615,20 +618,23 @@ const Login = ({ onVerificationViewChange }) => {
                 <div className="w-full border-t border-neutral-200" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-white px-3 text-neutral-400">or continue with</span>
+                <span className="bg-white px-3 text-sm sm:text-xs text-neutral-400">or continue with</span>
               </div>
             </div>
 
             {GOOGLE_CLIENT_ID ? (
-              <div ref={googleBtnRef} className="flex justify-center w-full [&>div]:!w-full" />
+              <div
+                ref={googleBtnRef}
+                className="flex justify-center w-full [&>div]:!w-full [&>div]:!shadow-none [&>div]:!outline-none"
+              />
             ) : (
               <button
                 type="button" disabled={isLoading}
                 onClick={() => setError('Google OAuth is not available.')}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5
-                  border border-neutral-200 rounded-lg bg-white hover:bg-neutral-50
-                  shadow-sm hover:shadow transition-all duration-150
-                  text-sm font-medium text-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-3 sm:py-2.5
+                  border border-transparent rounded-lg bg-white hover:bg-neutral-50
+                  shadow-none outline-none focus:outline-none focus:ring-0 transition-colors duration-150
+                  text-base sm:text-sm font-medium text-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-4 h-4" viewBox="0 0 48 48">
                   <path fill="#EA4335" d="M24 9.5c3.14 0 5.95 1.08 8.17 2.86l6.09-6.09C34.46 3.09 29.53 1 24 1 14.82 1 7.02 6.7 3.77 14.7l7.08 5.5C12.6 13.48 17.85 9.5 24 9.5z" />

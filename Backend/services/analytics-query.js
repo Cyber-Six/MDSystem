@@ -73,9 +73,76 @@ function normalizeSexFilterValue(value) {
   return null;
 }
 
+const AGE_GROUP_CANONICAL = Object.freeze([
+  'Under 17',
+  '17–20',
+  '21–25',
+  '26–30',
+  '31–40',
+  '41+',
+]);
+
+const AGE_GROUP_ALIASES = Object.freeze({
+  under17: 'Under 17',
+  'under-17': 'Under 17',
+  'under 17': 'Under 17',
+  '17-20': '17–20',
+  '17–20': '17–20',
+  '21-25': '21–25',
+  '21–25': '21–25',
+  '26-30': '26–30',
+  '26–30': '26–30',
+  '31-40': '31–40',
+  '31–40': '31–40',
+  '41+': '41+',
+  '41plus': '41+',
+});
+
+function normalizeAgeGroupFilterValue(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === 'all') return null;
+  return AGE_GROUP_ALIASES[normalized] || null;
+}
+
+function ageBracketCaseExpr(alias = 'up') {
+  return `
+    CASE
+      WHEN DATE_PART('year', AGE(${alias}."date_of_birth")) < 17 THEN 'Under 17'
+      WHEN DATE_PART('year', AGE(${alias}."date_of_birth")) <= 20 THEN '17–20'
+      WHEN DATE_PART('year', AGE(${alias}."date_of_birth")) <= 25 THEN '21–25'
+      WHEN DATE_PART('year', AGE(${alias}."date_of_birth")) <= 30 THEN '26–30'
+      WHEN DATE_PART('year', AGE(${alias}."date_of_birth")) <= 40 THEN '31–40'
+      ELSE '41+'
+    END
+  `;
+}
+
+function ageGroupFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3) {
+  const cleanedAgeGroup = options.ageGroup ? String(options.ageGroup).trim() : '';
+  const normalizedAgeGroup = normalizeAgeGroupFilterValue(cleanedAgeGroup);
+
+  if (!normalizedAgeGroup) {
+    return { clause: '', params: [], nextIndex: startIdx };
+  }
+
+  const clause = ` AND ${patientIdExpr} IN (
+    SELECT p_age.id
+    FROM "Patients" p_age
+    INNER JOIN "UsersPersonal" up_age ON up_age.id = p_age.id
+    WHERE ${ageBracketCaseExpr('up_age')} = $${startIdx}
+  )`;
+
+  return {
+    clause,
+    params: [normalizedAgeGroup],
+    nextIndex: startIdx + 1,
+  };
+}
+
 /**
- * Generate SQL WHERE clause fragment to filter patients by department, program, or sex.
- * @param {object} options - { department?: string, sex?: string }
+ * Generate SQL WHERE clause fragment to filter patients by department, program, sex, or age group.
+ * @param {object} options - { department?: string, sex?: string, ageGroup?: string }
  * @param {string} patientIdExpr - SQL expression for patient ID (e.g. 'p.id')
  * @param {number} startIdx - Starting $N param index (after existing params)
  * @returns {{ clause: string, params: any[], nextIndex: number }}
@@ -112,6 +179,11 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
       startIdx++;
     }
   }
+
+  const ageFilter = ageGroupFilterClause(options, patientIdExpr, startIdx);
+  clause += ageFilter.clause;
+  params.push(...ageFilter.params);
+  startIdx = ageFilter.nextIndex;
 
   return { clause, params, nextIndex: startIdx };
 }
@@ -247,15 +319,6 @@ async function consultationsByType(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const baseParams = [startDate, endDate, ...bf.params];
   const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
-  logger.error(`
-    SELECT c.type, COUNT(*) as count
-    FROM "Consultation" c
-    INNER JOIN "Patients" p ON c."patientId" = p.id
-    INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
-    GROUP BY c.type ORDER BY count DESC`);
-
-  logger.error('Query params:', [...baseParams, ...pf.params]);
   
   const result = await db.query(`
     SELECT c.type, COUNT(*) as count
@@ -1598,6 +1661,11 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
     paramIndex++;
   }
 
+  const af = ageGroupFilterClause(options, 'p.id', paramIndex);
+  const ageFilter = af.clause;
+  params.push(...af.params);
+  paramIndex = af.nextIndex;
+
   const result = await db.query(`
     WITH patient_dept AS (
       SELECT DISTINCT ON (pul."patientId") pul."patientId", ep.department
@@ -1612,7 +1680,7 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     INNER JOIN patient_dept pd ON pd."patientId" = p.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${sexFilter}
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${sexFilter} ${ageFilter}
     GROUP BY pd.department ORDER BY count DESC LIMIT 15
   `, params);
 
@@ -1650,6 +1718,11 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
     paramIndex++;
   }
 
+  const af = ageGroupFilterClause(options, 'p.id', paramIndex);
+  const ageFilter = af.clause;
+  params.push(...af.params);
+  paramIndex = af.nextIndex;
+
   const result = await db.query(`
     WITH patient_prog AS (
       SELECT DISTINCT ON (pul."patientId") pul."patientId", spg.label as program
@@ -1665,7 +1738,7 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     INNER JOIN patient_prog pp ON pp."patientId" = p.id
-    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${sexFilter}
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause} ${sexFilter} ${ageFilter}
     GROUP BY pp.program ORDER BY count DESC LIMIT 15
   `, params);
 
@@ -1704,6 +1777,11 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
     paramIndex++;
   }
 
+  const af = ageGroupFilterClause(options, 'pul."patientId"', paramIndex);
+  const ageFilter = af.clause;
+  params.push(...af.params);
+  paramIndex = af.nextIndex;
+
   const result = await db.query(`
     WITH patient_dept AS (
       SELECT DISTINCT ON (pul."patientId") pul."patientId", ep.department
@@ -1722,7 +1800,7 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
     INNER JOIN "patientUpdateLog" pul ON l.id = pul.id AND pul.status = 'Approved'
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
     INNER JOIN patient_dept pd ON pd."patientId" = pul."patientId"
-    WHERE pul.created_at BETWEEN $1 AND $2 ${bf.clause} ${sexFilter}
+    WHERE pul.created_at BETWEEN $1 AND $2 ${bf.clause} ${sexFilter} ${ageFilter}
     GROUP BY pd.department ORDER BY total_records DESC LIMIT 15
   `, params);
 
@@ -2081,7 +2159,8 @@ async function executeQuery(dataType, branch, startDate, endDate, options = {}) 
   const groupSuffix = options.groupBy ? `:g=${options.groupBy}` : '';
   const deptSuffix = options.department ? `:d=${options.department}` : '';
   const sexSuffix = options.sex ? `:sx=${options.sex}` : '';
-  const cacheKey = getCacheKey(dataType, branch, startDate, endDate) + groupSuffix + deptSuffix + sexSuffix;
+  const ageGroupSuffix = options.ageGroup ? `:ag=${options.ageGroup}` : '';
+  const cacheKey = getCacheKey(dataType, branch, startDate, endDate) + groupSuffix + deptSuffix + sexSuffix + ageGroupSuffix;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
@@ -2153,7 +2232,7 @@ function hasReport(reportType) {
  * Get distinct departments and sex values for filter dropdowns
  */
 async function getFilterOptions() {
-  const cacheKey = `${CACHE_PREFIX}filter-options:v3`;
+  const cacheKey = `${CACHE_PREFIX}filter-options:v4`;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
@@ -2224,10 +2303,12 @@ async function getFilterOptions() {
   ).sort((a, b) => a.localeCompare(b));
 
   const sexFilterOptions = ['Male', 'Female'];
+  const ageGroupOptions = [...AGE_GROUP_CANONICAL];
 
   const data = {
     departments: departmentProgramOptions,
     sexes: sexFilterOptions,
+    ageGroups: ageGroupOptions,
   };
   await setCachedResult(cacheKey, data);
   return data;

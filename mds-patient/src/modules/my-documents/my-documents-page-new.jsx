@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   getMyDocuments, 
   downloadMyDocument,
   getRequestedDocuments,
   uploadRequestedDocument,
 } from '../../services/documents-service';
-import { axiosRequest } from '../../packages-core-adapter';
+import { axiosRequest, bannerService } from '../../packages-core-adapter';
 import DocumentNotificationModal from './document-notification-modal';
 
 const TYPE_LABELS = {
@@ -65,6 +65,7 @@ export default function MyDocumentsPage() {
   const [uploadProgress, setUploadProgress] = useState({});
   const [filter, setFilter] = useState('requested');
   const [stagedFiles, setStagedFiles] = useState({});
+  const actionLocksRef = useRef(new Set());
   
   // Notification state
   const [dismissedNotifications, setDismissedNotifications] = useState(() => {
@@ -219,9 +220,12 @@ export default function MyDocumentsPage() {
   };
 
   const handleDownload = async (doc) => {
+    const lockKey = `doc:${doc.id}`;
+    if (actionLocksRef.current.has(lockKey)) return;
+    actionLocksRef.current.add(lockKey);
     setDownloading(doc.id);
     try {
-      const blob = await downloadMyDocument(doc.id);
+      const blob = await downloadMyDocument(doc, { mode: 'download' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -230,23 +234,32 @@ export default function MyDocumentsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      setError('Failed to download document.');
+    } catch (err) {
+      const message = err?.message || 'Failed to download document.';
+      setError(message);
+      bannerService.showBanner({ type: 'error', message });
     } finally {
       setDownloading(null);
+      actionLocksRef.current.delete(lockKey);
     }
   };
 
   const handleView = async (doc) => {
+    const lockKey = `doc:${doc.id}`;
+    if (actionLocksRef.current.has(lockKey)) return;
+    actionLocksRef.current.add(lockKey);
     setDownloading(doc.id);
     try {
-      const blob = await downloadMyDocument(doc.id);
+      const blob = await downloadMyDocument(doc, { mode: 'view' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
-    } catch {
-      setError('Failed to open document.');
+    } catch (err) {
+      const message = err?.message || 'Failed to open document.';
+      setError(message);
+      bannerService.showBanner({ type: 'error', message });
     } finally {
       setDownloading(null);
+      actionLocksRef.current.delete(lockKey);
     }
   };
 

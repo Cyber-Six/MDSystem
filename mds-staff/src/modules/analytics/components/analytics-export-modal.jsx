@@ -76,6 +76,31 @@ const METRIC_LABELS = {
 
 const ALL_METRIC_KEYS = Object.keys(CHART_TYPE_MAP);
 
+async function getExportErrorMessage(err) {
+  const fallback = 'Export failed. Please try again.';
+  const responseData = err?.response?.data;
+
+  if (responseData instanceof Blob) {
+    try {
+      const text = await responseData.text();
+      if (!text) return fallback;
+
+      try {
+        const parsed = JSON.parse(text);
+        return parsed?.message || parsed?.error || fallback;
+      } catch {
+        if (text.toLowerCase().includes('<!doctype html')) {
+          return 'Export request was routed to an HTML page instead of the analytics API. Please restart the dev server and try again.';
+        }
+      }
+    } catch {
+      return fallback;
+    }
+  }
+
+  return err?.response?.data?.message || err?.response?.data?.error || fallback;
+}
+
 /**
  * Analytics Export Modal
  * Allows the user to pick format, scope (preset), and trigger download.
@@ -86,6 +111,12 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
   const [selectedMetrics, setSelectedMetrics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const groupByLabel = groupBy
+    ? `${groupBy.charAt(0).toUpperCase()}${groupBy.slice(1)}`
+    : 'Default';
+  const departmentLabel = department || 'All Departments';
+  const sexLabel = sex || 'All Sex';
 
   const toggleMetric = useCallback((metric) => {
     setSelectedMetrics(prev =>
@@ -120,7 +151,8 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
       await exportAnalytics(format, opts);
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Export failed. Please try again.');
+      const message = await getExportErrorMessage(err);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -235,6 +267,18 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, 
               <span className="font-medium text-secondary-700 dark:text-neutral-200">
                 {FORMAT_OPTIONS.find(f => f.value === format)?.label}
               </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Grouping</span>
+              <span className="font-medium text-secondary-700 dark:text-neutral-200">{groupByLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Department</span>
+              <span className="font-medium text-secondary-700 dark:text-neutral-200">{departmentLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Sex</span>
+              <span className="font-medium text-secondary-700 dark:text-neutral-200">{sexLabel}</span>
             </div>
           </div>
 

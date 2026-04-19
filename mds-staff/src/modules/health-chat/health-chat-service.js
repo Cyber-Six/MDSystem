@@ -8,6 +8,12 @@
 import { axiosRequest } from '../../packages-core-adapter';
 
 const ENDPOINT = '/healthchat/medical';
+const PENDING_TICKETS_CACHE_TTL_MS = 5_000;
+
+const pendingTicketsCache = new Map();
+const pendingTicketsInFlight = new Map();
+
+const buildPendingTicketsCacheKey = (offset, limit, location) => `${offset}:${limit}:${location || 'Both'}`;
 
 /**
  * Send a GraphQL request to the health chat endpoint
@@ -37,6 +43,19 @@ const sendGraphQL = async (query, variables = {}) => {
  * Get pending tickets (awaiting approval)
  */
 export const getPendingTickets = async (offset = 0, limit = 50, location = 'Both') => {
+  const cacheKey = buildPendingTicketsCacheKey(offset, limit, location);
+  const now = Date.now();
+  const cachedEntry = pendingTicketsCache.get(cacheKey);
+
+  if (cachedEntry && now - cachedEntry.ts < PENDING_TICKETS_CACHE_TTL_MS) {
+    return cachedEntry.data;
+  }
+
+  const inFlight = pendingTicketsInFlight.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
   const query = `
     query GetPendingTickets($location: Designation, $offset: Int, $limit: Int) {
       getPendingTickets(location: $location, offset: $offset, limit: $limit) {
@@ -81,8 +100,18 @@ export const getPendingTickets = async (offset = 0, limit = 50, location = 'Both
     }
   `;
 
-  const data = await sendGraphQL(query, { location, offset, limit });
-  return data.getPendingTickets;
+  const request = sendGraphQL(query, { location, offset, limit })
+    .then((data) => {
+      const payload = data.getPendingTickets;
+      pendingTicketsCache.set(cacheKey, { data: payload, ts: Date.now() });
+      return payload;
+    })
+    .finally(() => {
+      pendingTicketsInFlight.delete(cacheKey);
+    });
+
+  pendingTicketsInFlight.set(cacheKey, request);
+  return request;
 };
 
 /**
@@ -672,7 +701,36 @@ export const unstageFile = async (fileId) => {
 /**
  * Get the URL for a file
  */
+const normalizeTemplateType = (templateType = '') =>
+  String(templateType).trim().toLowerCase().replace(/\s+/g, '-');
+
+const resolveStaffDocumentRoute = (documentId, templateType = '', mode = 'view') => {
+  const normalizedType = normalizeTemplateType(templateType);
+  const normalizedMode = String(mode).trim().toLowerCase() === 'download' ? 'download' : 'view';
+  if (normalizedType === 'prescription') {
+    return `/documents/prescription/${normalizedMode}/${documentId}`;
+  }
+  if (normalizedType === 'medical-certificate') {
+    return `/documents/medical-certificate/${normalizedMode}/${documentId}`;
+  }
+  return `/documents/generated/download/${documentId}`;
+};
+
 export const getFileUrl = (fileId) => {
+  // Virtual IDs are used for generated documents (e.g. prescription, medical certificate).
+  if (typeof fileId === 'string' && fileId.startsWith('document:')) {
+    // Backward compatible formats:
+    // - document:<documentId>
+    // - document:<templateType>:<documentId>
+    const [, segmentA, segmentB] = fileId.split(':');
+    if (segmentA && segmentB) {
+      return resolveStaffDocumentRoute(segmentB, segmentA, 'view');
+    }
+
+    if (segmentA) {
+      return resolveStaffDocumentRoute(segmentA, '', 'view');
+    }
+  }
   return `/media/record/eConsultation/${fileId}`;
 };
 

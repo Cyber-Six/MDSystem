@@ -157,9 +157,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),
           bypass: function(req) {
-            // Don't proxy GET requests to /analytics (browser navigation) - let React Router handle them
-            // Only proxy API calls (POST, or GET with API path prefixes)
-            if (req.method === 'GET' && !req.url.startsWith('/analytics/query') && !req.url.startsWith('/analytics/queries') && !req.url.startsWith('/analytics/export') && !req.url.startsWith('/analytics/report')) {
+            // Only bypass SPA navigation to the analytics page itself.
+            // All analytics API endpoints (including /analytics/filter-options) must be proxied.
+            const url = req.url || '';
+            if (req.method === 'GET' && (url === '/analytics' || url === '/analytics/')) {
               return '/index.html';
             }
           },

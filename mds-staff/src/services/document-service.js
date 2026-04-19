@@ -1,5 +1,31 @@
 import { axiosRequest } from '../packages-core-adapter';
 
+const normalizeTemplateType = (templateType = '') =>
+  String(templateType).trim().toLowerCase().replace(/\s+/g, '-');
+
+const normalizeDocumentMode = (mode = '') =>
+  String(mode).trim().toLowerCase() === 'view' ? 'view' : 'download';
+
+const resolveGeneratedDocumentPath = (documentId, templateType = '', mode = 'download') => {
+  const normalizedType = normalizeTemplateType(templateType);
+  const normalizedMode = normalizeDocumentMode(mode);
+
+  if (normalizedType === 'prescription') {
+    return `/documents/prescription/${normalizedMode}/${documentId}`;
+  }
+  if (normalizedType === 'medical-certificate') {
+    return `/documents/medical-certificate/${normalizedMode}/${documentId}`;
+  }
+  return `/documents/generated/download/${documentId}`;
+};
+
+const fetchGeneratedDocumentBlob = async (path) => {
+  const response = await axiosRequest.get(path, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
 /**
  * Get all required document tags with patient's submission status.
  * @param {string|number} patientId - The patient ID to fetch documents for
@@ -148,12 +174,60 @@ export const getGeneratedDocuments = async (patientId) => {
 
 /**
  * Download a generated document PDF as Blob.
- * @param {string|number} documentId - The generated document ID
+ * @param {string|number|object} documentOrId - generated document id or object with { id, templateType }
+ * @param {string} templateType - optional template type override when first arg is id
  * @returns {Promise<Blob>}
  */
-export const downloadGeneratedDocumentBlob = async (documentId) => {
-  const response = await axiosRequest.get(`/documents/generated/download/${documentId}`, {
-    responseType: 'blob',
-  });
-  return response.data;
+export const downloadGeneratedDocumentBlob = async (documentOrId, templateType = '') => {
+  const documentId =
+    typeof documentOrId === 'object' && documentOrId !== null
+      ? documentOrId.id
+      : documentOrId;
+
+  const documentTemplateType =
+    typeof documentOrId === 'object' && documentOrId !== null
+      ? documentOrId.templateType
+      : templateType;
+
+  const preferredPath = resolveGeneratedDocumentPath(documentId, documentTemplateType, 'download');
+  const fallbackPath = `/documents/generated/download/${documentId}`;
+
+  try {
+    return await fetchGeneratedDocumentBlob(preferredPath);
+  } catch (err) {
+    if (preferredPath !== fallbackPath) {
+      return fetchGeneratedDocumentBlob(fallbackPath);
+    }
+    throw err;
+  }
+};
+
+/**
+ * View a generated document PDF as Blob.
+ * @param {string|number|object} documentOrId - generated document id or object with { id, templateType }
+ * @param {string} templateType - optional template type override when first arg is id
+ * @returns {Promise<Blob>}
+ */
+export const viewGeneratedDocumentBlob = async (documentOrId, templateType = '') => {
+  const documentId =
+    typeof documentOrId === 'object' && documentOrId !== null
+      ? documentOrId.id
+      : documentOrId;
+
+  const documentTemplateType =
+    typeof documentOrId === 'object' && documentOrId !== null
+      ? documentOrId.templateType
+      : templateType;
+
+  const preferredPath = resolveGeneratedDocumentPath(documentId, documentTemplateType, 'view');
+  const fallbackPath = `/documents/generated/download/${documentId}`;
+
+  try {
+    return await fetchGeneratedDocumentBlob(preferredPath);
+  } catch (err) {
+    if (preferredPath !== fallbackPath) {
+      return fetchGeneratedDocumentBlob(fallbackPath);
+    }
+    throw err;
+  }
 };

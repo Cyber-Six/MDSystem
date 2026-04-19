@@ -11,7 +11,7 @@ The analytics export feature allows staff users to download analytics data in th
 ```
 Frontend (mds-staff)                        Backend (Express)
 ┌────────────────────────┐                  ┌────────────────────────────────────┐
-│ staff-analytics.jsx    │                  │ routes/documents/analytics.js      │
+│ staff-analytics.jsx    │                  │ routes/analytics/analytics.js      │
 │  ├─ Export button       │ ──POST──────▶   │  ├─ POST /analytics/export         │
 │  └─ AnalyticsExportModal│                 │  ├─ POST /analytics/export/single  │
 │                        │                  │  ├─ GET  /analytics/export/presets  │
@@ -46,7 +46,7 @@ Frontend (mds-staff)                        Backend (Express)
 
 | File | Changes |
 |------|---------|
-| `Backend/routes/documents/analytics.js` | Added 4 export endpoints |
+| `Backend/routes/analytics/analytics.js` | Added and maintained export endpoints |
 | `mds-staff/src/modules/analytics/analytics-service.js` | Added `exportAnalytics()`, `exportSingleMetric()`, `EXPORT_PRESETS` |
 | `mds-staff/src/modules/analytics/staff-analytics.jsx` | Added Export button + modal integration |
 | `mds-staff/src/modules/analytics/components/analytics-chart-card.jsx` | Added per-card PDF export button |
@@ -66,6 +66,9 @@ Export multiple metrics in the chosen format.
   "branch": "Manila" | "QuezonCity" | "Both",
   "startDate": "2025-01-01",
   "endDate": "2025-06-01",
+  "groupBy": "daily" | "weekly" | "monthly" | "quarterly" | "yearly",  // optional
+  "department": "BS Computer Science",                                     // optional
+  "sex": "Male" | "Female",                                              // optional
   "preset": "full-report",        // optional – overrides dataTypes
   "dataTypes": ["top-diagnoses"]   // optional – specific queries
 }
@@ -81,7 +84,10 @@ Export a single metric as a focused PDF with data table + chart.
   "dataType": "top-diagnoses",
   "branch": "Manila",
   "startDate": "2025-01-01",
-  "endDate": "2025-06-01"
+  "endDate": "2025-06-01",
+  "groupBy": "monthly",       // optional
+  "department": "Nursing",    // optional
+  "sex": "Female"             // optional
 }
 ```
 
@@ -96,20 +102,26 @@ Returns all exportable data types with display metadata (label, axes, chart type
 ## Export Formats
 
 ### CSV
-- Comment-prefixed metadata header (branch, dates, generated timestamp)
-- Summary table: metric name + total
-- Per-metric sections: xAxis/yAxis columns with totals
-- Safe escaping of commas, quotes, and newlines
+- Comment-prefixed metadata header now includes branch, date range, groupBy, department filter, sex filter, and generated timestamp.
+- First table is now a flat detailed breakdown for import workflows, with one row per chart data point (including series rows for grouped-bar/heatmap and quartiles for box plots).
+- Detail columns include: metric key/label, chart type/variant, x/y axis labels, data label, series, value, raw count, diastolic value, min/q1/median/q3/max/sample count, percent-of-total, metric totals, and filter/date context.
+- Summary table is still included after details for quick totals.
+- Safe escaping of commas, quotes, and newlines.
 
 ### Excel (.xlsx)
-- **Summary sheet**: Merged title row, styled header table with metric name/total/items count
-- **Per-metric sheets**: Individual worksheets with formatted data tables
+- **Detailed Breakdown sheet (default first tab)**: Flattened full-detail dataset (same shape as CSV detail rows) so opening/importing the file immediately shows informative analytics rows.
+- **Summary sheet**: Still provides totals, but now includes chart type, date range, and active filters.
+- **Per-metric sheets**: Individual worksheets now include branch/date/filter metadata and richer table columns for:
+  - series-based metrics (male/female, department-type splits, matrix series)
+  - blood-pressure trends (systolic + diastolic)
+  - oral findings percentage metrics (percentage + raw count)
+  - box-plot metrics (min, q1, median, q3, max, sample count)
 - Dark green header styling (#2F4F4F), cell borders, auto-widths
 - Uses `exceljs` library
 
 ### PDF
-- **Multi-metric report**: Uses existing `StaffReportTemplate` with embedded charts (pie, bar, line, doughnut) and summary KPIs
-- **Single-metric report**: Focused layout with data table (top 10 rows with percentages), embedded chart, physician signature
+- **Multi-metric report**: Uses existing `StaffReportTemplate` with embedded charts and now embeds active filter context (groupBy, department, sex) in report subtitle and section summaries.
+- **Single-metric report**: Focused layout now includes department and sex filters in report information, plus grouping when applicable.
 - Dynamic filenames: `{metric}_{branch}_{startDate}_to_{endDate}.pdf`
 
 ---
@@ -118,13 +130,17 @@ Returns all exportable data types with display metadata (label, axes, chart type
 
 | Preset | Metrics | Description |
 |--------|---------|-------------|
-| `full-report` | All 15 | Complete analytics export |
+| `full-report` | All configured metrics | Complete analytics export |
 | `consultations` | 3 | Type, status, trends |
 | `diagnoses` | 2 | Top ICD-10, type distribution |
-| `vitals` | 2 | BMI, blood pressure trends |
-| `appointments` | 3 | Category, status, session |
+| `vitals` | 3 | BMI, blood pressure, and vital-sign distribution |
+| `appointments` | 4 | Category, status, session, accommodated trends |
 | `clinical` | 2 | Immunization, dental procedures |
-| `lifestyle` | 3 | Risk factors, allergies |
+| `lifestyle` | 4 | Risk factors, lifestyle statistics, allergies |
+| `emr` | 4 | Reproductive health, oral findings, lifestyle stats, vital signs |
+| `general` | 2 | Credential status and branch population |
+| `inventory` | 4 | Consumption trends, top consumed items, stock summary |
+| `demographics` | 12 | Sex, age group, department, program, and matrix analytics |
 
 ---
 
@@ -138,7 +154,18 @@ Returns all exportable data types with display metadata (label, axes, chart type
 - **Error handling**: Inline error message
 
 ### Per-Chart Export
-Each `AnalyticsChartCard` has a small download icon (↓) in the header. Clicking it triggers a single-metric PDF export for that specific chart.
+Each `AnalyticsChartCard` has a small download icon (↓) in the header. Clicking it triggers a single-metric PDF export for that specific chart and now carries the currently selected department and sex filters so the exported metric matches the on-screen chart.
+
+---
+
+## April 2026 Enhancement Summary
+
+This enhancement resolved the issue where downloaded analytics appeared as totals-only summaries during import/review.
+
+- Export outputs now include full chart-level rows and grouped breakdowns, not only metric totals and item counts.
+- Active filters (date range, groupBy, sex, department) are embedded across CSV, Excel, and PDF outputs.
+- Excel now opens directly to a detail-first sheet to make imports and audits immediately informative.
+- Single-chart PDF export now respects demographic filters used in the dashboard.
 
 ---
 
