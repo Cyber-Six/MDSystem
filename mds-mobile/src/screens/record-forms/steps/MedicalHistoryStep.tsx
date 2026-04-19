@@ -44,6 +44,20 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
     onUpdate('medicalHistory', { familyWhoHasIt: { ...mh.familyWhoHasIt, [id]: value } });
   };
 
+  const setSelfOtherChecked = (checked: boolean) => {
+    onUpdate('medicalHistory', {
+      selfOtherChecked: checked,
+      ...(checked ? {} : { selfOther: '' }),
+    });
+  };
+
+  const setFamilyOtherChecked = (checked: boolean) => {
+    onUpdate('medicalHistory', {
+      familyOtherChecked: checked,
+      ...(checked ? {} : { familyOther: '', familyOtherWhoHasIt: '' }),
+    });
+  };
+
   const checkedMap = tab === 'self' ? mh.self : mh.family;
   const inputBg = isDark ? colors.neutral[700] : '#FFF';
   const inputColor = isDark ? colors.neutral[100] : colors.neutral[900];
@@ -151,6 +165,55 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
           isDark={isDark}
           placeholder="Search or add conditions..."
         />
+
+        {tab === 'self' ? (
+          <View style={[styles.otherCard, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]}>
+            <TouchableOpacity style={styles.checkRow} onPress={() => setSelfOtherChecked(!mh.selfOtherChecked)} activeOpacity={0.7}>
+              <View style={[styles.checkbox, mh.selfOtherChecked && styles.checkboxChecked]}>
+                {mh.selfOtherChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+              </View>
+              <Text style={[styles.conditionName, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>Other condition</Text>
+            </TouchableOpacity>
+            {mh.selfOtherChecked && (
+              <TextInput
+                style={[styles.otherInput, { backgroundColor: isDark ? colors.neutral[700] : '#FFF', color: isDark ? colors.neutral[100] : colors.neutral[900], borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
+                value={mh.selfOther || ''}
+                onChangeText={v => onUpdate('medicalHistory', { selfOther: v })}
+                placeholder="Please specify other medical condition"
+                placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                multiline
+              />
+            )}
+          </View>
+        ) : (
+          <View style={[styles.otherCard, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]}>
+            <TouchableOpacity style={styles.checkRow} onPress={() => setFamilyOtherChecked(!mh.familyOtherChecked)} activeOpacity={0.7}>
+              <View style={[styles.checkbox, mh.familyOtherChecked && styles.checkboxChecked]}>
+                {mh.familyOtherChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+              </View>
+              <Text style={[styles.conditionName, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>Other family condition</Text>
+            </TouchableOpacity>
+            {mh.familyOtherChecked && (
+              <>
+                <TextInput
+                  style={[styles.otherInput, { backgroundColor: isDark ? colors.neutral[700] : '#FFF', color: isDark ? colors.neutral[100] : colors.neutral[900], borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
+                  value={mh.familyOther || ''}
+                  onChangeText={v => onUpdate('medicalHistory', { familyOther: v })}
+                  placeholder="Please specify other family condition"
+                  placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                  multiline
+                />
+                <TextInput
+                  style={[styles.otherInput, { marginTop: 8, backgroundColor: isDark ? colors.neutral[700] : '#FFF', color: isDark ? colors.neutral[100] : colors.neutral[900], borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
+                  value={mh.familyOtherWhoHasIt || ''}
+                  onChangeText={v => onUpdate('medicalHistory', { familyOtherWhoHasIt: v })}
+                  placeholder="Who has this condition?"
+                  placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                />
+              </>
+            )}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -174,8 +237,9 @@ const styles = StyleSheet.create({
   conditionName: { fontSize: 14, flex: 1 },
   whoInput: { marginLeft: 34, marginBottom: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 13 },
   otherSection: { marginTop: 20 },
-  otherLabel: { fontSize: 14, fontWeight: '500', marginBottom: 6 },
+  otherCard: { marginTop: 12, borderWidth: 1, borderRadius: 12, padding: 12 },
   otherInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, minHeight: 60, textAlignVertical: 'top' as const },
+  otherLabel: { fontSize: 14, fontWeight: '500', marginBottom: 6 },
 });
 
 export default MedicalHistoryStep;

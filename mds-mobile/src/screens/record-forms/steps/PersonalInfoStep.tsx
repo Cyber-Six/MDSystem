@@ -2,7 +2,7 @@
  * Personal Info Step — Step 0 of the initial record form
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal, FlatList,
   StyleSheet, Pressable, Platform, Keyboard, ActivityIndicator,
@@ -38,6 +38,25 @@ const GENDERS = ['Male', 'Female'];
 export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, errors, isUpdate = false }) => {
   const pi = formData.personalInfo;
   const [categoryOpen, setCategoryOpen] = useState(false);
+
+  useEffect(() => {
+    if (!pi.birthday) {
+      if (pi.age) onUpdate({ age: '' });
+      return;
+    }
+    const birthDate = new Date(pi.birthday);
+    if (Number.isNaN(birthDate.getTime())) return;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age -= 1;
+    }
+    const computedAge = age >= 0 ? String(age) : '';
+    if (computedAge !== (pi.age || '')) {
+      onUpdate({ age: computedAge });
+    }
+  }, [pi.birthday, pi.age, onUpdate]);
 
   // Program modal search state
   const [programOpen, setProgramOpen] = useState(false);
@@ -207,6 +226,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           {renderField('Surname', 'surname', 'Enter surname')}
           {renderField('First Name', 'firstName', 'Enter first name')}
           {renderField('Middle Name', 'middleName', 'Enter middle name')}
+          {renderField('Suffix', 'suffix', 'e.g. Jr., Sr., III')}
 
           <View style={styles.fieldGroup}>
             <DatePickerInput
@@ -216,6 +236,17 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
               isDark={isDark}
               required
               placeholder="Select birthday"
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={labelStyle}>Age</Text>
+            <TextInput
+              style={[...inputStyle, { opacity: 0.8 }]}
+              value={String(pi.age || '')}
+              editable={false}
+              placeholder="Auto-calculated"
+              placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
             />
           </View>
 
@@ -352,8 +383,6 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           </Pressable>
         </Modal>
       </View>
-
-      {!isUpdate && renderSelectField('Drug Test Done', 'drugTestDone', ['Yes', 'No'])}
 
       <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], marginTop: 24 }]}>
         Emergency Contacts

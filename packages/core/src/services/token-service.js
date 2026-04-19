@@ -158,12 +158,14 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
     
     // SECURITY: Validate refresh token exists
     if (!refreshToken) {
+      await Promise.resolve(TokenStorage.clearTokens());
       throw new Error('No refresh token available');
     }
 
     // SECURITY: Validate refresh token format (userId:deviceId:rawToken)
     const parts = refreshToken.split(':');
     if (parts.length !== 3) {
+      await Promise.resolve(TokenStorage.clearTokens());
       throw new Error('Invalid refresh token format');
     }
 
@@ -294,7 +296,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
     // Handle async storage (React Native)
     const accessToken = await Promise.resolve(TokenStorage.getAccessToken());
     const refreshToken = await Promise.resolve(TokenStorage.getRefreshToken());
-    return TokenStorage.validateToken(accessToken) && TokenStorage.validateToken(refreshToken);
+    return TokenStorage.validateToken(accessToken) && TokenStorage.validateRefreshToken(refreshToken);
   };
 
   return {
