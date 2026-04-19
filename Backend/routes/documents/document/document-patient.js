@@ -906,8 +906,16 @@ async function streamTemplatePdfForPatient(req, res, expectedTemplateType) {
 }
 
 /**
+ * GET /documents/prescription/view/:documentId
+ * View a patient-owned prescription PDF (inline stream)
+ */
+router.get('/prescription/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE);
+});
+
+/**
  * GET /documents/prescription/:documentId
- * View/download a patient-owned prescription PDF (inline stream)
+ * Backward-compatible alias for prescription inline stream route
  */
 router.get('/prescription/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
   await streamTemplatePdfForPatient(req, res, PRESCRIPTION_DOC_TYPE);
@@ -922,8 +930,16 @@ router.get('/prescription/download/:documentId', jwtProtect('patient'), checkCre
 });
 
 /**
+ * GET /documents/medical-certificate/view/:documentId
+ * View a patient-owned medical certificate PDF (inline stream)
+ */
+router.get('/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+  await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE);
+});
+
+/**
  * GET /documents/medical-certificate/:documentId
- * View/download a patient-owned medical certificate PDF (inline stream)
+ * Backward-compatible alias for medical certificate inline stream route
  */
 router.get('/medical-certificate/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE);

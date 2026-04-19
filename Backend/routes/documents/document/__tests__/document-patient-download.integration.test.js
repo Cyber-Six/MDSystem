@@ -107,7 +107,7 @@ describe('Patient document PDF routes', () => {
     app.use('/documents', router);
   });
 
-  test('GET /documents/prescription/:id returns a valid PDF stream', async () => {
+  const setupPrescriptionRegenerationMocks = () => {
     mockDbQuery
       .mockResolvedValueOnce({
         rows: [
@@ -129,18 +129,9 @@ describe('Patient document PDF routes', () => {
       buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF'),
       filename: 'prescription_55.pdf',
     });
+  };
 
-    const response = await request(app)
-      .get('/documents/prescription/55')
-      .buffer(true)
-      .parse(binaryParser);
-
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
-    expect(response.body.length).toBeGreaterThan(0);
-  });
-
-  test('GET /documents/medical-certificate/:id returns a valid PDF stream', async () => {
+  const setupMedicalCertificateRegenerationMocks = () => {
     mockDbQuery
       .mockResolvedValueOnce({
         rows: [
@@ -162,14 +153,61 @@ describe('Patient document PDF routes', () => {
       buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF'),
       filename: 'medical_certificate_77.pdf',
     });
+  };
+
+  test('GET /documents/prescription/view/:id returns a valid inline PDF stream', async () => {
+    setupPrescriptionRegenerationMocks();
 
     const response = await request(app)
-      .get('/documents/medical-certificate/77')
+      .get('/documents/prescription/view/55')
       .buffer(true)
       .parse(binaryParser);
 
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toMatch(/application\/pdf/i);
+    expect(response.headers['content-disposition']).toMatch(/inline/i);
+    expect(response.body.length).toBeGreaterThan(0);
+  });
+
+  test('GET /documents/prescription/download/:id returns a valid inline PDF stream', async () => {
+    setupPrescriptionRegenerationMocks();
+
+    const response = await request(app)
+      .get('/documents/prescription/download/55')
+      .buffer(true)
+      .parse(binaryParser);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
+    expect(response.headers['content-disposition']).toMatch(/inline/i);
+    expect(response.body.length).toBeGreaterThan(0);
+  });
+
+  test('GET /documents/medical-certificate/view/:id returns a valid inline PDF stream', async () => {
+    setupMedicalCertificateRegenerationMocks();
+
+    const response = await request(app)
+      .get('/documents/medical-certificate/view/77')
+      .buffer(true)
+      .parse(binaryParser);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
+    expect(response.headers['content-disposition']).toMatch(/inline/i);
+    expect(response.body.length).toBeGreaterThan(0);
+  });
+
+  test('GET /documents/medical-certificate/download/:id returns a valid inline PDF stream', async () => {
+    setupMedicalCertificateRegenerationMocks();
+
+    const response = await request(app)
+      .get('/documents/medical-certificate/download/77')
+      .buffer(true)
+      .parse(binaryParser);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/application\/pdf/i);
+    expect(response.headers['content-disposition']).toMatch(/inline/i);
     expect(response.body.length).toBeGreaterThan(0);
   });
 });
