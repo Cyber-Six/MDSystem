@@ -53,25 +53,11 @@ const METRICS_COLLAPSE_TO_TOTAL = new Set([
 
 const TAB_CONFIG = Object.freeze([
   {
-    name: 'Patients',
-    metrics: [
-      'patients-by-sex',
-      'patients-by-age-group',
-      'patient-population-by-branch',
-      'patient-credential-status',
-      'sex-age-group-matrix',
-    ],
-  },
-  {
     name: 'Consultations',
     metrics: [
       'consultations-by-type',
       'consultations-by-mode',
       'consultation-trends',
-      'consultations-by-sex',
-      'consultations-by-department',
-      'consultations-by-program',
-      'consultations-by-age-group',
     ],
   },
   {
@@ -79,9 +65,14 @@ const TAB_CONFIG = Object.freeze([
     metrics: [
       'top-diagnoses',
       'diagnoses-by-type',
-      'top-diagnoses-by-sex',
-      'diagnoses-by-age-group',
-      'diagnoses-sex-age',
+    ],
+  },
+  {
+    name: 'Vital Signs',
+    metrics: [
+      'bmi-trends',
+      'blood-pressure-trends',
+      'vital-signs-box-plot',
     ],
   },
   {
@@ -94,31 +85,33 @@ const TAB_CONFIG = Object.freeze([
     ],
   },
   {
-    name: 'Vitals & BMI',
-    metrics: [
-      'vital-signs-box-plot',
-      'bmi-trends',
-      'bmi-by-age-group',
-      'blood-pressure-trends',
-    ],
-  },
-  {
-    name: 'Lifestyle & Risks',
-    metrics: [
-      'lifestyle-risks',
-      'lifestyle-statistics',
-      'lifestyle-risks-by-department',
-    ],
-  },
-  {
-    name: 'Clinical Others',
+    name: 'Clinical Data',
     metrics: [
       'immunization-coverage',
       'dental-procedures',
-      'oral-findings-percentages',
+    ],
+  },
+  {
+    name: 'Lifestyle & Allergies',
+    metrics: [
+      'lifestyle-risks',
+      'lifestyle-statistics',
       'allergy-by-type',
       'allergy-by-severity',
+    ],
+  },
+  {
+    name: 'EMR',
+    metrics: [
       'female-reproductive-health',
+      'oral-findings-percentages',
+    ],
+  },
+  {
+    name: 'General',
+    metrics: [
+      'patient-credential-status',
+      'patient-population-by-branch',
     ],
   },
   {
@@ -128,6 +121,23 @@ const TAB_CONFIG = Object.freeze([
       'most-consumed-medicine',
       'most-consumed-supply',
       'inventory-consumption-trends',
+    ],
+  },
+  {
+    name: 'Demographics',
+    metrics: [
+      'patients-by-sex',
+      'consultations-by-sex',
+      'top-diagnoses-by-sex',
+      'patients-by-age-group',
+      'consultations-by-age-group',
+      'bmi-by-age-group',
+      'diagnoses-by-age-group',
+      'consultations-by-department',
+      'consultations-by-program',
+      'lifestyle-risks-by-department',
+      'sex-age-group-matrix',
+      'diagnoses-sex-age',
     ],
   },
 ]);
@@ -437,22 +447,27 @@ function flattenMetricPoints(metricKey, result = {}) {
 }
 
 function buildSummaryRows(structured, sheetConfig, state) {
-  const rows = [];
+  const grouped = new Map();
   const departmentKey = state.departmentAll ? ALL_DEPARTMENTS_LABEL : state.department;
 
   for (const sheet of sheetConfig) {
     for (const metricKey of sheet.metrics) {
       const scopedRows = structured[sheet.name]?.[metricKey]?.[departmentKey] || [];
-      rows.push({
-        rowLabel: matrixMetricDisplayLabel(metricKey, state),
+      const rowLabel = matrixMetricDisplayLabel(metricKey, state);
+      const key = `${sheet.name}::${rowLabel}`;
+      const existing = grouped.get(key) || {
+        rowLabel,
         category: sheet.name,
-        totalValue: sumFinite(scopedRows.map((row) => row.grandTotal)),
-        itemCount: scopedRows.length,
-      });
+        totalValue: 0,
+        itemCount: 0,
+      };
+      existing.totalValue += sumFinite(scopedRows.map((row) => row.grandTotal));
+      existing.itemCount += scopedRows.length;
+      grouped.set(key, existing);
     }
   }
 
-  return rows;
+  return Array.from(grouped.values());
 }
 
 function dateToken(value) {
@@ -641,7 +656,7 @@ function buildColumnLayout(state) {
           type: 'data',
           age,
           sex,
-          title: `${age.label} ${sex.label}`,
+          title: `${age.key}_${sex.key}`,
           width: WIDTHS.data,
         });
       }
@@ -653,7 +668,7 @@ function buildColumnLayout(state) {
         type: 'data',
         age,
         sex: state.sex,
-        title: age.label,
+        title: `${age.key}_${state.sex.key}`,
         width: WIDTHS.data,
       });
     }
@@ -664,7 +679,7 @@ function buildColumnLayout(state) {
         type: 'data',
         age: state.age,
         sex,
-        title: sex.label,
+        title: `${state.age.key}_${sex.key}`,
         width: WIDTHS.data,
       });
     }
@@ -696,7 +711,7 @@ function buildColumnLayout(state) {
 
   return {
     mode: 'matrix',
-    headerRows: state.ageAll && state.sexAll ? 2 : 1,
+    headerRows: 1,
     columns,
     dataColumns,
     totalColumns,
@@ -889,7 +904,10 @@ function renderKpiCards(sheet, rowIndex, columnCount, cards) {
     valueCell.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FF1F2937' } };
     valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF0F8' } };
     valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    valueCell.numFmt = Number.isInteger(Number(visibleCards[i].value)) ? '0' : '0.00';
+    const numericValue = Number(visibleCards[i].value);
+    if (Number.isFinite(numericValue)) {
+      valueCell.numFmt = Number.isInteger(numericValue) ? '0' : '0.00';
+    }
   }
 }
 
@@ -1258,10 +1276,13 @@ async function generateMatrixExcelWorkbook(meta = {}, requestedDataTypes = []) {
     renderFilterPills(sheet, 2, state, colCount);
 
     const totals = sheetTotals(data.structured, sheetName, sheetConfig.metrics, state);
+    const departmentKpi = state.departmentAll
+      ? { label: 'Departments', value: data.departments.length }
+      : { label: 'Department', value: state.department };
     const kpis = [
       { label: 'Total Value', value: totals.total },
       { label: 'Metrics', value: sheetConfig.metrics.length },
-      { label: 'Departments', value: state.departmentAll ? data.departments.length : 1 },
+      departmentKpi,
       { label: 'Items', value: totals.itemCount },
     ];
     renderKpiCards(sheet, 3, colCount, kpis);
