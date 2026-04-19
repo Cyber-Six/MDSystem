@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "dompurify": "^3.3.3",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
     "jest": "^30.3.0"
