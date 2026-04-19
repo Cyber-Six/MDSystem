@@ -1,10 +1,12 @@
 const express = require('express');
 const logger = require('../../utils/logger.js');
+const archiver = require('archiver');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 const query = require('../../config/query.js');
 const analytics = require('../../services/analytics-query.js');
 const docGen = require('../../services/doc-generate-module/index.js');
 const analyticsExport = require('../../services/analytics-export.js');
+const analyticsMatrixExport = require('../../services/analytics-matrix-export.js');
 const { getStaffBranch, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
 
 const router = express.Router();
@@ -108,7 +110,7 @@ router.get('/reports', jwtProtect('medical'), async (req, res) => {
 router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
   try {
     const { dataType } = req.params;
-    const { branch, startDate, endDate, groupBy, sex, department } = req.query;
+    const { branch, startDate, endDate, groupBy, sex, department, ageGroup } = req.query;
     const requestedDataType = String(dataType || '').trim();
     const normalizedDataType = normalizeDataTypeKey(requestedDataType);
 
@@ -159,7 +161,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
       userId: req.user.id,
     });
 
-    const data = await analytics.executeQuery(normalizedDataType, branch, startDate, endDate, { groupBy, sex, department });
+    const data = await analytics.executeQuery(normalizedDataType, branch, startDate, endDate, { groupBy, sex, department, ageGroup });
 
     const response = {
       success: true,
@@ -188,7 +190,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
  */
 router.post('/batch', jwtProtect('medical'), async (req, res) => {
   try {
-    const { dataTypes, branch, startDate, endDate, groupBy, department, sex } = req.body;
+    const { dataTypes, branch, startDate, endDate, groupBy, department, sex, ageGroup } = req.body;
     const dataTypeMappings = buildDataTypeMappings(dataTypes);
 
     if (!Array.isArray(dataTypes) || dataTypes.length === 0 || dataTypeMappings.length === 0) {
@@ -242,7 +244,7 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
       branch,
       startDate,
       endDate,
-      { groupBy, department, sex }
+      { groupBy, department, sex, ageGroup }
     );
 
     const results = {};
@@ -429,7 +431,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     if (!params) return;
 
     const { format, branch, startDate, endDate } = params;
-    const { dataTypes: rawDataTypes, preset, groupBy, sex, department } = req.body;
+    const { dataTypes: rawDataTypes, preset, groupBy, sex, department, ageGroup } = req.body;
     const normalizedRawDataTypes = Array.isArray(rawDataTypes)
       ? rawDataTypes
         .map((value) => normalizeDataTypeKey(String(value ?? '').trim()))
@@ -454,17 +456,11 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
       startDate,
       endDate,
       groupBy: groupBy || null,
+      ageGroup: ageGroup || null,
       dataTypes: dataTypes.length,
       preset: preset || null,
       userId: req.user.id,
     });
-
-    // Fetch analytics data
-    const data = await analyticsExport.fetchExportData(dataTypes, branch, startDate, endDate, { groupBy, sex, department });
-
-    if (Object.keys(data).length === 0) {
-      return res.status(404).json({ error: 'NO_DATA', message: 'No data found for the selected queries' });
-    }
 
     const meta = {
       branch,
@@ -473,29 +469,59 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
       groupBy,
       department,
       sex,
+      ageGroup,
       generatedAt: new Date().toISOString(),
     };
 
-    // ── CSV ──────────────────────────────────────────────────
+    // ── CSV (Matrix ZIP bundle: flat + wide per sheet) ──────
     if (format === 'csv') {
-      const csv = analyticsExport.generateCSV(data, meta);
+      const csvFiles = await analyticsMatrixExport.generateMatrixCsvFiles(meta, dataTypes);
       const filename = analyticsExport.buildFilename(
-        preset || 'analytics', branch, startDate, endDate, 'csv'
+        (preset || 'analytics_matrix').replace(/\s+/g, '_').toLowerCase(),
+        branch,
+        startDate,
+        endDate,
+        'zip'
       );
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+
+      res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      return res.send(csv);
+
+      await new Promise((resolve, reject) => {
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        archive.on('error', reject);
+        res.on('finish', resolve);
+        archive.pipe(res);
+
+        for (const file of csvFiles) {
+          archive.append(file.content, { name: file.filename });
+        }
+
+        archive.finalize();
+      });
+      return;
     }
 
-    // ── Excel ────────────────────────────────────────────────
+    // ── Excel (Matrix workbook with category tabs) ──────────
     if (format === 'excel') {
-      const workbook = await analyticsExport.generateExcel(data, meta);
+      const workbook = await analyticsMatrixExport.generateMatrixExcelWorkbook(meta, dataTypes);
       const filename = analyticsExport.buildFilename(
-        preset || 'analytics', branch, startDate, endDate, 'xlsx'
+        (preset || 'analytics_matrix').replace(/\s+/g, '_').toLowerCase(),
+        branch,
+        startDate,
+        endDate,
+        'xlsx'
       );
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       return workbook.xlsx.write(res).then(() => res.end());
+    }
+
+    // Fetch analytics data for PDF export.
+    const data = await analyticsExport.fetchExportData(dataTypes, branch, startDate, endDate, { groupBy, sex, department, ageGroup });
+
+    if (Object.keys(data).length === 0) {
+      return res.status(404).json({ error: 'NO_DATA', message: 'No data found for the selected queries' });
     }
 
     // ── PDF ──────────────────────────────────────────────────
@@ -545,7 +571,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
  */
 router.post('/export/single', jwtProtect('medical'), async (req, res) => {
   try {
-    const { dataType, branch, startDate, endDate, groupBy, sex, department } = req.body;
+    const { dataType, branch, startDate, endDate, groupBy, sex, department, ageGroup } = req.body;
     const requestedDataType = String(dataType || '').trim();
     const normalizedDataType = normalizeDataTypeKey(requestedDataType);
 
@@ -580,7 +606,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     });
 
     // Fetch data for single metric
-    const fetchResult = await analyticsExport.fetchExportData([normalizedDataType], branch, startDate, endDate, { groupBy, sex, department });
+    const fetchResult = await analyticsExport.fetchExportData([normalizedDataType], branch, startDate, endDate, { groupBy, sex, department, ageGroup });
     const result = fetchResult[normalizedDataType];
 
     if (!result) {
@@ -604,6 +630,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
       groupBy,
       department,
       sex,
+      ageGroup,
       physician: {
         id: req.user.id,
         firstName: physician.first_name,

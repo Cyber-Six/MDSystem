@@ -154,7 +154,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
 
             {/* Notifications Dropdown */}
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-neutral-900 rounded-lg shadow-lg border border-gray-200 dark:border-neutral-700 overflow-hidden z-50 flex flex-col">
+              <div className="fixed sm:absolute top-16 right-2 sm:right-0 sm:top-auto sm:mt-2 w-[calc(100vw-16px)] sm:w-96 max-h-[calc(100vh-100px)] bg-white dark:bg-neutral-900 rounded-lg shadow-lg border border-gray-200 dark:border-neutral-700 overflow-hidden z-50 flex flex-col">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-gray-200 dark:border-neutral-700 flex items-center justify-between bg-gray-50 dark:bg-neutral-800/80 shrink-0">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
