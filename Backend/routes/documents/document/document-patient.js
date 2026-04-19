@@ -1074,7 +1074,8 @@ router.get('/prescription/download/:documentId', jwtProtect('patient'), checkCre
  * GET /documents/medical-certificate/view/:documentId
  * Legacy route retained for compatibility
  */
-router.get('/medical-certificate/view/:documentId', jwtProtect('patient'), checkCredentialsStatus, async (req, res) => {
+router.get('/medical-certificate/view/:documentId', jwtProtect("patient"), checkCredentialsStatus, async (req, res) => {
+  logger.debug('Legacy medical certificate view route accessed', { documentId: req.params.documentId, patientId: req.user.id });
   await streamTemplatePdfForPatient(req, res, MEDICAL_CERTIFICATE_DOC_TYPE, 'inline');
 });
 
