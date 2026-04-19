@@ -71,6 +71,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
   const mb = formData.medicalBackground;
   const dh = formData.dentalHistory;
   const ob = formData.obgyne;
+  const fullName = [pi.surname, pi.firstName, pi.middleName, pi.suffix].filter(Boolean).join(' ').trim();
 
   // Gather selected self conditions
   const selfConditions = Object.entries(mh.self).filter(([, v]) => v).map(([id]) => getCatalogName(catalogs.medicalConditionCatalog, id));
@@ -81,6 +82,12 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
     name: getCatalogName(catalogs.medicalConditionCatalog, id),
     who: mh.familyWhoHasIt?.[id] || 'Not specified',
   }));
+  if (mh.familyOtherChecked && mh.familyOther) {
+    familyConditions.push({
+      name: `Other: ${mh.familyOther}`,
+      who: mh.familyOtherWhoHasIt || 'Not specified',
+    });
+  }
 
   // Immunizations
   const immunizationNames = Object.entries(mb.immunizations).filter(([, v]) => v).map(([id]) => getCatalogName(catalogs.immunizationCatalog, id));
@@ -96,7 +103,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
       {/* Personal Information */}
       <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
         <SectionHeader title="Personal Information" stepIndex={0} />
-        <DataRow label="Full Name" value={`${pi.surname}, ${pi.firstName} ${pi.middleName}`.trim()} />
+        <DataRow label="Full Name" value={fullName} />
         <DataRow label="Birthday" value={formatDate(pi.birthday)} />
         <DataRow label="Age" value={pi.age} />
         <DataRow label="Gender" value={pi.gender} />
@@ -108,6 +115,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
         <DataRow label="Program" value={pi.program === 'Other' ? pi.programOther : pi.program} />
         <DataRow label="Student Number" value={pi.studentNumber} />
         <DataRow label="Student Category" value={pi.studentCategory === 'Grade11' ? 'Grade 11' : pi.studentCategory === 'Grade12' ? 'Grade 12' : pi.studentCategory} />
+        <DataRow label="Last School Attended" value={pi.lastSchoolAttended} />
         <DataRow label="Drug Test" value={pi.drugTestDone} />
       </View>
 

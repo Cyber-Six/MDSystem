@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, StyleSheet,
+  KeyboardAvoidingView, StyleSheet,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -20,7 +20,7 @@ import ObGyneStep from './steps/ObGyneStep';
 import ReviewStep from './steps/ReviewStep';
 import {
   createEmptyFormData, fetchAllCatalogs, createInitialMedicalRecord,
-  submitUpdateRecord, fetchRevisionPrefill, checkInitialRecordStatus,
+  submitUpdateRecord, fetchRevisionPrefill, ensureUpdateTicket,
   getUpdateTicketStatus,
   type FormData, type AllCatalogs,
 } from '../../services/emr-service';
@@ -62,6 +62,13 @@ const InitialRecordFormScreen: React.FC = () => {
         setCatalogs(prev => ({ ...prev, catalogsLoading: false }));
       });
   }, []);
+
+  useEffect(() => {
+    if (isRevision || isUpdate) return;
+    ensureUpdateTicket('Both').catch(() => {
+      // Non-blocking: initial submission flow still creates/reuses a ticket later.
+    });
+  }, [isRevision, isUpdate]);
 
   // Load revision/update data if applicable
   // Only prefill for revisions (staff requested corrections) — not for regular updates.
@@ -120,150 +127,7 @@ const InitialRecordFormScreen: React.FC = () => {
 
   const scrollToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
 
-  // ─── Per-step validation (aligned with mds-patient record-update-form) ──────
-  const validateCurrentStep = (): string[] => {
-    const stepName = steps[currentStep];
-    const errors: string[] = [];
-
-    if (stepName === 'Personal Info') {
-      const pi = formData.personalInfo;
-      if (!isUpdate) {
-        // Initial record validates all personal fields
-        if (!pi.surname?.trim()) errors.push('Surname is required');
-        if (!pi.firstName?.trim()) errors.push('First name is required');
-        if (!pi.birthday) errors.push('Birthday is required');
-        if (!pi.gender) errors.push('Gender is required');
-        if (!pi.civilStatus) errors.push('Civil status is required');
-        if (!pi.nationality?.trim()) errors.push('Nationality is required');
-        if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
-        else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
-        if (!pi.address?.trim()) errors.push('Present address is required');
-        if (!pi.studentNumber?.trim()) errors.push('Student number is required');
-      }
-      if (!pi.program) errors.push('Please select a program before proceeding');
-      if (!pi.studentCategory) errors.push('Please select your student category before proceeding');
-
-      const c1 = pi.emergencyContacts?.[0];
-      const c2 = pi.emergencyContacts?.[1];
-      if (!c1?.name?.trim()) errors.push('1st emergency contact name is required');
-      if (!c1?.relationship?.trim()) errors.push('1st emergency contact relationship is required');
-      if (!c1?.contactNumber?.trim()) errors.push('1st emergency contact number is required');
-      else if (!isValidPhilippinePhone(c1.contactNumber.trim())) errors.push('1st emergency contact number must be a valid PH number');
-      if (!c2?.name?.trim()) errors.push('2nd emergency contact name is required');
-      if (!c2?.relationship?.trim()) errors.push('2nd emergency contact relationship is required');
-      if (!c2?.contactNumber?.trim()) errors.push('2nd emergency contact number is required');
-      else if (!isValidPhilippinePhone(c2.contactNumber.trim())) errors.push('2nd emergency contact number must be a valid PH number');
-    }
-
-    if (stepName === 'Medical Background') {
-      const mb = formData.medicalBackground;
-      // Lifestyle habits are always required (aligned with mds-patient)
-      if (!mb.smoker) errors.push('Please indicate if you smoke (Lifestyle Habits)');
-      if (!mb.alcoholDrinker) errors.push('Please indicate if you drink alcohol (Lifestyle Habits)');
-
-      // Allergy details validation
-      if (mb.hasAllergies === 'Yes') {
-        const selectedAllergies = Object.entries(mb.allergies)
-          .filter(([, val]) => (typeof val === 'object' ? (val as any)?.checked : !!val));
-        for (const [, val] of selectedAllergies) {
-          const detail = typeof val === 'object' ? val as any : {};
-          if (!detail.status || !detail.severity) {
-            errors.push('Please fill in Status and Severity for all selected allergies');
-            break;
-          }
-        }
-      }
-
-      // Hospitalization dates
-      if (mb.hasHospitalization === 'Yes') {
-        const checkedIds = Object.entries(mb.hospitalizationConditions)
-          .filter(([, v]) => v).map(([k]) => k);
-        if (checkedIds.some(id => !mb.hospitalizationDates?.[id]?.admissionDate)) {
-          errors.push('Please fill in the Admission Date for all selected hospitalizations');
-        }
-      }
-
-      // Operation dates
-      if (mb.hasOperation === 'Yes') {
-        const checkedIds = Object.entries(mb.operationConditions)
-          .filter(([, v]) => v).map(([k]) => k);
-        if (checkedIds.some(id => !mb.operationDates?.[id])) {
-          errors.push('Please fill in the Operation Date for all selected surgeries');
-        }
-      }
-
-      // Medications
-      if (mb.hasMedications === 'Yes') {
-        if (!Object.values(mb.selectedMedications).some(v => v)) {
-          errors.push('Please select at least one medication');
-        }
-      }
-
-      if (!mb.hasHospitalization) errors.push('Hospitalization question is required');
-      if (!mb.hasOperation) errors.push('Surgery/Operation question is required');
-    }
-
-    if (stepName === 'OB-GYNE') {
-      if (!formData.obgyne?.lastMenstrualPeriod) {
-        errors.push('Last menstrual period date is required');
-      }
-    }
-
-    if (stepName === 'Dental History') {
-      const dh = formData.dentalHistory;
-      if (!dh.firstTimeDentist) errors.push('Please indicate whether you have visited a dentist');
-      if (!dh.lastDentalCleaning) errors.push('Please select when your last dental cleaning was');
-
-      // Oral appliance fields
-      if (dh.hasIntraOralAppliance === 'yes') {
-        const checkedAppliances = Object.entries(dh.intraOralAppliances)
-          .filter(([, val]) => (typeof val === 'object' ? (val as any)?.checked : !!val));
-        for (const [, val] of checkedAppliances) {
-          const appData = typeof val === 'object' ? val as any : {};
-          if (!appData.status || !appData.dateIssued) {
-            errors.push('Please fill in Status and Date Issued for all selected oral appliances');
-            break;
-          }
-        }
-      }
-
-      // Dental procedure dates
-      const checkedProcs = Object.entries(dh.selectedDentalProcedures).filter(([, v]) => v);
-      for (const [id] of checkedProcs) {
-        if (!dh.procedureDates?.[id]) {
-          errors.push('Please fill in the Date for all selected dental procedures');
-          break;
-        }
-      }
-
-      // Dental photos — required for initial record; also required for dental/both updates
-      // (aligned with mds-patient: backend DentalPhotoRecordInput requires UUID! for both)
-      if (!isUpdate) {
-        if (!dh.upperTeethPhoto) errors.push('Upper teeth photo is required');
-        if (!dh.lowerTeethPhoto) errors.push('Lower teeth photo is required');
-      } else {
-        // For updates, photos are valid if they have .uri (new upload) or .id (from revision)
-        if (!dh.upperTeethPhoto?.uri && !dh.upperTeethPhoto?.id) {
-          errors.push('Please upload a photo of your upper teeth');
-        }
-        if (!dh.lowerTeethPhoto?.uri && !dh.lowerTeethPhoto?.id) {
-          errors.push('Please upload a photo of your lower teeth');
-        }
-      }
-    }
-
-    return errors;
-  };
-
   const handleNext = () => {
-    // Validate current step before proceeding (aligned with mds-patient)
-    const stepErrors = validateCurrentStep();
-    if (stepErrors.length > 0) {
-      Alert.alert('Incomplete Form', stepErrors.join('\n\n'), [{ text: 'OK' }]);
-      scrollToTop();
-      return;
-    }
-
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
       scrollToTop();
@@ -303,10 +167,16 @@ const InitialRecordFormScreen: React.FC = () => {
       if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
       else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
       if (!pi.address?.trim()) errors.push('Present address is required');
+      if (!pi.provinceAddress?.trim()) errors.push('Province address is required');
       if (!pi.studentNumber?.trim()) errors.push('Student number is required');
+      else if (!/^[a-zA-Z0-9\-]+$/.test(pi.studentNumber.trim())) errors.push('Student number must contain only letters, numbers, and dashes');
     }
     // Program + student category are always required (initial + update)
-    if (!pi.program) errors.push('Program is required');
+    if (!isUpdate && !isRevision) {
+      if (!pi.programId) errors.push('Program is required - please select one from the search results');
+    } else if (!pi.program) {
+      errors.push('Program is required');
+    }
     if (!isUpdate && pi.program === 'Other' && !pi.programOther?.trim()) errors.push('Please specify your program');
     if (!pi.studentCategory) errors.push('Student category is required');
 
@@ -314,9 +184,11 @@ const InitialRecordFormScreen: React.FC = () => {
     const c1 = pi.emergencyContacts?.[0];
     const c2 = pi.emergencyContacts?.[1];
     if (!c1?.name?.trim()) errors.push('1st emergency contact name is required');
+    if (!c1?.relationship?.trim()) errors.push('1st emergency contact relationship is required');
     if (!c1?.contactNumber?.trim()) errors.push('1st emergency contact number is required');
     else if (!isValidPhilippinePhone(c1.contactNumber.trim())) errors.push('1st emergency contact number must be a valid PH number');
     if (!c2?.name?.trim()) errors.push('2nd emergency contact name is required');
+    if (!c2?.relationship?.trim()) errors.push('2nd emergency contact relationship is required');
     if (!c2?.contactNumber?.trim()) errors.push('2nd emergency contact number is required');
     else if (!isValidPhilippinePhone(c2.contactNumber.trim())) errors.push('2nd emergency contact number must be a valid PH number');
 
@@ -331,6 +203,36 @@ const InitialRecordFormScreen: React.FC = () => {
       // Lifestyle (aligned with mds-patient)
       if (!mb.smoker) errors.push('Please indicate if you smoke');
       if (!mb.alcoholDrinker) errors.push('Please indicate if you drink alcohol');
+      if (mb.hasMedications === 'Yes' && !Object.values(mb.selectedMedications || {}).some(Boolean)) {
+        errors.push('Please select at least one medication');
+      }
+      if (mb.hasAllergies === 'Yes') {
+        const selectedAllergies = Object.entries(mb.allergies || {})
+          .filter(([, val]) => (typeof val === 'object' ? (val as any)?.checked : !!val));
+        for (const [, val] of selectedAllergies) {
+          const detail = typeof val === 'object' ? val as any : {};
+          if (!detail.status || !detail.severity) {
+            errors.push('Please fill in Status and Severity for all selected allergies');
+            break;
+          }
+        }
+      }
+      if (mb.hasHospitalization === 'Yes') {
+        const checkedHosp = Object.entries(mb.hospitalizationConditions || {}).filter(([, v]) => v).map(([id]) => id);
+        if (checkedHosp.some(id => !mb.hospitalizationDates?.[id]?.admissionDate)) {
+          errors.push('Please fill in admission dates for all selected hospitalizations');
+        }
+      }
+      if (mb.hasOperation === 'Yes') {
+        const checkedOps = Object.entries(mb.operationConditions || {}).filter(([, v]) => v).map(([id]) => id);
+        if (checkedOps.some(id => !mb.operationDates?.[id])) {
+          errors.push('Please fill in operation dates for all selected surgeries');
+        }
+      }
+      if (mb.eyeglasses || mb.contactLenses) {
+        if (!mb.gradeOD?.trim()) errors.push('Right eye (OD) grade is required when visual acuity is enabled');
+        if (!mb.gradeOS?.trim()) errors.push('Left eye (OS) grade is required when visual acuity is enabled');
+      }
     }
 
     // Dental History — only when relevant
@@ -585,11 +487,7 @@ const InitialRecordFormScreen: React.FC = () => {
         {isLastStep ? (
           <TouchableOpacity
             style={[styles.navBtn, styles.navBtnPrimary, isSubmitting && styles.navBtnDisabled]}
-            onPress={() => {
-              updateCertification(true);
-              // Small delay to let state update, then submit
-              setTimeout(handleSubmit, 100);
-            }}
+            onPress={handleSubmit}
             disabled={isSubmitting}
           >
             {isSubmitting ? (
