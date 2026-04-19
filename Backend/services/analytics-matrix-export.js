@@ -1005,7 +1005,14 @@ function buildVisibleTotals(rows, layout, state) {
 }
 
 function metricSectionTitle(metricKey, state) {
-  const base = matrixMetricDisplayLabel(metricKey, state);
+  const base = normalizeWhitespace(
+    matrixMetricDisplayLabel(metricKey, state)
+      .replace(/\s+by\s+sex\b/ig, '')
+      .replace(/\s+by\s+gender\b/ig, '')
+      .replace(/\s+by\s+age\s*group\b/ig, '')
+      .replace(/\s+by\s+department\b/ig, '')
+      .replace(/\s+by\s+program\b/ig, '')
+  );
 
   if (!state.departmentAll && !state.ageAll && !state.sexAll) {
     return `${base} — ${state.department} · ${state.ageLabel} · ${state.sexLabel}`;
@@ -1060,11 +1067,25 @@ function renderSheetTableBlocks(sheet, sheetName, metrics, structured, state, la
   for (const metricKey of metrics) {
     const metricRowsByDepartment = structured[sheetName]?.[metricKey] || {};
     const departments = orderedDepartments(metricRowsByDepartment, state);
-    const scopedDepartmentRows = departments
-      .map((department) => metricRowsByDepartment[department] || [])
-      .flat();
+    const departmentBlocks = departments
+      .map((department) => {
+        const rows = metricRowsByDepartment[department] || [];
+        const detailRows = rows.filter((row) => {
+          const normalized = normalizeWhitespace(row.label).toLowerCase();
+          if (!normalized) return false;
+          return normalized !== 'total';
+        });
+        const rowsForTotals = detailRows.length > 0 ? detailRows : rows;
+        return {
+          department,
+          detailRows,
+          rowsForTotals,
+        };
+      })
+      // Do not render low-signal sections that have no detail rows.
+      .filter((block) => block.detailRows.length > 0);
 
-    if (scopedDepartmentRows.length === 0) continue;
+    if (departmentBlocks.length === 0) continue;
 
     styleSectionRow(sheet, rowIndex, metricSectionTitle(metricKey, state), layout.columns.length);
     rowIndex++;
@@ -1077,18 +1098,10 @@ function renderSheetTableBlocks(sheet, sheetName, metrics, structured, state, la
       to: { row: header.filterRow, column: layout.columns.length },
     };
 
-    for (const department of departments) {
-      const rows = metricRowsByDepartment[department] || [];
-      if (rows.length === 0) continue;
-
-      // Avoid duplicated TOTAL rows: keep detail rows in body and compute one explicit footer total.
-      const detailRows = rows.filter((row) => {
-        const normalized = normalizeWhitespace(row.label).toLowerCase();
-        if (!normalized) return false;
-        return normalized !== 'total';
-      });
-      const rowsForBody = detailRows;
-      const rowsForTotals = detailRows.length > 0 ? detailRows : rows;
+    for (const block of departmentBlocks) {
+      const department = block.department;
+      const rowsForBody = block.detailRows;
+      const rowsForTotals = block.rowsForTotals;
 
       if (state.departmentAll) {
         styleSectionRow(sheet, rowIndex, department, layout.columns.length);
