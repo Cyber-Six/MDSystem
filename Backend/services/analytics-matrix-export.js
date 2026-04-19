@@ -787,6 +787,20 @@ function fixedColumnWidths(sheet, layout) {
   });
 }
 
+function buildColumnSegments(columnCount, requestedParts) {
+  const safeColumns = Math.max(1, Number(columnCount) || 1);
+  const safeParts = Math.max(1, Math.min(Number(requestedParts) || 1, safeColumns));
+  const segments = [];
+
+  for (let i = 0; i < safeParts; i++) {
+    const start = Math.floor((i * safeColumns) / safeParts) + 1;
+    const end = Math.max(start, Math.floor(((i + 1) * safeColumns) / safeParts));
+    segments.push({ start, end });
+  }
+
+  return segments;
+}
+
 function renderFilterPills(sheet, rowIndex, state, columnCount) {
   const pills = [
     { text: `Dept: ${state.departmentAll ? 'All' : state.department}`, active: !state.departmentAll },
@@ -794,58 +808,56 @@ function renderFilterPills(sheet, rowIndex, state, columnCount) {
     { text: `Sex: ${state.sexAll ? 'All' : state.sexLabel}`, active: !state.sexAll },
   ];
 
-  const baseSpan = Math.max(2, Math.floor(columnCount / 3));
-  let start = 1;
-  for (let i = 0; i < pills.length; i++) {
-    const end = i === pills.length - 1
-      ? columnCount
-      : Math.min(columnCount, start + baseSpan - 1);
+  const segments = buildColumnSegments(columnCount, pills.length);
+  const visiblePills = pills.slice(0, segments.length);
+
+  for (let i = 0; i < visiblePills.length; i++) {
+    const { start, end } = segments[i];
     const startLetter = sheet.getColumn(start).letter;
     const endLetter = sheet.getColumn(end).letter;
-    sheet.mergeCells(`${startLetter}${rowIndex}:${endLetter}${rowIndex}`);
+    if (end > start) {
+      sheet.mergeCells(`${startLetter}${rowIndex}:${endLetter}${rowIndex}`);
+    }
     const cell = sheet.getCell(`${startLetter}${rowIndex}`);
-    cell.value = pills[i].text;
+    cell.value = visiblePills[i].text;
     cell.font = {
       name: 'Arial',
       bold: true,
       size: 10,
-      color: { argb: pills[i].active ? COLORS.pillText : COLORS.pillAllText },
+      color: { argb: visiblePills[i].active ? COLORS.pillText : COLORS.pillAllText },
     };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.pillBg } };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    start = end + 1;
   }
 }
 
 function renderKpiCards(sheet, rowIndex, columnCount, cards) {
   const safeCards = cards.slice(0, 4);
-  const span = Math.max(2, Math.floor(columnCount / safeCards.length));
+  const segments = buildColumnSegments(columnCount, safeCards.length);
+  const visibleCards = safeCards.slice(0, segments.length);
 
-  let start = 1;
-  for (let i = 0; i < safeCards.length; i++) {
-    const end = i === safeCards.length - 1
-      ? columnCount
-      : Math.min(columnCount, start + span - 1);
+  for (let i = 0; i < visibleCards.length; i++) {
+    const { start, end } = segments[i];
     const startLetter = sheet.getColumn(start).letter;
     const endLetter = sheet.getColumn(end).letter;
 
-    sheet.mergeCells(`${startLetter}${rowIndex}:${endLetter}${rowIndex}`);
-    sheet.mergeCells(`${startLetter}${rowIndex + 1}:${endLetter}${rowIndex + 1}`);
+    if (end > start) {
+      sheet.mergeCells(`${startLetter}${rowIndex}:${endLetter}${rowIndex}`);
+      sheet.mergeCells(`${startLetter}${rowIndex + 1}:${endLetter}${rowIndex + 1}`);
+    }
 
     const titleCell = sheet.getCell(`${startLetter}${rowIndex}`);
-    titleCell.value = safeCards[i].label;
+    titleCell.value = visibleCards[i].label;
     titleCell.font = { name: 'Arial', bold: true, size: 10, color: { argb: 'FF1F2937' } };
     titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F1' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
     const valueCell = sheet.getCell(`${startLetter}${rowIndex + 1}`);
-    valueCell.value = safeCards[i].value;
+    valueCell.value = visibleCards[i].value;
     valueCell.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FF1F2937' } };
     valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF0F8' } };
     valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    valueCell.numFmt = Number.isInteger(Number(safeCards[i].value)) ? '0' : '0.00';
-
-    start = end + 1;
+    valueCell.numFmt = Number.isInteger(Number(visibleCards[i].value)) ? '0' : '0.00';
   }
 }
 
