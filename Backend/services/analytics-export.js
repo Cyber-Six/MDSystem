@@ -14,10 +14,10 @@ const docGen = require('./doc-generate-module/index.js');
  * Adding a new query here automatically enables it for CSV/Excel/PDF export.
  */
 const EXPORT_META = {
-  'consultations-by-type':    { label: 'Consultations by Type',       xAxis: 'Type',          yAxis: 'Count',   chartType: 'pie' },
-  'consultations-by-mode':    { label: 'Consultations by Mode',       xAxis: 'Mode',          yAxis: 'Count',   chartType: 'doughnut' },
-  'consultation-trends':      { label: 'Consultation Trends',         xAxis: 'Period',         yAxis: 'Count',   chartType: 'line' },
-  'top-diagnoses':            { label: 'Top 10 Diagnoses',            xAxis: 'Diagnosis',     yAxis: 'Count',   chartType: 'bar' },
+  'consultations-by-type':    { label: 'Consultations by Service Type (Medical vs Dental)', xAxis: 'Service Type', yAxis: 'Count', chartType: 'pie' },
+  'consultations-by-mode':    { label: 'Consultations by Mode of Delivery (Onsite vs Virtual)', xAxis: 'Mode of Delivery', yAxis: 'Count', chartType: 'doughnut' },
+  'consultation-trends':      { label: 'Consultation Trends Over Time', xAxis: 'Period', yAxis: 'Count', chartType: 'line' },
+  'top-diagnoses':            { label: 'Most Frequent Diagnoses Recorded', xAxis: 'Diagnosis', yAxis: 'Count', chartType: 'bar' },
   'diagnoses-by-type':        { label: 'Diagnoses by Type',           xAxis: 'Type',          yAxis: 'Count',   chartType: 'pie' },
   'bmi-trends':               { label: 'BMI Trends',                  xAxis: 'Period',        yAxis: 'Avg BMI', chartType: 'line' },
   'blood-pressure-trends':    { label: 'Blood Pressure Trends',       xAxis: 'Period',        yAxis: 'Avg BP',  chartType: 'line' },
@@ -34,7 +34,7 @@ const EXPORT_META = {
   // EMR / General / Inventory
   'female-reproductive-health': { label: 'Female Reproductive Health', xAxis: 'Metric', yAxis: 'Count', chartType: 'doughnut' },
   'lifestyle-statistics':       { label: 'Lifestyle Statistics',       xAxis: 'Metric', yAxis: 'Value', chartType: 'bar', hasSeries: true },
-  'oral-findings-percentages':  { label: 'Oral Finding Percentages',   xAxis: 'Finding', yAxis: 'Percentage', chartType: 'bar' },
+  'oral-findings-percentages':  { label: 'Oral Findings Prevalence',   xAxis: 'Oral Finding', yAxis: 'Prevalence (%)', chartType: 'bar' },
   'vital-signs-box-plot':       { label: 'Vital Signs Box Plot',       xAxis: 'Vital', yAxis: 'Median', chartType: 'bar' },
   'patient-credential-status':  { label: 'Patient Credential Status',  xAxis: 'Status', yAxis: 'Patients', chartType: 'pie' },
   'patient-population-by-branch': { label: 'Patient Population by Branch', xAxis: 'Branch', yAxis: 'Patients', chartType: 'bar' },
@@ -69,7 +69,7 @@ const EXPORT_PRESETS = {
   },
   'consultations': {
     label: 'Consultations Report',
-    description: 'Consultation metrics: type, mode, trends',
+    description: 'Consultation metrics: service type, mode of delivery, and trends',
     dataTypes: ['consultations-by-type', 'consultations-by-mode', 'consultation-trends'],
   },
   'diagnoses': {
@@ -89,8 +89,8 @@ const EXPORT_PRESETS = {
   },
   'clinical': {
     label: 'Clinical Data Report',
-    description: 'Immunization coverage and dental procedures',
-    dataTypes: ['immunization-coverage', 'dental-procedures'],
+    description: 'Immunization coverage, dental procedures, and oral findings prevalence',
+    dataTypes: ['immunization-coverage', 'dental-procedures', 'oral-findings-percentages'],
   },
   'lifestyle': {
     label: 'Lifestyle & Allergies Report',
@@ -321,6 +321,7 @@ function buildDetailedRows(data, meta = {}) {
   const groupBy = formatFilterValue(meta.groupBy, 'Default');
   const departmentFilter = formatFilterValue(meta.department, 'All');
   const sexFilter = formatFilterValue(meta.sex, 'All');
+  const ageGroupFilter = formatFilterValue(meta.ageGroup, 'All');
 
   for (const [dataType, result] of Object.entries(data)) {
     const exportMeta = EXPORT_META[dataType] || {};
@@ -331,6 +332,10 @@ function buildDetailedRows(data, meta = {}) {
     const rawCounts = Array.isArray(result?.rawCounts) ? result.rawCounts : [];
     const diastolicValues = Array.isArray(result?.diastolicValues) ? result.diastolicValues : [];
     const metricTotal = normalizeNumeric(result?.total);
+    const chartContext = result?.chartContext || {};
+    const chartTitle = chartContext.title || exportMeta.label || dataType;
+    const datasetContext = chartContext.datasetContext || chartContext.key || dataType;
+    const filterParameters = `branch=${branch};startDate=${startDate};endDate=${endDate};groupBy=${groupBy};department=${departmentFilter};sex=${sexFilter};ageGroup=${ageGroupFilter}`;
     const chartType = exportMeta.chartType || '';
     const chartVariant = result?.chartVariant || chartType || 'bar';
     const isTrend = metricTrendType(dataType);
@@ -347,12 +352,16 @@ function buildDetailedRows(data, meta = {}) {
       yAxis: exportMeta.yAxis || 'Value',
       metricTotal,
       itemCount: labels.length,
+      chartTitle,
+      datasetContext,
+      filterParameters,
       branch,
       startDate,
       endDate,
       groupBy,
       departmentFilter,
       sexFilter,
+      ageGroupFilter,
     };
 
     if (boxPlot.length > 0) {
@@ -538,6 +547,9 @@ function buildResearchRows(data) {
   for (const [metricKey, result] of Object.entries(data || {})) {
     const exportMeta = EXPORT_META[metricKey] || {};
     const metric = exportMeta.label || metricKey;
+    const chartContext = result?.chartContext || {};
+    const chartTitle = chartContext.title || metric;
+    const datasetContext = chartContext.datasetContext || chartContext.key || metricKey;
     const labels = Array.isArray(result?.labels) ? result.labels : [];
     const values = Array.isArray(result?.values) ? result.values : [];
     const series = Array.isArray(result?.series) ? result.series : [];
@@ -555,6 +567,8 @@ function buildResearchRows(data) {
         category: categoryForMetric(metricKey),
         metricKey,
         metric,
+        chartTitle,
+        datasetContext,
         label,
         value,
         percentOfTotal,
@@ -672,6 +686,8 @@ function generateCSV(data, meta) {
   const groupBy = formatFilterValue(meta.groupBy, 'Default');
   const departmentFilter = formatFilterValue(meta.department, 'All');
   const sexFilter = formatFilterValue(meta.sex, 'All');
+  const ageGroupFilter = formatFilterValue(meta.ageGroup, 'All');
+  const filterParameters = `branch=${branch};startDate=${meta.startDate};endDate=${meta.endDate};groupBy=${groupBy};department=${departmentFilter};sex=${sexFilter};ageGroup=${ageGroupFilter}`;
 
   // 8 metadata lines (kept as comments for easy skipping in external tools).
   lines.push(`# MDSystem Analytics Clean Export`);
@@ -680,13 +696,16 @@ function generateCSV(data, meta) {
   lines.push(`# Group By: ${groupBy}`);
   lines.push(`# Department Filter: ${departmentFilter}`);
   lines.push(`# Sex Filter: ${sexFilter}`);
+  lines.push(`# Age Group Filter: ${ageGroupFilter}`);
   lines.push(`# Generated: ${generatedAt}`);
-  lines.push('# Columns: Category,Metric,Label,Value,% of Total,Min,Q1,Median,Q3,Max,Sample Count');
+  lines.push('# Columns: Category,Metric,Chart Title,Dataset Context,Label,Value,% of Total,Min,Q1,Median,Q3,Max,Sample Count,Filter Parameters');
 
   // Clean research table.
   lines.push([
     'Category',
     'Metric',
+    'Chart Title',
+    'Dataset Context',
     'Label',
     'Value',
     '% of Total',
@@ -696,12 +715,15 @@ function generateCSV(data, meta) {
     'Q3',
     'Max',
     'Sample Count',
+    'Filter Parameters',
   ].map(csvEscape).join(','));
 
   for (const row of researchRows) {
     lines.push([
       row.category,
       row.metric,
+      row.chartTitle,
+      row.datasetContext,
       row.label,
       row.value,
       row.percentOfTotal,
@@ -711,6 +733,7 @@ function generateCSV(data, meta) {
       row.q3,
       row.max,
       row.sampleCount,
+      filterParameters,
     ].map(csvEscape).join(','));
   }
 
@@ -892,6 +915,7 @@ async function generatePDF(data, meta) {
   const groupBy = formatFilterValue(meta.groupBy, 'Default');
   const departmentFilter = formatFilterValue(meta.department, 'All');
   const sexFilter = formatFilterValue(meta.sex, 'All');
+  const ageGroupFilter = formatFilterValue(meta.ageGroup, 'All');
   const filterSummary = `Group By: ${groupBy} | Department: ${departmentFilter} | Sex: ${sexFilter}`;
 
   for (const [dataType, result] of Object.entries(data)) {
@@ -921,8 +945,10 @@ async function generatePDF(data, meta) {
       : undefined;
     const showPercentage = shouldShowPercentageColumn(result, { isTrend, isBP, isBoxPlot });
 
+    const chartContext = result.chartContext || {};
+
     sections.push({
-      title: exportMeta.label,
+      title: chartContext.title || exportMeta.label,
       chartType: exportMeta.chartType,
       labels: tableLabels,
       values: tableValues,
@@ -935,6 +961,16 @@ async function generatePDF(data, meta) {
       isBP,
       isBoxPlot,
       showPercentage,
+      chartContext,
+      filterParameters: {
+        branch: branchLabel(meta.branch),
+        startDate: meta.startDate,
+        endDate: meta.endDate,
+        groupBy,
+        department: departmentFilter,
+        sex: sexFilter,
+        ageGroup: ageGroupFilter,
+      },
       summary: `Total Records: ${result.total || 0}  |  Items shown: ${tableLabels.length}${result.labels.length > maxRows ? ` of ${result.labels.length}` : ''}  |  ${filterSummary}`,
     });
   }
@@ -942,11 +978,15 @@ async function generatePDF(data, meta) {
   // Build summary KPIs
   const summary = {};
   for (const [dataType, result] of Object.entries(data)) {
-    const label = EXPORT_META[dataType]?.label || dataType;
+    const label = result?.chartContext?.title || EXPORT_META[dataType]?.label || dataType;
     summary[label] = result.total || 0;
   }
+  if (data['oral-findings-percentages']) {
+    summary.oralFindingsPrevalence = data['oral-findings-percentages']?.summary
+      || 'Oral Findings Prevalence (Boolean-based percentages).';
+  }
   summary.reportDateRange = `${meta.startDate} to ${meta.endDate}`;
-  summary.appliedFilters = filterSummary;
+  summary.appliedFilters = `${filterSummary} | Age Group: ${ageGroupFilter}`;
 
   const docData = {
     report: {
@@ -1000,14 +1040,17 @@ async function generateSingleMetricPDF(dataType, result, meta) {
   const groupLabel = groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
   const departmentFilter = formatFilterValue(meta.department, 'All');
   const sexFilter = formatFilterValue(meta.sex, 'All');
-  const filterSubtitle = `Dept: ${departmentFilter} | Sex: ${sexFilter}`;
+  const ageGroupFilter = formatFilterValue(meta.ageGroup, 'All');
+  const filterSubtitle = `Dept: ${departmentFilter} | Sex: ${sexFilter} | Age Group: ${ageGroupFilter}`;
+  const chartTitle = result?.chartContext?.title || exportMeta.label;
+  const datasetContext = result?.chartContext?.datasetContext || result?.chartContext?.key || dataType;
 
   const doc = pdf.createDocument({ size: 'letter', margins: { top: 50, bottom: 50, left: 54, right: 54 } });
 
   // ── Header ──────────────────────────────────────────────
   const reportTitle = isTrend
-    ? `${exportMeta.label} (${groupLabel})`
-    : exportMeta.label;
+    ? `${chartTitle} (${groupLabel})`
+    : chartTitle;
 
   pdf.addHeader(doc, reportTitle, `${meta.startDate} to ${meta.endDate} | ${filterSubtitle}`, {
     clinicName: 'TIP Medical-Dental Services',
@@ -1023,6 +1066,8 @@ async function generateSingleMetricPDF(dataType, result, meta) {
   if (isTrend || meta.groupBy) pdf.addField(doc, 'Grouping', groupLabel);
   pdf.addField(doc, 'Department Filter', departmentFilter);
   pdf.addField(doc, 'Sex Filter', sexFilter);
+  pdf.addField(doc, 'Age Group Filter', ageGroupFilter);
+  pdf.addField(doc, 'Dataset Context', datasetContext);
   pdf.addField(doc, 'Total Records', String(result.total || 0));
   pdf.addField(doc, 'Generated', new Date().toLocaleString('en-US'));
   doc.moveDown(0.5);
@@ -1139,7 +1184,7 @@ async function generateSingleMetricPDF(dataType, result, meta) {
           break;
         case 'line':
           chartBuffer = await chart.generateLineChart(chartLabels, [{
-            label: exportMeta.label,
+            label: chartTitle,
             data: chartValues,
             borderColor: '#2196F3',
             fill: false,
@@ -1148,7 +1193,7 @@ async function generateSingleMetricPDF(dataType, result, meta) {
         case 'bar':
         default:
           chartBuffer = await chart.generateBarChart(chartLabels, [{
-            label: exportMeta.label,
+            label: chartTitle,
             data: chartValues,
             backgroundColor: '#4CAF50',
           }], chartOpts);

@@ -89,6 +89,7 @@ const TAB_CONFIG = Object.freeze([
     metrics: [
       'immunization-coverage',
       'dental-procedures',
+      'oral-findings-percentages',
     ],
   },
   {
@@ -104,7 +105,6 @@ const TAB_CONFIG = Object.freeze([
     name: 'EMR',
     metrics: [
       'female-reproductive-health',
-      'oral-findings-percentages',
     ],
   },
   {
@@ -170,8 +170,8 @@ function normalizeWhitespace(text) {
   return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
-function matrixMetricDisplayLabel(metricKey, state) {
-  const base = metricLabel(metricKey);
+function matrixMetricDisplayLabel(metricKey, state, titleOverride = '') {
+  const base = normalizeWhitespace(titleOverride) || metricLabel(metricKey);
   let compact = base;
 
   // Dimension wording is redundant because rows/columns and filter pills already encode it.
@@ -498,6 +498,15 @@ function orderedDepartments(metricRowsByDepartment, state) {
 
 async function buildMatrixData(meta = {}, requestedDataTypes = []) {
   const state = resolveFilterState(meta);
+  const exportFilterParameters = JSON.stringify({
+    branch: state.branch,
+    startDate: state.startDate,
+    endDate: state.endDate,
+    groupBy: state.groupBy,
+    department: state.departmentAll ? 'All' : state.department,
+    ageGroup: state.ageAll ? 'All' : state.ageLabel,
+    sex: state.sexAll ? 'All' : state.sexLabel,
+  });
   const sheetConfig = activeSheetConfig(requestedDataTypes);
   const metricLookup = metricToSheetLookup(sheetConfig);
   const metrics = Array.from(new Set(sheetConfig.flatMap((sheet) => sheet.metrics)));
@@ -546,6 +555,11 @@ async function buildMatrixData(meta = {}, requestedDataTypes = []) {
           const sheetName = metricLookup[metricKey];
           if (!sheetName) continue;
 
+          const chartContext = wrapped.data.chartContext || {};
+          const chartTitle = chartContext.title || metricLabel(metricKey);
+          const datasetContext = chartContext.datasetContext || chartContext.key || metricKey;
+          const metricName = matrixMetricDisplayLabel(metricKey, state, chartTitle);
+
           const points = flattenMetricPoints(metricKey, wrapped.data);
           if (points.length === 0) continue;
 
@@ -559,7 +573,10 @@ async function buildMatrixData(meta = {}, requestedDataTypes = []) {
               row = {
                 sheet: sheetName,
                 metricKey,
-                metricName: matrixMetricDisplayLabel(metricKey, state),
+                metricName,
+                chartTitle,
+                datasetContext,
+                filterParameters: exportFilterParameters,
                 department,
                 label: point.label,
                 unit: point.unit || '',
@@ -578,6 +595,9 @@ async function buildMatrixData(meta = {}, requestedDataTypes = []) {
             sheetFlat.push({
               sheet: sheetName,
               metric: row.metricName,
+              chartTitle: row.chartTitle,
+              datasetContext: row.datasetContext,
+              filterParameters: row.filterParameters,
               department,
               ageGroup: age.label,
               sex: sex.label,
@@ -1341,6 +1361,9 @@ function buildWideCsvRowsForSheet(structured, sheetName, metricKeys, state, layo
         const csvRow = {
           sheet: sheetName,
           metric: row.metricName,
+          chart_title: row.chartTitle,
+          dataset_context: row.datasetContext,
+          filter_parameters: row.filterParameters,
           department,
           label: row.label,
         };
@@ -1363,6 +1386,15 @@ async function generateMatrixCsvFiles(meta = {}, requestedDataTypes = []) {
   const layout = buildColumnLayout(state);
   const startToken = dateToken(state.startDate);
   const endToken = dateToken(state.endDate);
+  const filterParameters = JSON.stringify({
+    branch: state.branch,
+    startDate: state.startDate,
+    endDate: state.endDate,
+    groupBy: state.groupBy,
+    department: state.departmentAll ? 'All' : state.department,
+    ageGroup: state.ageAll ? 'All' : state.ageLabel,
+    sex: state.sexAll ? 'All' : state.sexLabel,
+  });
   const files = [];
 
   for (const sheet of data.sheetConfig) {
@@ -1370,12 +1402,15 @@ async function generateMatrixCsvFiles(meta = {}, requestedDataTypes = []) {
     const slug = sheetSlug(sheetName);
 
     const flatRows = data.flatRecords.get(sheetName) || [];
-    const flatHeader = ['sheet', 'metric', 'department', 'age_group', 'sex', 'label', 'value', 'pct_of_total'];
+    const flatHeader = ['sheet', 'metric', 'chart_title', 'dataset_context', 'filter_parameters', 'department', 'age_group', 'sex', 'label', 'value', 'pct_of_total'];
     const flatLines = [flatHeader.join(',')];
     for (const row of flatRows) {
       flatLines.push([
         row.sheet,
         row.metric,
+        row.chartTitle,
+        row.datasetContext,
+        row.filterParameters,
         row.department,
         row.ageGroup,
         row.sex,
@@ -1391,7 +1426,7 @@ async function generateMatrixCsvFiles(meta = {}, requestedDataTypes = []) {
     });
 
     const wideRows = buildWideCsvRowsForSheet(data.structured, sheetName, sheet.metrics, state, layout);
-    const wideColumns = ['sheet', 'metric', 'department', 'label', ...buildWideColumnOrder(layout)];
+    const wideColumns = ['sheet', 'metric', 'chart_title', 'dataset_context', 'filter_parameters', 'department', 'label', ...buildWideColumnOrder(layout)];
     const wideLines = [wideColumns.join(',')];
     for (const row of wideRows) {
       wideLines.push(wideColumns.map((column) => csvEscape(row[column])).join(','));
@@ -1403,12 +1438,15 @@ async function generateMatrixCsvFiles(meta = {}, requestedDataTypes = []) {
     });
   }
 
-  const summaryFlatHeader = ['sheet', 'metric', 'department', 'age_group', 'sex', 'label', 'value', 'pct_of_total'];
+  const summaryFlatHeader = ['sheet', 'metric', 'chart_title', 'dataset_context', 'filter_parameters', 'department', 'age_group', 'sex', 'label', 'value', 'pct_of_total'];
   const summaryFlatLines = [summaryFlatHeader.join(',')];
   for (const row of data.summaryRows) {
     summaryFlatLines.push([
       'Summary',
       row.rowLabel,
+      row.rowLabel,
+      'summary',
+      filterParameters,
       state.departmentAll ? ALL_DEPARTMENTS_LABEL : state.department,
       state.ageAll ? 'All' : state.ageLabel,
       state.sexAll ? 'All' : state.sexLabel,
@@ -1423,12 +1461,15 @@ async function generateMatrixCsvFiles(meta = {}, requestedDataTypes = []) {
     content: summaryFlatLines.join('\r\n'),
   });
 
-  const summaryWideColumns = ['sheet', 'metric', 'department', 'label', 'grand_total'];
+  const summaryWideColumns = ['sheet', 'metric', 'chart_title', 'dataset_context', 'filter_parameters', 'department', 'label', 'grand_total'];
   const summaryWideLines = [summaryWideColumns.join(',')];
   for (const row of data.summaryRows) {
     summaryWideLines.push([
       'Summary',
       row.rowLabel,
+      row.rowLabel,
+      'summary',
+      filterParameters,
       state.departmentAll ? ALL_DEPARTMENTS_LABEL : state.department,
       row.rowLabel,
       row.totalValue,

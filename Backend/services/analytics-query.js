@@ -295,6 +295,33 @@ function roundNumber(value, precision = 2) {
   return Number(Number(value).toFixed(precision));
 }
 
+function toFindingKey(label, fallbackIndex = 0) {
+  const cleaned = String(label || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) return `finding${fallbackIndex || ''}`;
+
+  const parts = cleaned.split(' ');
+  return parts
+    .map((part, index) => {
+      if (index === 0) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join('');
+}
+
+function titleFromDataType(dataType) {
+  return String(dataType || '')
+    .split('-')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ') || 'No Data Available';
+}
+
 function buildBoxSummary(values = [], precision = 2) {
   if (!Array.isArray(values) || values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -815,44 +842,116 @@ async function lifestyleStatistics(branch, startDate, endDate, options = {}) {
  * Oral finding prevalence percentages against selected patient population.
  */
 async function oralFindingsPercentages(branch, startDate, endDate, options = {}) {
-  const bfPopulation = branchFilter(branch, 'up', 1);
-  const basePopParams = [...bfPopulation.params];
-  const pfPopulation = profileFilterClause(options, 'p.id', basePopParams.length + 1);
-
-  const populationResult = await db.query(`
-    SELECT COUNT(DISTINCT p.id)::int AS total_population
-    FROM "Patients" p
-    INNER JOIN "UsersPersonal" up ON up.id = p.id
-    WHERE 1 = 1 ${bfPopulation.clause} ${pfPopulation.clause}
-  `, [...basePopParams, ...pfPopulation.params]);
-
-  const totalPopulation = parseInt(populationResult.rows[0]?.total_population || 0);
-  if (totalPopulation <= 0) {
-    return { labels: [], values: [], rawCounts: [], total: 0 };
-  }
-
   const bf = branchFilter(branch);
   const baseParams = [startDate, endDate, ...bf.params];
   const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+  const allParams = [...baseParams, ...pf.params];
 
-  const result = await db.query(`
-    SELECT ofc.name AS finding, COUNT(DISTINCT dr."patientId")::int AS patient_count
+  const populationResult = await db.query(`
+    SELECT COUNT(DISTINCT p.id)::int AS total_population
     FROM "DentalRecord" dr
-    INNER JOIN "oralFindingRecord" ofr ON ofr."dentalRecordId" = dr.id
-    INNER JOIN "oralFindingCatalog" ofc ON ofc.id = ofr."oralFindingId"
     INNER JOIN "Patients" p ON p.id = dr."patientId"
     INNER JOIN "UsersPersonal" up ON up.id = p.id
-    WHERE dr.created_at BETWEEN $1 AND $2
-      ${bf.clause} ${pf.clause}
-    GROUP BY ofc.name
-    ORDER BY patient_count DESC, ofc.name ASC
-    LIMIT 12
-  `, [...baseParams, ...pf.params]);
+    WHERE dr.created_at BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
+  `, allParams);
 
-  const labels = result.rows.map((row) => row.finding);
-  const rawCounts = result.rows.map((row) => parseInt(row.patient_count));
-  const values = rawCounts.map((count) => roundNumber((count / totalPopulation) * 100, 2));
-  return { labels, values, rawCounts, total: totalPopulation, unit: 'percentage' };
+  const totalPopulation = parseInt(populationResult.rows[0]?.total_population || 0);
+  if (totalPopulation <= 0) {
+    return {
+      labels: [],
+      values: [],
+      rawCounts: [],
+      noValues: [],
+      oralFindings: {},
+      total: 0,
+      unit: 'percentage',
+      summary: 'Oral Findings Prevalence (Boolean-based percentages).',
+    };
+  }
+
+  const result = await db.query(`
+    WITH filtered_population AS (
+      SELECT DISTINCT p.id
+      FROM "DentalRecord" dr
+      INNER JOIN "Patients" p ON p.id = dr."patientId"
+      INNER JOIN "UsersPersonal" up ON up.id = p.id
+      WHERE dr.created_at BETWEEN $1 AND $2 ${bf.clause} ${pf.clause}
+    ),
+    patient_finding_flags AS (
+      SELECT
+        fp.id AS patient_id,
+        ofc.id AS finding_id,
+        ofc.name AS finding_name,
+        COALESCE(
+          BOOL_OR(
+            LOWER(TRIM(COALESCE(ofr.status::text, ''))) IN ('true', 't', '1', 'yes', 'present', 'positive', 'active')
+          ),
+          false
+        ) AS finding_present
+      FROM filtered_population fp
+      INNER JOIN "oralFindingCatalog" ofc ON COALESCE(ofc."isValid", true) = true
+      LEFT JOIN "DentalRecord" dr
+        ON dr."patientId" = fp.id
+       AND dr.created_at BETWEEN $1 AND $2
+      LEFT JOIN "oralFindingRecord" ofr
+        ON ofr."dentalRecordId" = dr.id
+       AND ofr."oralFindingId" = ofc.id
+      GROUP BY fp.id, ofc.id, ofc.name
+    )
+    SELECT
+      finding_name,
+      COUNT(*) FILTER (WHERE finding_present = true)::int AS yes_count,
+      COUNT(*) FILTER (WHERE finding_present = false)::int AS no_count
+    FROM patient_finding_flags
+    GROUP BY finding_name
+    ORDER BY yes_count DESC, finding_name ASC
+    LIMIT 12
+  `, allParams);
+
+  const labels = [];
+  const values = [];
+  const rawCounts = [];
+  const noValues = [];
+  const oralFindings = {};
+  const usedKeys = new Set();
+
+  result.rows.forEach((row, index) => {
+    const findingName = String(row.finding_name || '').trim() || `Finding ${index + 1}`;
+    const yesCount = parseInt(row.yes_count || 0);
+    const noCount = Math.max(totalPopulation - yesCount, 0);
+    const yesPercentage = roundNumber((yesCount / totalPopulation) * 100, 2);
+    const noPercentage = roundNumber((noCount / totalPopulation) * 100, 2);
+
+    labels.push(findingName);
+    values.push(yesPercentage);
+    rawCounts.push(yesCount);
+    noValues.push(noPercentage);
+
+    let findingKey = toFindingKey(findingName, index + 1);
+    if (usedKeys.has(findingKey)) {
+      findingKey = `${findingKey}${index + 1}`;
+    }
+    usedKeys.add(findingKey);
+
+    oralFindings[findingKey] = {
+      label: findingName,
+      yes: yesPercentage,
+      no: noPercentage,
+      yesCount,
+      noCount,
+    };
+  });
+
+  return {
+    labels,
+    values,
+    rawCounts,
+    noValues,
+    oralFindings,
+    total: totalPopulation,
+    unit: 'percentage',
+    summary: 'Oral Findings Prevalence (Boolean-based percentages).',
+  };
 }
 
 /**
@@ -1923,19 +2022,19 @@ async function diagnosesBySexAndAge(branch, startDate, endDate, options = {}) {
 const QUERY_HANDLERS = {
   'consultations-by-type': {
     handler: consultationsByType,
-    description: 'Consultations grouped by Medical/Dental type',
+    description: 'Consultations by service type (Medical vs Dental)',
   },
   'consultations-by-mode': {
     handler: consultationsByMode,
-    description: 'Consultations grouped by mode (Onsite, Virtual)',
+    description: 'Consultations by mode of delivery (Onsite vs Virtual)',
   },
   'consultation-trends': {
     handler: consultationTrends,
-    description: 'Monthly consultation volume trends',
+    description: 'Consultation trends over time',
   },
   'top-diagnoses': {
     handler: topDiagnoses,
-    description: 'Top 10 most common diagnoses with ICD codes',
+    description: 'Most frequent diagnoses recorded with ICD codes',
   },
   'diagnoses-by-type': {
     handler: diagnosesByType,
@@ -1994,7 +2093,7 @@ const QUERY_HANDLERS = {
   },
   'oral-findings-percentages': {
     handler: oralFindingsPercentages,
-    description: 'Oral finding prevalence percentages across the selected patient population',
+    description: 'Oral findings prevalence using boolean yes/no percentages across the filtered patient population',
   },
   'vital-signs-box-plot': {
     handler: vitalSignsBoxPlot,
@@ -2081,6 +2180,53 @@ const QUERY_HANDLERS = {
   },
 };
 
+const CHART_CONTEXT_OVERRIDES = Object.freeze({
+  'consultations-by-type': {
+    key: 'serviceType',
+    title: 'Consultations by Service Type (Medical vs Dental)',
+    datasetContext: 'serviceType',
+  },
+  'consultations-by-mode': {
+    key: 'deliveryMode',
+    title: 'Consultations by Mode of Delivery (Onsite vs Virtual)',
+    datasetContext: 'deliveryMode',
+  },
+  'consultation-trends': {
+    key: 'consultationTrends',
+    title: 'Consultation Trends Over Time',
+    datasetContext: 'consultationTimeline',
+  },
+  'top-diagnoses': {
+    key: 'diagnosisFrequency',
+    title: 'Most Frequent Diagnoses Recorded',
+    datasetContext: 'diagnosisFrequency',
+  },
+  'oral-findings-percentages': {
+    key: 'oralFindings',
+    title: 'Oral Findings Prevalence',
+    datasetContext: 'booleanOralHealthPrevalence',
+  },
+});
+
+function buildChartContext(dataType, options = {}, result = {}) {
+  const override = CHART_CONTEXT_OVERRIDES[dataType] || {};
+  const defaultTitle = titleFromDataType(dataType);
+
+  return {
+    key: override.key || dataType,
+    title: override.title || defaultTitle,
+    datasetContext: override.datasetContext || override.key || dataType,
+    description: QUERY_HANDLERS[dataType]?.description || '',
+    filterParameters: {
+      groupBy: options.groupBy || null,
+      department: options.department || null,
+      sex: options.sex || null,
+      ageGroup: options.ageGroup || null,
+    },
+    total: Number.isFinite(Number(result?.total)) ? Number(result.total) : 0,
+  };
+}
+
 // ============================================================
 // REPORT QUERY FUNCTIONS - For PDF report generation
 // ============================================================
@@ -2166,11 +2312,15 @@ async function executeQuery(dataType, branch, startDate, endDate, options = {}) 
 
   logger.debug(`Executing query: ${dataType}`, { branch, startDate, endDate, options });
   const result = await config.handler(branch, startDate, endDate, options);
+  const enrichedResult = {
+    ...(result || {}),
+    chartContext: result?.chartContext || buildChartContext(dataType, options, result),
+  };
 
   // Store in cache
-  await setCachedResult(cacheKey, result);
+  await setCachedResult(cacheKey, enrichedResult);
 
-  return result;
+  return enrichedResult;
 }
 
 /**
