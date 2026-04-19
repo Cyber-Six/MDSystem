@@ -21,9 +21,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const checkAuth = async () => {
     try {
-      const token = await TokenStorage.getAccessToken();
-      setIsAuthenticated(!!token);
+      const [accessToken, refreshToken] = await Promise.all([
+        Promise.resolve(TokenStorage.getAccessToken?.()),
+        Promise.resolve(TokenStorage.getRefreshToken?.()),
+      ]);
+
+      if (!accessToken || !refreshToken) {
+        await Promise.resolve(TokenStorage.clearTokens?.());
+        setIsAuthenticated(false);
+        return;
+      }
+
+      const isAccessValid =
+        typeof TokenStorage.validateToken === 'function'
+          ? TokenStorage.validateToken(accessToken)
+          : true;
+      const isRefreshValid =
+        typeof TokenStorage.validateRefreshToken === 'function'
+          ? TokenStorage.validateRefreshToken(refreshToken)
+          : true;
+
+      if (!isAccessValid || !isRefreshValid) {
+        await Promise.resolve(TokenStorage.clearTokens?.());
+        setIsAuthenticated(false);
+        return;
+      }
+
+      setIsAuthenticated(true);
     } catch (error) {
+      try {
+        await Promise.resolve(TokenStorage.clearTokens?.());
+      } catch {
+        // Ignore token cleanup failures during bootstrap.
+      }
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
