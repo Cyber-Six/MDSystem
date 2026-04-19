@@ -523,17 +523,10 @@ const Login = ({ onVerificationViewChange }) => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
+            <div className="mb-1">
               <label htmlFor="password" className="block text-sm sm:text-xs font-medium text-secondary-700">
                 Password
               </label>
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-sm sm:text-xs text-accent-600 hover:text-accent-700 hover:underline transition-colors font-medium"
-              >
-                Forgot password?
-              </button>
             </div>
             <div className="relative">
               <input
@@ -564,6 +557,16 @@ const Login = ({ onVerificationViewChange }) => {
                 )}
               </button>
             </div>
+            <div className="flex justify-end mt-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm sm:text-xs text-accent-600 hover:text-accent-700 hover:underline transition-colors font-medium"
+              >
+                Forgot password?
+              </button>
+            </div>
+
           </div>
 
           {captchaRequired && (

@@ -136,30 +136,30 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-lg h-[600px] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-[2px] p-4">
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex max-h-[88vh] flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
+        <div className="px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
               <Users className="w-5 h-5 text-primary-600 dark:text-primary-400" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-secondary-900 dark:text-white">Manage Whitelist</h2>
-              <p className="text-sm text-secondary-500 dark:text-neutral-400">{entries.length} patient{entries.length !== 1 ? 's' : ''} whitelisted</p>
+            <div className="flex flex-col" style={{ gap: '3px' }}>
+              <h2 className="m-0 text-lg font-semibold leading-[1.2] text-secondary-900 dark:text-white">Manage Whitelist</h2>
+              <p className="m-0 text-sm leading-[1.25] text-secondary-500 dark:text-neutral-400">{entries.length} patient{entries.length !== 1 ? 's' : ''} whitelisted</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
           >
             <X className="w-5 h-5 text-secondary-500 dark:text-neutral-400" />
           </button>
         </div>
 
         {/* Search Section */}
-        <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
-          <label className="block text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-2">
+        <div className="px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
+          <label className="mb-1.5 block text-sm font-semibold leading-[1.2] text-secondary-600 dark:text-neutral-300">
             Search Patient by Name, Email, or ID
           </label>
           <div className="relative" ref={dropdownRef}>
@@ -169,7 +169,7 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
                 value={searchInput}
                 onChange={(e) => handleSearchInput(e.target.value)}
                 placeholder="Type to search..."
-                className="w-full pl-9 pr-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 pl-9 pr-3 py-2 text-sm text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
               {searching && (
@@ -181,30 +181,30 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
 
             {/* Search Results Dropdown */}
             {showDropdown && searchResults.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+              <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700">
                 {searchResults.map((patient) => (
                   <button
                     key={patient.id}
                     onClick={() => handleSelectPatient(patient)}
                     disabled={adding}
-                    className="w-full px-4 py-3 text-left hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50 border-b border-neutral-100 dark:border-neutral-600 last:border-0"
+                    className="w-full border-b border-neutral-100 dark:border-neutral-600 px-3.5 py-2.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-600 disabled:opacity-50 last:border-0"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-sm font-bold text-primary-600 dark:text-primary-400 flex-shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-sm font-bold text-primary-600 dark:text-primary-400 flex-shrink-0">
                         {patient.identifier?.toString().slice(-2) || '?'}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-base font-semibold text-secondary-900 dark:text-white truncate">
+                        <p className="truncate text-sm font-semibold text-secondary-900 dark:text-white">
                           {formatPatientName(patient)}
                         </p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-sm text-secondary-600 dark:text-neutral-400">
+                          <span className="text-xs text-secondary-600 dark:text-neutral-400">
                             ID: {patient.identifier}
                           </span>
                           {patient.profile_type && (
                             <>
-                              <span className="text-sm text-neutral-400">•</span>
-                              <span className="text-sm text-secondary-600 dark:text-neutral-400">
+                              <span className="text-xs text-neutral-400">•</span>
+                              <span className="text-xs text-secondary-600 dark:text-neutral-400">
                                 {patient.profile_type}
                               </span>
                             </>
@@ -220,10 +220,10 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
 
             {/* No Results */}
             {showDropdown && searchInput.trim() && !searching && searchResults.length === 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg shadow-lg p-4 text-center">
-                <AlertCircle className="w-8 h-8 text-neutral-300 dark:text-neutral-600 mx-auto mb-2" />
-                <p className="text-base text-secondary-500 dark:text-neutral-400">No patients found</p>
-                <p className="text-sm text-secondary-400 dark:text-neutral-500 mt-1">
+              <div className="absolute z-10 mt-1 w-full rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 p-4 text-center">
+                <AlertCircle className="mx-auto mb-2 h-7 w-7 text-neutral-300 dark:text-neutral-600" />
+                <p className="text-sm text-secondary-500 dark:text-neutral-400">No patients found</p>
+                <p className="mt-1 text-xs text-secondary-400 dark:text-neutral-500">
                   Try searching with a different name, ID, or email
                 </p>
               </div>
@@ -235,40 +235,40 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
         {error && (
           <div className="mx-5 mt-4 p-3 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" />
-            <p className="text-base text-error-700 dark:text-error-300">{error}</p>
+            <p className="text-sm text-error-700 dark:text-error-300">{error}</p>
           </div>
         )}
 
         {/* Whitelist Entries */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="max-h-[42vh] overflow-y-auto px-5 py-2.5">
           {loading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-6">
               <div className="w-6 h-6 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
             </div>
           ) : entries.length === 0 ? (
-            <div className="text-center py-8">
+            <div className="py-6 text-center">
               <Users className="w-10 h-10 text-neutral-300 dark:text-neutral-600 mx-auto mb-3" />
-              <p className="text-base text-secondary-500 dark:text-neutral-400">No patients in whitelist</p>
-              <p className="text-sm text-secondary-400 dark:text-neutral-500 mt-1">
+              <p className="text-sm text-secondary-500 dark:text-neutral-400">No patients in whitelist</p>
+              <p className="mt-1 text-xs text-secondary-400 dark:text-neutral-500">
                 Search for patients above to add them
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {entries.map((entry) => (
                 <div
                   key={entry.id}
-                  className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg border border-neutral-200 dark:border-neutral-600"
+                  className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/50 px-2.5 py-2"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-sm font-semibold text-primary-600 dark:text-primary-400 flex-shrink-0">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="h-7 w-7 flex-shrink-0 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-xs font-bold text-primary-600 dark:text-primary-400">
                       {entry.patientIdentifier?.toString().slice(-2) || '?'}
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-base font-medium text-secondary-800 dark:text-white truncate">
+                    <div className="min-w-0 flex flex-col" style={{ gap: '3px' }}>
+                      <p className="m-0 truncate text-sm font-semibold leading-[1.2] text-secondary-800 dark:text-white">
                         {entry.patientName?.trim() || 'Unknown Patient'}
                       </p>
-                      <p className="text-sm text-secondary-500 dark:text-neutral-400">
+                      <p className="m-0 text-xs leading-[1.2] text-secondary-500 dark:text-neutral-400">
                         ID: {entry.patientIdentifier || entry.patientId}
                       </p>
                     </div>
@@ -276,7 +276,7 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
                   <button
                     onClick={() => handleRemove(entry.patientId)}
                     disabled={removing === entry.patientId}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-md transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-error-600 dark:text-error-400 transition-colors hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50"
                     title="Remove from whitelist"
                   >
                     {removing === entry.patientId ? (
@@ -293,10 +293,10 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-neutral-200 dark:border-neutral-700 flex justify-end flex-shrink-0">
+        <div className="px-5 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex justify-end flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-base font-medium text-secondary-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-lg transition-colors"
+            className="rounded-lg bg-neutral-100 dark:bg-neutral-700 px-4 py-1.5 text-sm font-medium text-secondary-700 dark:text-neutral-300 transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-600"
           >
             Done
           </button>
