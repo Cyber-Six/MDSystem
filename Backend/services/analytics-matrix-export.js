@@ -164,17 +164,23 @@ function matrixMetricDisplayLabel(metricKey, state) {
   const base = metricLabel(metricKey);
   let compact = base;
 
-  // Sex and age dimensions are already represented by matrix columns or active filters.
-  compact = compact.replace(/\s+by\s+sex\b/i, '');
-  compact = compact.replace(/\s+by\s+age\s*group\b/i, '');
-
-  // Department/program context is shown either via section headers or active filter context.
-  compact = compact.replace(/\s+by\s+department\b/i, '');
-  if (!state.departmentAll) {
-    compact = compact.replace(/\s+by\s+program\b/i, '');
-  }
+  // Dimension wording is redundant because rows/columns and filter pills already encode it.
+  compact = compact.replace(/\s+by\s+sex\b/ig, '');
+  compact = compact.replace(/\s+by\s+gender\b/ig, '');
+  compact = compact.replace(/\s+by\s+age\s*group\b/ig, '');
+  compact = compact.replace(/\s+by\s+sex\s*(?:&|and)\s*age\b/ig, '');
+  compact = compact.replace(/\s+sex\s*[×x]\s*age\s*group\s*matrix\b/ig, ' Matrix');
+  compact = compact.replace(/\s+by\s+department\b/ig, '');
+  compact = compact.replace(/\s+by\s+program\b/ig, '');
 
   compact = normalizeWhitespace(compact);
+
+  // Keep labels concise when a specific department is already part of section context.
+  if (!state.departmentAll && /\bprogram\b/i.test(compact) && /consultations/i.test(compact)) {
+    compact = compact.replace(/\bprogram\b/ig, '');
+    compact = normalizeWhitespace(compact);
+  }
+
   return compact || base;
 }
 
@@ -538,7 +544,7 @@ async function buildMatrixData(meta = {}, requestedDataTypes = []) {
               row = {
                 sheet: sheetName,
                 metricKey,
-                metricName: metricLabel(metricKey),
+                metricName: matrixMetricDisplayLabel(metricKey, state),
                 department,
                 label: point.label,
                 unit: point.unit || '',
@@ -1076,7 +1082,11 @@ function renderSheetTableBlocks(sheet, sheetName, metrics, structured, state, la
       if (rows.length === 0) continue;
 
       // Avoid duplicated TOTAL rows: keep detail rows in body and compute one explicit footer total.
-      const detailRows = rows.filter((row) => !isTotalLabel(row.label));
+      const detailRows = rows.filter((row) => {
+        const normalized = normalizeWhitespace(row.label).toLowerCase();
+        if (!normalized) return false;
+        return normalized !== 'total';
+      });
       const rowsForBody = detailRows;
       const rowsForTotals = detailRows.length > 0 ? detailRows : rows;
 
