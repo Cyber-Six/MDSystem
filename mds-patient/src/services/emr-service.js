@@ -1015,6 +1015,73 @@ const buildOralApplianceRecords = (dentalHistory, catalog) => {
   return { appliances, notes: dentalHistory?.applianceOther || null };
 };
 
+const VISUAL_ACUITY_META_PREFIX = 'VA_META::';
+
+const normalizeVisualGrade = (value) => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const parseLegacyVisualAcuityFlags = (notes = '') => ({
+  eyeglasses: notes.includes('Eyeglasses: Yes'),
+  contactLenses: notes.includes('Contact Lenses: Yes'),
+});
+
+const parseVisualAcuityMetaNotes = (rawNotes) => {
+  if (typeof rawNotes !== 'string') return null;
+  if (!rawNotes.startsWith(VISUAL_ACUITY_META_PREFIX)) return null;
+
+  try {
+    const payload = JSON.parse(rawNotes.slice(VISUAL_ACUITY_META_PREFIX.length));
+    return payload && typeof payload === 'object' ? payload : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildVisualAcuityPayload = (medicalBackground = {}) => {
+  const eyeglasses = !!medicalBackground.eyeglasses;
+  const contactLenses = !!medicalBackground.contactLenses;
+
+  const baseOD = normalizeVisualGrade(medicalBackground.gradeOD);
+  const baseOS = normalizeVisualGrade(medicalBackground.gradeOS);
+
+  const eyeglassesOD = normalizeVisualGrade(medicalBackground.gradeODEyeglasses) || (eyeglasses ? baseOD : '');
+  const eyeglassesOS = normalizeVisualGrade(medicalBackground.gradeOSEyeglasses) || (eyeglasses ? baseOS : '');
+  const contactOD = normalizeVisualGrade(medicalBackground.gradeODContactLenses) || (contactLenses && !eyeglasses ? baseOD : '');
+  const contactOS = normalizeVisualGrade(medicalBackground.gradeOSContactLenses) || (contactLenses && !eyeglasses ? baseOS : '');
+
+  const rightEye = eyeglasses
+    ? (eyeglassesOD || contactOD || baseOD || 'N/A')
+    : (contactOD || baseOD || 'N/A');
+  const leftEye = eyeglasses
+    ? (eyeglassesOS || contactOS || baseOS || 'N/A')
+    : (contactOS || baseOS || 'N/A');
+
+  const metadata = {
+    version: 2,
+    eyeglasses,
+    contactLenses,
+    grades: {
+      eyeglasses: {
+        od: eyeglassesOD,
+        os: eyeglassesOS,
+      },
+      contactLenses: {
+        od: contactOD,
+        os: contactOS,
+      },
+    },
+  };
+
+  return {
+    notes: `Eyeglasses: ${eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${contactLenses ? 'Yes' : 'No'}`,
+    acuityNotes: `${VISUAL_ACUITY_META_PREFIX}${JSON.stringify(metadata)}`,
+    leftEye,
+    rightEye,
+  };
+};
+
 /**
  * Build all input objects from form data for the batched mutation
  * @param {object} formData           - Form data from the initial record form
@@ -1137,18 +1204,19 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
 
   // Visual Acuity Profile
   const hasVisualAcuity = formData.medicalBackground.eyeglasses || formData.medicalBackground.contactLenses;
+  const visualAcuityPayload = buildVisualAcuityPayload(formData.medicalBackground);
   // Use the first catalog entry for acuityId — falls back to null (acuity omitted) if catalog is empty
   const visualAcuityId = visualAcuityCatalog[0]?.id ?? null;
   inputs.visualAcuityProfile = {
     notes: hasVisualAcuity
-      ? `Eyeglasses: ${formData.medicalBackground.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.medicalBackground.contactLenses ? 'Yes' : 'No'}`
+      ? visualAcuityPayload.notes
       : null,
     acuity: hasVisualAcuity && visualAcuityId
       ? {
           acuityId: visualAcuityId,
-          left_eye: formData.medicalBackground.gradeOS || "N/A",
-          right_eye: formData.medicalBackground.gradeOD || "N/A",
-          notes: null,
+          left_eye: visualAcuityPayload.leftEye,
+          right_eye: visualAcuityPayload.rightEye,
+          notes: visualAcuityPayload.acuityNotes,
           recorded_at: formData.medicalBackground.visualAcuityDate
             ? new Date(formData.medicalBackground.visualAcuityDate).toISOString().split('T')[0]
             : new Date().toISOString().split('T')[0]
@@ -1734,6 +1802,19 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const immunDosesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, i.doseNumber || 1]));
 
   const vaNotesStr = va.notes || '';
+  const vaAcuityNotesStr = va.acuity?.notes || '';
+  const vaMeta = parseVisualAcuityMetaNotes(vaAcuityNotesStr);
+  const vaLegacyFlags = parseLegacyVisualAcuityFlags(`${vaNotesStr} ${vaAcuityNotesStr}`);
+  const vaFallbackOD = va.acuity?.right_eye || '';
+  const vaFallbackOS = va.acuity?.left_eye || '';
+  const eyeglassesFromMeta = typeof vaMeta?.eyeglasses === 'boolean' ? vaMeta.eyeglasses : null;
+  const contactLensesFromMeta = typeof vaMeta?.contactLenses === 'boolean' ? vaMeta.contactLenses : null;
+  const hasAcuityValues = !!(vaFallbackOD || vaFallbackOS);
+  const resolvedEyeglasses = (eyeglassesFromMeta ?? vaLegacyFlags.eyeglasses) || hasAcuityValues;
+  const resolvedContactLenses = contactLensesFromMeta ?? vaLegacyFlags.contactLenses;
+  const eyeglassesGrades = vaMeta?.grades?.eyeglasses || {};
+  const contactLensGrades = vaMeta?.grades?.contactLenses || {};
+
   const medicalBackground = {
     immunizations:             immunMap,
     immunizationDates:         immunDatesMap,
@@ -1764,10 +1845,14 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     vaper:                     ls.vapeUser ? 'yes' : 'no',
     vapeType:                  ls.vapeType || '',
     vapeFrequency:             ls.vapeFrequency || '',
-    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes') || !!(va.acuity?.right_eye || va.acuity?.left_eye),
-    contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
-    gradeOD:                   va.acuity?.right_eye    || '',
-    gradeOS:                   va.acuity?.left_eye     || '',
+    eyeglasses:                resolvedEyeglasses,
+    contactLenses:             resolvedContactLenses,
+    gradeOD:                   vaFallbackOD,
+    gradeOS:                   vaFallbackOS,
+    gradeODEyeglasses:         normalizeVisualGrade(eyeglassesGrades.od) || (resolvedEyeglasses ? vaFallbackOD : ''),
+    gradeOSEyeglasses:         normalizeVisualGrade(eyeglassesGrades.os) || (resolvedEyeglasses ? vaFallbackOS : ''),
+    gradeODContactLenses:      normalizeVisualGrade(contactLensGrades.od) || (resolvedContactLenses ? vaFallbackOD : ''),
+    gradeOSContactLenses:      normalizeVisualGrade(contactLensGrades.os) || (resolvedContactLenses ? vaFallbackOS : ''),
     visualAcuityDate:          va.acuity?.recorded_at
                                  ? new Date(va.acuity.recorded_at).toISOString().split('T')[0]
                                  : '',
@@ -1896,7 +1981,7 @@ export const fetchRevisionPrefill = async () => {
         }
         visualAcuity: getVisualAcuityProfile {
           notes
-          acuity { left_eye right_eye recorded_at }
+          acuity { left_eye right_eye notes recorded_at }
         }
         dentalHistory: getDentalHistory {
           seenByDentist lastDentalCleaning lastVisitDate

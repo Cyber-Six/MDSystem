@@ -131,6 +131,16 @@ const DentalHistoryStep = ({ formData, onChange }) => {
               onChange={(e) => handleInputChange('lastDentalCleaning', e.target.value)}
             />
 
+            {formData.seenByDentist === false && (
+              <Input
+                label="When was your last dental consultation?"
+                type="month"
+                placeholder="YYYY-MM"
+                value={formData.lastVisitDate || ''}
+                onChange={(e) => handleInputChange('lastVisitDate', e.target.value)}
+              />
+            )}
+
             {formData.seenByDentist === true && (
               <Input
                 label="Purpose of Last Visit"

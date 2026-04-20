@@ -1,15 +1,15 @@
 import React from 'react';
 
-export const Input = ({ label, required, error, reserveErrorSpace = false, ...props }) => (
+export const Input = ({ label, required, error, reserveErrorSpace = false, className = '', ...props }) => (
   <div className="mb-1">
     {label && (
-      <label className="form-label text-xs">
+      <label className="form-label">
         {label}
         {required && <span className="text-error-500 ml-1">*</span>}
       </label>
     )}
     <input
-      className={`form-input py-1 px-2 text-sm ${error ? 'border-error-500 focus:ring-error-500' : ''}`}
+      className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
       {...props}
     />
     {(error || reserveErrorSpace) && (
@@ -18,7 +18,7 @@ export const Input = ({ label, required, error, reserveErrorSpace = false, ...pr
   </div>
 );
 
-export const Select = ({ label, required, error, options, ...props }) => (
+export const Select = ({ label, required, error, options, className = '', ...props }) => (
   <div className="mb-2">
     {label && (
       <label className="form-label">
@@ -27,7 +27,7 @@ export const Select = ({ label, required, error, options, ...props }) => (
       </label>
     )}
     <select
-      className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''}`}
+      className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
       {...props}
     >
       <option value="">Select...</option>
@@ -48,7 +48,7 @@ export const Checkbox = ({ label, ...props }) => (
   </div>
 );
 
-export const Textarea = ({ label, required, error, rows = 3, ...props }) => (
+export const Textarea = ({ label, required, error, rows = 3, className = '', ...props }) => (
   <div className="mb-2">
     {label && (
       <label className="form-label">
@@ -57,7 +57,7 @@ export const Textarea = ({ label, required, error, rows = 3, ...props }) => (
       </label>
     )}
     <textarea
-      className={`form-input min-h-[100px] ${error ? 'border-error-500 focus:ring-error-500' : ''}`}
+      className={`form-input min-h-[100px] ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
       rows={rows}
       {...props}
     />
@@ -65,7 +65,7 @@ export const Textarea = ({ label, required, error, rows = 3, ...props }) => (
   </div>
 );
 
-export const Button = ({ variant = 'primary', children, ...props }) => {
+export const Button = ({ variant = 'primary', children, className = '', ...props }) => {
   const variantClasses = {
     primary: 'btn-primary',
     secondary: 'btn-secondary',
@@ -73,7 +73,7 @@ export const Button = ({ variant = 'primary', children, ...props }) => {
   };
 
   return (
-    <button className={variantClasses[variant]} {...props}>
+    <button className={`${variantClasses[variant]} ${className}`.trim()} {...props}>
       {children}
     </button>
   );

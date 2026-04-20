@@ -380,34 +380,43 @@
   /* Form component styles */
   .form-label {
     display: block;
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-xs);
+    color: var(--color-text-secondary);
+    margin-bottom: 0.375rem;
   }
 
   .form-input {
     width: 100%;
-    padding: 0.625rem 0.875rem;
-    font-size: var(--font-size-base);
+    padding: 0.5rem 0.75rem;
+    font-size: var(--font-size-sm);
     line-height: 1.5;
     color: var(--color-text-primary);
-    background-color: var(--color-bg-primary);
+    background-color: #ffffff;
     border: 1px solid var(--color-border-medium);
-    border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
+    border-radius: 0.625rem;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+  }
+
+  .form-input:hover {
+    border-color: var(--color-primary-400);
   }
 
   .form-input:focus {
     outline: none;
     border-color: var(--color-primary-500);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    box-shadow: 0 0 0 3px rgba(221, 179, 34, 0.2);
+  }
+
+  .form-input::placeholder {
+    color: var(--color-text-light);
   }
 
   .form-input:disabled {
     background-color: var(--color-gray-100);
+    color: var(--color-text-tertiary);
     cursor: not-allowed;
-    opacity: 0.65;
+    opacity: 0.9;
   }
 
   .form-checkbox {
@@ -425,23 +434,30 @@
   }
 
   .form-section {
-    background-color: var(--color-bg-primary);
-    padding: var(--spacing-lg);
+    background-color: #ffffff;
+    padding: 1.25rem;
     border-radius: var(--radius-xl);
-    margin-bottom: var(--spacing-lg);
-    border: 1px solid var(--color-gray-200);
-    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);
+    margin-bottom: var(--spacing-md);
+    border: 1px solid var(--color-border-light);
+    box-shadow: 0 6px 18px rgba(28, 25, 23, 0.06);
+  }
+
+  @media (min-width: 640px) {
+    .form-section {
+      padding: var(--spacing-lg);
+    }
   }
 
   /* Progress Stepper */
   .progress-step {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2rem;
+    height: 2rem;
     border-radius: var(--radius-full);
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
     transition: all var(--transition-base);
   }
 
@@ -451,9 +467,9 @@
   }
 
   .progress-step.active {
-    background-color: var(--color-primary-600);
-    color: var(--color-gray-900);
-    box-shadow: 0 0 0 4px rgba(221, 179, 34, 0.25);
+    background-color: var(--color-primary-500);
+    color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(241, 197, 38, 0.35);
   }
 
   .progress-step.upcoming {
@@ -466,20 +482,21 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 1rem;
+    padding: 0.625rem 1.5rem;
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
-    color: var(--color-gray-900);
+    color: #ffffff;
     background-color: var(--color-primary-500);
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: 0.625rem;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: transform var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
   }
 
   .btn-primary:hover:not(:disabled) {
     background-color: var(--color-primary-600);
     box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
   }
 
   .btn-primary:disabled {
@@ -510,20 +527,21 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 1rem;
+    padding: 0.625rem 1.25rem;
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
-    color: var(--color-primary-600);
-    background-color: transparent;
-    border: 2px solid var(--color-primary-600);
-    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    background-color: var(--color-gray-100);
+    border: 1px solid var(--color-border-medium);
+    border-radius: 0.625rem;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   }
 
   .btn-outline:hover:not(:disabled) {
-    background-color: var(--color-primary-600);
-    color: white;
+    background-color: var(--color-gray-200);
+    border-color: var(--color-border-dark);
+    color: var(--color-text-primary);
   }
 
   .btn-outline:disabled {

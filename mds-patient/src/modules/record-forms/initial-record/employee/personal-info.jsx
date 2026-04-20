@@ -78,18 +78,21 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
   }, [data.birthday]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ── Personal Information Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary-100 text-primary-700">
+        <div className="flex items-center gap-3 mb-5 pb-4 border-b border-neutral-200">
+          <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary-100 text-primary-700">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </span>
-          Personal Information
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-lg font-heading font-semibold text-secondary-900" style={{ margin: 0 }}>
+            Personal Information
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label="Surname"
             required
@@ -212,15 +215,18 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
 
       {/* ── Employment Information Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary-100 text-primary-700">
+        <div className="flex items-center gap-3 mb-5 pb-4 border-b border-neutral-200">
+          <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary-100 text-primary-700">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </span>
-          Employment Information
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-lg font-heading font-semibold text-secondary-900" style={{ margin: 0 }}>
+            Employment Information
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label="Department"
             required
@@ -277,28 +283,30 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
 
       {/* ── Emergency Contacts Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-3 flex flex-wrap items-center gap-2">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-error-100 text-error-600 shrink-0">
+        <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-neutral-200">
+          <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-error-100 text-error-600 shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </span>
-          Emergency Contact Information
-        </h3>
+          <h3 className="text-lg font-heading font-semibold text-secondary-900" style={{ margin: 0 }}>
+            Emergency Contact Information
+          </h3>
+        </div>
 
-        {/* --- Contact 1 (Required) --- */}
-        <div className="mb-3 pb-3 border-b border-neutral-200">
-          <div className="space-y-2">
+        <div className="border border-neutral-200 rounded-xl p-4 bg-white mb-3">
+          <h5 className="font-semibold text-secondary-700 mb-2 text-xs uppercase tracking-wide">Primary Emergency Contact</h5>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <Input
-              label="Person/s to be Contacted in Case of Emergency"
+              label="Name"
               required
               value={data.emergencyContacts[0]?.name || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'name', e.target.value)}
-              placeholder="Full name"
+              placeholder="Contact Name"
               error={fieldErrors.emergencyContact1Name}
             />
             <Input
-              label="Relationship to the Person/s to be Contacted During Emergency"
+              label="Relationship"
               required
               value={data.emergencyContacts[0]?.relationship || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'relationship', e.target.value)}
@@ -306,62 +314,65 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               error={fieldErrors.emergencyContact1Relationship}
             />
             <Input
-              label="Address of Contact Person"
-              required
-              value={data.emergencyContacts[0]?.address || ''}
-              onChange={(e) => handleEmergencyContactChange(0, 'address', e.target.value)}
-              placeholder="Complete address of contact person"
-              error={fieldErrors.emergencyContact1Address}
-            />
-            <Input
-              label="Contact Number of the Person During Emergency"
+              label="Contact Number"
               type="tel"
               required
               reserveErrorSpace
               value={data.emergencyContacts[0]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', handlePhone('ec0', e.target.value))}
-              placeholder="09XXXXXXXXX"
+              placeholder="Contact Number"
               error={phoneWarnings.ec0 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact1ContactNumber}
+            />
+          </div>
+          <div className="mt-2">
+            <Input
+              label="Address"
+              required
+              value={data.emergencyContacts[0]?.address || ''}
+              onChange={(e) => handleEmergencyContactChange(0, 'address', e.target.value)}
+              placeholder="Contact's home address"
+              error={fieldErrors.emergencyContact1Address}
             />
           </div>
         </div>
 
-        {/* --- Contact 2 (Optional) --- */}
-        <div>
-          <p className="text-sm font-semibold text-secondary-500 mb-2">
+        <div className="border border-neutral-200 rounded-xl p-4 bg-white">
+          <h5 className="font-semibold text-secondary-700 mb-2 text-xs uppercase tracking-wide flex items-center gap-2">
             Additional Emergency Contact
-            <span className="ml-2 text-xs font-normal bg-secondary-100 text-secondary-500 px-2 py-0.5 rounded-full">Optional</span>
-          </p>
-          <div className="space-y-2">
+            <span className="text-[10px] font-normal bg-secondary-100 text-secondary-500 px-2 py-0.5 rounded-full normal-case tracking-normal">Optional</span>
+          </h5>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <Input
-              label="Person/s to be Contacted in Case of Emergency"
+              label="Name"
               value={data.emergencyContacts[1]?.name || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'name', e.target.value)}
-              placeholder="Full name"
+              placeholder="Contact Name"
               error={fieldErrors.emergencyContact2Name}
             />
             <Input
-              label="Relationship to the Person/s to be Contacted During Emergency"
+              label="Relationship"
               value={data.emergencyContacts[1]?.relationship || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'relationship', e.target.value)}
-              placeholder="e.g., Spouse, Parent"
+              placeholder="e.g., Sibling, Guardian"
               error={fieldErrors.emergencyContact2Relationship}
             />
             <Input
-              label="Address of Contact Person"
-              value={data.emergencyContacts[1]?.address || ''}
-              onChange={(e) => handleEmergencyContactChange(1, 'address', e.target.value)}
-              placeholder="Complete address of contact person"
-              error={fieldErrors.emergencyContact2Address}
-            />
-            <Input
-              label="Contact Number of the Person During Emergency"
+              label="Contact Number"
               type="tel"
               reserveErrorSpace
               value={data.emergencyContacts[1]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', handlePhone('ec1', e.target.value))}
-              placeholder="09XXXXXXXXX"
+              placeholder="Contact Number"
               error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact2ContactNumber}
+            />
+          </div>
+          <div className="mt-2">
+            <Input
+              label="Address"
+              value={data.emergencyContacts[1]?.address || ''}
+              onChange={(e) => handleEmergencyContactChange(1, 'address', e.target.value)}
+              placeholder="Contact's home address"
+              error={fieldErrors.emergencyContact2Address}
             />
           </div>
         </div>
