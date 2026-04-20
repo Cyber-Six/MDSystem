@@ -38,8 +38,15 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     }
 
     // ✅ Required fields
+    if (!email) {
+      return res.status(400).json({
+        error: "MISSING_FIELDS",
+        message: "Email is required."
+      });
+    }
+
     // For the login 2FA flow, reCAPTCHA was already verified at the login endpoint
-    if (!email || (purpose !== '2fa' && !recaptchaToken && !recaptchaTestMode )) {
+    if (purpose !== '2fa' && !recaptchaToken && !recaptchaTestMode) {
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Email and reCAPTCHA token are required."
@@ -55,8 +62,8 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
       });
     }
 
-    // ✅ Verify reCAPTCHA (not required for login 2FA — already enforced at login endpoint)
-    if (purpose !== '2fa') {
+    // ✅ Verify reCAPTCHA (not required for login 2FA, and skipped in test mode)
+    if (purpose !== '2fa' && !recaptchaTestMode) {
       const recaptchaValid = await verifyRecaptcha(recaptchaToken);
       if (!recaptchaValid) {
         return res.status(400).json({

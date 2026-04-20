@@ -216,17 +216,23 @@ const Login = ({ onVerificationViewChange }) => {
       if (res.data.ok) {
         const loginKey = res.data.LoginKey;
         setVerificationKey(loginKey);
-        let googleEmail = '';
+        const responseEmail = String(res.data.email || '').trim();
+        let tokenEmail = '';
         try {
           const payload = JSON.parse(atob(response.credential.split('.')[1]));
-          googleEmail = payload.email || '';
-          setEmail(googleEmail);
+          tokenEmail = String(payload.email || '').trim();
         } catch { /* non-critical */ }
+
+        const loginEmail = responseEmail || tokenEmail;
+        if (loginEmail) {
+          setEmail(loginEmail);
+        }
+
         if (res.data.requiresTotp) {
           setShowTotpVerify(true);
         } else {
-          await handleSend2FA(googleEmail);
-          setShowTwoFactor(true);
+          const sent = await handleSend2FA(loginEmail);
+          if (sent) setShowTwoFactor(true);
         }
       }
     } catch (err) {
@@ -268,9 +274,37 @@ const Login = ({ onVerificationViewChange }) => {
   }, [handleGoogleCredential]);
 
   const handleSend2FA = async (emailOverride) => {
+    const targetEmail = String(emailOverride || email || '').trim();
+
+    if (!targetEmail) {
+      setError('Unable to send verification code. Please sign in again.');
+      return false;
+    }
+
     try {
-      await axiosRequest.post('/auth/email/2fa', { email: emailOverride || email });
-    } catch (err) { console.error('Failed to send 2FA code:', err); }
+      await axiosRequest.post('/auth/email/2fa', { email: targetEmail });
+      if (targetEmail !== email) {
+        setEmail(targetEmail);
+      }
+      return true;
+    } catch (err) {
+      const errorCode = err.response?.data?.error;
+      switch (errorCode) {
+        case 'EMAIL_COOLDOWN_ACTIVE':
+          setError('Please wait before requesting another code.');
+          break;
+        case 'EMAIL_ATTEMPT_LIMIT_REACHED':
+          setError('Too many attempts. Please try again later.');
+          break;
+        case 'MISSING_FIELDS':
+        case 'INVALID_INSTITUTION_EMAIL':
+          setError('Unable to send verification code. Please sign in again.');
+          break;
+        default:
+          setError(err.response?.data?.message || 'Failed to send verification code.');
+      }
+      return false;
+    }
   };
 
   const handleInitialLogin = async (e) => {
@@ -288,8 +322,8 @@ const Login = ({ onVerificationViewChange }) => {
         if (response.data.requiresTotp) {
           setShowTotpVerify(true);
         } else {
-          await handleSend2FA();
-          setShowTwoFactor(true);
+          const sent = await handleSend2FA(email);
+          if (sent) setShowTwoFactor(true);
         }
       }
     } catch (err) {
@@ -315,8 +349,16 @@ const Login = ({ onVerificationViewChange }) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+
+    const verificationEmail = String(email || '').trim();
+    if (!verificationEmail) {
+      setError('Email is missing. Please sign in again.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await axiosRequest.post('/auth/email/2fa/verify', { email, otp: twoFactorCode, verificationKey });
+      const response = await axiosRequest.post('/auth/email/2fa/verify', { email: verificationEmail, otp: twoFactorCode, verificationKey });
       if (response.data.ok) {
         setVerificationKey(response.data.verificationKey);
         setShowTwoFactor(false);
@@ -339,14 +381,7 @@ const Login = ({ onVerificationViewChange }) => {
     setError('');
     setIsLoading(true);
     try {
-      await axiosRequest.post('/auth/email/2fa', { email });
-    } catch (err) {
-      const errorCode = err.response?.data?.error;
-      switch (errorCode) {
-        case 'EMAIL_COOLDOWN_ACTIVE':       setError('Please wait before requesting another code.'); break;
-        case 'EMAIL_ATTEMPT_LIMIT_REACHED': setError('Too many attempts. Please try again later.'); break;
-        default:                            setError(err.response?.data?.message || 'Failed to resend code.');
-      }
+      await handleSend2FA(email);
     } finally { setIsLoading(false); }
   };
 
@@ -377,9 +412,10 @@ const Login = ({ onVerificationViewChange }) => {
 
   const handleUseEmailInstead = async () => {
     setError('');
+    const sent = await handleSend2FA(email);
+    if (!sent) return;
     setTotpCode('');
     setShowTotpVerify(false);
-    await handleSend2FA();
     setShowTwoFactor(true);
   };
 
