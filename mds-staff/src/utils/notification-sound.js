@@ -31,16 +31,12 @@
 export const AVAILABLE_SOUNDS = [
   { id: 'synthesis', label: 'System Chime (Built-in)' },
 
-  // ── Per-module pre-named files ─────────────────────────────────────────────
-  // Drop a file with the exact name into  mds-staff/public/sounds/  and it
-  // will play automatically for that module — no code change needed.
-  // IMPORTANT: Frontend module defaults are derived by these labels. You can
-  // freely change ids (filenames), keep labels as-is.
-  { id: 'ack.mp3', label: 'Appointments' },
-  { id: 'chicken-on-tree-screaming.mp3',     label: 'Requests'     },
-  { id: 'dee-dee-risa.mp3',    label: 'Inventory'    },
-  { id: 'tobol.mp3',   label: 'Health Chat'  },
-  { id: 'you-phone-is-ringing.mp3',      label: 'General'      },
+  // ── Custom sound options ──────────────────────────────────────────────────
+  { id: 'gentle-bell.wav', label: 'Gentle Bell' },
+  { id: 'soft-pop.wav', label: 'Soft Pop' },
+  { id: 'airy-ding.wav', label: 'Airy Ding' },
+  { id: 'marimba-tap.wav', label: 'Marimba Tap' },
+  { id: 'digital-blip.wav', label: 'Digital Blip' },
 
   // ── Add more custom sounds below ──────────────────────────────────────────
   // { id: 'chime.mp3',      label: 'Chime'      },

@@ -67,15 +67,15 @@ const NOTIFICATION_MODULE_KEYS = [
 ];
 
 const MODULE_SOUND_FALLBACK = {
-  appointments: 'appointments.mp3',
-  medicineRequests: 'requests.mp3',
-  inventory: 'inventory.mp3',
-  healthChat: 'healthchat.mp3',
-  general: 'general.mp3',
+  appointments: 'marimba-tap.wav',
+  medicineRequests: 'airy-ding.wav',
+  inventory: 'marimba-tap.wav',
+  healthChat: 'airy-ding.wav',
+  general: 'digital-blip.wav',
 };
 
 // Build module defaults from AVAILABLE_SOUNDS so changing ids there (e.g.
-// appointments.mp3 -> ack.mp3) is automatically picked up by the frontend.
+// marimba-tap.wav -> another file) is automatically picked up by the frontend.
 const DEFAULT_SOUND_FILE_BY_MODULE = (() => {
   const next = { ...MODULE_SOUND_FALLBACK };
   AVAILABLE_SOUNDS.forEach((s) => {

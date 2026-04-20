@@ -7,11 +7,11 @@
 
 export const AVAILABLE_SOUNDS = [
   { id: 'synthesis', label: 'System Chime (Built-in)' },
-  { id: 'appointments.mp3', label: 'Appointments' },
-  { id: 'requests.mp3', label: 'Requests' },
-  { id: 'inventory.mp3', label: 'Inventory' },
-  { id: 'healthchat.mp3', label: 'Health Chat' },
-  { id: 'general.mp3', label: 'General' },
+  { id: 'gentle-bell.wav', label: 'Gentle Bell' },
+  { id: 'soft-pop.wav', label: 'Soft Pop' },
+  { id: 'airy-ding.wav', label: 'Airy Ding' },
+  { id: 'marimba-tap.wav', label: 'Marimba Tap' },
+  { id: 'digital-blip.wav', label: 'Digital Blip' },
 ];
 
 const THROTTLE_MS = 800;
