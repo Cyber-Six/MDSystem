@@ -16,6 +16,7 @@ import {
 import { useTheme, colors } from '../../context/ThemeContext';
 import { getPatientProfile, PatientProfile } from '../../services/profile-service';
 import { Ionicons } from '@expo/vector-icons';
+import { UserAvatar } from '../../components/common/UserAvatar';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -97,15 +98,8 @@ export const ProfileScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Avatar */}
         <View style={styles.avatarSection}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: colors.primary[500] },
-            ]}
-          >
-            <Text style={styles.avatarText}>
-              {displayName.charAt(0).toUpperCase()}
-            </Text>
+          <View style={{ marginBottom: 12 }}>
+            <UserAvatar name={displayName} size="lg" />
           </View>
           <Text
             style={[
@@ -181,15 +175,6 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { padding: 16, paddingBottom: 40 },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  avatarText: { fontSize: 32, fontWeight: 'bold', color: '#FFFFFF' },
   name: { fontSize: 22, fontWeight: 'bold' },
   role: { fontSize: 14, marginTop: 4, textAlign: 'center', paddingHorizontal: 12 },
   card: { borderRadius: 16, padding: 16, marginBottom: 16 },

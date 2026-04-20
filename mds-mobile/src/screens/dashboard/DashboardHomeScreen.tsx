@@ -1,206 +1,169 @@
-/**
- * Dashboard Home Screen - Main screen after authentication
- * Mirrors mds-patient dashboard-home.jsx
- *
- * Fetches real data: profile name, announcements, appointment status, health chat status.
- */
-
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  StyleSheet,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { getPatientProfile, clearProfileCache } from '../../services/profile-service';
 import { fetchActiveAnnouncements, Announcement } from '../../services/announcement-service';
 import { getAppointmentStatus, ACTIVE_STATUSES } from '../../services/appointment-service';
 import { getCurrentActiveTicket } from '../../services/health-chat-service';
+import { getMedicineStatus } from '../../services/medicine-service';
 import { useRecordStatus } from '../../context/RecordStatusContext';
-import PendingRecordGate from '../../components/PendingRecordGate';
+import { useHealthChatBadge } from '../../context/HealthChatNotificationProvider';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import AnnouncementDetailModal from '../../components/announcements/AnnouncementDetailModal';
 import SecureAnnouncementImage from '../../components/announcements/SecureAnnouncementImage';
+import { TopBar } from '../../components/layout/TopBar';
+import { SectionLabel } from '../../components/common/SectionLabel';
+import { StatTile } from '../../components/common/StatTile';
+import { ActivityCard } from '../../components/common/ActivityCard';
+import { EmptyState } from '../../components/common/EmptyState';
+import { AnnouncementCarousel, AnnouncementCarouselItem } from '../../components/common/AnnouncementCarousel';
 
 interface DashboardHomeScreenProps {
   navigation: any;
 }
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-
-const StatCard: React.FC<{
-  icon: IoniconName;
-  label: string;
-  value: string;
-  color: string;
-  isDark: boolean;
-}> = ({ icon, label, value, color, isDark }) => (
-  <View
-    style={[
-      styles.statCard,
-      { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-    ]}
-  >
-    <View style={[styles.statIcon, { backgroundColor: color }]}>
-      <Ionicons name={icon} size={20} color="#FFFFFF" />
-    </View>
-    <Text
-      style={[
-        styles.statValue,
-        { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-      ]}
-    >
-      {value}
-    </Text>
-    <Text
-      style={[
-        styles.statLabel,
-        { color: isDark ? colors.neutral[400] : colors.neutral[600] },
-      ]}
-    >
-      {label}
-    </Text>
-  </View>
-);
-
-const QuickActionButton: React.FC<{
-  icon: string;
-  iconLib?: 'Ionicons' | 'MCI';
-  label: string;
-  color: string;
+type ActivityItem = {
+  key: string;
+  icon: React.ComponentType<{ size: number; color: string }>;
+  iconBg: string;
+  title: string;
+  subtitle: string;
+  timeAgo?: string;
+  badge?: {
+    label: string;
+    variant: 'success' | 'warning' | 'error' | 'info' | 'neutral';
+  };
   onPress: () => void;
-}> = ({ icon, iconLib = 'Ionicons', label, color, onPress }) => (
-  <TouchableOpacity
-    style={[styles.quickAction, { backgroundColor: color }]}
-    onPress={onPress}
-    activeOpacity={0.8}
-  >
-    {iconLib === 'MCI' ? (
-      <MaterialCommunityIcons name={icon as any} size={26} color="#FFFFFF" style={styles.quickActionIcon} />
-    ) : (
-      <Ionicons name={icon as IoniconName} size={26} color="#FFFFFF" style={styles.quickActionIcon} />
-    )}
-    <Text style={styles.quickActionLabel}>{label}</Text>
-  </TouchableOpacity>
+};
+
+const CalendarIcon: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <Ionicons name="calendar-outline" size={size} color={color} />
 );
 
-export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
-  navigation,
-}) => {
+const ChatIcon: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
+);
+
+const RecordIcon: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <Ionicons name="clipboard-outline" size={size} color={color} />
+);
+
+const MedicineIcon: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <MaterialCommunityIcons name="pill" size={size} color={color} />
+);
+
+const AnnouncementIcon: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <Ionicons name="megaphone-outline" size={size} color={color} />
+);
+
+const greetingByTime = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+};
+
+const countPendingMedicineRequests = (requests: Array<{ status?: string }>) => {
+  return requests.filter((request) => String(request.status || '').toLowerCase() === 'pending').length;
+};
+
+const normalizeSentenceCase = (value: string) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return 'Announcement';
+
+  if (normalized === normalized.toUpperCase()) {
+    const lower = normalized.toLowerCase();
+    return `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+  }
+
+  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+};
+
+export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ navigation }) => {
   const { isDark } = useTheme();
   const { recordStatus } = useRecordStatus();
-  const [refreshing, setRefreshing] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null);
+  const { badgeCount } = useHealthChatBadge();
+  const shouldSkipAppointmentRequest = Boolean(recordStatus?.needsInitialRecord)
+    || recordStatus?.credentialStatus === 'Inactive'
+    || recordStatus?.credentialStatus === 'Unverified';
 
-  // Real data state
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [announcementIndex, setAnnouncementIndex] = useState(0);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
-  const [isAnnouncementTransitioning, setIsAnnouncementTransitioning] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [userName, setUserName] = useState<string>('Patient');
   const [appointmentStatus, setAppointmentStatus] = useState<string | null>(null);
   const [chatStatus, setChatStatus] = useState<string | null>(null);
-  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [medicinePendingCount, setMedicinePendingCount] = useState(0);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
-  // Auto-rotate announcement carousel
-  const carouselTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const carouselTransitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstName = useMemo(() => {
+    const trimmed = String(userName || '').trim();
+    if (!trimmed) return 'Patient';
+    return trimmed.split(/\s+/)[0] || 'Patient';
+  }, [userName]);
+
+  const navigateToSecondaryScreen = useCallback((screen: string) => {
+    const parent = navigation.getParent?.();
+    if (parent) {
+      parent.navigate('MoreStack', { screen });
+      return;
+    }
+    navigation.navigate('MoreStack', { screen });
+  }, [navigation]);
 
   const loadDashboardData = useCallback(async () => {
     try {
-      const [profile, annList, apptResult, chatResult] = await Promise.allSettled([
+      setIsDataLoading(true);
+
+      const [profile, annList, appointment, activeTicket, medicine] = await Promise.allSettled([
         getPatientProfile(),
         fetchActiveAnnouncements(),
-        getAppointmentStatus(),
+        shouldSkipAppointmentRequest ? Promise.resolve(null) : getAppointmentStatus(),
         getCurrentActiveTicket(),
+        getMedicineStatus(),
       ]);
 
-      if (profile.status === 'fulfilled' && profile.value?.firstName) {
-        setUserName(profile.value.firstName);
-      } else if (profile.status === 'fulfilled' && profile.value?.name) {
-        setUserName(profile.value.name.split(' ')[0]);
+      if (profile.status === 'fulfilled') {
+        const profileName = profile.value?.name || profile.value?.firstName || 'Patient';
+        setUserName(profileName);
       }
 
       if (annList.status === 'fulfilled') {
         setAnnouncements(annList.value || []);
+      } else {
+        setAnnouncements([]);
       }
 
-      if (apptResult.status === 'fulfilled' && apptResult.value) {
-        const status = apptResult.value.status;
+      if (shouldSkipAppointmentRequest) {
+        setAppointmentStatus(null);
+      } else if (appointment.status === 'fulfilled' && appointment.value) {
+        const status = appointment.value.status;
         setAppointmentStatus(ACTIVE_STATUSES.includes(status) ? status : null);
+      } else {
+        setAppointmentStatus(null);
       }
 
-      if (chatResult.status === 'fulfilled' && chatResult.value) {
-        setChatStatus(chatResult.value.status);
+      if (activeTicket.status === 'fulfilled' && activeTicket.value) {
+        setChatStatus(activeTicket.value.status || null);
+      } else {
+        setChatStatus(null);
       }
-    } catch {
-      // Silently fail — dashboard still works without data
+
+      if (medicine.status === 'fulfilled') {
+        setMedicinePendingCount(countPendingMedicineRequests(medicine.value || []));
+      } else {
+        setMedicinePendingCount(0);
+      }
     } finally {
       setIsDataLoading(false);
     }
-  }, []);
+  }, [shouldSkipAppointmentRequest]);
 
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
-
-  const goToAnnouncement = useCallback((indexOrUpdater: React.SetStateAction<number>) => {
-    if (announcements.length === 0) {
-      return;
-    }
-
-    setIsAnnouncementTransitioning(true);
-
-    if (carouselTransitionTimer.current) {
-      clearTimeout(carouselTransitionTimer.current);
-      carouselTransitionTimer.current = null;
-    }
-
-    carouselTransitionTimer.current = setTimeout(() => {
-      setAnnouncementIndex((prev) => {
-        const nextIndex = typeof indexOrUpdater === 'function'
-          ? (indexOrUpdater as (value: number) => number)(prev)
-          : indexOrUpdater;
-
-        return ((nextIndex % announcements.length) + announcements.length) % announcements.length;
-      });
-      setIsAnnouncementTransitioning(false);
-      carouselTransitionTimer.current = null;
-    }, 180);
-  }, [announcements.length]);
-
-  useEffect(() => {
-    setAnnouncementIndex((prev) => {
-      if (announcements.length === 0) return 0;
-      return Math.min(prev, announcements.length - 1);
-    });
-  }, [announcements.length]);
-
-  // Auto-rotate announcements
-  useEffect(() => {
-    if (announcements.length <= 1) return;
-
-    carouselTimer.current = setInterval(() => {
-      goToAnnouncement((prev) => prev + 1);
-    }, 5000);
-
-    return () => {
-      if (carouselTimer.current) clearInterval(carouselTimer.current);
-    };
-  }, [announcements.length, goToAnnouncement]);
-
-  useEffect(() => {
-    return () => {
-      if (carouselTransitionTimer.current) {
-        clearTimeout(carouselTransitionTimer.current);
-      }
-    };
-  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -209,541 +172,289 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
     setRefreshing(false);
   }, [loadDashboardData]);
 
-  return (
-    <PendingRecordGate>
-    <SafeAreaView
-      style={[
-        styles.container,
-        {
-          backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50],
+  const normalizedRecordStatus = String(recordStatus?.status || '').toLowerCase();
+  const isAwaitingInitialApproval = Boolean(recordStatus?.needsInitialRecord)
+    && (
+      normalizedRecordStatus === 'pending'
+      || normalizedRecordStatus === 'revisionsubmitted'
+      || normalizedRecordStatus === 'underreview'
+      || normalizedRecordStatus === 'in review'
+    );
+
+  const appointmentCount = appointmentStatus ? 1 : 0;
+  const messageCount = badgeCount > 0 ? badgeCount : chatStatus ? 1 : 0;
+  const recordCount = recordStatus?.needsInitialRecord ? 0 : 1;
+
+  const recentActivity = useMemo<ActivityItem[]>(() => {
+    const items: ActivityItem[] = [];
+
+    if (chatStatus || messageCount > 0) {
+      items.push({
+        key: 'chat',
+        icon: ChatIcon,
+        iconBg: 'bg-primary-500',
+        title: 'Health chat update',
+        subtitle: chatStatus
+          ? `Conversation status: ${chatStatus}`
+          : `${messageCount} unread message${messageCount > 1 ? 's' : ''}`,
+        timeAgo: 'Now',
+        badge: messageCount > 0
+          ? {
+              label: messageCount > 99 ? '99+ unread' : `${messageCount} unread`,
+              variant: 'info',
+            }
+          : undefined,
+        onPress: () => navigation.navigate('HealthChat'),
+      });
+    }
+
+    if (medicinePendingCount > 0) {
+      items.push({
+        key: 'medicine',
+        icon: MedicineIcon,
+        iconBg: 'bg-success-500',
+        title: 'Medicine request update',
+        subtitle: `${medicinePendingCount} pending request${medicinePendingCount > 1 ? 's' : ''}`,
+        timeAgo: 'Today',
+        badge: {
+          label: 'Pending',
+          variant: 'warning',
         },
-      ]}
-      edges={['top']}
-    >
+        onPress: () => navigation.navigate('Medicine'),
+      });
+    }
+
+    if (isAwaitingInitialApproval) {
+      items.push({
+        key: 'record-pending',
+        icon: RecordIcon,
+        iconBg: 'bg-warning-500',
+        title: 'Initial record under review',
+        subtitle: 'Please wait for staff verification. We will notify you once approved.',
+        timeAgo: 'Today',
+        badge: {
+          label: 'Pending approval',
+          variant: 'info',
+        },
+        onPress: () => navigation.navigate('Records'),
+      });
+    } else if (recordStatus?.needsInitialRecord || recordStatus?.credentialStatus === 'Inactive') {
+      items.push({
+        key: 'record',
+        icon: RecordIcon,
+        iconBg: 'bg-accent-500',
+        title: 'Record update required',
+        subtitle: 'Complete your profile record to unlock full app access.',
+        timeAgo: 'Today',
+        badge: {
+          label: 'Action needed',
+          variant: 'warning',
+        },
+        onPress: () => navigation.navigate('Records', { screen: 'UpdateRecordChoice' }),
+      });
+    }
+
+    if (announcements.length > 0) {
+      items.push({
+        key: 'announcement',
+        icon: AnnouncementIcon,
+        iconBg: 'bg-warning-500',
+        title: 'New clinic announcements',
+        subtitle: `${announcements.length} active announcement${announcements.length > 1 ? 's' : ''}`,
+        timeAgo: 'Today',
+        badge: {
+          label: 'Info',
+          variant: 'info',
+        },
+        onPress: () => navigateToSecondaryScreen('Announcements'),
+      });
+    }
+
+    return items;
+  }, [announcements.length, chatStatus, isAwaitingInitialApproval, medicinePendingCount, messageCount, navigateToSecondaryScreen, navigation, recordStatus?.credentialStatus, recordStatus?.needsInitialRecord]);
+
+  const announcementCarouselItems = useMemo<AnnouncementCarouselItem[]>(() => {
+    return announcements.map((item) => {
+      const pubmat = item.pubmat;
+
+      return {
+        id: item.id,
+        title: normalizeSentenceCase(item.label),
+        body: item.description,
+        onPress: () => setSelectedAnnouncement(item),
+        renderImage: pubmat
+          ? () => (
+              <SecureAnnouncementImage
+                pubmat={pubmat}
+                style={{ width: '100%', height: 144 }}
+                resizeMode="cover"
+              />
+            )
+          : undefined,
+      };
+    });
+  }, [announcements]);
+
+  return (
+    <SafeAreaView className="flex-1 bg-neutral-50 dark:bg-secondary-900" edges={['top', 'left', 'right']}>
+      <TopBar
+        title={`Welcome back, ${firstName}`}
+        onMenuPress={() => toggleAppDrawer(navigation)}
+      />
+
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        className="flex-1"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[colors.primary[500]]}
             tintColor={colors.primary[500]}
-            progressBackgroundColor={colors.secondary[900]}
+            progressBackgroundColor={isDark ? colors.secondary[800] : colors.neutral[50]}
           />
         }
+        contentContainerStyle={{ paddingBottom: 108 }}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={[
-              styles.menuButton,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-            onPress={() => toggleAppDrawer(navigation)}
-            accessibilityRole="button"
-            accessibilityLabel="Open sidebar"
-          >
-            <Ionicons
-              name="menu"
-              size={22}
-              color={isDark ? colors.neutral[100] : colors.secondary[900]}
-            />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                styles.greeting,
-                { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-              ]}
-            >
-              Welcome back
+        <View className="px-4 pt-4">
+          <View className="mb-5">
+            <Text className="text-[26px] font-bold text-secondary-900 dark:text-neutral-50">
+              {greetingByTime()}, {firstName}
             </Text>
-            <Text
-              style={[
-                styles.userName,
-                {
-                  color: isDark ? colors.neutral[100] : colors.secondary[900],
-                },
-              ]}
-            >
-              {userName || 'Patient'}
+            <Text className="text-[14px] text-secondary-400 dark:text-secondary-500 mt-1">
+              Here's your health summary
             </Text>
           </View>
-        </View>
 
-        {/* Stats Row */}
-        <View style={styles.statsRow}>
-          <StatCard
-            icon="calendar"
-            label="Appointment"
-            value={appointmentStatus || '—'}
-            color={colors.accent[500]}
-            isDark={isDark}
-          />
-          <StatCard
-            icon="chatbubbles"
-            label="Health Chat"
-            value={chatStatus || '—'}
-            color={colors.primary[500]}
-            isDark={isDark}
-          />
-          <StatCard
-            icon="clipboard"
-            label="Records"
-            value={recordStatus?.needsInitialRecord ? 'Required' : recordStatus?.status || 'Complete'}
-            color={colors.success[500]}
-            isDark={isDark}
-          />
-        </View>
-
-        {/* Initial Record Required Banner */}
-        {recordStatus?.needsInitialRecord && (
-          <TouchableOpacity
-            style={[
-              styles.recordBanner,
-              {
-                backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : '#FFFBEB',
-                borderColor: isDark ? 'rgba(245,158,11,0.3)' : '#FDE68A',
-              },
-            ]}
-            onPress={() => navigation.navigate('More', {
-              screen: 'InitialRecordForm',
-              params: { isRevision: recordStatus?.status === 'Revision' },
-            })}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="clipboard" size={22} color={colors.primary[500]} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.recordBannerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                {recordStatus?.status === 'Revision' ? 'Revision Requested' : 'Medical Record Required'}
-              </Text>
-              <Text style={[styles.recordBannerDesc, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
-                {recordStatus?.status === 'Revision'
-                  ? (recordStatus?.notes || 'Please revise your medical record.')
-                  : 'Complete your initial medical record to access all features.'}
-              </Text>
-            </View>
-            <Text style={{ color: colors.primary[500], fontSize: 20, fontWeight: '600' }}>›</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Announcements Carousel */}
-        {announcements.length > 0 && (
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-          >
-            <View style={styles.cardHeaderRow}>
-              <Text
-                style={[
-                  styles.cardTitle,
-                  { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                ]}
-              >
-                Announcements
-              </Text>
-              <Text
-                style={[
-                  styles.carouselCounter,
-                  { color: isDark ? colors.neutral[500] : colors.neutral[400] },
-                ]}
-              >
-                {announcementIndex + 1}/{announcements.length}
-              </Text>
-            </View>
-
+          {isAwaitingInitialApproval ? (
             <TouchableOpacity
-              style={[
-                styles.announcementCard,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(241,197,38,0.06)'
-                    : 'rgba(241,197,38,0.08)',
-                  borderColor: isDark
-                    ? 'rgba(241,197,38,0.15)'
-                    : 'rgba(241,197,38,0.2)',
-                },
-                isAnnouncementTransitioning && styles.announcementCardTransitioning,
-              ]}
-              activeOpacity={0.85}
-              onPress={() => setSelectedAnnouncement(announcements[announcementIndex] ?? null)}
+              className="bg-primary-50 dark:bg-secondary-800 rounded-2xl border border-primary-200 dark:border-secondary-700 p-4 mb-5"
+              onPress={() => navigation.navigate('Records')}
+              accessibilityRole="button"
+              accessibilityLabel="View record approval status"
             >
-              {announcements[announcementIndex]?.pubmat ? (
-                <SecureAnnouncementImage
-                  pubmat={announcements[announcementIndex].pubmat as string}
-                  style={styles.announcementThumb}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.announcementThumbFallback,
-                    { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] },
-                  ]}
-                >
-                  <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
+              <View className="flex-row items-start">
+                <View className="w-9 h-9 rounded-xl bg-primary-500 items-center justify-center mr-3 mt-0.5">
+                  <Ionicons name="time-outline" size={18} color={colors.secondary[900]} />
                 </View>
-              )}
-              <View style={styles.announcementTextContainer}>
-                <Text
-                  style={[
-                    styles.announcementTitle,
-                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {announcements[announcementIndex]?.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.announcementDesc,
-                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {announcements[announcementIndex]?.description}
-                </Text>
-                <Text
-                  style={[
-                    styles.announcementReadMore,
-                    { color: isDark ? colors.primary[400] : colors.primary[500] },
-                  ]}
-                >
-                  Tap to view full details
-                </Text>
+
+                <View className="flex-1">
+                  <Text className="text-[14px] font-semibold text-secondary-800 dark:text-neutral-100">
+                    Initial record submitted - waiting for approval
+                  </Text>
+                  <Text className="text-[12px] text-secondary-500 dark:text-secondary-400 mt-1 leading-5">
+                    Please wait for clinic staff verification. You will be notified once your record is approved.
+                  </Text>
+                </View>
               </View>
             </TouchableOpacity>
+          ) : null}
 
-            {announcements.length > 1 && (
-              <View style={styles.carouselNavRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.carouselNavButton,
-                    {
-                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
-                    },
-                  ]}
-                  onPress={() => goToAnnouncement((prev) => prev - 1)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={16}
-                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
-                  />
-                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Prev</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.carouselNavButton,
-                    {
-                      backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
-                    },
-                  ]}
-                  onPress={() => goToAnnouncement((prev) => prev + 1)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.carouselNavText, { color: isDark ? colors.neutral[300] : colors.secondary[800] }]}>Next</Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={16}
-                    color={isDark ? colors.neutral[300] : colors.secondary[800]}
-                  />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Dot indicators */}
-            {announcements.length > 1 && (
-              <View style={styles.dotRow}>
-                {announcements.map((item, i) => (
-                  <TouchableOpacity
-                    key={item.id ?? `${i}`}
-                    onPress={() => goToAnnouncement(i)}
-                    style={[
-                      styles.dot,
-                      {
-                        width: i === announcementIndex ? 18 : 7,
-                        backgroundColor:
-                          i === announcementIndex
-                            ? colors.primary[500]
-                            : isDark
-                              ? colors.neutral[700]
-                              : colors.neutral[300],
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Go to announcement ${i + 1}`}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Quick Actions */}
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.cardTitle,
-              {
-                color: isDark ? colors.neutral[100] : colors.secondary[900],
-              },
-            ]}
-          >
-            Quick Actions
-          </Text>
-          <View style={styles.actionsGrid}>
-            <QuickActionButton
-              icon="calendar"
-              label="Book Appointment"
-              color={colors.accent[500]}
+          <View className="flex-row gap-3 mb-6">
+            <StatTile
+              icon={CalendarIcon}
+              label="Appointments"
+              count={appointmentCount}
+              loading={isDataLoading}
+              badge={appointmentCount > 0 ? { label: 'Upcoming', variant: 'warning' } : undefined}
               onPress={() => navigation.navigate('Appointments')}
             />
-            <QuickActionButton
-              icon="chatbubbles"
-              label="Health Chat"
-              color={colors.primary[500]}
+
+            <StatTile
+              icon={ChatIcon}
+              label="Messages"
+              count={messageCount}
+              loading={isDataLoading}
+              badge={messageCount > 0 ? { label: 'Unread', variant: 'info' } : undefined}
               onPress={() => navigation.navigate('HealthChat')}
             />
-            <QuickActionButton
-              icon="pill"
-              iconLib="MCI"
-              label="Medicine Request"
-              color={colors.success[500]}
-              onPress={() => navigation.navigate('Medicine')}
-            />
-            <QuickActionButton
-              icon="person"
-              label="My Profile"
-              color={colors.secondary[600]}
-              onPress={() =>
-                navigation.navigate('More', { screen: 'Profile' })
-              }
+
+            <StatTile
+              icon={RecordIcon}
+              label="Records"
+              count={recordCount}
+              loading={isDataLoading}
+              badge={recordCount > 0 ? { label: 'Approved', variant: 'success' } : { label: 'Pending', variant: 'warning' }}
+              onPress={() => navigation.navigate('Records')}
             />
           </View>
-        </View>
 
-        {/* Record Update Options — only when initial record is approved */}
-        {!recordStatus?.needsInitialRecord && (
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-          >
-            <Text
-              style={[
-                styles.cardTitle,
-                { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-              ]}
+          <SectionLabel title="Upcoming" />
+          {appointmentStatus ? (
+            <TouchableOpacity
+              className="bg-white dark:bg-secondary-800 rounded-2xl border border-neutral-200 dark:border-secondary-700 p-4 mb-1"
+              onPress={() => navigation.navigate('Appointments')}
+              accessibilityRole="button"
+              accessibilityLabel="View upcoming appointment"
             >
-              Update Records
-            </Text>
-            <View style={styles.updateRow}>
-              <TouchableOpacity
-                style={[styles.updateButton, { backgroundColor: '#3B82F6' }]}
-                onPress={() => navigation.navigate('More', {
-                  screen: 'InitialRecordForm',
-                  params: { isUpdate: true, recordType: 'medical' },
-                })}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="medkit" size={22} color="#FFFFFF" style={styles.updateIcon} />
-                <Text style={styles.updateLabel}>Medical</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.updateButton, { backgroundColor: '#22C55E' }]}
-                onPress={() => navigation.navigate('More', {
-                  screen: 'InitialRecordForm',
-                  params: { isUpdate: true, recordType: 'dental' },
-                })}
-                activeOpacity={0.8}
-              >
-                <MaterialCommunityIcons name="tooth" size={22} color="#FFFFFF" style={styles.updateIcon} />
-                <Text style={styles.updateLabel}>Dental</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.updateButton, { backgroundColor: '#8B5CF6' }]}
-                onPress={() => navigation.navigate('More', {
-                  screen: 'InitialRecordForm',
-                  params: { isUpdate: true, recordType: 'both' },
-                })}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="clipboard" size={22} color="#FFFFFF" style={styles.updateIcon} />
-                <Text style={styles.updateLabel}>Both</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="w-10 h-10 rounded-xl bg-accent-500 items-center justify-center mr-3 flex-shrink-0">
+                    <Ionicons name="calendar-outline" size={18} color={colors.neutral[50]} />
+                  </View>
 
-        {/* Active Status */}
-        {(appointmentStatus || chatStatus) && (
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-          >
-            <Text
-              style={[
-                styles.cardTitle,
-                { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-              ]}
-            >
-              Active
-            </Text>
-
-            {appointmentStatus && (
-              <TouchableOpacity
-                style={[
-                  styles.statusRow,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(59,130,246,0.08)'
-                      : 'rgba(59,130,246,0.06)',
-                    borderColor: isDark
-                      ? 'rgba(59,130,246,0.2)'
-                      : 'rgba(59,130,246,0.15)',
-                  },
-                ]}
-                onPress={() => navigation.navigate('Appointments')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="calendar" size={22} color={colors.accent[500]} />
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.statusRowLabel,
-                      { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                    ]}
-                  >
-                    Appointment
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statusRowValue,
-                      { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                    ]}
-                  >
-                    Status: {appointmentStatus}
-                  </Text>
+                  <View className="flex-1">
+                    <Text className="text-[14px] font-semibold text-secondary-800 dark:text-neutral-100" numberOfLines={1}>
+                      Upcoming appointment
+                    </Text>
+                    <Text className="text-[12px] text-secondary-400 dark:text-secondary-500 mt-0.5" numberOfLines={1}>
+                      Status: {appointmentStatus}
+                    </Text>
+                  </View>
                 </View>
-                <Text
-                  style={{ color: isDark ? colors.neutral[600] : colors.neutral[300], fontSize: 18 }}
-                >
-                  ›
-                </Text>
-              </TouchableOpacity>
-            )}
 
-            {chatStatus && (
-              <TouchableOpacity
-                style={[
-                  styles.statusRow,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(241,197,38,0.06)'
-                      : 'rgba(241,197,38,0.06)',
-                    borderColor: isDark
-                      ? 'rgba(241,197,38,0.15)'
-                      : 'rgba(241,197,38,0.12)',
-                    marginTop: appointmentStatus ? 8 : 0,
-                  },
-                ]}
-                onPress={() => navigation.navigate('HealthChat')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="chatbubbles" size={22} color={colors.primary[500]} />
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.statusRowLabel,
-                      { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                    ]}
-                  >
-                    Health Chat
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statusRowValue,
-                      { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                    ]}
-                  >
-                    Status: {chatStatus}
-                  </Text>
+                <View className="px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-800 ml-3">
+                  <Text className="text-[10px] font-semibold text-primary-800 dark:text-primary-100">Upcoming</Text>
                 </View>
-                <Text
-                  style={{ color: isDark ? colors.neutral[600] : colors.neutral[300], fontSize: 18 }}
-                >
-                  ›
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <EmptyState
+              icon={CalendarIcon}
+              message="No upcoming appointments"
+              subMessage="Book an appointment with the clinic"
+              actionLabel="Book appointment"
+              onAction={() => navigation.navigate('Appointments')}
+            />
+          )}
 
-        {/* No activity state */}
-        {!appointmentStatus && !chatStatus && !isDataLoading && (
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-          >
-            <Text
-              style={[
-                styles.cardTitle,
-                { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-              ]}
-            >
-              Recent Activity
-            </Text>
-            <View
-              style={[
-                styles.emptyState,
-                {
-                  backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
-                },
-              ]}
-            >
-              <Ionicons name="mail-open-outline" size={36} color={isDark ? colors.neutral[600] : colors.neutral[300]} style={{ marginBottom: 8 }} />
-              <Text
-                style={[
-                  styles.emptyText,
-                  { color: isDark ? colors.neutral[400] : colors.neutral[600] },
-                ]}
-              >
-                No recent activity
-              </Text>
-            </View>
-          </View>
-        )}
+          <SectionLabel title="Recent Activity" style="mt-6" />
+          {recentActivity.length > 0 ? (
+            recentActivity.map((activity) => (
+              <ActivityCard
+                key={activity.key}
+                icon={activity.icon}
+                iconBg={activity.iconBg}
+                title={activity.title}
+                subtitle={activity.subtitle}
+                timeAgo={activity.timeAgo}
+                badge={activity.badge}
+                onPress={activity.onPress}
+              />
+            ))
+          ) : (
+            <EmptyState
+              icon={ChatIcon}
+              message="No recent activity"
+              subMessage="Updates across chat, medicine, and records will appear here."
+            />
+          )}
 
-        {/* App Info */}
-        <View style={styles.footer}>
-          <Text
-            style={[
-              styles.footerText,
-              {
-                color: isDark ? colors.neutral[500] : colors.neutral[400],
-              },
-            ]}
-          >
-            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
-          </Text>
+          <SectionLabel
+            title="Announcements"
+            action={() => navigateToSecondaryScreen('Announcements')}
+            actionLabel={`${announcements.length} total`}
+            style="mt-6"
+          />
+
+          {announcementCarouselItems.length > 0 ? (
+            <AnnouncementCarousel items={announcementCarouselItems} />
+          ) : (
+            <EmptyState
+              icon={AnnouncementIcon}
+              message="No announcements right now"
+              subMessage="Clinic updates will appear here when available."
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -753,200 +464,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
         onClose={() => setSelectedAnnouncement(null)}
       />
     </SafeAreaView>
-    </PendingRecordGate>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 40 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 24,
-  },
-  menuButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  greeting: { fontSize: 14 },
-  userName: { fontSize: 24, fontWeight: 'bold', marginTop: 2 },
-  themeToggle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  themeIcon: { fontSize: 22 },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 14,
-    alignItems: 'center',
-  },
-  statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  statValue: { fontSize: 14, fontWeight: 'bold' },
-  statLabel: { fontSize: 11, marginTop: 2 },
-  card: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  quickAction: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    borderRadius: 14,
-    padding: 18,
-    alignItems: 'center',
-  },
-  quickActionIcon: { marginBottom: 8 },
-  quickActionLabel: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  // Record update row
-  updateRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  updateButton: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  updateIcon: { marginBottom: 4 },
-  updateLabel: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  emptyState: {
-    padding: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  emptyText: { fontSize: 14 },
-  // Announcements
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  carouselCounter: { fontSize: 12, fontWeight: '500' },
-  announcementCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 12,
-  },
-  announcementCardTransitioning: { opacity: 0.45 },
-  announcementThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.03)',
-  },
-  announcementThumbFallback: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  announcementTextContainer: { flex: 1 },
-  announcementTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  announcementDesc: { fontSize: 12, lineHeight: 17 },
-  announcementReadMore: { fontSize: 11, fontWeight: '600', marginTop: 7 },
-  carouselNavRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    marginBottom: 2,
-  },
-  carouselNavButton: {
-    minWidth: 86,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  carouselNavText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  dotRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
-  },
-  dot: { height: 7, borderRadius: 4 },
-  // Status rows
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 12,
-  },
-  statusRowLabel: { fontSize: 14, fontWeight: '600' },
-  statusRowValue: { fontSize: 12, marginTop: 2 },
-  recordBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginHorizontal: 16,
-    marginTop: 12,
-    gap: 12,
-  },
-  recordBannerIcon: { fontSize: 28 },
-  recordBannerTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
-  recordBannerDesc: { fontSize: 12, lineHeight: 16 },
-  footer: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  footerText: { fontSize: 12 },
-});
 
 export default DashboardHomeScreen;

@@ -23,7 +23,9 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { useRecordStatus } from '../../context/RecordStatusContext';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
+import { TopBar } from '../../components/layout/TopBar';
 import {
   STATUS,
   SESSION,
@@ -40,7 +42,7 @@ import {
   unstageFile,
 } from '../../services/appointment-service';
 
-const STEP_LABELS = ['Select Type', 'Date & Session', 'Requirements', 'Review'];
+const STEP_LABELS = ['Type', 'Date', 'Details', 'Review'];
 
 const BACKEND_ALLOWED_REQUIREMENT_MIME_TYPES = [
   'image/jpeg',
@@ -128,40 +130,45 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
   isDark,
 }) => (
   <View style={styles.stepperRow}>
-    {STEP_LABELS.map((label, i) => (
-      <React.Fragment key={i}>
+    {STEP_LABELS.map((label, i) => {
+      const stepNumber = i + 1;
+      const done = i < step;
+      const active = i === step;
+
+      return (
+      <React.Fragment key={label}>
         <View style={styles.stepItem}>
           <View
             style={[
               styles.stepCircle,
-              i < step
-                ? { backgroundColor: colors.success[500] }
-                : i === step
+              done
+                ? { backgroundColor: colors.primary[500] }
+                : active
                 ? { backgroundColor: colors.primary[500] }
                 : {
                     backgroundColor: isDark
-                      ? colors.neutral[700]
+                      ? colors.secondary[600]
                       : colors.neutral[200],
                   },
             ]}
           >
-            {i < step ? (
-              <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+            {done ? (
+              <Ionicons name="checkmark" size={14} color={colors.secondary[900]} />
             ) : (
               <Text
                 style={[
                   styles.stepNumber,
                   {
                     color:
-                      i <= step
-                        ? '#FFFFFF'
+                      active
+                        ? colors.secondary[900]
                         : isDark
-                        ? colors.neutral[400]
+                        ? colors.secondary[400]
                         : colors.neutral[500],
                   },
                 ]}
               >
-                {i + 1}
+                {stepNumber}
               </Text>
             )}
           </View>
@@ -170,16 +177,19 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
               styles.stepLabel,
               {
                 color:
-                  i <= step
+                  active
                     ? isDark
                       ? colors.primary[300]
-                      : colors.primary[700]
+                      : colors.primary[600]
+                    : done
+                    ? isDark
+                      ? colors.secondary[400]
+                      : colors.secondary[500]
                     : isDark
-                    ? colors.neutral[500]
+                    ? colors.secondary[500]
                     : colors.neutral[400],
               },
             ]}
-            numberOfLines={1}
           >
             {label}
           </Text>
@@ -190,13 +200,14 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
               styles.stepLine,
               {
                 backgroundColor:
-                  i < step ? colors.success[500] : isDark ? colors.neutral[700] : colors.neutral[200],
+                  done ? colors.primary[500] : isDark ? colors.secondary[600] : colors.neutral[200],
               },
             ]}
           />
         )}
       </React.Fragment>
-    ))}
+      );
+    })}
   </View>
 );
 
@@ -205,6 +216,10 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
 export const AppointmentScreen: React.FC = () => {
   const { isDark } = useTheme();
   const navigation = useNavigation<any>();
+  const { recordStatus } = useRecordStatus();
+  const shouldSkipAppointmentRequests = Boolean(recordStatus?.needsInitialRecord)
+    || recordStatus?.credentialStatus === 'Inactive'
+    || recordStatus?.credentialStatus === 'Unverified';
 
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -268,6 +283,16 @@ export const AppointmentScreen: React.FC = () => {
   // ── Load status ────────────────────────────────────────────────────────────
 
   const loadStatus = useCallback(async () => {
+    if (shouldSkipAppointmentRequests) {
+      setCurrentStatus(null);
+      setSchedulers([]);
+      setRequirements([]);
+      setRejectionRecord(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -291,7 +316,7 @@ export const AppointmentScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shouldSkipAppointmentRequests]);
 
   useEffect(() => {
     loadStatus();
@@ -655,13 +680,37 @@ export const AppointmentScreen: React.FC = () => {
   const trimmedPurpose = purpose.trim();
   const selectedDayStatus = selectedDate ? getDayStatus(selectedDate) : 'unavailable';
 
+  const visibleSchedulers = schedulers.filter((scheduler) => {
+    const sourceName = String(scheduler?.label || scheduler?.name || '').toLowerCase();
+    if (process.env.NODE_ENV === 'production' && /test|placeholder|scghedfa/i.test(sourceName)) {
+      return false;
+    }
+    return true;
+  });
+
+  const handleTopBarPress = () => {
+    if (step > 0) {
+      if (step === 3 && requirements.length === 0) {
+        setShowPurposeRequiredError(false);
+        setStep(1);
+        return;
+      }
+
+      setShowPurposeRequiredError(false);
+      setStep((prev) => Math.max(prev - 1, 0));
+      return;
+    }
+
+    toggleAppDrawer(navigation);
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading && !refreshing) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
-        edges={['top']}
+        edges={['top', 'left', 'right']}
       >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
@@ -676,8 +725,15 @@ export const AppointmentScreen: React.FC = () => {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
-      edges={['top']}
+      edges={['top', 'left', 'right']}
     >
+      <TopBar
+        title="Appointments"
+        showBack={step > 0}
+        onBack={handleTopBarPress}
+        onMenuPress={handleTopBarPress}
+      />
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -691,33 +747,6 @@ export const AppointmentScreen: React.FC = () => {
           />
         }
       >
-        <View style={styles.topMenuRow}>
-          <TouchableOpacity
-            style={[
-              styles.menuButton,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-            onPress={() => toggleAppDrawer(navigation)}
-            accessibilityRole="button"
-            accessibilityLabel="Open sidebar"
-          >
-            <Ionicons
-              name="menu"
-              size={22}
-              color={isDark ? colors.neutral[100] : colors.secondary[900]}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Header Banner */}
-        <View style={[styles.headerBanner, { backgroundColor: colors.primary[500] }]}>
-          <Ionicons name="calendar" size={28} color="#FFFFFF" style={styles.headerIcon} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Appointments</Text>
-            <Text style={styles.headerSubtitle}>Schedule and manage your appointments</Text>
-          </View>
-        </View>
-
         {/* Error */}
         {error && (
           <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50], borderColor: colors.error[400] }]}>
@@ -807,7 +836,7 @@ export const AppointmentScreen: React.FC = () => {
                 <Text style={[styles.cardTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
                   Select Appointment Type
                 </Text>
-                {schedulers.length === 0 ? (
+                {visibleSchedulers.length === 0 ? (
                   <View style={[styles.emptyState, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
                     <Ionicons name="calendar" size={36} color={isDark ? colors.neutral[400] : colors.neutral[500]} style={styles.emptyIcon} />
                     <Text style={[styles.emptyText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
@@ -815,7 +844,7 @@ export const AppointmentScreen: React.FC = () => {
                     </Text>
                   </View>
                 ) : (
-                  schedulers.map((s) => (
+                  visibleSchedulers.map((s) => (
                     <TouchableOpacity
                       key={s.id}
                       style={[
@@ -1411,7 +1440,7 @@ export const AppointmentScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 40 },
+  scrollContent: { padding: 16, paddingBottom: 96 },
   topMenuRow: { marginBottom: 12 },
   menuButton: {
     width: 40,
@@ -1466,7 +1495,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
   },
-  primaryButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+  primaryButtonText: { color: colors.secondary[900], fontWeight: '600', fontSize: 15 },
 
   dangerButton: {
     backgroundColor: colors.error[500],
@@ -1488,7 +1517,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  submitButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+  submitButtonText: { color: colors.secondary[900], fontWeight: '600', fontSize: 15 },
 
   backButton: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
   backButtonText: { fontWeight: '600', fontSize: 15 },
@@ -1496,11 +1525,11 @@ const styles = StyleSheet.create({
   // Stepper
   stepperRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 20,
     paddingHorizontal: 4,
   },
-  stepItem: { alignItems: 'center', width: 60 },
+  stepItem: { alignItems: 'center', minWidth: 64 },
   stepCircle: {
     width: 28,
     height: 28,
@@ -1509,8 +1538,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepNumber: { fontSize: 12, fontWeight: '600' },
-  stepLabel: { fontSize: 9, marginTop: 4, textAlign: 'center' },
-  stepLine: { flex: 1, height: 2, marginTop: 14 },
+  stepLabel: { fontSize: 10, marginTop: 4, textAlign: 'center', fontWeight: '500' },
+  stepLine: { flex: 1, height: 1.5, marginHorizontal: 6, marginBottom: 14 },
 
   // Scheduler cards
   schedulerCard: {

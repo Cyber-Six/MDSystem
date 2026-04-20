@@ -348,9 +348,10 @@ const registerProfileSetup = async (
   options: { branch?: string } = {}
 ) => {
   const pi = personalInfo || {} as PersonalInfo;
-  const hasIdentifier = !!identifier?.trim();
 
-  const personalInput = {
+  // Current backend contract: a single initial-profile mutation handles
+  // personal record creation and branch/identifier persistence atomically.
+  const initialInput = {
     first_name: pi.firstName?.trim() || '',
     middle_name: pi.middleName?.trim() || '',
     last_name: pi.surname?.trim() || '',
@@ -363,50 +364,30 @@ const registerProfileSetup = async (
     contactNumber: pi.contactNumber?.trim() || '',
     present_address: pi.address?.trim() || '',
     province_address: pi.provinceAddress?.trim() || pi.address?.trim() || '',
+    branch: options.branch || 'Manila',
+    identifier: identifier?.trim() || '',
   };
+
+  const mutation = `mutation ProfileSetup($input: userProfileInitialInput!) {
+    createInitialPersonalRecord(input: $input) {
+      first_name
+      last_name
+      branch
+      identifier
+    }
+  }`;
 
   if (isRevision) {
     await cancelPersonalRecordLog();
   }
 
-  const mutation = hasIdentifier && !isRevision
-    ? `mutation ProfileSetup($branchInput: BranchIdentifierInput!, $input: userProfileInput!) {
-        createBranchIdentifier(input: $branchInput) { branch identifier }
-        createPersonalRecordLog(input: $input) { first_name last_name }
-      }`
-    : `mutation ProfileSetup($input: userProfileInput!) {
-        createPersonalRecordLog(input: $input) { first_name last_name }
-      }`;
-
-  const branchInput: any = { identifier: identifier?.trim() || '' };
-  if (options.branch) branchInput.branch = options.branch;
-
-  const variables = hasIdentifier && !isRevision
-    ? { branchInput, input: personalInput }
-    : { input: personalInput };
-
   try {
-    await sendGraphQLRequest(mutation, variables, { endpoint: '/profile/patient' });
+    await sendGraphQLRequest(mutation, { input: initialInput }, { endpoint: '/profile/patient' });
   } catch (error: any) {
     const msg = error.message?.toLowerCase() || '';
-    if (msg.includes('already in progress') || (msg.includes('identifier') && msg.includes('branch'))) {
+    if (msg.includes('already in progress') || msg.includes('revision still pending')) {
       try { await cancelPersonalRecordLog(); } catch {}
-      if (hasIdentifier) {
-        try {
-          const retryBranchInput: any = { identifier: identifier!.trim() };
-          if (options.branch) retryBranchInput.branch = options.branch;
-          await sendGraphQLRequest(
-            `mutation RetryBranch($branchInput: BranchIdentifierInput!) { createBranchIdentifier(input: $branchInput) { branch identifier } }`,
-            { branchInput: retryBranchInput },
-            { endpoint: '/profile/patient' }
-          );
-        } catch {}
-      }
-      await sendGraphQLRequest(
-        `mutation ProfileSetupRetry($input: userProfileInput!) { createPersonalRecordLog(input: $input) { first_name last_name } }`,
-        { input: personalInput },
-        { endpoint: '/profile/patient' }
-      );
+      await sendGraphQLRequest(mutation, { input: initialInput }, { endpoint: '/profile/patient' });
       return;
     }
     throw error;

@@ -83,8 +83,11 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
     return true;
   };
 
-  const navigateToMoreStackScreen = (screen: string): boolean => {
-    return navigateToMainTab('More', { screen });
+  const navigateToSecondaryStackScreen = (screen: string): boolean => {
+    const nav = getNavigationRef();
+    if (!nav) return false;
+    nav.navigate('MoreStack', { screen });
+    return true;
   };
 
   const navigateWhenReady = (navigateFn: () => boolean) => {
@@ -126,17 +129,17 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
     }
 
     if (type === 'document' || event.startsWith('document:')) {
-      navigateWhenReady(() => navigateToMoreStackScreen('MyDocuments'));
+      navigateWhenReady(() => navigateToSecondaryStackScreen('MyDocuments'));
       return;
     }
 
     if (type === 'record' || type === 'emr' || event.startsWith('updateticket')) {
-      navigateWhenReady(() => navigateToMainTab('UpdateRecord'));
+      navigateWhenReady(() => navigateToMainTab('Records', { screen: 'UpdateRecordChoice' }));
       return;
     }
 
     if (type === 'staff' || type === 'general' || event === 'staff:notification' || event === 'admin:notification') {
-      navigateWhenReady(() => navigateToMainTab('More'));
+      navigateWhenReady(() => navigateToSecondaryStackScreen('Announcements'));
     }
   };
 
