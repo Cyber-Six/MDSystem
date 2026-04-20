@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ITEM_CATEGORY, getDisplayLocation } from '../../medical-inventory-service';
+import ConfirmationModal from '../../../../components/modals/ConfirmationModal';
 
 const DOSAGE_UNITS = ['mg', 'g', 'mcg', 'ml', 'L', 'IU'];
 const SUPPLY_UNITS = ['pcs', 'box', 'pack', 'set', 'kit'];
@@ -11,22 +12,54 @@ const formatDateDisplay = (dateValue) => {
     const date = new Date(dateValue);
     if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch (err) {
+  } catch {
     return dateValue;
   }
+};
+
+const normalizeDateOnly = (dateValue) => {
+  if (!dateValue) return null;
+  const str = String(dateValue);
+  const parts = str.split('-').map(Number);
+
+  // Input type="date" gives YYYY-MM-DD; parse manually to avoid timezone shifts.
+  if (parts.length === 3 && parts.every((num) => Number.isFinite(num))) {
+    const [year, month, day] = parts;
+    return new Date(year, month - 1, day);
+  }
+
+  const fallback = new Date(dateValue);
+  if (isNaN(fallback.getTime())) return null;
+  return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
 };
 
 // Helper to check if expiry date is in the past
 const isExpiryDateInPast = (expiryDate) => {
   if (!expiryDate) return false;
   try {
-    const expiry = new Date(expiryDate);
+    const expiry = normalizeDateOnly(expiryDate);
+    if (!expiry) return false;
     const today = new Date();
     // Set time to midnight to compare dates only
     today.setHours(0, 0, 0, 0);
     expiry.setHours(0, 0, 0, 0);
     return expiry < today;
-  } catch (err) {
+  } catch {
+    return false;
+  }
+};
+
+// Helper to check if expiry date is today
+const isExpiryDateToday = (expiryDate) => {
+  if (!expiryDate) return false;
+  try {
+    const expiry = normalizeDateOnly(expiryDate);
+    if (!expiry) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expiry.setHours(0, 0, 0, 0);
+    return expiry.getTime() === today.getTime();
+  } catch {
     return false;
   }
 };
@@ -63,6 +96,7 @@ const AddSupplyModal = ({ itemId, items, allowedLocations = [], onClose, onSave 
   const [saveAnother, setSaveAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [showExpiryTodayModal, setShowExpiryTodayModal] = useState(false);
   const [touched, setTouched] = useState({});
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -113,6 +147,12 @@ const AddSupplyModal = ({ itemId, items, allowedLocations = [], onClose, onSave 
     });
     
     // Validate all required fields
+    if (form.expiryDate && isExpiryDateToday(form.expiryDate)) {
+      setShowExpiryTodayModal(true);
+      setSubmitError('');
+      return;
+    }
+
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
       setSubmitError(validationErrors.join(' • '));
@@ -286,7 +326,7 @@ const AddSupplyModal = ({ itemId, items, allowedLocations = [], onClose, onSave 
                 onBlur={() => touch('expiryDate')}
                 required={isMedicine}
                 className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
-                  hasFieldError('expiryDate') || (form.expiryDate && isExpiryDateInPast(form.expiryDate))
+                  hasFieldError('expiryDate') || (form.expiryDate && isExpiryDateInPast(form.expiryDate)) || (form.expiryDate && isExpiryDateToday(form.expiryDate))
                     ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
                     : 'border-neutral-300 dark:border-neutral-600'
                 }`}
@@ -301,6 +341,12 @@ const AddSupplyModal = ({ itemId, items, allowedLocations = [], onClose, onSave 
                 <p className="mt-1 text-[10px] text-error-500 font-medium flex items-center gap-1">
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1" clipRule="evenodd" /></svg>
                   This item is already expired
+                </p>
+              )}
+              {form.expiryDate && isExpiryDateToday(form.expiryDate) && (
+                <p className="mt-1 text-[10px] text-error-500 font-medium flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1" clipRule="evenodd" /></svg>
+                  Items expiring today cannot be received
                 </p>
               )}
               {!isMedicine && noExpiry && !hasFieldError('expiryDate') && !isExpiryDateInPast(form.expiryDate) && (
@@ -353,6 +399,18 @@ const AddSupplyModal = ({ itemId, items, allowedLocations = [], onClose, onSave 
           </div>
         </div>
       </div>
+
+      <ConfirmationModal
+        isOpen={showExpiryTodayModal}
+        onClose={() => setShowExpiryTodayModal(false)}
+        onConfirm={() => setShowExpiryTodayModal(false)}
+        title="Cannot Receive Supply"
+        message="You cannot add a medical item that expires today."
+        description="Select an expiry date after today to continue."
+        confirmText="OK"
+        cancelText="Close"
+        variant="danger"
+      />
     </div>
   );
 };

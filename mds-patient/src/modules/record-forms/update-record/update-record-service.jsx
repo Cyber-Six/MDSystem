@@ -15,6 +15,27 @@ const DEBUG = false;
 const log = (...args) => DEBUG && console.log(...args);
 const warn = (...args) => DEBUG && console.warn(...args);
 
+const formatDateToMonthInput = (rawDate) => {
+  if (!rawDate) return '';
+  const dateText = String(rawDate).trim();
+
+  if (/^\d{4}-\d{2}$/.test(dateText)) return dateText;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return dateText.slice(0, 7);
+  if (dateText.includes('T')) return dateText.split('T')[0].slice(0, 7);
+
+  return dateText.slice(0, 7);
+};
+
+const normalizeMonthOrDateToISODate = (rawDate) => {
+  if (!rawDate) return null;
+  const dateText = String(rawDate).trim();
+
+  if (/^\d{4}-\d{2}$/.test(dateText)) return `${dateText}-01`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return dateText;
+
+  return null;
+};
+
 /**
  * Upload a file to the media staging endpoint
  * @param {File|null} file - Browser File object
@@ -511,8 +532,8 @@ async function mapRevisionDataToFormData(backendData) {
     formData.seenByDentist = backendData.dentalHistory.seenByDentist === true;
     formData.lastDentalCleaning = backendData.dentalHistory.lastDentalCleaning || '0-6';
     formData.purpose = backendData.dentalHistory.purpose || '';
-    // Convert ISO date to yyyy-MM-dd format
-    formData.lastVisitDate = backendData.dentalHistory.lastVisitDate ? backendData.dentalHistory.lastVisitDate.split('T')[0] : '';
+    // Use yyyy-MM so it works with input[type="month"] in update dental step.
+    formData.lastVisitDate = formatDateToMonthInput(backendData.dentalHistory.lastVisitDate);
   }
 
   // Dental Procedures
@@ -1263,11 +1284,13 @@ export async function createDentalHistory(formData) {
     }
   `;
 
+  const normalizedLastVisitDate = normalizeMonthOrDateToISODate(formData.lastVisitDate);
+
   const input = {
     seenByDentist: formData.seenByDentist === true,
     lastDentalCleaning: formData.lastDentalCleaning || '0-6',
     purpose: formData.purpose || null,
-    lastVisitDate: formData.lastVisitDate || null
+    lastVisitDate: normalizedLastVisitDate
   };
 
   console.log('🦷 Creating dental history...', input);

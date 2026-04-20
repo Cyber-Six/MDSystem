@@ -241,6 +241,9 @@ const MedicalBackgroundForm = ({
     </div>
   );
 
+  const hasVisualAcuity = !!(data.eyeglasses || data.contactLenses);
+  const hasDualLensTypes = !!(data.eyeglasses && data.contactLenses);
+
   return (
     <div className="space-y-4">
       {/* Error Banner */}
@@ -1159,7 +1162,7 @@ const MedicalBackgroundForm = ({
           isOpen={activeAccordion === 'lifestyle'}
           onToggle={toggleAccordion}
           icon={
-            <svg className="w-5 h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 mr-2 text-warning-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           }
@@ -1167,9 +1170,10 @@ const MedicalBackgroundForm = ({
           <div className="space-y-6">
             {/* Smoker */}
             <div className="border-l-4 border-warning-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Smoker</h4>
-              <div className="flex gap-4 mb-4">
-                <label className="flex items-center">
+              <h4 className="font-semibold text-secondary-700 mb-1">Smoker</h4>
+              <p className="text-xs text-secondary-500">Include sticks per day and years if applicable.</p>
+              <div className="flex gap-5 mt-3">
+                <label className="flex items-center gap-2">
                   <input
                     type="radio"
                     name="smoker"
@@ -1178,9 +1182,9 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('smoker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">No</span>
+                  <span className="text-secondary-700">No</span>
                 </label>
-                <label className="flex items-center">
+                <label className="flex items-center gap-2">
                   <input
                     type="radio"
                     name="smoker"
@@ -1189,11 +1193,11 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('smoker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">Yes</span>
+                  <span className="text-secondary-700">Yes</span>
                 </label>
               </div>
               {data.smoker === 'yes' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Input
                     label="Sticks per day"
                     type="number"
@@ -1213,10 +1217,11 @@ const MedicalBackgroundForm = ({
             </div>
 
             {/* Alcohol */}
-            <div className="border-l-4 border-accent-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Alcohol Drinker</h4>
-              <div className="flex gap-4 mb-4">
-                <label className="flex items-center">
+            <div className="border-l-4 border-warning-500 pl-4">
+              <h4 className="font-semibold text-secondary-700 mb-1">Alcohol Drinker</h4>
+              <p className="text-xs text-secondary-500">Select frequency if you consume alcohol.</p>
+              <div className="flex gap-5 mt-3">
+                <label className="flex items-center gap-2">
                   <input
                     type="radio"
                     name="alcoholDrinker"
@@ -1225,9 +1230,9 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('alcoholDrinker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">No</span>
+                  <span className="text-secondary-700">No</span>
                 </label>
-                <label className="flex items-center">
+                <label className="flex items-center gap-2">
                   <input
                     type="radio"
                     name="alcoholDrinker"
@@ -1236,24 +1241,27 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('alcoholDrinker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">Yes</span>
+                  <span className="text-secondary-700">Yes</span>
                 </label>
               </div>
               {data.alcoholDrinker === 'yes' && (
-                <Select
-                  label="Frequency"
-                  options={LIFESTYLE_FREQUENCY_OPTIONS}
-                  value={data.alcoholFrequency || ''}
-                  onChange={(e) => handleChange('alcoholFrequency', e.target.value)}
-                />
+                <div className="mt-4">
+                  <Select
+                    label="Frequency"
+                    options={LIFESTYLE_FREQUENCY_OPTIONS}
+                    value={data.alcoholFrequency || ''}
+                    onChange={(e) => handleChange('alcoholFrequency', e.target.value)}
+                  />
+                </div>
               )}
             </div>
 
             {/* Vaper */}
-            <div className="border-l-4 border-primary-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Vaper</h4>
-              <div className="flex gap-4 mb-4">
-                <label className="flex items-center">
+            <div className="border-l-4 border-warning-500 pl-4">
+              <h4 className="font-semibold text-secondary-700 mb-1">Vaper</h4>
+              <p className="text-xs text-secondary-500">Select vape type and usage frequency if applicable.</p>
+              <div className="flex gap-5 mt-3">
+                <label className="flex items-center gap-2">
                   <input
                     type="radio"
                     name="vaper"
@@ -1262,9 +1270,9 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('vaper', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">No</span>
+                  <span className="text-secondary-700">No</span>
                 </label>
-                <label className="flex items-center">
+                <label className="flex items-center gap-2">
                   <input
                     type="radio"
                     name="vaper"
@@ -1273,11 +1281,11 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('vaper', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">Yes</span>
+                  <span className="text-secondary-700">Yes</span>
                 </label>
               </div>
               {data.vaper === 'yes' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Select
                     label="Vape Type"
                     options={VAPE_TYPE_OPTIONS}
@@ -1326,9 +1334,9 @@ const MedicalBackgroundForm = ({
                 />
               </div>
             </div>
-            {(data.eyeglasses || data.contactLenses) && (
+            {hasVisualAcuity && !hasDualLensTypes && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="Grade: OD (Right Eye)"
                     placeholder="e.g., -2.00"
@@ -1341,14 +1349,47 @@ const MedicalBackgroundForm = ({
                     value={data.gradeOS || ''}
                     onChange={(e) => handleChange('gradeOS', e.target.value)}
                   />
-                  <Input
-                    label="Date"
-                    type="date"
-                    value={data.visualAcuityDate || ''}
-                    onChange={(e) => handleChange('visualAcuityDate', e.target.value)}
-                  />
                 </div>
               </>
+            )}
+            {hasDualLensTypes && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-primary-200 bg-primary-50/40 p-4">
+                  <h4 className="text-sm font-semibold text-primary-800 mb-3">Eyeglasses Grade</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="OD (Right Eye)"
+                      placeholder="e.g., -2.00"
+                      value={data.gradeODEyeglasses || ''}
+                      onChange={(e) => handleChange('gradeODEyeglasses', e.target.value)}
+                    />
+                    <Input
+                      label="OS (Left Eye)"
+                      placeholder="e.g., -1.75"
+                      value={data.gradeOSEyeglasses || ''}
+                      onChange={(e) => handleChange('gradeOSEyeglasses', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-primary-200 bg-white p-4">
+                  <h4 className="text-sm font-semibold text-primary-800 mb-3">Contact Lenses Grade</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="OD (Right Eye)"
+                      placeholder="e.g., -2.00"
+                      value={data.gradeODContactLenses || ''}
+                      onChange={(e) => handleChange('gradeODContactLenses', e.target.value)}
+                    />
+                    <Input
+                      label="OS (Left Eye)"
+                      placeholder="e.g., -1.75"
+                      value={data.gradeOSContactLenses || ''}
+                      onChange={(e) => handleChange('gradeOSContactLenses', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </AccordionSection>

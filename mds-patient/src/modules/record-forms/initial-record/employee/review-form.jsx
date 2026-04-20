@@ -231,11 +231,18 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
           <DataRow label="Vaper" value={formData.medicalBackground?.vaper === 'yes' ? `Yes (${formData.medicalBackground?.vapeType || 'Not specified'}, ${formData.medicalBackground?.vapeFrequency || 'Not specified'})` : 'No'} />
           <DataRow label="Eyeglasses" value={formData.medicalBackground?.eyeglasses ? 'Yes' : 'No'} />
           <DataRow label="Contact Lenses" value={formData.medicalBackground?.contactLenses ? 'Yes' : 'No'} />
-          {(formData.medicalBackground?.eyeglasses || formData.medicalBackground?.contactLenses) && (
+          {(formData.medicalBackground?.eyeglasses || formData.medicalBackground?.contactLenses) && !(formData.medicalBackground?.eyeglasses && formData.medicalBackground?.contactLenses) && (
             <>
               <DataRow label="Grade OD" value={formData.medicalBackground?.gradeOD} />
               <DataRow label="Grade OS" value={formData.medicalBackground?.gradeOS} />
-              <DataRow label="Visual Acuity Date" value={formatDate(formData.medicalBackground?.visualAcuityDate)} />
+            </>
+          )}
+          {formData.medicalBackground?.eyeglasses && formData.medicalBackground?.contactLenses && (
+            <>
+              <DataRow label="Eyeglasses Grade OD" value={formData.medicalBackground?.gradeODEyeglasses || formData.medicalBackground?.gradeOD} />
+              <DataRow label="Eyeglasses Grade OS" value={formData.medicalBackground?.gradeOSEyeglasses || formData.medicalBackground?.gradeOS} />
+              <DataRow label="Contact Lenses Grade OD" value={formData.medicalBackground?.gradeODContactLenses || formData.medicalBackground?.gradeOD} />
+              <DataRow label="Contact Lenses Grade OS" value={formData.medicalBackground?.gradeOSContactLenses || formData.medicalBackground?.gradeOS} />
             </>
           )}
         </dl>

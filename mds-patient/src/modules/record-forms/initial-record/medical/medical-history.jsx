@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Checkbox, Input, Textarea } from './form-elements';
+import { Checkbox, Input } from './form-elements';
 import { searchDomainCatalog, createDomainCatalog } from '@core/services/emr-service';
 
 function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name' }) {
@@ -101,10 +101,6 @@ const MedicalHistoryForm = ({
     onChange({ ...data, self });
   };
 
-  const handleSelfOtherChange = (value) => {
-    onChange({ ...data, selfOther: value });
-  };
-
   const handleFamilyConditionChange = (id, checked) => {
     const family = { ...data.family, [id]: checked };
     if (!checked) {
@@ -119,10 +115,6 @@ const MedicalHistoryForm = ({
   const handleFamilyWhoHasItChange = (id, value) => {
     const familyWhoHasIt = { ...data.familyWhoHasIt, [id]: value };
     onChange({ ...data, familyWhoHasIt });
-  };
-
-  const handleFamilyOtherChange = (value) => {
-    onChange({ ...data, familyOther: value });
   };
 
   const CatalogLoader = () => (
@@ -217,11 +209,11 @@ const MedicalHistoryForm = ({
           )}
           {/* Search or add conditions */}
           <div className="mt-4">
-            <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">Other Conditions (search or add):</label>
             <div ref={conditionOthers.wrapperRef}>
               <input
                 type="text"
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm bg-white text-secondary-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
                 placeholder="Type to search for a condition..."
                 value={conditionOthers.input}
                 autoComplete="off"
@@ -229,9 +221,9 @@ const MedicalHistoryForm = ({
                 onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
               />
               {conditionOthers.focused && conditionOthers.input.trim() && (
-                <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm max-h-60 overflow-y-auto">
                   {conditionOthers.searching && (
-                    <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                    <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
                   {conditionOthers.suggestions.length > 0 ? (
                     <>
@@ -239,7 +231,7 @@ const MedicalHistoryForm = ({
                         <button
                           key={result.id}
                           type="button"
-                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
                           onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
                         >
                           {result.name}
@@ -250,7 +242,7 @@ const MedicalHistoryForm = ({
                       ))}
                       <button
                         type="button"
-                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
                         disabled={conditionOthers.creating}
                         onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                       >
@@ -260,7 +252,7 @@ const MedicalHistoryForm = ({
                   ) : (
                     <button
                       type="button"
-                      className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                      className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
                       disabled={conditionOthers.creating}
                       onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                     >
@@ -272,24 +264,6 @@ const MedicalHistoryForm = ({
             </div>
           </div>
 
-          {/* Other Option */}
-          <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
-            <Checkbox
-              label="Other:"
-              checked={data.selfOtherChecked || false}
-              onChange={(e) => onChange({ ...data, selfOtherChecked: e.target.checked })}
-            />
-            {data.selfOtherChecked && (
-              <div className="mt-3">
-                <Textarea
-                  placeholder="Please specify other medical conditions..."
-                  value={data.selfOther || ''}
-                  onChange={(e) => handleSelfOtherChange(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -360,11 +334,11 @@ const MedicalHistoryForm = ({
           )}
           {/* Search or add conditions */}
           <div className="mt-4">
-            <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">Other Conditions (search or add):</label>
             <div ref={conditionOthers.wrapperRef}>
               <input
                 type="text"
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm bg-white text-secondary-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
                 placeholder="Type to search for a condition..."
                 value={conditionOthers.input}
                 autoComplete="off"
@@ -372,9 +346,9 @@ const MedicalHistoryForm = ({
                 onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
               />
               {conditionOthers.focused && conditionOthers.input.trim() && (
-                <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm max-h-60 overflow-y-auto">
                   {conditionOthers.searching && (
-                    <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                    <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
                   {conditionOthers.suggestions.length > 0 ? (
                     <>
@@ -382,7 +356,7 @@ const MedicalHistoryForm = ({
                         <button
                           key={result.id}
                           type="button"
-                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
                           onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
                         >
                           {result.name}
@@ -393,7 +367,7 @@ const MedicalHistoryForm = ({
                       ))}
                       <button
                         type="button"
-                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
                         disabled={conditionOthers.creating}
                         onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                       >
@@ -403,7 +377,7 @@ const MedicalHistoryForm = ({
                   ) : (
                     <button
                       type="button"
-                      className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                      className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
                       disabled={conditionOthers.creating}
                       onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                     >
@@ -415,29 +389,6 @@ const MedicalHistoryForm = ({
             </div>
           </div>
 
-          {/* Other Option */}
-          <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
-            <Checkbox
-              label="Other:"
-              checked={data.familyOtherChecked || false}
-              onChange={(e) => onChange({ ...data, familyOtherChecked: e.target.checked })}
-            />
-            {data.familyOtherChecked && (
-              <div className="mt-3 space-y-2">
-                <Textarea
-                  placeholder="Please specify other medical conditions..."
-                  value={data.familyOther || ''}
-                  onChange={(e) => handleFamilyOtherChange(e.target.value)}
-                  rows={2}
-                />
-                <Input
-                  placeholder="Who has this condition?"
-                  value={data.familyOtherWhoHasIt || ''}
-                  onChange={(e) => onChange({ ...data, familyOtherWhoHasIt: e.target.value })}
-                />
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>
