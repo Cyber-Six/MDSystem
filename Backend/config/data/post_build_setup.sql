@@ -688,7 +688,7 @@ VALUES
   ('Teaching Certificate Program');
 
 
-CREATE INDEX ON "UsersPersonal"(identifier text_pattern_ops);
+CREATE INDEX ON "UsersPersonal"(identifier);
 
 CREATE INDEX ON "UsersPersonal"(identifier);
 
