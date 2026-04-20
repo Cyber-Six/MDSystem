@@ -190,12 +190,6 @@ const DataConsent = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const isNewVersion = consentData && 
-    consentData.data_consent_version && 
-    consentData.data_consent_version !== consentData.required_version;
-
   const consentHtml = useMemo(() => {
     if (!consentData?.consent_text) return '';
 
@@ -218,6 +212,12 @@ const DataConsent = ({
 
     return sanitizedHtml;
   }, [consentData]);
+
+  if (!isOpen) return null;
+
+  const isNewVersion = consentData && 
+    consentData.data_consent_version && 
+    consentData.data_consent_version !== consentData.required_version;
 
   return (
     <>
