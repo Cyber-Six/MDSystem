@@ -455,60 +455,9 @@ const PatientSettings = () => {
         </SettingRow>
         <SettingRow
           label="Show banners"
-          description="Show success/error banners for API requests"
+          description="Show or hide banner notifications"
         >
           <Toggle checked={draft.showBanners} onChange={(v) => set('showBanners', v)} />
-        </SettingRow>
-        <SettingRow
-          label="Errors only"
-          description="Suppress success banners — only show failed requests"
-          indent
-        >
-          <Toggle
-            checked={draft.bannerErrorsOnly}
-            onChange={(v) => set('bannerErrorsOnly', v)}
-            disabled={!draft.showBanners}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Compact banners"
-          description="Cap the number of banners shown at once"
-          indent
-        >
-          <Toggle
-            checked={draft.bannerCompact}
-            onChange={(v) => set('bannerCompact', v)}
-            disabled={!draft.showBanners}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Auto-dismiss banners"
-          description="Automatically dismiss banners after a delay"
-          indent
-        >
-          <Toggle
-            checked={draft.bannerAutoDismiss}
-            onChange={(v) => set('bannerAutoDismiss', v)}
-            disabled={!draft.showBanners}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Banner dismiss delay"
-          description="Seconds before a banner auto-dismisses"
-          indent
-        >
-          <div className="flex items-center gap-2">
-            <select
-              value={draft.bannerDismissDelay}
-              onChange={(e) => set('bannerDismissDelay', parseInt(e.target.value, 10))}
-              disabled={!draft.showBanners || !draft.bannerAutoDismiss}
-              className="text-sm px-2 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40"
-            >
-              {[3, 5, 8, 10, 15].map((s) => (
-                <option key={s} value={s}>{s}s</option>
-              ))}
-            </select>
-          </div>
         </SettingRow>
       </Section>
 
