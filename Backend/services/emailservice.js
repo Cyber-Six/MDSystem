@@ -207,17 +207,30 @@ function twoFATemplate(otp) {
  */
 function notificationTemplate({ title, message, notes, ctaText, ctaLink }) {
   // SECURITY: Sanitize all user-supplied fields to prevent stored XSS in emails
-  const safeTitle   = xss(title   || '');
-  const safeMessage = xss(message || '');
+  const safeTitle   = xss(title   || '').trim();
+  const safeMessage = xss(message || '').trim();
   const safeNotes   = notes   ? xss(notes)   : null;
   const safeCtaText = ctaText ? xss(ctaText) : null;
   // SECURITY: Only allow http/https URLs in CTA links to prevent javascript: injection
   const safeCtaLink = ctaLink && /^https?:\/\//i.test(ctaLink) ? xss(ctaLink) : null;
 
+  const messageLines = safeMessage
+    ? safeMessage
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+    : [];
+
+  const messageHtml = messageLines.length > 0
+    ? messageLines.map(line => `<p style="margin: 0 0 10px; line-height: 1.55;">${line}</p>`).join('')
+    : '<p style="margin: 0 0 10px; line-height: 1.55;">You have a new notification.</p>';
+
+  const heading = safeTitle || 'MDSystem Notification';
+
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-      <h2 style="color:#2F4F4F;">${safeTitle}</h2>
-      <p>${safeMessage}</p>
+      <h2 style="color:#2F4F4F; margin-top: 0; margin-bottom: 14px;">${heading}</h2>
+      <div style="color:#1f2937;">${messageHtml}</div>
       ${safeNotes ? `<p><strong>Notes:</strong> ${safeNotes}</p>` : ''}
       ${safeCtaText && safeCtaLink
         ? `<div style="text-align:center; margin: 25px 0;">
@@ -350,9 +363,11 @@ function buildEmailTemplate(job_name, userEmail, data) {
     subject = 'Reset Your MDSystem Password';
     htmlContent = passwordResetTemplate(data.resetpwlink, data.portal);
   } else if (job_name === 'sendNotificationEmail') {
-    subject = data.title;
+    subject = typeof data.title === 'string' && data.title.trim()
+      ? data.title.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
+      : 'MDSystem Notification';
     htmlContent = notificationTemplate({
-      title: data.title,
+      title: subject,
       message: data.message,
       notes: data.notes,
       ctaText: data.ctaText,

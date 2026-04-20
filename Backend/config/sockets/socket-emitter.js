@@ -6,6 +6,8 @@ const { sendExpoPushNotification, eventToPushContent } = require('./push-notific
 const { resolveChannelsForEvent } = require('./notification-preferences');
 const query = require('../query');
 
+const BROADCAST_NOTIFICATION_EVENTS = new Set(['admin:notification', 'staff:notification']);
+
 // Lazy-loaded to avoid circular dependency with socket-server.js
 let _getIO;
 function getIO() {
@@ -13,6 +15,91 @@ function getIO() {
     _getIO = require('./socket-server').getIO;
   }
   return _getIO();
+}
+
+function formatEventNameAsTitle(eventName) {
+  const source = String(eventName || 'notification');
+  const normalized = source
+    .replace(/[:._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) return 'Notification';
+
+  return normalized.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function tryParseBroadcastMessage(rawMessage) {
+  if (typeof rawMessage !== 'string') return null;
+
+  const trimmed = rawMessage.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+    const body = typeof parsed.body === 'string' ? parsed.body.trim() : '';
+
+    if (!title && !body) {
+      return null;
+    }
+
+    return { title, body };
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeEmailSubject(value) {
+  return String(value || '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolveEmailContent(eventName, data, emailNotif, userId) {
+  const fallbackTitle =
+    typeof emailNotif?.title === 'string' && emailNotif.title.trim()
+      ? emailNotif.title.trim()
+      : formatEventNameAsTitle(eventName);
+
+  const fallbackMessage =
+    typeof emailNotif?.message === 'string' && emailNotif.message.trim()
+      ? emailNotif.message.trim()
+      : (typeof data?.message === 'string' && data.message.trim()
+        ? data.message.trim()
+        : `You have a new notification: ${eventName}`);
+
+  let resolvedTitle = fallbackTitle;
+  let resolvedMessage = fallbackMessage;
+
+  if (!emailNotif?.title && !emailNotif?.message && BROADCAST_NOTIFICATION_EVENTS.has(eventName)) {
+    const structured = tryParseBroadcastMessage(data?.message);
+    if (structured) {
+      resolvedTitle = structured.title || fallbackTitle;
+      resolvedMessage = structured.body || fallbackMessage;
+      logger.debug(`[NOTIF] Parsed structured broadcast email content for user:${userId} event:${eventName}`);
+    } else if (typeof data?.message === 'string') {
+      const trimmed = data.message.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        logger.warn(`[NOTIF] Invalid structured broadcast payload for user:${userId} event:${eventName}; using fallback text`);
+      }
+    }
+  }
+
+  return {
+    title: sanitizeEmailSubject(resolvedTitle) || 'Notification',
+    message: resolvedMessage || `You have a new notification: ${eventName}`,
+    notes: emailNotif?.notes ?? null,
+    ctaText: emailNotif?.ctaText ?? null,
+    ctaLink: emailNotif?.ctaLink ?? null,
+  };
 }
 
 /**
@@ -190,14 +277,16 @@ async function notifyUser(userId, eventName, data, emailNotif = null) {
         email = await query.findEmailByUserId(userId);
       }
       if (email) {
-        const title   = emailNotif?.title   || eventName.replace(/[:.]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        const message = emailNotif?.message  || (typeof data?.message === 'string' ? data.message : `You have a new notification: ${eventName}`);
-        const notes   = emailNotif?.notes    ?? null;
-        const ctaText = emailNotif?.ctaText  ?? null;
-        const ctaLink = emailNotif?.ctaLink  ?? null;
+        const {
+          title,
+          message,
+          notes,
+          ctaText,
+          ctaLink,
+        } = resolveEmailContent(eventName, data, emailNotif, userId);
 
         await enqueueNotificationEmail(email, title, message, notes, ctaText, ctaLink);
-        logger.debug(`[NOTIF] Enqueued email for user:${userId} (${channelPrefs.email ? 'always' : 'fallback'})`);
+        logger.debug(`[NOTIF] Enqueued email for user:${userId} (${channelPrefs.email ? 'always' : 'fallback'}) with subject:"${title}"`);
       } else {
         logger.warn(`[NOTIF] No email found for user:${userId}, skipping email delivery`);
       }
