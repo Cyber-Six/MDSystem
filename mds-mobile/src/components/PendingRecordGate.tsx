@@ -122,7 +122,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
           {(needsInactiveRevision || !hasSubmittedInactiveUpdate) && (
             <TouchableOpacity
               style={styles.fillFormButton}
-              onPress={() => navigation.navigate('More', { screen: 'UpdateRecordChoice' })}
+              onPress={() => navigation.navigate('Records', { screen: 'UpdateRecordChoice' })}
               activeOpacity={0.8}
             >
               <Text style={styles.fillFormButtonText}>
@@ -276,7 +276,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
         <TouchableOpacity
           style={styles.fillFormButton}
           onPress={() =>
-            navigation.navigate('More', {
+            navigation.navigate('Records', {
               screen: 'InitialRecordForm',
               params: { isRevision },
             })
@@ -286,7 +286,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
           <Text style={styles.fillFormButtonText}>
             {isRevision ? 'Revise Medical Record' : 'Fill Out Medical Record'}
           </Text>
-          <Text style={{ color: '#FFF', fontSize: 16, marginLeft: 6 }}>→</Text>
+          <Text style={{ color: colors.secondary[900], fontSize: 16, marginLeft: 6 }}>→</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   fillFormButtonText: {
-    color: '#FFFFFF',
+    color: colors.secondary[900],
     fontSize: 16,
     fontWeight: '700',
   },

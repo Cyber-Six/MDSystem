@@ -8,6 +8,7 @@ const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const buttonRef = useRef(null);
+  const closeTimerRef = useRef(null);
 
   // Patient portal supports both login and register
   const getViewFromPath = () => {
@@ -17,33 +18,110 @@ const Auth = () => {
   
   const [activeView, setActiveView] = useState(getViewFromPath());
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isPanelClosing, setIsPanelClosing] = useState(false);
+  const [shouldPopLoginButton, setShouldPopLoginButton] = useState(false);
   const [isVerificationView, setIsVerificationView] = useState(false);
   const [registerStep, setRegisterStep] = useState(1);
 
   // Blur button when panel closes to remove focus styling
   useEffect(() => {
-    if (!isPanelOpen && buttonRef.current) {
+    if (!isPanelOpen && !isPanelClosing && buttonRef.current) {
       buttonRef.current.blur();
     }
-  }, [isPanelOpen]);
+  }, [isPanelOpen, isPanelClosing]);
 
   // Update activeView when path changes
   useEffect(() => {
-    setActiveView(getViewFromPath());
+    const nextView = getViewFromPath();
+    setActiveView(nextView);
+
+    if (nextView !== 'login') {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setIsPanelClosing(false);
+      setShouldPopLoginButton(false);
+    }
   }, [location.pathname]);
 
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleViewChange = (view) => {
+    if (view !== 'login') {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setIsPanelClosing(false);
+      setShouldPopLoginButton(false);
+    }
+
     setActiveView(view);
     setRegisterStep(1);
     navigate(`/auth/${view}`, { replace: true });
   };
 
-  const togglePanel = () => {
-    setIsPanelOpen(!isPanelOpen);
+  const finishPanelClose = () => {
+    setIsPanelClosing(false);
+    setShouldPopLoginButton(true);
+  };
+
+  const openPanel = () => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+
+    setShouldPopLoginButton(false);
+    setIsPanelClosing(false);
+    setIsPanelOpen(true);
   };
 
   const closePanel = () => {
+    if (!isPanelOpen) {
+      return;
+    }
+
     setIsPanelOpen(false);
+
+    if (activeView !== 'login') {
+      setIsPanelClosing(false);
+      setShouldPopLoginButton(false);
+      return;
+    }
+
+    setShouldPopLoginButton(false);
+    setIsPanelClosing(true);
+
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+
+    closeTimerRef.current = window.setTimeout(() => {
+      finishPanelClose();
+      closeTimerRef.current = null;
+    }, 450);
+  };
+
+  const handlePanelTransitionEnd = (event) => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'right') {
+      return;
+    }
+
+    if (!isPanelOpen && isPanelClosing && activeView === 'login') {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      finishPanelClose();
+    }
   };
 
   // Close panel when clicking outside
@@ -65,12 +143,17 @@ const Auth = () => {
       {/* Fullscreen Landing Content with Slider */}
       <AuthSlides isPanelOpen={isPanelOpen} activeView={activeView} />
 
-      {/* Toggle Button - Shows only when login panel is closed */}
-      {!isPanelOpen && activeView === 'login' && (
+      {/* Toggle Button - Appears after the login panel fully closes */}
+      {!isPanelOpen && !isPanelClosing && activeView === 'login' && (
         <button 
           ref={buttonRef}
-          className="toggle-btn fixed top-6 right-6 px-6 py-3 !bg-primary-500 hover:!bg-primary-600 text-white font-semibold rounded-full shadow-lg cursor-pointer flex items-center gap-2 z-[12] transition-colors duration-200 hover:shadow-xl active:!bg-primary-700 focus:!ring-0 focus:!outline-none"
-          onClick={togglePanel}
+          className={`toggle-btn fixed top-6 right-6 px-6 py-3 !bg-primary-500 hover:!bg-primary-600 text-white font-semibold rounded-full shadow-lg cursor-pointer flex items-center gap-2 z-[12] transition-colors duration-200 hover:shadow-xl active:!bg-primary-700 focus:!ring-0 focus:!outline-none ${shouldPopLoginButton ? 'auth-login-toggle-pop' : ''}`}
+          onClick={openPanel}
+          onAnimationEnd={() => {
+            if (shouldPopLoginButton) {
+              setShouldPopLoginButton(false);
+            }
+          }}
           aria-label="Open login panel"
         >
           Click here to login
@@ -81,7 +164,10 @@ const Auth = () => {
       )}
 
       {/* Sliding Login Panel */}
-      <div className={`auth-panel fixed top-0 h-[100dvh] w-full max-w-[420px] bg-white shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen && activeView === 'login' ? 'right-0' : '-right-full'}`}>
+      <div
+        className={`auth-panel fixed top-0 h-[100dvh] w-full max-w-[420px] bg-white shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen && activeView === 'login' ? 'right-0' : '-right-full'}`}
+        onTransitionEnd={handlePanelTransitionEnd}
+      >
         <div className="h-full flex flex-col px-5 sm:px-6 md:px-8 py-6 sm:py-8">
           {/* X Close Button */}
           <button
@@ -181,7 +267,7 @@ const Auth = () => {
               <div className={`flex-1 min-h-0 md:flex-none ${registerStep === 1 ? '' : 'pt-8 md:pt-0'}`}>
                 <Register onBackToLogin={() => {
                   handleViewChange('login');
-                  setIsPanelOpen(true);
+                  openPanel();
                 }} onStepChange={setRegisterStep} />
               </div>
             </div>
