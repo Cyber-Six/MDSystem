@@ -51,6 +51,12 @@ export const MainTabNavigator: React.FC = () => {
     || normalizedRecordStatus === 'underreview'
     || normalizedRecordStatus === 'in review';
   const isInitialFormOnlyMode = Boolean(recordStatus?.needsInitialRecord) && !isAwaitingInitialApproval;
+  const shouldSkipMedicinePolling = isRecordLoading
+    || !recordStatus
+    || (recordStatus.credentialStatus == null && recordStatus.status == null)
+    || isInitialFormOnlyMode
+    || recordStatus.credentialStatus === 'Inactive'
+    || recordStatus.credentialStatus === 'Unverified';
   const isRevisionInitialForm = normalizedRecordStatus === 'revision';
 
   const loadMedicinePendingCount = useCallback(async () => {
@@ -63,7 +69,7 @@ export const MainTabNavigator: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isInitialFormOnlyMode) {
+    if (shouldSkipMedicinePolling) {
       setMedicinePendingCount(0);
       return;
     }
@@ -75,7 +81,7 @@ export const MainTabNavigator: React.FC = () => {
     }, 45000);
 
     return () => clearInterval(timer);
-  }, [isInitialFormOnlyMode, loadMedicinePendingCount]);
+  }, [shouldSkipMedicinePolling, loadMedicinePendingCount]);
 
   if (isRecordLoading) {
     return (

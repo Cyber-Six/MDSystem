@@ -394,6 +394,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        showPasswordToggle
         autoComplete={isIOS ? 'off' : 'password'}
         textContentType={isIOS ? 'none' : 'password'}
         importantForAutofill={isIOS ? 'no' : 'auto'}

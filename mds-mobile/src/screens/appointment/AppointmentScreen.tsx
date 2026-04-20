@@ -216,8 +216,11 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
 export const AppointmentScreen: React.FC = () => {
   const { isDark } = useTheme();
   const navigation = useNavigation<any>();
-  const { recordStatus } = useRecordStatus();
-  const shouldSkipAppointmentRequests = Boolean(recordStatus?.needsInitialRecord)
+  const { recordStatus, isRecordLoading } = useRecordStatus();
+  const shouldSkipAppointmentRequests = isRecordLoading
+    || !recordStatus
+    || (recordStatus.credentialStatus == null && recordStatus.status == null)
+    || Boolean(recordStatus.needsInitialRecord)
     || recordStatus?.credentialStatus === 'Inactive'
     || recordStatus?.credentialStatus === 'Unverified';
 

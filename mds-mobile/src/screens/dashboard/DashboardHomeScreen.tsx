@@ -83,9 +83,12 @@ const normalizeSentenceCase = (value: string) => {
 
 export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ navigation }) => {
   const { isDark } = useTheme();
-  const { recordStatus } = useRecordStatus();
+  const { recordStatus, isRecordLoading } = useRecordStatus();
   const { badgeCount } = useHealthChatBadge();
-  const shouldSkipAppointmentRequest = Boolean(recordStatus?.needsInitialRecord)
+  const shouldSkipProtectedRequests = isRecordLoading
+    || !recordStatus
+    || (recordStatus.credentialStatus == null && recordStatus.status == null)
+    || Boolean(recordStatus.needsInitialRecord)
     || recordStatus?.credentialStatus === 'Inactive'
     || recordStatus?.credentialStatus === 'Unverified';
 
@@ -120,9 +123,9 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
       const [profile, annList, appointment, activeTicket, medicine] = await Promise.allSettled([
         getPatientProfile(),
         fetchActiveAnnouncements(),
-        shouldSkipAppointmentRequest ? Promise.resolve(null) : getAppointmentStatus(),
-        getCurrentActiveTicket(),
-        getMedicineStatus(),
+        shouldSkipProtectedRequests ? Promise.resolve(null) : getAppointmentStatus(),
+        shouldSkipProtectedRequests ? Promise.resolve(null) : getCurrentActiveTicket(),
+        shouldSkipProtectedRequests ? Promise.resolve(null) : getMedicineStatus(),
       ]);
 
       if (profile.status === 'fulfilled') {
@@ -136,7 +139,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
         setAnnouncements([]);
       }
 
-      if (shouldSkipAppointmentRequest) {
+      if (shouldSkipProtectedRequests) {
         setAppointmentStatus(null);
       } else if (appointment.status === 'fulfilled' && appointment.value) {
         const status = appointment.value.status;
@@ -145,13 +148,17 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
         setAppointmentStatus(null);
       }
 
-      if (activeTicket.status === 'fulfilled' && activeTicket.value) {
+      if (shouldSkipProtectedRequests) {
+        setChatStatus(null);
+      } else if (activeTicket.status === 'fulfilled' && activeTicket.value) {
         setChatStatus(activeTicket.value.status || null);
       } else {
         setChatStatus(null);
       }
 
-      if (medicine.status === 'fulfilled') {
+      if (shouldSkipProtectedRequests) {
+        setMedicinePendingCount(0);
+      } else if (medicine.status === 'fulfilled') {
         setMedicinePendingCount(countPendingMedicineRequests(medicine.value || []));
       } else {
         setMedicinePendingCount(0);
@@ -159,7 +166,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
     } finally {
       setIsDataLoading(false);
     }
-  }, [shouldSkipAppointmentRequest]);
+  }, [shouldSkipProtectedRequests]);
 
   useEffect(() => {
     loadDashboardData();

@@ -341,6 +341,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         value={formData.password}
         onChangeText={(value) => handleInputChange('password', value)}
         secureTextEntry
+        showPasswordToggle
         editable={!loading}
       />
 
@@ -350,6 +351,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         value={formData.confirmPassword}
         onChangeText={(value) => handleInputChange('confirmPassword', value)}
         secureTextEntry
+        showPasswordToggle
         editable={!loading}
       />
 

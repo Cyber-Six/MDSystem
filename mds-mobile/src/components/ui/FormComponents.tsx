@@ -22,15 +22,20 @@ import { useTheme, colors } from '../../context/ThemeContext';
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
+  showPasswordToggle?: boolean;
 }
 
 export const Input: React.FC<InputProps> = ({ 
   label, 
   error, 
   style,
+  showPasswordToggle = false,
+  secureTextEntry,
   ...props 
 }) => {
   const { isDark } = useTheme();
+  const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
+  const shouldShowPasswordToggle = showPasswordToggle && !!secureTextEntry;
 
   return (
     <View style={styles.inputContainer}>
@@ -42,21 +47,40 @@ export const Input: React.FC<InputProps> = ({
           {label}
         </Text>
       )}
-      <TextInput
-        style={[
-          styles.input,
-          {
-            backgroundColor: isDark ? colors.neutral[800] : colors.neutral[50],
-            color: isDark ? colors.neutral[100] : colors.secondary[900],
-            borderColor: error 
-              ? colors.error[500] 
-              : isDark ? colors.neutral[600] : colors.neutral[300],
-          },
-          style
-        ]}
-        placeholderTextColor={isDark ? colors.neutral[400] : colors.neutral[400]}
-        {...props}
-      />
+      <View style={styles.inputWrapper}>
+        <TextInput
+          style={[
+            styles.input,
+            shouldShowPasswordToggle && styles.inputWithIcon,
+            {
+              backgroundColor: isDark ? colors.neutral[800] : colors.neutral[50],
+              color: isDark ? colors.neutral[100] : colors.secondary[900],
+              borderColor: error 
+                ? colors.error[500] 
+                : isDark ? colors.neutral[600] : colors.neutral[300],
+            },
+            style
+          ]}
+          placeholderTextColor={isDark ? colors.neutral[400] : colors.neutral[400]}
+          secureTextEntry={shouldShowPasswordToggle ? !isPasswordVisible : secureTextEntry}
+          {...props}
+        />
+        {shouldShowPasswordToggle && (
+          <TouchableOpacity
+            onPress={() => setIsPasswordVisible((prev) => !prev)}
+            style={styles.inputIconButton}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={isPasswordVisible ? 'Hide password' : 'Show password'}
+          >
+            <Ionicons
+              name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={isDark ? colors.neutral[400] : colors.neutral[500]}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
       {error && (
         <Text style={styles.errorText}>{error}</Text>
       )}
@@ -283,6 +307,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     fontSize: 16,
     borderWidth: 1,
+  },
+  inputWrapper: {
+    position: 'relative',
+    width: '100%',
+  },
+  inputWithIcon: {
+    paddingRight: 48,
+  },
+  inputIconButton: {
+    position: 'absolute',
+    right: 14,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorText: {
     color: colors.error[500],
