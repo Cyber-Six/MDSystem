@@ -5,7 +5,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal, FlatList,
-  StyleSheet, Pressable, Keyboard, ActivityIndicator, Animated, Easing, useWindowDimensions,
+  StyleSheet, Pressable, Keyboard, ActivityIndicator, Animated, Easing, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
@@ -65,6 +65,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const [programSuggestions, setProgramSuggestions] = useState<Array<{ id: string; label: string }>>([]);
   const [programSearching, setProgramSearching] = useState(false);
   const [programSearchFocused, setProgramSearchFocused] = useState(false);
+  const [programKeyboardHeight, setProgramKeyboardHeight] = useState(0);
   const collapsedPanelHeight = Math.min(Math.max(windowHeight * 0.42, 300), windowHeight * 0.66);
   const expandedPanelHeight = Math.min(Math.max(windowHeight * 0.78, 470), windowHeight * 0.9);
   const programPanelHeight = useRef(new Animated.Value(collapsedPanelHeight)).current;
@@ -96,6 +97,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
   const closeProgramModal = useCallback(() => {
     Keyboard.dismiss();
+    setProgramKeyboardHeight(0);
     setProgramSearchFocused(false);
     setProgramOpen(false);
   }, []);
@@ -110,12 +112,30 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const openProgramModal = useCallback(() => {
     // Keep keyboard closed until user explicitly focuses the search box.
     Keyboard.dismiss();
+    setProgramKeyboardHeight(0);
     setProgramSearch('');
     setProgramSuggestions([]);
     setProgramSearchFocused(false);
     programPanelHeight.setValue(collapsedPanelHeight);
     setProgramOpen(true);
   }, [collapsedPanelHeight, programPanelHeight]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
+      if (!programOpen) return;
+      setProgramKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setProgramKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [programOpen]);
 
   useEffect(() => {
     return () => {
@@ -328,6 +348,9 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
                   height: programPanelHeight,
                   backgroundColor: isDark ? colors.neutral[800] : '#FFF',
                 },
+                Platform.OS === 'android' && programKeyboardHeight > 0
+                  ? { transform: [{ translateY: programKeyboardHeight }] }
+                  : null,
               ]}
             >
               <Pressable
