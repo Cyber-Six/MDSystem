@@ -573,11 +573,11 @@ VALUES
 ('Dental Consultation', 'Casal', 63, 20, 15, 'Weekly dental consultation, Mon-Sat', true, false, false),
 ('Dental Consultation', 'QuezonCity', 63, 25, 20, 'Weekly dental consultation, Mon-Sat', true, false, false);
 
-INSERT INTO "Announcement" (title, content, pubmat, "isActive")
+INSERT INTO "Announcement" (title, content, "isActive")
 VALUES
-('System Maintenance Notice', 'The system will be down for maintenance on Saturday, 10:00 PM - 12:00 AM.', 'd6067d73-64e3-4b1a-a593-5a80b70c9120', true),
-('New Feature Release: Patient Portal', 'We are excited to announce the launch of our new patient portal, allowing you to easily access your medical records and appointments online.', 'a1f5c8e2-3b9d-4c2e-9f8a-7b6d5c4e3f21', true),
-('COVID-19 Vaccination Drive', 'Join us for our upcoming COVID-19 vaccination drive on Friday, 9:00 AM - 4:00 PM at all branches. Walk-ins welcome!', 'c3e8f9a1-2d4b-4e5f-8a7c-6b5d4e3f2a10', true);
+('System Maintenance Notice', 'The system will be down for maintenance on Saturday, 10:00 PM - 12:00 AM.', true),
+('New Feature Release: Patient Portal', 'We are excited to announce the launch of our new patient portal, allowing you to easily access your medical records and appointments online.', true),
+('COVID-19 Vaccination Drive', 'Join us for our upcoming COVID-19 vaccination drive on Friday, 9:00 AM - 4:00 PM at all branches. Walk-ins welcome!', true);
 
 INSERT INTO "rolesTable" (label, data)
 VALUES
@@ -688,7 +688,7 @@ VALUES
   ('Teaching Certificate Program');
 
 
-CREATE INDEX ON "UsersPersonal"(identifier text_pattern_ops);
+CREATE INDEX ON "UsersPersonal"(identifier);
 
 CREATE INDEX ON "UsersPersonal"(identifier);
 

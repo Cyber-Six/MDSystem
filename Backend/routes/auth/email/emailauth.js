@@ -17,6 +17,8 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
+const recaptchaTestMode = process.env.RECAPTCHA_TEST_MODE === 'true';
+
 const router = express.Router();
 
 function isValidOtpPurpose(purpose) {
@@ -27,17 +29,17 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     const { email, recaptchaToken } = req.body;
     const purpose = req.params.purpose.toLowerCase();
     
-    // ✅ Validate perform
+    // ✅ Validate purpose
     if (!isValidOtpPurpose(purpose)) {
         return res.status(400).json({
         error: "INVALID_PERFORM_ACTION",
-        message: "Perform must be either 'verification' or '2fa'."
+        message: "Purpose must be either 'verification' or '2fa'."
         });
     }
 
     // ✅ Required fields
     // For the login 2FA flow, reCAPTCHA was already verified at the login endpoint
-    if (!email || (purpose !== '2fa' && !recaptchaToken)) {
+    if (!email || (purpose !== '2fa' && !recaptchaToken && !recaptchaTestMode )) {
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Email and reCAPTCHA token are required."
