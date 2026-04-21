@@ -22,18 +22,30 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const { isDark } = useTheme();
 
   return (
-    <View className="bg-white dark:bg-secondary-800 rounded-2xl p-6 items-center border border-neutral-200 dark:border-secondary-700 border-dashed mb-3">
+    <View
+      className="rounded-2xl p-6 items-center border border-dashed mb-3"
+      style={{
+        backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+        borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+      }}
+    >
       <Icon
         size={32}
         color={isDark ? colors.secondary[600] : colors.neutral[300]}
       />
 
-      <Text className="text-[14px] font-semibold text-secondary-600 dark:text-secondary-400 text-center mt-3">
+      <Text
+        className="text-[14px] font-semibold text-center mt-3"
+        style={{ color: isDark ? colors.secondary[400] : colors.secondary[600] }}
+      >
         {message}
       </Text>
 
       {subMessage ? (
-        <Text className="text-[12px] text-secondary-400 dark:text-secondary-500 text-center mt-1 mb-4">
+        <Text
+          className="text-[12px] text-center mt-1 mb-4"
+          style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }}
+        >
           {subMessage}
         </Text>
       ) : null}
@@ -45,7 +57,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
         >
-          <Text className="text-[13px] font-semibold text-secondary-900">{actionLabel}</Text>
+          <Text className="text-[13px] font-semibold" style={{ color: colors.secondary[900] }}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </View>

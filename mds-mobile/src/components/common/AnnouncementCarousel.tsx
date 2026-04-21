@@ -45,8 +45,12 @@ export const AnnouncementCarousel: React.FC<AnnouncementCarouselProps> = ({ item
         ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
         renderItem={({ item }) => (
           <TouchableOpacity
-            className="bg-white dark:bg-secondary-800 rounded-2xl overflow-hidden border border-neutral-200 dark:border-secondary-700"
-            style={{ width: cardWidth }}
+            className="rounded-2xl overflow-hidden border"
+            style={{
+              width: cardWidth,
+              backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+              borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+            }}
             onPress={item.onPress}
             activeOpacity={0.85}
             accessibilityRole={item.onPress ? 'button' : undefined}
@@ -58,7 +62,10 @@ export const AnnouncementCarousel: React.FC<AnnouncementCarouselProps> = ({ item
             ) : item.imageUri ? (
               <Image source={{ uri: item.imageUri }} className="w-full h-36" resizeMode="cover" />
             ) : (
-              <View className="w-full h-36 bg-primary-50 dark:bg-secondary-700 items-center justify-center">
+              <View
+                className="w-full h-36 items-center justify-center"
+                style={{ backgroundColor: isDark ? colors.secondary[700] : colors.primary[50] }}
+              >
                 <Ionicons
                   name="megaphone-outline"
                   size={36}
@@ -69,20 +76,25 @@ export const AnnouncementCarousel: React.FC<AnnouncementCarouselProps> = ({ item
 
             <View className="p-3">
               <Text
-                className="text-[14px] font-semibold text-secondary-800 dark:text-neutral-100"
+                className="text-[14px] font-semibold"
+                style={{ color: isDark ? colors.neutral[100] : colors.secondary[800] }}
                 numberOfLines={2}
               >
                 {item.title}
               </Text>
 
               <Text
-                className="text-[12px] text-secondary-400 dark:text-secondary-500 mt-1"
+                className="text-[12px] mt-1"
+                style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }}
                 numberOfLines={2}
               >
                 {item.body}
               </Text>
 
-              <Text className="text-[11px] text-primary-600 dark:text-primary-400 mt-2 font-medium">
+              <Text
+                className="text-[11px] mt-2 font-medium"
+                style={{ color: isDark ? colors.primary[400] : colors.primary[600] }}
+              >
                 Tap to view full details
               </Text>
             </View>

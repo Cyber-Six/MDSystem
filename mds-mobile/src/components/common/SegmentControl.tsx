@@ -1,5 +1,6 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { useTheme, colors } from '../../context/ThemeContext';
 
 type SegmentOption<T extends string> = {
   value: T;
@@ -19,8 +20,13 @@ export function SegmentControl<T extends string>({
   onChange,
   className = 'mx-4 mb-4',
 }: SegmentControlProps<T>) {
+  const { isDark } = useTheme();
+
   return (
-    <View className={`flex-row bg-neutral-100 dark:bg-secondary-700 rounded-xl p-1 ${className}`}>
+    <View
+      className={`flex-row rounded-xl p-1 ${className}`}
+      style={{ backgroundColor: isDark ? colors.secondary[700] : colors.neutral[100] }}
+    >
       {options.map((opt) => {
         const selected = value === opt.value;
 
@@ -28,12 +34,20 @@ export function SegmentControl<T extends string>({
           <TouchableOpacity
             key={opt.value}
             onPress={() => onChange(opt.value)}
-            className={`flex-1 py-2 rounded-lg items-center min-h-[40px] justify-center ${selected ? 'bg-white dark:bg-secondary-600' : ''}`}
+            className="flex-1 py-2 rounded-lg items-center min-h-[40px] justify-center"
+            style={selected
+              ? { backgroundColor: isDark ? colors.secondary[600] : '#FFFFFF' }
+              : undefined}
             accessibilityRole="button"
             accessibilityLabel={opt.label}
           >
             <Text
-              className={`text-[13px] font-semibold ${selected ? 'text-secondary-800 dark:text-neutral-100' : 'text-secondary-400 dark:text-secondary-500'}`}
+              className="text-[13px] font-semibold"
+              style={{
+                color: selected
+                  ? (isDark ? colors.neutral[100] : colors.secondary[800])
+                  : (isDark ? colors.secondary[500] : colors.secondary[400]),
+              }}
             >
               {opt.label}
             </Text>

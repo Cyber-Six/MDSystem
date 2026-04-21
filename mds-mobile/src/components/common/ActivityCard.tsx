@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { BadgeVariant } from './Badge';
-import { colors } from '../../context/ThemeContext';
+import { useTheme, colors } from '../../context/ThemeContext';
 
 type IconType = React.ComponentType<{ size: number; color: string }>;
 
@@ -45,10 +45,16 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   badge,
   onPress,
 }) => {
+  const { isDark } = useTheme();
+
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="flex-row items-center bg-white dark:bg-secondary-800 rounded-2xl p-4 border border-neutral-200 dark:border-secondary-700 mb-2.5 min-h-[68px]"
+      className="flex-row items-center rounded-2xl p-4 border mb-2.5 min-h-[68px]"
+      style={{
+        backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+        borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+      }}
       accessibilityRole={onPress ? 'button' : undefined}
       disabled={!onPress}
     >
@@ -57,17 +63,30 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
       </View>
 
       <View className="flex-1">
-        <Text className="text-[14px] font-semibold text-secondary-800 dark:text-neutral-100" numberOfLines={1}>
+        <Text
+          className="text-[14px] font-semibold"
+          style={{ color: isDark ? colors.neutral[100] : colors.secondary[800] }}
+          numberOfLines={1}
+        >
           {title}
         </Text>
-        <Text className="text-[12px] text-secondary-400 dark:text-secondary-500 mt-0.5" numberOfLines={1}>
+        <Text
+          className="text-[12px] mt-0.5"
+          style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }}
+          numberOfLines={1}
+        >
           {subtitle}
         </Text>
       </View>
 
       <View className="items-end gap-1 flex-shrink-0 ml-2">
         {timeAgo ? (
-          <Text className="text-[11px] text-secondary-300 dark:text-secondary-600">{timeAgo}</Text>
+          <Text
+            className="text-[11px]"
+            style={{ color: isDark ? colors.secondary[600] : colors.secondary[300] }}
+          >
+            {timeAgo}
+          </Text>
         ) : null}
 
         {badge ? (

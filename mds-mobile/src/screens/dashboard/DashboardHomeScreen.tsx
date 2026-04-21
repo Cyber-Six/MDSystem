@@ -303,7 +303,11 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
   }, [announcements]);
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-50 dark:bg-secondary-900" edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }}
+      edges={['top', 'left', 'right']}
+    >
       <TopBar
         title={`Welcome back, ${firstName}`}
         onMenuPress={() => toggleAppDrawer(navigation)}
@@ -324,17 +328,21 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
       >
         <View className="px-4 pt-4">
           <View className="mb-5">
-            <Text className="text-[26px] font-bold text-secondary-900 dark:text-neutral-50">
+            <Text className="text-[26px] font-bold" style={{ color: isDark ? colors.neutral[50] : colors.secondary[900] }}>
               {greetingByTime()}, {firstName}
             </Text>
-            <Text className="text-[14px] text-secondary-400 dark:text-secondary-500 mt-1">
+            <Text className="text-[14px] mt-1" style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }}>
               Here's your health summary
             </Text>
           </View>
 
           {isAwaitingInitialApproval ? (
             <TouchableOpacity
-              className="bg-primary-50 dark:bg-secondary-800 rounded-2xl border border-primary-200 dark:border-secondary-700 p-4 mb-5"
+              className="rounded-2xl border p-4 mb-5"
+              style={{
+                backgroundColor: isDark ? colors.secondary[800] : colors.primary[50],
+                borderColor: isDark ? colors.secondary[700] : colors.primary[200],
+              }}
               onPress={() => navigation.navigate('Records')}
               accessibilityRole="button"
               accessibilityLabel="View record approval status"
@@ -345,10 +353,10 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
                 </View>
 
                 <View className="flex-1">
-                  <Text className="text-[14px] font-semibold text-secondary-800 dark:text-neutral-100">
+                  <Text className="text-[14px] font-semibold" style={{ color: isDark ? colors.neutral[100] : colors.secondary[800] }}>
                     Initial record submitted - waiting for approval
                   </Text>
-                  <Text className="text-[12px] text-secondary-500 dark:text-secondary-400 mt-1 leading-5">
+                  <Text className="text-[12px] mt-1 leading-5" style={{ color: isDark ? colors.secondary[400] : colors.secondary[500] }}>
                     Please wait for clinic staff verification. You will be notified once your record is approved.
                   </Text>
                 </View>
@@ -388,7 +396,11 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
           <SectionLabel title="Upcoming" />
           {appointmentStatus ? (
             <TouchableOpacity
-              className="bg-white dark:bg-secondary-800 rounded-2xl border border-neutral-200 dark:border-secondary-700 p-4 mb-1"
+              className="rounded-2xl border p-4 mb-1"
+              style={{
+                backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+                borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+              }}
               onPress={() => navigation.navigate('Appointments')}
               accessibilityRole="button"
               accessibilityLabel="View upcoming appointment"
@@ -400,17 +412,17 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({ naviga
                   </View>
 
                   <View className="flex-1">
-                    <Text className="text-[14px] font-semibold text-secondary-800 dark:text-neutral-100" numberOfLines={1}>
+                    <Text className="text-[14px] font-semibold" style={{ color: isDark ? colors.neutral[100] : colors.secondary[800] }} numberOfLines={1}>
                       Upcoming appointment
                     </Text>
-                    <Text className="text-[12px] text-secondary-400 dark:text-secondary-500 mt-0.5" numberOfLines={1}>
+                    <Text className="text-[12px] mt-0.5" style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }} numberOfLines={1}>
                       Status: {appointmentStatus}
                     </Text>
                   </View>
                 </View>
 
-                <View className="px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-800 ml-3">
-                  <Text className="text-[10px] font-semibold text-primary-800 dark:text-primary-100">Upcoming</Text>
+                <View className="px-2 py-0.5 rounded-full ml-3" style={{ backgroundColor: isDark ? colors.primary[800] : colors.primary[100] }}>
+                  <Text className="text-[10px] font-semibold" style={{ color: isDark ? colors.primary[100] : colors.primary[800] }}>Upcoming</Text>
                 </View>
               </View>
             </TouchableOpacity>

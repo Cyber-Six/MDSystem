@@ -481,6 +481,7 @@ export const MedicineRequestScreen: React.FC = () => {
         options={segmentOptions}
         value={view}
         onChange={(next) => setView(next as 'form' | 'status')}
+        className="mx-4 mt-3 mb-4"
       />
 
       {/* ── Form View ──────────────────────────────────────────────────── */}

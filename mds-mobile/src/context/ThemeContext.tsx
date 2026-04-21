@@ -59,8 +59,9 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       : themeMode;
 
   useEffect(() => {
-    setColorScheme(themeMode);
-  }, [themeMode, setColorScheme]);
+    // NativeWind expects the resolved color scheme, not the preference mode.
+    setColorScheme(theme);
+  }, [theme, setColorScheme]);
 
   const isDark = theme === 'dark';
 

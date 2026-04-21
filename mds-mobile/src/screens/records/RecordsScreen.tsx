@@ -149,38 +149,54 @@ export const RecordsScreen: React.FC<RecordsScreenProps> = ({ navigation }) => {
   const ticketLabel = normalizeStatusLabel(ticketStatus?.status || recordStatus?.status);
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-50 dark:bg-secondary-900" edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }}
+      edges={['top', 'left', 'right']}
+    >
       <TopBar title="Records" onMenuPress={() => toggleAppDrawer(navigation)} />
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }}>
         <View className="px-4 pt-4">
-          <View className="bg-white dark:bg-secondary-800 rounded-2xl border border-neutral-200 dark:border-secondary-700 p-4">
-            <Text className="text-[16px] font-semibold text-secondary-900 dark:text-neutral-50">
+          <View
+            className="rounded-2xl border p-4"
+            style={{
+              backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+              borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+            }}
+          >
+            <Text className="text-[16px] font-semibold" style={{ color: isDark ? colors.neutral[50] : colors.secondary[900] }}>
               Health record overview
             </Text>
-            <Text className="text-[13px] text-secondary-400 dark:text-secondary-500 mt-1">
+            <Text className="text-[13px] mt-1" style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }}>
               Review your current record status and start a new update when needed.
             </Text>
           </View>
 
           <SectionLabel title="Current Status" style="mt-6" />
-          <View className="bg-white dark:bg-secondary-800 rounded-2xl border border-neutral-200 dark:border-secondary-700 p-4 gap-4">
+          <View
+            className="rounded-2xl border p-4 gap-4"
+            style={{
+              backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+              borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+            }}
+          >
             <View className="flex-row items-center justify-between">
-              <Text className="text-[13px] text-secondary-500 dark:text-secondary-400">Credential</Text>
+              <Text className="text-[13px]" style={{ color: isDark ? colors.secondary[400] : colors.secondary[500] }}>Credential</Text>
               <Badge label={credentialLabel} variant={getCredentialBadgeVariant(recordStatus?.credentialStatus)} />
             </View>
 
-            <View className="h-[0.5px] bg-neutral-200 dark:bg-secondary-700" />
+            <View className="h-[0.5px]" style={{ backgroundColor: isDark ? colors.secondary[700] : colors.neutral[200] }} />
 
             <View className="flex-row items-center justify-between">
-              <Text className="text-[13px] text-secondary-500 dark:text-secondary-400">Update ticket</Text>
+              <Text className="text-[13px]" style={{ color: isDark ? colors.secondary[400] : colors.secondary[500] }}>Update ticket</Text>
               <Badge label={ticketLabel} variant={getTicketBadgeVariant(ticketStatus?.status || recordStatus?.status)} />
             </View>
 
-            <View className="h-[0.5px] bg-neutral-200 dark:bg-secondary-700" />
+            <View className="h-[0.5px]" style={{ backgroundColor: isDark ? colors.secondary[700] : colors.neutral[200] }} />
 
             <View className="flex-row items-center justify-between">
-              <Text className="text-[13px] text-secondary-500 dark:text-secondary-400">Record access</Text>
+              <Text className="text-[13px]" style={{ color: isDark ? colors.secondary[400] : colors.secondary[500] }}>Record access</Text>
               <Badge
                 label={recordStatus?.needsInitialRecord ? 'Locked' : 'Unlocked'}
                 variant={recordStatus?.needsInitialRecord ? 'warning' : 'success'}
@@ -191,9 +207,15 @@ export const RecordsScreen: React.FC<RecordsScreenProps> = ({ navigation }) => {
           <SectionLabel title="Recent Activity" style="mt-6" />
 
           {isLoadingTicket ? (
-            <View className="bg-white dark:bg-secondary-800 rounded-2xl border border-neutral-200 dark:border-secondary-700 p-6 items-center">
+            <View
+              className="rounded-2xl border p-6 items-center"
+              style={{
+                backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+                borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+              }}
+            >
               <ActivityIndicator size="small" color={colors.primary[500]} />
-              <Text className="text-[12px] text-secondary-400 dark:text-secondary-500 mt-2">
+              <Text className="text-[12px] mt-2" style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }}>
                 Loading record activity...
               </Text>
             </View>
@@ -222,8 +244,11 @@ export const RecordsScreen: React.FC<RecordsScreenProps> = ({ navigation }) => {
 
       <TouchableOpacity
         onPress={() => navigation.navigate('UpdateRecordChoice')}
-        className="absolute right-5 bg-primary-500 rounded-full px-5 min-h-[52px] flex-row items-center justify-center gap-1"
-        style={{ bottom: Math.max(insets.bottom + 68, 90) }}
+        className="absolute bg-primary-500 rounded-full px-5 min-h-[52px] flex-row items-center justify-center gap-1"
+        style={{
+          right: 10,
+          bottom: Math.max(insets.bottom - 16, 2),
+        }}
         accessibilityRole="button"
         accessibilityLabel="Start record update"
       >

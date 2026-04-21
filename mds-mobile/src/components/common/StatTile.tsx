@@ -51,7 +51,11 @@ export const StatTile: React.FC<StatTileProps> = ({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="flex-1 bg-white dark:bg-secondary-800 rounded-2xl p-3 border border-neutral-200 dark:border-secondary-700 items-center justify-center min-h-[90px]"
+      className="flex-1 rounded-2xl p-3 border items-center justify-center min-h-[90px]"
+      style={{
+        backgroundColor: isDark ? colors.secondary[800] : '#FFFFFF',
+        borderColor: isDark ? colors.secondary[700] : colors.neutral[200],
+      }}
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={`${label}: ${resolvedCount}`}
       disabled={!onPress}
@@ -65,10 +69,16 @@ export const StatTile: React.FC<StatTileProps> = ({
       ) : (
         <>
           <Icon size={22} color={isDark ? colors.primary[400] : colors.primary[600]} />
-          <Text className="text-[22px] font-bold text-secondary-800 dark:text-neutral-100 leading-tight mt-1">
+          <Text
+            className="text-[22px] font-bold leading-tight mt-1"
+            style={{ color: isDark ? colors.neutral[100] : colors.secondary[800] }}
+          >
             {resolvedCount}
           </Text>
-          <Text className="text-[11px] text-secondary-400 dark:text-secondary-500 text-center">
+          <Text
+            className="text-[11px] text-center"
+            style={{ color: isDark ? colors.secondary[500] : colors.secondary[400] }}
+          >
             {label}
           </Text>
 
