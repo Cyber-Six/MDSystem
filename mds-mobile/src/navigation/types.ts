@@ -17,7 +17,6 @@ export type RecordsStackParamList = {
 };
 
 export type MoreStackParamList = {
-  MoreMenu: undefined;
   Profile: undefined;
   MedicineRequest: undefined;
   MyDocuments: undefined;

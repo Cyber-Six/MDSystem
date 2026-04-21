@@ -36,7 +36,7 @@ export function SegmentControl<T extends string>({
             onPress={() => onChange(opt.value)}
             className="flex-1 py-2 rounded-lg items-center min-h-[40px] justify-center"
             style={selected
-              ? { backgroundColor: isDark ? colors.secondary[600] : '#FFFFFF' }
+              ? { backgroundColor: colors.primary[500] }
               : undefined}
             accessibilityRole="button"
             accessibilityLabel={opt.label}
@@ -45,7 +45,7 @@ export function SegmentControl<T extends string>({
               className="text-[13px] font-semibold"
               style={{
                 color: selected
-                  ? (isDark ? colors.neutral[100] : colors.secondary[800])
+                  ? '#FFFFFF'
                   : (isDark ? colors.secondary[500] : colors.secondary[400]),
               }}
             >

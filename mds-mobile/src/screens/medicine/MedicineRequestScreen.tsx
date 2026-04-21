@@ -35,8 +35,6 @@ import { useBanner } from '../../context/BannerContext';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import { TopBar } from '../../components/layout/TopBar';
 import { SegmentControl } from '../../components/common/SegmentControl';
-import { FieldLabel } from '../../components/common/InputField';
-import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { getPatientProfile } from '../../services/profile-service';
 import {
   BRANCHES,
@@ -128,6 +126,7 @@ export const MedicineRequestScreen: React.FC = () => {
   const latestPendingRequest = pendingRequests[0] ?? null;
   const hasPendingRequest = pendingRequests.length > 0;
   const isFormValid = Boolean(purpose.trim()) && Boolean(location) && selectedCodes.size > 0;
+  const isSubmitDisabled = !isFormValid;
 
   const segmentOptions = useMemo(
     () => [
@@ -242,8 +241,11 @@ export const MedicineRequestScreen: React.FC = () => {
         } else if (prefix === 'm') {
           // Main campus — can choose Arlegui or Casal
           setAllowedBranches(BRANCHES.filter((b) => b.value !== 'QuezonCity'));
+          setLocation('Casal');
+        } else {
+          setAllowedBranches(BRANCHES);
+          setLocation('Casal');
         }
-        // else: unknown prefix → show all branches
       })
       .catch(() => {})
       .finally(() => setIsProfileLoading(false));
@@ -377,10 +379,7 @@ export const MedicineRequestScreen: React.FC = () => {
       setRequests((prev) => [result, ...prev]);
       showBanner({ type: 'success', message: 'Medicine request submitted successfully!' });
       setPurpose('');
-      if (emailPrefix !== 'q') setLocation('');
       setSelectedCodes(new Set());
-      setMedicines([]);
-      setGrouped([]);
     } catch (err: any) {
       showError(err.message || 'Failed to submit request.');
     } finally {
@@ -570,7 +569,10 @@ export const MedicineRequestScreen: React.FC = () => {
 
           {/* Purpose (Chief Complaint) */}
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-            <FieldLabel label="Purpose" required />
+            <View style={styles.fieldLabelRow}>
+              <Text style={[styles.fieldLabelText, { color: isDark ? '#FFFFFF' : colors.secondary[700] }]}>Purpose</Text>
+              <Text style={styles.requiredAsterisk}>*</Text>
+            </View>
             <TextInput
               style={[
                 styles.textArea,
@@ -613,7 +615,10 @@ export const MedicineRequestScreen: React.FC = () => {
 
           {/* Branch Selection — uses allowedBranches from email detection */}
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-            <FieldLabel label="Branch" required />
+            <View style={styles.fieldLabelRow}>
+              <Text style={[styles.fieldLabelText, { color: isDark ? '#FFFFFF' : colors.secondary[700] }]}>Branch</Text>
+              <Text style={styles.requiredAsterisk}>*</Text>
+            </View>
             {isProfileLoading ? (
               <ActivityIndicator size="small" color={colors.primary[500]} />
             ) : (
@@ -723,12 +728,29 @@ export const MedicineRequestScreen: React.FC = () => {
             </Text>
           </View>
 
-          <PrimaryButton
-            label="Submit request"
+          <TouchableOpacity
+            style={[
+              styles.submitButton,
+              {
+                opacity: submitting ? 0.85 : 1,
+                backgroundColor: isSubmitDisabled
+                  ? (isDark ? 'rgba(241,197,38,0.42)' : 'rgba(241,197,38,0.55)')
+                  : colors.primary[500],
+              },
+            ]}
             onPress={handleSubmit}
-            loading={submitting}
-            disabled={!isFormValid}
-          />
+            disabled={isSubmitDisabled || submitting}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Submit request"
+            accessibilityState={{ disabled: isSubmitDisabled || submitting }}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={[styles.submitButtonText, { opacity: isSubmitDisabled ? 0.75 : 1 }]}>Submit request</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       ) : (
         /* ── Status View ──────────────────────────────────────────────── */
@@ -984,6 +1006,9 @@ const styles = StyleSheet.create({
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
 
   label: { fontSize: 15, fontWeight: '600', marginBottom: 10 },
+  fieldLabelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  fieldLabelText: { fontSize: 13, fontWeight: '600' },
+  requiredAsterisk: { color: colors.error[500], marginLeft: 4, fontSize: 13 },
 
   textArea: {
     borderWidth: 1,
@@ -1027,15 +1052,15 @@ const styles = StyleSheet.create({
 
   // Submit
   submitButton: {
-    backgroundColor: colors.primary[500],
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 11,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
+    minHeight: 46,
   },
-  submitButtonText: { color: colors.secondary[900], fontWeight: '600', fontSize: 16 },
+  submitButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
 
   // Status
   statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
