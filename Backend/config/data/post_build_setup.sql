@@ -695,3 +695,6 @@ CREATE INDEX ON "UsersPersonal"(identifier);
 CREATE INDEX ON "UsersPersonalLog"(user_id, created_at DESC);
 
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
+
+ALTER TABLE "rolesMap"
+ADD CONSTRAINT rolesmap_unique UNIQUE ("personnelId", "rolesId");
