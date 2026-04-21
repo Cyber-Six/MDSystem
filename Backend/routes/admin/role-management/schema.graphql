@@ -238,6 +238,10 @@ type PatientDeletionCandidate {
   updatedAt: String
   eligibleAfter: String
   eligible: Boolean!
+  isMedicalPersonnel: Boolean!
+  deletionMode: String!
+  blocked: Boolean!
+  blockedReason: String
 }
 
 type PatientDeletionCandidatePage {
