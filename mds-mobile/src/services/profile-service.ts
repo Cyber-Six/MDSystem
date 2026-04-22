@@ -17,6 +17,11 @@ export interface PatientProfile {
   secondEmergencyContactNumber: string | null;
   identifier: string | null;
   identity: PatientIdentity | null;
+  // Student / Employee profile data from EMR
+  profileType: 'StudentProfile' | 'EmployeeProfile' | null;
+  yearLevel: string | null;
+  program: string | null;
+  department: string | null;
 }
 
 let _cache: PatientProfile | null = null;
@@ -79,10 +84,15 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       { endpoint: '/profile/patient' },
     ),
     sendGraphQLRequest(
-      `query GetEmergencyContact {
+      `query GetPatientEMRData {
         emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
+        }
+        myProfile: getMyProfile {
+          __typename
+          ... on StudentProfile { program year }
+          ... on EmployeeProfile { department }
         }
       }`,
       {},
@@ -104,7 +114,7 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       : null;
 
   if (emergencyResult.status === 'rejected') {
-    console.warn('[Profile Service] Active emergency contact fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
+    console.warn('[Profile Service] EMR data fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
   }
 
   const log = (profileData as any)?.personalLog || {};
@@ -116,6 +126,9 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       ? (emergencyData as any).emergencyContacts[0]
       : null) ||
     null;
+
+  const myProfile = (emergencyData as any)?.myProfile || null;
+  const profileTypeName: string | null = myProfile?.__typename || null;
 
   const nameParts = [
     sanitizeDisplayValue(log.first_name),
@@ -139,6 +152,12 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     secondEmergencyContactNumber: extractContactNumber(latestEmergency?.secondContact),
     identifier: sanitizeDisplayValue((profileData as any)?.personalRecord?.identifier),
     identity,
+    profileType: (profileTypeName === 'StudentProfile' || profileTypeName === 'EmployeeProfile')
+      ? (profileTypeName as 'StudentProfile' | 'EmployeeProfile')
+      : null,
+    yearLevel: profileTypeName === 'StudentProfile' ? sanitizeDisplayValue(myProfile?.year) : null,
+    program: profileTypeName === 'StudentProfile' ? sanitizeDisplayValue(myProfile?.program) : null,
+    department: profileTypeName === 'EmployeeProfile' ? sanitizeDisplayValue(myProfile?.department) : null,
   };
 
   return _cache;

@@ -39,7 +39,7 @@ const ActiveAppointmentCard = ({ appointment, onCancel, cancelling }) => {
           <div className="flex items-center justify-between">
             <span className="text-sm text-neutral-600 dark:text-neutral-400">Session:</span>
             <span className="text-sm font-medium text-neutral-900 dark:text-white">
-              {session === SESSION.MORNING ? 'Morning (8:00 AM - 12:00 PM)' : 'Afternoon (1:00 PM - 5:00 PM)'}
+              {session === SESSION.MORNING ? 'Morning (7:30 AM - 11:30 AM)' : 'Afternoon (1:00 PM - 4:00 PM)'}
             </span>
           </div>
         )}

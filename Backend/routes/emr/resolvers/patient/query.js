@@ -26,6 +26,14 @@ const Query = {
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
 
+  // Returns the most recent profile record of any status — used by profile display components
+  // to show the patient's year level / program / department without requiring an active form.
+  getMyProfile: async (_, __, { user, res }) => {
+    const result = await Wrapper._getUserProfile(_, { userId: user.id, offset: 0, limit: 1, statuses: null }, { user, res });
+    if (result.length === 0) return null;
+    return result[0];
+  },
+
 
   getDentalPhotoRecord: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserDentalPhotoRecord(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });

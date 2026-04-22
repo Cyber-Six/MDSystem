@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Phone, UserCircle, IdCard } from 'lucide-react';
+import { User, Mail, Phone, UserCircle, IdCard, GraduationCap, Briefcase } from 'lucide-react';
 import Modal from '@core/components/modals/modal';
 import { getPatientProfile } from '@core/services/emr-service';
+import { formatYearLevel } from '../../utils/format-year-level';
 
 const ProfileModal = ({ isOpen, onClose }) => {
   const [userProfile, setUserProfile] = useState(null);
@@ -44,6 +45,12 @@ const ProfileModal = ({ isOpen, onClose }) => {
     </div>
   );
 
+  const isStudent = userProfile?.profileType === 'StudentProfile';
+  const isEmployee = userProfile?.profileType === 'EmployeeProfile';
+  const identityLabel = isStudent ? 'Student' : isEmployee ? 'Employee' : null;
+  const yearLabel = isStudent ? formatYearLevel(userProfile?.yearLevel) : null;
+  const identifierLabel = isEmployee ? 'Employee ID' : 'Student ID';
+
   return (
     <Modal
       isOpen={isOpen}
@@ -71,9 +78,36 @@ const ProfileModal = ({ isOpen, onClose }) => {
               <h3 style={{ margin: 0, lineHeight: 1.2 }} className="text-xl font-semibold text-gray-900 dark:text-white text-center">
                 {userProfile?.name || '—'}
               </h3>
-              <p style={{ margin: 0, lineHeight: 1.2 }} className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Student
-              </p>
+              {identityLabel && (
+                <p style={{ margin: 0, lineHeight: 1.2 }} className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {identityLabel}
+                </p>
+              )}
+              {/* Student: year level + program pills */}
+              {isStudent && (yearLabel || userProfile?.program) && (
+                <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+                  {yearLabel && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-700/50">
+                      <GraduationCap className="w-3 h-3" />
+                      {yearLabel}
+                    </span>
+                  )}
+                  {userProfile?.program && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-secondary-50 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 border border-secondary-200 dark:border-neutral-600 max-w-[220px] truncate" title={userProfile.program}>
+                      {userProfile.program}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Employee: department pill */}
+              {isEmployee && userProfile?.department && (
+                <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50 max-w-[220px] truncate" title={userProfile.department}>
+                    <Briefcase className="w-3 h-3" />
+                    {userProfile.department}
+                  </span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -135,7 +169,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
                     ))}
                     <ProfileField
                       icon={IdCard}
-                      label="Student ID"
+                      label={identifierLabel}
                       value={userProfile?.identifier || '—'}
                     />
                   </>
