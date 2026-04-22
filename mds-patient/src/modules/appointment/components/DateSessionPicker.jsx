@@ -301,7 +301,7 @@ const DateSessionPicker = ({
                 </div>
                 <p className={`text-lg font-bold leading-none m-0 transition-colors duration-200 ${morningRemaining > 0 ? 'hover:text-yellow-500' : ''} text-secondary-800 dark:text-white`}>Morning</p>
               </div>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 uppercase tracking-wider m-0">8:00 AM — 12:00 PM</p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 uppercase tracking-wider m-0">7:30 AM — 11:30 AM</p>
               <p className={`text-sm font-semibold m-0 ${morningRemaining <= 0 ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}>
                 {morningRemaining <= 0 ? 'Full' : `${morningRemaining} slot${morningRemaining !== 1 ? 's' : ''} remaining`}
               </p>
@@ -322,7 +322,7 @@ const DateSessionPicker = ({
                 </div>
                 <p className={`text-lg font-bold leading-none m-0 transition-colors duration-200 ${afternoonRemaining > 0 ? 'hover:text-yellow-500' : ''} text-secondary-800 dark:text-white`}>Afternoon</p>
               </div>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 uppercase tracking-wider m-0">1:00 PM — 5:00 PM</p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 uppercase tracking-wider m-0">1:00 PM — 4:00 PM</p>
               <p className={`text-sm font-semibold m-0 ${afternoonRemaining <= 0 ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}>
                 {afternoonRemaining <= 0 ? 'Full' : `${afternoonRemaining} slot${afternoonRemaining !== 1 ? 's' : ''} remaining`}
               </p>

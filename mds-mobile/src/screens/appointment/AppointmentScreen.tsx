@@ -1036,7 +1036,7 @@ export const AppointmentScreen: React.FC = () => {
                         onPress={() => setSelectedSession(SESSION.MORNING)}
                       >
                         <Text style={[styles.sessionName, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Morning</Text>
-                        <Text style={[styles.sessionTime, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>8 AM – 12 PM</Text>
+                        <Text style={[styles.sessionTime, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>7:30 AM – 11:30 AM</Text>
                         <Text style={{ color: morningRemaining <= 0 ? colors.error[500] : colors.success[500], fontSize: 13, marginTop: 4 }}>
                           {morningRemaining <= 0 ? 'Full' : `${morningRemaining} slot${morningRemaining !== 1 ? 's' : ''}`}
                         </Text>
@@ -1066,7 +1066,7 @@ export const AppointmentScreen: React.FC = () => {
                         onPress={() => setSelectedSession(SESSION.AFTERNOON)}
                       >
                         <Text style={[styles.sessionName, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Afternoon</Text>
-                        <Text style={[styles.sessionTime, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>1 PM – 5 PM</Text>
+                        <Text style={[styles.sessionTime, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>1:00 PM – 4:00 PM</Text>
                         <Text style={{ color: afternoonRemaining <= 0 ? colors.error[500] : colors.success[500], fontSize: 13, marginTop: 4 }}>
                           {afternoonRemaining <= 0 ? 'Full' : `${afternoonRemaining} slot${afternoonRemaining !== 1 ? 's' : ''}`}
                         </Text>
@@ -1292,7 +1292,7 @@ export const AppointmentScreen: React.FC = () => {
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>Session</Text>
                     <Text style={[styles.reviewValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                      {selectedSession === SESSION.MORNING ? 'Morning (8 AM – 12 PM)' : 'Afternoon (1 PM – 5 PM)'}
+                      {selectedSession === SESSION.MORNING ? 'Morning (7:30 AM – 11:30 AM)' : 'Afternoon (1:00 PM – 4:00 PM)'}
                     </Text>
                   </View>
                   {uploadedRequirements.length > 0 && (

@@ -24,7 +24,7 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
       <div className="flex justify-between text-sm">
         <span className="text-neutral-500 dark:text-neutral-400">Session</span>
         <span className="font-medium text-neutral-900 dark:text-white">
-          {selectedSession === SESSION.MORNING ? 'Morning (8:00 AM — 12:00 PM)' : 'Afternoon (1:00 PM — 5:00 PM)'}
+          {selectedSession === SESSION.MORNING ? 'Morning (7:30 AM — 11:30 AM)' : 'Afternoon (1:00 PM — 4:00 PM)'}
         </span>
       </div>
       {requirements.length > 0 && (
