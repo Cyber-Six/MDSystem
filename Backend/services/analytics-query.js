@@ -98,6 +98,41 @@ const AGE_GROUP_ALIASES = Object.freeze({
   '41plus': '41+',
 });
 
+const STUDENT_TYPE_CANONICAL = Object.freeze([
+  'Freshman',
+  'Sophomore',
+  'Junior',
+  'Senior',
+  'Returnee',
+]);
+
+const STUDENT_TYPE_ALIASES = Object.freeze({
+  freshman: 'Freshman',
+  freshmen: 'Freshman',
+  freshmennewstudent: 'Freshman',
+  firstyear: 'Freshman',
+  year1: 'Freshman',
+  sophomore: 'Sophomore',
+  transferee: 'Sophomore',
+  secondyear: 'Sophomore',
+  year2: 'Sophomore',
+  junior: 'Junior',
+  oldstudent: 'Junior',
+  thirdyear: 'Junior',
+  year3: 'Junior',
+  senior: 'Senior',
+  fourthyear: 'Senior',
+  year4: 'Senior',
+  returnee: 'Returnee',
+});
+
+function normalizeStudentTypeValue(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!normalized) return null;
+  return STUDENT_TYPE_ALIASES[normalized] || null;
+}
+
 function normalizeAgeGroupFilterValue(value) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim().toLowerCase();
@@ -1606,6 +1641,48 @@ async function topDiagnosesBySex(branch, startDate, endDate, options = {}) {
   return { labels: topLabels, values: series[0]?.values || [], series, total, chartVariant: 'grouped-bar' };
 }
 
+/**
+ * Total student population grouped by student type.
+ * Includes canonical buckets: Freshman, Sophomore, Junior, Senior, Returnee.
+ */
+async function studentsByType(branch, startDate, endDate, options = {}) {
+  const bf = branchFilter(branch, 'up', 1);
+  const baseParams = [...bf.params];
+  const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const result = await db.query(`
+    WITH latest_student_profile AS (
+      SELECT DISTINCT ON (pul."patientId")
+        pul."patientId",
+        sp.year::text AS student_year
+      FROM "patientUpdateLog" pul
+      INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Student'
+      INNER JOIN "student_profile" sp ON sp."profileId" = pr.id
+      WHERE pul.status = 'Approved'
+        AND sp.year IS NOT NULL
+      ORDER BY pul."patientId", pul.created_at DESC
+    )
+    SELECT lsp.student_year, COUNT(DISTINCT p.id)::int AS count
+    FROM "Patients" p
+    INNER JOIN "UsersPersonal" up ON up.id = p.id
+    INNER JOIN latest_student_profile lsp ON lsp."patientId" = p.id
+    WHERE 1 = 1 ${bf.clause} ${pf.clause}
+    GROUP BY lsp.student_year
+  `, [...baseParams, ...pf.params]);
+
+  const countsByType = new Map(STUDENT_TYPE_CANONICAL.map((label) => [label, 0]));
+  for (const row of result.rows) {
+    const studentType = normalizeStudentTypeValue(row.student_year);
+    if (!studentType) continue;
+    countsByType.set(studentType, (countsByType.get(studentType) || 0) + parseInt(row.count));
+  }
+
+  const labels = [...STUDENT_TYPE_CANONICAL];
+  const values = labels.map((label) => countsByType.get(label) || 0);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return { labels, values, total };
+}
+
 // ── B. AGE GROUP DISTRIBUTION ────────────────────────────────
 
 /**
@@ -2160,6 +2237,10 @@ const QUERY_HANDLERS = {
     handler: patientsBySex,
     description: 'Patient population distribution by sex',
   },
+  'students-by-type': {
+    handler: studentsByType,
+    description: 'Total student population grouped by student type (Freshman, Sophomore, Junior, Senior, Returnee)',
+  },
   'consultations-by-sex': {
     handler: consultationsBySex,
     description: 'Consultation volume broken down by patient sex',
@@ -2241,6 +2322,11 @@ const CHART_CONTEXT_OVERRIDES = Object.freeze({
     key: 'studentProgramConsultations',
     title: 'Consultations by Program (Student)',
     datasetContext: 'studentProgramConsultations',
+  },
+  'students-by-type': {
+    key: 'studentTypePopulation',
+    title: 'Total Students by Student Type',
+    datasetContext: 'studentTypePopulation',
   },
 });
 

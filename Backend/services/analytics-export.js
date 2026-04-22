@@ -45,6 +45,7 @@ const EXPORT_META = {
 
   // Demographics
   'patients-by-sex':              { label: 'Patients by Sex',                xAxis: 'Sex',             yAxis: 'Patients', chartType: 'pie' },
+  'students-by-type':             { label: 'Total Students by Student Type', xAxis: 'Student Type',    yAxis: 'Students', chartType: 'bar' },
   'consultations-by-sex':         { label: 'Consultations by Sex',           xAxis: 'Sex',             yAxis: 'Count',    chartType: 'pie' },
   'top-diagnoses-by-sex':         { label: 'Top Diagnoses by Sex (Top 10)',  xAxis: 'Diagnosis',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
   'patients-by-age-group':        { label: 'Patients by Age Group',          xAxis: 'Age Group',       yAxis: 'Patients', chartType: 'pie' },
@@ -114,9 +115,9 @@ const EXPORT_PRESETS = {
   },
   'demographics': {
     label: 'Demographics Report',
-    description: 'Sex, age group, department, and program distribution analytics',
+    description: 'Sex, age group, student type, department, and program distribution analytics',
     dataTypes: [
-      'patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex',
+      'patients-by-sex', 'students-by-type', 'consultations-by-sex', 'top-diagnoses-by-sex',
       'patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group',
       'consultations-by-department', 'consultations-by-program', 'lifestyle-risks-by-department',
       'sex-age-group-matrix', 'diagnoses-sex-age',
@@ -151,6 +152,7 @@ const EXPORT_CATEGORIES = [
     name: 'Patients',
     metrics: [
       'patients-by-sex',
+      'students-by-type',
       'patients-by-age-group',
       'patient-population-by-branch',
       'patient-credential-status',
