@@ -21,8 +21,6 @@ import { formatYearLevel } from '../../utils/formatYearLevel';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-
 const ProfileField: React.FC<{
   icon: IoniconName;
   label: string;
