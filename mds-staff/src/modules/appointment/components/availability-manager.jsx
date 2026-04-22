@@ -370,7 +370,7 @@ const AvailabilityManager = () => {
       notes: '',
       isActive: true,
       whitelistOnly: false,
-      purposeRequired: false,
+      purposeRequired: true,
     });
     setRequirements([]);
     setPendingRequirements([]);
@@ -532,7 +532,7 @@ const AvailabilityManager = () => {
           notes: editForm.notes || null,
           isActive: editForm.isActive,
           whitelistOnly: editForm.whitelistOnly,
-          purposeRequired: editForm.purposeRequired ?? false,
+          purposeRequired: true,
         });
         await loadSchedulers(updated?.id ?? editForm.id);
       } else {
@@ -546,7 +546,7 @@ const AvailabilityManager = () => {
           afternoonAllowed: editForm.afternoonAllowed,
           notes: editForm.notes || null,
           whitelistOnly: editForm.whitelistOnly ?? false,
-          purposeRequired: editForm.purposeRequired ?? false,
+          purposeRequired: true,
           slotIncludedDates: [],
           slotExcludedDates: [],
           whiteLists: [],
@@ -1223,18 +1223,15 @@ const AvailabilityManager = () => {
                         </span>
                       </label>
 
-                      <label className="flex cursor-pointer items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={editForm.purposeRequired ?? false}
-                          onChange={(e) => setEditForm({ ...editForm, purposeRequired: e.target.checked })}
-                          className="mt-0.5 h-4 w-4 rounded border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800"
-                        />
+                      <div className="flex items-start gap-2">
+                        <span className="mt-0.5 flex h-4 w-4 items-center justify-center rounded bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        </span>
                         <span>
                           <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Require Purpose</span>
-                          <span className="block text-xs text-secondary-700 dark:text-neutral-300">Patients must provide a reason for their visit</span>
+                          <span className="block text-xs text-primary-600 dark:text-primary-400">Always required — patients must provide a reason for their visit</span>
                         </span>
-                      </label>
+                      </div>
 
                       <label className="flex cursor-pointer items-start gap-2">
                         <input
