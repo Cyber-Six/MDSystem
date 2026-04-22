@@ -150,7 +150,7 @@ On the frontend, if the user clicks "Sign in with Google" before completing the 
 The complete authentication flow follows this sequence:
 
 ```
-Email → Password → reCAPTCHA (adaptive) → 2FA → Data Consent
+Email → Password → reCAPTCHA (adaptive) → 2FA → Login Complete (Data Consent only if required)
 ```
 
 ### Detailed Steps
@@ -162,7 +162,7 @@ Email → Password → reCAPTCHA (adaptive) → 2FA → Data Consent
 | 3. Credential Verification | Backend validates email format, institution, password hash | `POST /auth/login` |
 | 4. 2FA - TOTP (if enabled) | If user has TOTP (Google Authenticator) enabled, prompt for 6-digit code | `POST /settings/totp/validate` |
 | 5. 2FA - Email OTP (default) | If TOTP not enabled, send OTP to email; user enters code | `POST /auth/email/2fa` → `POST /auth/email/2fa/verify` |
-| 6. Data Consent | User must accept current data consent policy | DataConsent modal |
+| 6. Data Consent (Conditional) | Prompted only when `data_consent` is false or `data_consent_version` differs from `DATA_CONSENT_VERSION` | DataConsent modal |
 | 7. Login Complete | Final call exchanges LoginKey for JWT access + refresh tokens | `POST /auth/login/complete` |
 
 ### Session State
