@@ -2160,7 +2160,7 @@ const _extractEmergencyContactNumber = (contact) => {
 export const getPatientProfile = async () => {
   if (_patientProfileCache) return _patientProfileCache;
 
-  const [profileResult, emergencyResult] = await Promise.allSettled([
+  const [profileResult, emrResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -2179,10 +2179,15 @@ export const getPatientProfile = async () => {
       { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
-      `query GetEmergencyContact {
+      `query GetPatientEMRData {
         emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
+        }
+        myProfile: getMyProfile {
+          __typename
+          ... on StudentProfile { program year }
+          ... on EmployeeProfile { department }
         }
       }`,
       {}
@@ -2197,20 +2202,23 @@ export const getPatientProfile = async () => {
     console.warn('[EMR Service] Could not fetch patient profile data:', profileResult.reason?.message);
   }
 
-  const emergencyData = emergencyResult.status === 'fulfilled'
-    ? emergencyResult.value
+  const emrData = emrResult.status === 'fulfilled'
+    ? emrResult.value
     : null;
 
-  if (emergencyResult.status === 'rejected') {
-    console.warn('[EMR Service] Active emergency contact fetch failed:', emergencyResult.reason?.message);
+  if (emrResult.status === 'rejected') {
+    console.warn('[EMR Service] EMR data fetch failed:', emrResult.reason?.message);
   }
 
   const log = profileData?.personalLog || {};
 
-  const latestEmergency = emergencyData?.emergencyContact
-    || (Array.isArray(emergencyData?.emergencyContacts) ? emergencyData.emergencyContacts[0] : null)
+  const latestEmergency = emrData?.emergencyContact
+    || (Array.isArray(emrData?.emergencyContacts) ? emrData.emergencyContacts[0] : null)
     || null;
   const nameParts = [log.first_name, log.middle_name, log.last_name, log.suffix].filter(Boolean);
+
+  const myProfile = emrData?.myProfile || null;
+  const profileTypeName = myProfile?.__typename || null;
 
   _patientProfileCache = {
     name: nameParts.length > 0 ? nameParts.join(' ') : null,
@@ -2220,6 +2228,11 @@ export const getPatientProfile = async () => {
     firstEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.secondContact),
     identifier: profileData?.personalRecord?.identifier || null,
+    // Student/Employee profile data
+    profileType: profileTypeName, // 'StudentProfile' | 'EmployeeProfile' | null
+    yearLevel: profileTypeName === 'StudentProfile' ? (myProfile?.year || null) : null,
+    program: profileTypeName === 'StudentProfile' ? (myProfile?.program || null) : null,
+    department: profileTypeName === 'EmployeeProfile' ? (myProfile?.department || null) : null,
   };
 
   return _patientProfileCache;
