@@ -2182,7 +2182,9 @@ const _extractEmergencyContactNumber = (contact) => {
 export const getPatientProfile = async () => {
   if (_patientProfileCache) return _patientProfileCache;
 
-  const [profileResult, emrResult] = await Promise.allSettled([
+  // Three independent requests so a failure in getMyProfile never blocks
+  // the emergency contact fetch.
+  const [profileResult, emergencyResult, myProfileResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -2200,12 +2202,19 @@ export const getPatientProfile = async () => {
       {},
       { endpoint: '/profile/patient' }
     ),
+    // Emergency contacts in its own request so it is never blocked by getMyProfile
     sendGraphQLRequest(
-      `query GetPatientEMRData {
+      `query GetEmergencyContact {
         emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
         }
+      }`,
+      {}
+    ),
+    // getMyProfile is optional — fails gracefully if backend schema cache is stale
+    sendGraphQLRequest(
+      `query GetMyProfile {
         myProfile: getMyProfile {
           __typename
           ... on StudentProfile { program year }
@@ -2224,22 +2233,30 @@ export const getPatientProfile = async () => {
     console.warn('[EMR Service] Could not fetch patient profile data:', profileResult.reason?.message);
   }
 
-  const emrData = emrResult.status === 'fulfilled'
-    ? emrResult.value
+  const emergencyData = emergencyResult.status === 'fulfilled'
+    ? emergencyResult.value
     : null;
 
-  if (emrResult.status === 'rejected') {
-    console.warn('[EMR Service] EMR data fetch failed:', emrResult.reason?.message);
+  if (emergencyResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch emergency contact:', emergencyResult.reason?.message);
+  }
+
+  const myProfileData = myProfileResult.status === 'fulfilled'
+    ? myProfileResult.value
+    : null;
+
+  if (myProfileResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch profile type (non-critical):', myProfileResult.reason?.message);
   }
 
   const log = profileData?.personalLog || {};
 
-  const latestEmergency = emrData?.emergencyContact
-    || (Array.isArray(emrData?.emergencyContacts) ? emrData.emergencyContacts[0] : null)
+  const latestEmergency = emergencyData?.emergencyContact
+    || (Array.isArray(emergencyData?.emergencyContacts) ? emergencyData.emergencyContacts[0] : null)
     || null;
   const nameParts = [log.first_name, log.middle_name, log.last_name, log.suffix].filter(Boolean);
 
-  const myProfile = emrData?.myProfile || null;
+  const myProfile = myProfileData?.myProfile || null;
   const profileTypeName = myProfile?.__typename || null;
 
   _patientProfileCache = {

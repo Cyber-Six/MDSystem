@@ -70,7 +70,9 @@ const inferIdentityFromEmail = (email: string | null | undefined): PatientIdenti
 export const getPatientProfile = async (): Promise<PatientProfile> => {
   if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
-  const [profileResult, emergencyResult] = await Promise.allSettled([
+  // Three independent requests so a failure in getMyProfile never blocks
+  // the emergency contact fetch.
+  const [profileResult, emergencyResult, myProfileResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -83,12 +85,19 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       {},
       { endpoint: '/profile/patient' },
     ),
+    // Emergency contacts in its own request so it is never blocked by getMyProfile
     sendGraphQLRequest(
-      `query GetPatientEMRData {
+      `query GetEmergencyContact {
         emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
         }
+      }`,
+      {},
+    ),
+    // getMyProfile is optional — fails gracefully if backend schema cache is stale
+    sendGraphQLRequest(
+      `query GetMyProfile {
         myProfile: getMyProfile {
           __typename
           ... on StudentProfile { program year }
@@ -114,7 +123,16 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       : null;
 
   if (emergencyResult.status === 'rejected') {
-    console.warn('[Profile Service] EMR data fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
+    console.warn('[Profile Service] Could not fetch emergency contact:', (emergencyResult as PromiseRejectedResult).reason?.message);
+  }
+
+  const myProfileData =
+    myProfileResult.status === 'fulfilled'
+      ? myProfileResult.value
+      : null;
+
+  if (myProfileResult.status === 'rejected') {
+    console.warn('[Profile Service] Could not fetch profile type (non-critical):', (myProfileResult as PromiseRejectedResult).reason?.message);
   }
 
   const log = (profileData as any)?.personalLog || {};
@@ -127,7 +145,7 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       : null) ||
     null;
 
-  const myProfile = (emergencyData as any)?.myProfile || null;
+  const myProfile = (myProfileData as any)?.myProfile || null;
   const profileTypeName: string | null = myProfile?.__typename || null;
 
   const nameParts = [
