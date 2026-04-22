@@ -128,7 +128,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           await handleSend2FA();
           setCurrentStep('2fa');
         } else {
-          setShowConsent(true);
+          await completeLoginWithKey(res.data.LoginKey, { promptConsentIfRequired: true });
         }
       }
     } catch (err: any) {
@@ -205,7 +205,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           await handleSend2FA();
           setCurrentStep('2fa');
         } else {
-          setShowConsent(true);
+          await completeLoginWithKey(response.data.LoginKey, { promptConsentIfRequired: true });
         }
       }
     } catch (err: any) {
@@ -254,7 +254,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       if (response.data.ok) {
         const newKey = response.data.verificationKey;
         setVerificationKey(newKey);
-        setShowConsent(true);
+        setCurrentStep('credentials');
+        await completeLoginWithKey(newKey, { promptConsentIfRequired: true });
       }
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
@@ -308,9 +309,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   // Complete login after consent is accepted (DataConsent handles POST consent)
-  const completeLoginWithKey = async (key: string) => {
+  const completeLoginWithKey = async (
+    key: string,
+    { promptConsentIfRequired = false }: { promptConsentIfRequired?: boolean } = {}
+  ) => {
     setError('');
     setIsLoading(true);
+    let shouldOpenConsent = false;
 
     try {
       const response = await axiosRequest.post('/auth/login/complete', { 
@@ -338,17 +343,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           setCurrentStep('2fa');
           break;
         case 'DATA_CONSENT_REQUIRED':
-          setError('You must agree to the data consent policy to login.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the data consent policy to login.');
+          }
           break;
         case 'OUTDATED_CONSENT':
-          setError('You must agree to the latest data consent policy.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the latest data consent policy.');
+          }
           break;
         default:
           setError(errorMsg);
       }
     } finally {
       setIsLoading(false);
-      setShowConsent(false);
+      setShowConsent(shouldOpenConsent);
     }
   };
 
