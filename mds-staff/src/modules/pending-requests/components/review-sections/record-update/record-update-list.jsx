@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePermissions } from '../../../../../context/permissions-context';
+import { useStaffNotifications } from '../../../../notification/notification-context';
 import {
   BRANCH,
   TICKET_STATUS,
@@ -78,6 +79,7 @@ const RecordUpdateList = ({
   externalStatusFilter = null,
   showStatusFilter = true,
 }) => {
+  const { subscribe } = useStaffNotifications();
   const { branch: permBranch, allowedBranches } = usePermissions();
   // ── Filter state ──────────────────────────────────────────────────────────
   // Default to the staff member's permission branch; fall back to Manila.
@@ -122,7 +124,7 @@ const RecordUpdateList = ({
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
-  const fetchTickets = useCallback(async () => {
+  const fetchTickets = useCallback(async (options = {}) => {
     setLoading(true);
     setError('');
     try {
@@ -133,7 +135,7 @@ const RecordUpdateList = ({
        *
        * For all other statuses we query directly.
        */
-      const result = await getStatusUpdateTickets(queryStatuses, branch);
+      const result = await getStatusUpdateTickets(queryStatuses, branch, 0, 20, options);
 
       // Keep only update requests (is_initial === false); initial records are shown on the Initial Record tab.
       const updateOnly = (await enrichWithInitialFlag(result)).filter((t) => !t.is_initial);
@@ -169,6 +171,15 @@ const RecordUpdateList = ({
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  // Live-sync pending list when a new patient update ticket is submitted.
+  useEffect(() => {
+    const unsubscribe = subscribe('updateTicket', () => {
+      fetchTickets({ force: true });
+    });
+
+    return () => unsubscribe();
+  }, [subscribe, fetchTickets]);
 
   // ── After approve / revision ───────────────────────────────────────────────
 
@@ -261,7 +272,7 @@ const RecordUpdateList = ({
 
           {/* Refresh */}
           <button
-            onClick={fetchTickets}
+            onClick={() => fetchTickets({ force: true })}
             disabled={loading}
             className="ml-auto px-3 py-1 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1"
           >

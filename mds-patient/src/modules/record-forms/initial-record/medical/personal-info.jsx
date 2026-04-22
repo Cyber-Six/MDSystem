@@ -108,6 +108,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
     { value: 'Senior', label: 'Senior' },
     { value: 'Masteral', label: 'Masteral' },
     { value: 'Doctorate', label: 'Doctorate' },
+    { value: 'Returnee', label: 'Returnee' },
   ];
 
   const calculateAge = (birthday) => {

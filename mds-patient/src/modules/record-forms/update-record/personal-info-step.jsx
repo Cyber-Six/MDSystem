@@ -151,7 +151,8 @@ const PersonalInfoStep = ({ formData, onChange }) => {
             { value: 'Junior', label: 'Junior' },
             { value: 'Senior', label: 'Senior' },
             { value: 'Masteral', label: 'Masteral' },
-            { value: 'Doctorate', label: 'Doctorate' }
+            { value: 'Doctorate', label: 'Doctorate' },
+            { value: 'Returnee', label: 'Returnee' }
           ]}
           value={formData.schoolYear || ''}
           onChange={(e) => handleInputChange('schoolYear', e.target.value)}

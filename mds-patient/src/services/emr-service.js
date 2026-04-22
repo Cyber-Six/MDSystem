@@ -1618,7 +1618,7 @@ const createObgynHistory = async (input) => {
 // Utility function to map student category to year level
 const mapYearLevel = (category) => {
   // New dropdown values already match backend STUDENT_YEAR enum values
-  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate']);
+  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate', 'Returnee']);
   if (validEnumValues.has(category)) return category;
   // Legacy mappings for backward compatibility with old stored data
   const legacyMapping = {
@@ -1669,7 +1669,7 @@ const reverseMapDentalCleaningRange = (backendValue) => {
 /** Reverse mapping: backend year level → form student category */
 const reverseMapYearLevel = (backendYear) => {
   // Backend STUDENT_YEAR enum values match the form dropdown values directly
-  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate']);
+  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate', 'Returnee']);
   if (validEnumValues.has(backendYear)) return backendYear;
   return '';
 };
@@ -1905,6 +1905,87 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   return { personalInfo, medicalHistory, medicalBackground, dentalHistory, obgyne };
 };
 
+const normalizeRevisionScope = (scope) => (
+  scope === 'Medical' || scope === 'Dental' || scope === 'Both' ? scope : 'Both'
+);
+
+const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
+  const normalizedScope = normalizeRevisionScope(scope);
+  const includeMedical = normalizedScope === 'Medical' || normalizedScope === 'Both';
+  const includeDental = normalizedScope === 'Dental' || normalizedScope === 'Both';
+
+  let query = `query GetRevisionEMRData {
+    emrProfile: getProfile {
+      ... on StudentProfile { program year }
+      ... on EmployeeProfile { department role }
+    }
+    emergencyContact: getEmergencyContact {
+      firstContact  { contactName relationship contactNumber address }
+      secondContact { contactName relationship contactNumber address }
+    }`;
+
+  if (includeMedical) {
+    query += `
+    medicalHistory: getMedicalHistory {
+      conditions { conditionId relationship }
+      notes
+    }
+    allergyProfile: getAllergyProfile {
+      allergies { allergenCatalogId status severity }
+      notes
+    }
+    hospitalizationProfile: getHospitalizationProfile {
+      hospitalizations { conditionId admissionDate dischargeDate notes }
+      notes
+    }
+    operationProfile: getOperationProfile {
+      operations { procedureId operationDate notes }
+      notes
+    }
+    medicationProfile: getMedicationProfile {
+      medications { medicineId description }
+      notes
+    }
+    immunizationProfile: getImmunizationProfile {
+      immunizations { vaccineTypeId immunizationDate doseNumber }
+      notes
+    }
+    lifestyle: getLifestyle {
+      smoker numberOfCigarettesPerDay yearsSmoked
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency
+    }
+    visualAcuity: getVisualAcuityProfile {
+      notes
+      acuity { left_eye right_eye notes recorded_at }
+    }
+    obgyne: getObgynHistory {
+      lastMenstrualPeriod hasDysmenorrhea notes
+    }`;
+  }
+
+  if (includeDental) {
+    query += `
+    dentalHistory: getDentalHistory {
+      seenByDentist lastDentalCleaning lastVisitDate
+    }
+    dentalProcedureProfile: getDentalProcedureProfile {
+      procedures { procedureTypeId }
+    }
+    dentalPhotoRecord: getDentalPhotoRecord {
+      upperTeeth lowerTeeth
+    }
+    oralAppliance: getOralApplianceProfile {
+      appliances { tagId arch }
+    }`;
+  }
+
+  query += `
+  }`;
+
+  return query;
+};
+
 /**
  * Fetch all existing record data for a patient in Revision status so the
  * initial record form can be pre-populated with their previous submission.
@@ -1915,8 +1996,9 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
  *
  * @returns {object|null} FormData-shaped object or null on complete failure
  */
-export const fetchRevisionPrefill = async () => {
-  console.log('[EMR Service] Fetching revision pre-fill data...');
+export const fetchRevisionPrefill = async (scope = 'Both') => {
+  const normalizedScope = normalizeRevisionScope(scope);
+  console.log('[EMR Service] Fetching revision pre-fill data (scope:', normalizedScope + ')...');
 
   const [profileResult, emrResult] = await Promise.allSettled([
     // ── Request 1: personal profile ──────────────────────
@@ -1940,68 +2022,8 @@ export const fetchRevisionPrefill = async () => {
       { endpoint: '/profile/patient' }
     ),
 
-    // ── Request 2: all EMR data (batched) ─────────────────
-    sendGraphQLRequest(
-      `query GetRevisionEMRData {
-        emrProfile: getProfile {
-          ... on StudentProfile { program year }
-          ... on EmployeeProfile { department role }
-        }
-        emergencyContact: getEmergencyContact {
-          firstContact  { contactName relationship contactNumber address }
-          secondContact { contactName relationship contactNumber address }
-        }
-        medicalHistory: getMedicalHistory {
-          conditions { conditionId relationship }
-          notes
-        }
-        allergyProfile: getAllergyProfile {
-          allergies { allergenCatalogId status severity }
-          notes
-        }
-        hospitalizationProfile: getHospitalizationProfile {
-          hospitalizations { conditionId admissionDate dischargeDate notes }
-          notes
-        }
-        operationProfile: getOperationProfile {
-          operations { procedureId operationDate notes }
-          notes
-        }
-        medicationProfile: getMedicationProfile {
-          medications { medicineId description }
-          notes
-        }
-        immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId immunizationDate doseNumber }
-          notes
-        }
-        lifestyle: getLifestyle {
-          smoker numberOfCigarettesPerDay yearsSmoked
-          alcoholConsumer frequencyOfAlcoholConsumption
-          vapeUser vapeType vapeFrequency
-        }
-        visualAcuity: getVisualAcuityProfile {
-          notes
-          acuity { left_eye right_eye notes recorded_at }
-        }
-        dentalHistory: getDentalHistory {
-          seenByDentist lastDentalCleaning lastVisitDate
-        }
-        dentalProcedureProfile: getDentalProcedureProfile {
-          procedures { procedureTypeId }
-        }
-        dentalPhotoRecord: getDentalPhotoRecord {
-          upperTeeth lowerTeeth
-        }
-        oralAppliance: getOralApplianceProfile {
-          appliances { tagId arch }
-        }
-        obgyne: getObgynHistory {
-          lastMenstrualPeriod hasDysmenorrhea notes
-        }
-      }`,
-      {}
-    ),
+    // ── Request 2: scope-aware EMR data (batched) ─────────
+    sendGraphQLRequest(buildRevisionPrefillEMRQuery(normalizedScope), {}),
   ]);
 
   if (profileResult.status === 'rejected') {
@@ -2237,7 +2259,7 @@ export const checkInitialRecordStatus = async () => {
       { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
-      `query GetUpdateTicket { getUpdateTicket { id status notes created_at } }`,
+      `query GetUpdateTicket { getUpdateTicket { id status scope notes created_at } }`,
       {}
     ),
   ]);
@@ -2261,6 +2283,7 @@ export const checkInitialRecordStatus = async () => {
     return {
       needsInitialRecord: true,
       status: ticketStatus,
+      scope: ticket?.scope ?? null,
       ticketId: ticket?.id ?? null,
       notes: ticket?.notes ?? null,
       ticketCreatedAt: ticket?.created_at ?? null,
@@ -2275,6 +2298,7 @@ export const checkInitialRecordStatus = async () => {
     return {
       needsInitialRecord: false,
       status: ticket?.status ?? null,
+      scope: ticket?.scope ?? null,
       ticketId: ticket?.id ?? null,
       notes: ticket?.notes ?? null,
       ticketCreatedAt: ticket?.created_at ?? null,
@@ -2300,6 +2324,7 @@ export const checkInitialRecordStatus = async () => {
   return {
     needsInitialRecord,
     status: ticket.status,
+    scope: ticket.scope ?? null,
     ticketId: ticket.id,
     notes: ticket.notes ?? null,
     ticketCreatedAt: ticket.created_at ?? null,

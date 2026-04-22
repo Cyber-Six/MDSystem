@@ -76,17 +76,21 @@ const _TICKET_TTL_MS = 30_000;   // 30 s
  * @param {string}   branch    — DesignationBranch enum value
  * @param {number}   [offset]
  * @param {number}   [limit]
+ * @param {{ force?: boolean }} [options] — force bypass in-memory cache
  * @returns {Promise<Array<{id, patientId, status}>>}
  */
-export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit = 20) => {
+export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit = 20, options = {}) => {
+  const forceRefresh = options?.force === true;
   const cacheKey = `${[...statuses].sort().join('|')}_${branch}_${offset}_${limit}`;
 
-  // Return a still-fresh cached result immediately.
-  const cached = _ticketCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts <= _TICKET_TTL_MS) return cached.data;
+  // Return a still-fresh cached result immediately unless force refresh was requested.
+  if (!forceRefresh) {
+    const cached = _ticketCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts <= _TICKET_TTL_MS) return cached.data;
+  }
 
-  // If an identical request is already in-flight, share its promise.
-  if (_ticketFlight.has(cacheKey)) return _ticketFlight.get(cacheKey);
+  // If an identical request is already in-flight, share its promise unless forced.
+  if (!forceRefresh && _ticketFlight.has(cacheKey)) return _ticketFlight.get(cacheKey);
 
   const request = sendGraphQL(
     `query GetStatusUpdateTickets(
@@ -116,11 +120,15 @@ export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit
     .then((data) => {
       const result = data.getStatusUpdateTickets ?? [];
       _ticketCache.set(cacheKey, { data: result, ts: Date.now() });
-      _ticketFlight.delete(cacheKey);
+      if (_ticketFlight.get(cacheKey) === request) {
+        _ticketFlight.delete(cacheKey);
+      }
       return result;
     })
     .catch((err) => {
-      _ticketFlight.delete(cacheKey);
+      if (_ticketFlight.get(cacheKey) === request) {
+        _ticketFlight.delete(cacheKey);
+      }
       throw err;
     });
 

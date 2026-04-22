@@ -135,6 +135,7 @@ const Dashboard = () => {
         const [{
           needsInitialRecord,
           status,
+          scope: ticketScope,
           notes: ticketNotes,
           credentialStatus: nextCredentialStatus,
           ticketCreatedAt,
@@ -165,7 +166,7 @@ const Dashboard = () => {
           if (status === 'Revision') {
             console.log('[Dashboard] Revision detected — fetching pre-fill data...');
             try {
-              const prefill = await fetchRevisionPrefill();
+              const prefill = await fetchRevisionPrefill(ticketScope || 'Both');
               setRevisionData(prefill);
             } catch (err) {
               console.warn('[Dashboard] Could not fetch revision pre-fill data:', err.message);
@@ -280,6 +281,7 @@ const Dashboard = () => {
     const {
       needsInitialRecord,
       status,
+      scope: ticketScope,
       notes,
       credentialStatus: nextCredentialStatus,
       ticketCreatedAt,
@@ -293,7 +295,7 @@ const Dashboard = () => {
     if (status === 'Revision' && notes) {
       setRevisionNote(notes);
       try {
-        const prefill = await fetchRevisionPrefill();
+        const prefill = await fetchRevisionPrefill(ticketScope || 'Both');
         setRevisionData(prefill);
       } catch (error) {
         console.warn('[Dashboard] Could not fetch revision pre-fill data after notification:', error.message);
