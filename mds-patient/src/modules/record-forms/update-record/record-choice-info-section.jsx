@@ -14,7 +14,7 @@ const RecordChoiceInfoSection = () => {
 
           <div className="space-y-5">
             <div>
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Guidelines</h4>
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Guidelines</h4>
               <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-2 list-disc pl-5">
                 <li>Complete your record forms before proceeding to MDS (Medical and Dental Services).</li>
                 <li>Provide complete and accurate information to avoid delays in assessment and appointment processing.</li>
@@ -25,7 +25,7 @@ const RecordChoiceInfoSection = () => {
             </div>
 
             <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">When to Use Each Record Update</h4>
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">When to Use Each Record Update</h4>
               <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-2 list-disc pl-5">
                 <li><span className="font-semibold text-gray-800 dark:text-gray-200">Both Medical and Dental:</span> Use during every semestral enrollment and student ID validation.</li>
                 <li><span className="font-semibold text-gray-800 dark:text-gray-200">Medical Only:</span> Use for medical appointments and checkups (e.g. OJT, sports events, outside activities, and other concerns.)</li>
