@@ -79,9 +79,26 @@ async function searchPatients(query, branch) {
     const param = `%${query}%`;
     const sql = `
         SELECT DISTINCT uc.id AS "userId", uc.email,
-               up.first_name, up.middle_name, up.last_name, up.identifier
+               up.first_name, up.middle_name, up.last_name, up.identifier,
+               p.profile::text AS profile_type,
+               spd.label AS program,
+               sp.year,
+               ep.department,
+               ep.role
         FROM "UserCredentials" uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
+        LEFT JOIN "Patients" p ON p.id = uc.id
+        LEFT JOIN LATERAL (
+            SELECT pr2.id
+            FROM "profileRecord" pr2
+            JOIN "patientUpdateLog" pul2 ON pul2.id = pr2.id
+            WHERE pul2."patientId" = uc.id
+            ORDER BY pul2.created_at DESC
+            LIMIT 1
+        ) pr ON true
+        LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+        LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
+        LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
         WHERE (
             up.first_name  ILIKE $1 OR
             up.middle_name ILIKE $1 OR
@@ -204,7 +221,21 @@ router.get('/id/search', jwtProtect("medical"), async (req, res) => {
         const users = await searchPatients(query, branch);
 
         logger.info(`Unified patient search: "${query}" branch=${branch} → ${users.length} results`);
-        res.json({ users: users.map(u => ({ id: u.userId, email: u.email, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
+        res.json({
+            users: users.map((u) => ({
+                id: u.userId,
+                email: u.email,
+                firstName: u.first_name,
+                middleName: u.middle_name,
+                lastName: u.last_name,
+                identifier: u.identifier,
+                profile_type: u.profile_type ?? null,
+                program: u.program ?? null,
+                year: u.year ?? null,
+                department: u.department ?? null,
+                role: u.role ?? null,
+            })),
+        });
     } catch (error) {
         logger.error('Error in unified patient search:', error);
         res.status(500).json({ error: 'Internal server error' });

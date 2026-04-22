@@ -9,6 +9,7 @@
  */
 
 import { axiosRequest } from '../../../packages-core-adapter';
+import { getPatientProfileLabel, getPatientYearLevelLabel } from '../../../utils/patient-year-level';
 
 /**
  * Format a full name as "Last, First MI."
@@ -44,6 +45,13 @@ export async function searchPatientsForInventory(query, branch) {
     name: formatFullName(u.firstName, u.middleName, u.lastName),
     identifier: u.identifier ?? null,
     email: u.email ?? null,
+    profile_type: u.profile_type ?? null,
+    program: u.program ?? null,
+    year: u.year ?? null,
+    department: u.department ?? null,
+    role: u.role ?? null,
+    profileLabel: getPatientProfileLabel(u),
+    yearLevelLabel: getPatientYearLevelLabel(u),
   }));
 }
 

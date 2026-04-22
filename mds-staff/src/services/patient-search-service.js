@@ -1,4 +1,9 @@
 import { axiosRequest } from '../packages-core-adapter';
+import {
+  formatStudentYearLevel,
+  getPatientYearLevelLabel,
+  getPatientProfileLabel,
+} from '../utils/patient-year-level';
 
 // ── GraphQL ─────────────────────────────────────────────────────────────────────
 const SEARCH_PATIENTS_QUERY = `
@@ -83,11 +88,9 @@ export function getPatientInitials(patient) {
   return (f + l).toUpperCase() || '?';
 }
 
-/** Get a profile label like "BSIT · 3rd Year" or "HR · Manager" */
+/** Get a profile label like "BSIT · Freshman" or "Employee" */
 export function getProfileLabel(patient) {
-  if (patient.profile_type === 'Student')
-    return patient.program ? `${patient.program} · ${patient.year || ''}` : 'Student';
-  if (patient.profile_type === 'Employee')
-    return patient.department ? `${patient.department} · ${patient.role || ''}` : 'Employee';
-  return patient.profile_type || '';
+  return getPatientProfileLabel(patient);
 }
+
+export { formatStudentYearLevel, getPatientYearLevelLabel };

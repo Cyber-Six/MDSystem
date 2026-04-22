@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { notifyStaffs, notifyPatients, fetchAllStaff } from './notification-service';
-import { searchPatients, formatPatientName } from '../../services/patient-search-service';
+import { searchPatients, formatPatientName, getPatientYearLevelLabel } from '../../services/patient-search-service';
 import { usePermissions } from '../../context/permissions-context';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
 
@@ -307,7 +307,7 @@ const SendNotificationView = () => {
                         <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate leading-none m-0">
                           {recipientType === 'staff'
                             ? [user.role, user.branch].filter(Boolean).join(' · ')
-                            : [user.identifier, user.branch].filter(Boolean).join(' · ')}
+                            : [user.identifier, getPatientYearLevelLabel(user), user.branch].filter(Boolean).join(' · ')}
                         </p>
                       </div>
                       <span className="ml-3 shrink-0 text-primary-500 text-xs font-semibold">Add</span>
