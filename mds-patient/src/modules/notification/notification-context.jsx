@@ -113,12 +113,51 @@ const EVENT_MAP = {
     message: data?.message || `The request for "${data?.label || 'a document'}" has been cancelled.`,
     refId: data?.documentId ?? null,
   }),
-  'updateTicket:statusChanged': (data) => ({
-    type: 'record',
-    route: '/record-update',
-    title: `Record Update ${data?.newStatus ?? 'Updated'}`,
-    message: data?.message ?? `Your record update request has been ${(data?.newStatus ?? '').toLowerCase()}.`,
-  }),
+  'updateTicket:statusChanged': (data) => {
+    const status = String(data?.newStatus || '').trim();
+    const normalizedStatus = status.toLowerCase();
+    const notes = typeof data?.notes === 'string' ? data.notes.trim() : '';
+
+    if (normalizedStatus === 'approved') {
+      return {
+        type: 'record',
+        route: '/',
+        title: 'Record Submission Approved',
+        message: data?.message || (notes
+          ? `Your submitted record has been approved. Staff notes: ${notes}`
+          : 'Your submitted record has been approved.'),
+      };
+    }
+
+    if (normalizedStatus === 'revision') {
+      return {
+        type: 'record',
+        route: '/record-update',
+        title: 'Record Revision Required',
+        message: data?.message || (notes
+          ? `Your submitted record needs revision. Staff notes: ${notes}`
+          : 'Your submitted record needs revision. Please review your form and resubmit.'),
+      };
+    }
+
+    if (normalizedStatus === 'rejected') {
+      return {
+        type: 'record',
+        route: '/record-update',
+        title: 'Record Submission Rejected',
+        message: data?.message || (notes
+          ? `Your submitted record was rejected. Reason: ${notes}`
+          : 'Your submitted record was rejected. Please contact the clinic for guidance.'),
+      };
+    }
+
+    return {
+      type: 'record',
+      route: '/record-update',
+      title: `Record Update ${status || 'Updated'}`,
+      message: data?.message || `Your record update request has been ${status ? status.toLowerCase() : 'updated'}.`,
+    };
+  },
   'staff:notification': (data) => {
     // Parse message field which may contain JSON with title and body
     let title = 'Message from Staff';

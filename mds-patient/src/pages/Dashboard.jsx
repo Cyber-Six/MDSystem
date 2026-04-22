@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
@@ -6,6 +6,7 @@ import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill, 
 import InitialRecordModal from '../modules/record-forms/initial-record/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 import InitialEmployeeRecordForm from '../modules/record-forms/initial-record/employee/initial-employee-record-form.jsx';
+import { usePatientNotifications } from '../modules/notification/notification-context';
 import { detectRoleFromEmail } from '@mdsystem/core/validation/email-validation';
 
 // Derive the patient role from stored value, with fallback for sessions
@@ -55,6 +56,7 @@ const RouteLoader = () => (
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { subscribe } = usePatientNotifications();
   const INACTIVE_REACTIVATION_LOCK_LEGACY_KEY = 'patient_inactive_reactivation_lock';
   const getPatientLockKey = () => {
     try {
@@ -265,6 +267,55 @@ const Dashboard = () => {
       isMounted = false;
     };
   }, [location.pathname, isCheckingStatus]);
+
+  // Live-sync initial record gate when staff updates this ticket status.
+  // This lets pending/revision/approved/rejected transitions appear instantly
+  // in web sessions (including WebView) without a manual refresh.
+  const refreshAccessStateFromNotification = useCallback(async () => {
+    const {
+      needsInitialRecord,
+      status,
+      notes,
+      credentialStatus: nextCredentialStatus,
+      ticketCreatedAt,
+    } = await checkInitialRecordStatus();
+
+    setIsVerified(!needsInitialRecord);
+    setCredentialStatus(nextCredentialStatus || null);
+    setRecordStatus(status || null);
+    setInactiveTicketCreatedAt(ticketCreatedAt || null);
+
+    if (status === 'Revision' && notes) {
+      setRevisionNote(notes);
+      try {
+        const prefill = await fetchRevisionPrefill();
+        setRevisionData(prefill);
+      } catch (error) {
+        console.warn('[Dashboard] Could not fetch revision pre-fill data after notification:', error.message);
+        setRevisionData(null);
+      }
+    } else {
+      setRevisionNote(null);
+      setRevisionData(null);
+    }
+
+    setShowInitialRecordModal(!!needsInitialRecord);
+  }, []);
+
+  useEffect(() => {
+    if (isCheckingStatus) return undefined;
+
+    const unsubscribe = subscribe('updateTicket:statusChanged', async (data) => {
+      try {
+        console.log('[Dashboard] Received updateTicket:statusChanged event:', data);
+        await refreshAccessStateFromNotification();
+      } catch (error) {
+        console.warn('[Dashboard] Failed to refresh status after notification:', error.message);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [subscribe, isCheckingStatus, refreshAccessStateFromNotification]);
 
   const handleInactiveUpdateSubmissionSuccess = async () => {
     setRecordStatus('Pending');
