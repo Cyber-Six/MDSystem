@@ -1223,16 +1223,6 @@ const AvailabilityManager = () => {
                         </span>
                       </label>
 
-                      <div className="flex items-start gap-2">
-                        <span className="mt-0.5 flex h-4 w-4 items-center justify-center rounded bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
-                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                        </span>
-                        <span>
-                          <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Require Purpose</span>
-                          <span className="block text-xs text-primary-600 dark:text-primary-400">Always required — patients must provide a reason for their visit</span>
-                        </span>
-                      </div>
-
                       <label className="flex cursor-pointer items-start gap-2">
                         <input
                           type="checkbox"
