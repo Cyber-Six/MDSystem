@@ -3,6 +3,15 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-
 import Layout from '../components/layout/layout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
 import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill, getMyPersonalEmail, getPatientProfile } from '../services/emr-service.js';
+import { logoutPatientSession } from '../services/auth-session-service.js';
+import {
+  getUnverifiedWaitingScreen,
+  isInactiveRevisionNeeded,
+  isInactiveUpdateSubmitted,
+  isInactiveWorkflowStatus,
+  normalizeCredentialStatus,
+  shouldRestrictInactiveFlow as computeShouldRestrictInactiveFlow,
+} from '../services/record-status-utils.js';
 import InitialRecordModal from '../modules/record-forms/initial-record/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 import InitialEmployeeRecordForm from '../modules/record-forms/initial-record/employee/initial-employee-record-form.jsx';
@@ -71,9 +80,6 @@ const Dashboard = () => {
     return INACTIVE_REACTIVATION_LOCK_LEGACY_KEY;
   };
   const INACTIVE_REACTIVATION_LOCK_KEY = getPatientLockKey();
-  const normalizeCredentialStatus = (status) => (
-    typeof status === 'string' ? status.trim().toLowerCase() : null
-  );
   const [showInitialRecordModal, setShowInitialRecordModal] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [recordStatus, setRecordStatus] = useState(null);
@@ -184,17 +190,16 @@ const Dashboard = () => {
   }, []);
 
   const normalizedCredentialStatus = normalizeCredentialStatus(credentialStatus);
-  const isInactiveCredential = normalizedCredentialStatus === 'inactive';
-  const hasPendingInactiveWorkflow = ['Pending', 'Revision', 'RevisionSubmitted'].includes(recordStatus);
-  const shouldKeepInactiveLock = inactiveLockPersisted && (
-    normalizedCredentialStatus !== 'active' || hasPendingInactiveWorkflow
-  );
-  const shouldRestrictInactiveFlow =
-    isInactiveCredential || shouldKeepInactiveLock;
+  const shouldRestrictInactiveFlow = computeShouldRestrictInactiveFlow({
+    credentialStatus,
+    inactiveLockPersisted,
+    recordStatus,
+  });
   const isOnRecordUpdateRoute = location.pathname.endsWith('/record-update');
   const hasSubmittedInactiveUpdate =
-    shouldRestrictInactiveFlow && (recordStatus === 'Pending' || recordStatus === 'RevisionSubmitted');
-  const needsInactiveRevision = shouldRestrictInactiveFlow && recordStatus === 'Revision';
+    shouldRestrictInactiveFlow && isInactiveUpdateSubmitted(recordStatus);
+  const needsInactiveRevision = shouldRestrictInactiveFlow && isInactiveRevisionNeeded(recordStatus);
+  const waitingScreen = getUnverifiedWaitingScreen({ recordStatus, isVerified });
 
   // Persist inactive reactivation lock while credential status is Inactive.
   // Once status is Active again, remove the lock immediately.
@@ -216,7 +221,7 @@ const Dashboard = () => {
     if (
       inactiveLockPersisted &&
       normalizedCredential === 'active' &&
-      !['Pending', 'Revision', 'RevisionSubmitted'].includes(recordStatus)
+      !isInactiveWorkflowStatus(recordStatus)
     ) {
       try {
         localStorage.removeItem(INACTIVE_REACTIVATION_LOCK_KEY);
@@ -366,6 +371,10 @@ const Dashboard = () => {
     }
   };
 
+  const handleForcedFlowLogout = async () => {
+    await logoutPatientSession(true);
+  };
+
   // Show loading state while checking
   if (isCheckingStatus) {
     return (
@@ -487,7 +496,7 @@ const Dashboard = () => {
 
   // Show revision-submitted screen ONLY for unverified patients waiting for initial record approval
   // Verified patients with pending revisions should still access dashboard normally
-  if (recordStatus === 'RevisionSubmitted' && isVerified === false) {
+  if (waitingScreen === 'revision-submitted') {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -556,7 +565,7 @@ const Dashboard = () => {
 
   // Show pending approval screen ONLY for unverified patients waiting for initial record approval
   // Verified patients with pending updates should still access dashboard normally
-  if (recordStatus === 'Pending' && isVerified === false) {
+  if (waitingScreen === 'pending-approval') {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -631,6 +640,7 @@ const Dashboard = () => {
         onComplete={handleInitialRecordComplete}
         isRevision={recordStatus === 'Revision'}
         revisionNote={revisionNote}
+        onLogout={handleForcedFlowLogout}
       >
         {isEmployee ? (
           <InitialEmployeeRecordForm
