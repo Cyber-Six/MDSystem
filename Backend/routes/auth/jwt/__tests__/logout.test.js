@@ -8,6 +8,18 @@ jest.mock('../../../../config/middleware/ratelimiter.js', () => ({
   portalBasedIpRateLimiter: () => (_req, _res, next) => next(),
 }));
 
+jest.mock('../../../../config/middleware/jwtProtect.js', () => ({
+  jwtProtect: () => (req, _res, next) => {
+    const testUserIdHeader = req.headers['x-test-user-id'];
+    const parsedUserId = Number(testUserIdHeader);
+    req.user = {
+      id: Number.isSafeInteger(parsedUserId) && parsedUserId > 0 ? parsedUserId : 101,
+      role: 'patient',
+    };
+    next();
+  },
+}));
+
 jest.mock('../../../../config/redis.js', () => ({
   getRefreshSession: (...args) => mockGetRefreshSession(...args),
   saveRefreshSession: (...args) => mockSaveRefreshSession(...args),
@@ -64,7 +76,7 @@ describe('POST /auth/logout', () => {
       .send({ refreshToken: '101:device-1:token-a' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, revoked: false });
+    expect(response.body).toEqual({ ok: true });
     expect(mockGetRefreshSession).toHaveBeenCalledWith(101, 'device-1');
     expect(mockSaveRefreshSession).not.toHaveBeenCalled();
   });
@@ -81,7 +93,19 @@ describe('POST /auth/logout', () => {
       .send({ refreshToken: '101:device-1:token-other' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, revoked: false });
+    expect(response.body).toEqual({ ok: true });
+    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
+  });
+
+  test('returns idempotent success when authenticated user does not match token user', async () => {
+    const response = await request(app)
+      .post('/auth/logout')
+      .set('x-test-user-id', '202')
+      .send({ refreshToken: '101:device-1:token-current' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(mockGetRefreshSession).not.toHaveBeenCalled();
     expect(mockSaveRefreshSession).not.toHaveBeenCalled();
   });
 
@@ -97,7 +121,7 @@ describe('POST /auth/logout', () => {
       .send({ refreshToken: '101:device-1:token-current' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, revoked: true });
+    expect(response.body).toEqual({ ok: true });
     expect(mockSaveRefreshSession).toHaveBeenCalledTimes(1);
   });
 
@@ -116,7 +140,7 @@ describe('POST /auth/logout', () => {
       .send({ refreshToken: '101:device-1:token-current' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, revoked: true });
+    expect(response.body).toEqual({ ok: true });
     expect(mockSaveRefreshSession).toHaveBeenCalledTimes(1);
 
     const [savedUserId, savedDeviceId, savedSession, ttl] = mockSaveRefreshSession.mock.calls[0];
@@ -145,7 +169,7 @@ describe('POST /auth/logout', () => {
       .send({ refreshToken: '101:device-1:token-prev' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, revoked: true });
+    expect(response.body).toEqual({ ok: true });
     expect(mockSaveRefreshSession).toHaveBeenCalledTimes(1);
   });
 
