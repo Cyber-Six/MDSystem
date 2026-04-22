@@ -263,20 +263,32 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
    * @param {boolean} redirectToAuth - Whether to redirect/navigate after logout
    */
   const logout = async (redirectToAuth = true) => {
-    // Clear all tokens (handle async storage)
+    const accessToken = await Promise.resolve(TokenStorage.getAccessToken());
+    const refreshToken = await Promise.resolve(TokenStorage.getRefreshToken());
+
+    // Clear all tokens locally first so logout is effective even when network is unavailable.
     await Promise.resolve(TokenStorage.clearTokens());
-    
-    // Optional: Call backend logout endpoint to invalidate session
-    // This is fire-and-forget, errors are ignored
-    try {
-      axios.post(`${getApiBaseUrl()}/auth/logout`, {}, {
-        withCredentials: true,
-        timeout: 5000,
-      }).catch(() => {
-        // Ignore errors - tokens are already cleared locally
-      });
-    } catch {
-      // Ignore errors - tokens are already cleared locally
+
+    // Best-effort server-side revocation for the current refresh session.
+    if (TokenStorage.validateRefreshToken(refreshToken)) {
+      const headers = {};
+      if (TokenStorage.validateToken(accessToken)) {
+        headers.Authorization = `Bearer ${accessToken}`;
+      }
+
+      try {
+        await axios.post(
+          `${getApiBaseUrl()}/auth/logout`,
+          { refreshToken },
+          {
+            withCredentials: true,
+            timeout: 5000,
+            headers,
+          }
+        );
+      } catch {
+        // Ignore revocation failures — local logout has already completed.
+      }
     }
     
     // Redirect/navigate if requested

@@ -5,10 +5,11 @@ const InfoCard = () => (
     <h3 className="text-lg font-semibold text-primary-900 dark:text-primary-100 mb-4" style={{ margin: 0 }}>Important Information</h3>
     <ul className="space-y-3 text-sm text-primary-700 dark:text-primary-300">
       {[
-        'Appointments are subject to availability and confirmation',
-        'You will receive a confirmation once your appointment is approved',
-        'Please arrive 10 minutes before your scheduled time',
-        'Bring your student ID and any relevant medical documents',
+        'Please arrive on time for your scheduled appointment. Patients who arrive on time will be prioritized, while those who arrive early or late may be accommodated afterward.',
+        'We encourage booking your appointment at least 2 days before your preferred date.',
+        'Please ensure all required documents are submitted correctly. Appointments are subject to staff review and may be approved or declined.',
+        'You will receive a confirmation once your appointment has been approved.',
+        'Bring a valid ID and any relevant medical documents.',
       ].map((text, i) => (
         <li key={i} className="flex items-start space-x-2">
           <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">

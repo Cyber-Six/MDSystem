@@ -11,7 +11,8 @@ const InitialRecordModal = ({
   children,
   onComplete,
   isRevision = false,
-  revisionNote = null
+  revisionNote = null,
+  onLogout = null
 }) => {
   const modalRef = useRef(null);
 
@@ -90,11 +91,22 @@ const InitialRecordModal = ({
                 </p>
               </div>
             </div>
-            <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium bg-white/30 text-secondary-900 px-3 py-1.5 rounded-full flex-shrink-0`}>
+            <div className="flex items-center gap-2">
+              {typeof onLogout === 'function' && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="text-xs sm:text-sm font-semibold bg-white text-secondary-900 px-3 py-1.5 rounded-lg hover:bg-white/90 transition-colors"
+                >
+                  Logout
+                </button>
+              )}
+              <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium bg-white/30 text-secondary-900 px-3 py-1.5 rounded-full flex-shrink-0`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isRevision ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"} />
               </svg>
               <span>{isRevision ? 'Revision Required' : 'Required for Access'}</span>
+              </div>
             </div>
           </div>
 

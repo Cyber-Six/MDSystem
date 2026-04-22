@@ -1,5 +1,4 @@
 const db  = require("../../../../config/query.js");
-const { findEmailByUserId } = require("../../../../config/query.js");
 const { notifyUser } = require("../../../../config/sockets");
 
 const { assertActiveUpdateTicket } = require("./helper.js");
@@ -9,6 +8,42 @@ const logger = require("../../../../utils/logger.js");
 const permit = require("../../../../services/permit.js");
 
 const Query = require("./query.js");
+
+function buildStatusNotificationCopy(status, notes) {
+  const trimmedNotes = typeof notes === 'string' ? notes.trim() : '';
+  const hasNotes = trimmedNotes.length > 0;
+
+  switch (status) {
+    case 'Approved':
+      return {
+        title: 'Record Submission Approved',
+        message: hasNotes
+          ? `Your submitted record has been approved. Staff notes: ${trimmedNotes}`
+          : 'Your submitted record has been approved.',
+      };
+    case 'Revision':
+      return {
+        title: 'Record Revision Required',
+        message: hasNotes
+          ? `Your submitted record needs revision. Staff notes: ${trimmedNotes}`
+          : 'Your submitted record needs revision. Please review your form and resubmit.',
+      };
+    case 'Rejected':
+      return {
+        title: 'Record Submission Rejected',
+        message: hasNotes
+          ? `Your submitted record was rejected. Reason: ${trimmedNotes}`
+          : 'Your submitted record was rejected. Please contact the clinic for guidance.',
+      };
+    default:
+      return {
+        title: 'Record Status Updated',
+        message: hasNotes
+          ? `Your record status has been updated to ${status}. Notes: ${trimmedNotes}`
+          : `Your record status has been updated to ${status}.`,
+      };
+  }
+}
 
 const Mutation = {
   staffUpdateTicket: async (_, args, { user, res }) => {
@@ -33,20 +68,30 @@ const Mutation = {
       { user, res }
     );
 
+    const newStatus = updateResult;
+    const { title, message } = buildStatusNotificationCopy(newStatus, args.notes);
+
     // Notify patient about the update ticket status change
     try {
       const notification = await notifyUser(
         args.userId,
         "updateTicket:statusChanged",
-        { recordId: record.id, newStatus: updateResult.status },
         {
-          email: await findEmailByUserId(args.userId),
-          title: "Update Ticket Status Changed",
-          message: `Your update ticket has been ${updateResult.status.toLowerCase()}.`,
-        }
+          recordId: record.id,
+          newStatus,
+          notes: args.notes || null,
+          scope: record.scope || null,
+          message,
+        },
+        {
+          title,
+          message,
+          notes: args.notes || null,
+        },
+        { forceEmail: true }
       );
 
-      logger.info(`Notification sent to user ${args.userId}: ${notification}`);
+      logger.info(`Notification sent to user ${args.userId}: ${notification} (${newStatus})`);
     } catch (error) {
       logger.error(`Failed to send notification for update ticket status change: ${error.message}`);
     }

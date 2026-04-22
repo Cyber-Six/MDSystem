@@ -194,7 +194,7 @@ POST /auth/login/complete  → issues JWT (blocks if TOTP not verified)
 
 ### Email 2FA for Patients
 
-Patient login (web + mobile) can require a 6-digit code sent to the registered email before the data consent step. Controlled by `allow_email_2fa` in `UserCredentials`.
+Patient login (web + mobile) can require a 6-digit code sent to the registered email before login completion. A data consent modal is shown only when consent is missing or its stored version is older than `DATA_CONSENT_VERSION`. Controlled by `allow_email_2fa` and consent fields in `UserCredentials`.
 
 ### 2FA Enforcement on Admin Transfer
 
@@ -2064,7 +2064,7 @@ MDSystem supports Google OAuth as an alternative authentication method, restrict
 
 ### Flow
 
-After Google OAuth verification, the user follows the same 2FA → Data Consent → Login Complete flow as password-based login.
+After Google OAuth verification, the user follows the same 2FA → Login Complete flow as password-based login, with Data Consent prompted only when the backend reports `DATA_CONSENT_REQUIRED` or `OUTDATED_CONSENT`.
 
 ### Related Files
 

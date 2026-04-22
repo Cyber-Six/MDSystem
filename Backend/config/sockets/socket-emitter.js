@@ -212,9 +212,13 @@ function emitToRole(role, eventName, data) {
  * @param {string} eventName
  * @param {*}      data
  * @param {{ email: string, title: string, message: string, notes?: string, ctaText?: string, ctaLink?: string } | null} [emailNotif]
+ * @param {{ forceEmail?: boolean, skipEmail?: boolean }} [options]
  * @returns {Promise<'delivered'|'queued'|'suppressed'>}
  */
-async function notifyUser(userId, eventName, data, emailNotif = null) {
+async function notifyUser(userId, eventName, data, emailNotif = null, options = {}) {
+  const forceEmail = options?.forceEmail === true;
+  const skipEmail = options?.skipEmail === true;
+
   // ── Resolve channel preferences for this event ────────────────────────────
   let channelPrefs;
   try {
@@ -266,8 +270,11 @@ async function notifyUser(userId, eventName, data, emailNotif = null) {
   //   2. emailFallback = true && user offline → send email
   //   3. otherwise → no email
   const shouldEmail =
-    channelPrefs.email ||
-    (channelPrefs.emailFallback && !online);
+    !skipEmail && (
+      forceEmail ||
+      channelPrefs.email ||
+      (channelPrefs.emailFallback && !online)
+    );
 
   if (shouldEmail) {
     try {
@@ -305,11 +312,12 @@ async function notifyUser(userId, eventName, data, emailNotif = null) {
  * @param {string}   eventName
  * @param {*}        data
  * @param {{ email: string, title: string, message: string, notes?: string, ctaText?: string, ctaLink?: string } | null} [emailNotif]
+ * @param {{ forceEmail?: boolean, skipEmail?: boolean }} [options]
  * @returns {Promise<{ delivered: string[], queued: string[], suppressed: string[] }>}
  */
-async function notifyUsers(userIds, eventName, data, emailNotif = null) {
+async function notifyUsers(userIds, eventName, data, emailNotif = null, options = {}) {
   const results = await Promise.all(
-    userIds.map(async (userId) => ({ userId, result: await notifyUser(userId, eventName, data, emailNotif) }))
+    userIds.map(async (userId) => ({ userId, result: await notifyUser(userId, eventName, data, emailNotif, options) }))
   );
   return results.reduce(
     (acc, { userId, result }) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getPatientAppointmentSnapshot, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
-import { searchPatients, formatPatientName, getProfileLabel, getPatientInitials } from '../../../services/patient-search-service';
+import { searchPatients, formatPatientName, getProfileLabel, getPatientInitials, getPatientYearLevelLabel } from '../../../services/patient-search-service';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import AppointmentDetailModal from './appointment-detail-modal';
 import PatientInitialBadge from '../../search-patient/components/patient-initial-badge';
@@ -209,8 +209,8 @@ const PatientLookup = () => {
                 {selectedPatient.identifier ? `ID: ${selectedPatient.identifier}` : ''}
                 {selectedPatient.identifier && getProfileLabel(selectedPatient) ? ' · ' : ''}
                 {getProfileLabel(selectedPatient) || ''}
-                {(selectedPatient.identifier || getProfileLabel(selectedPatient)) && selectedPatient.profile_type ? ' · ' : ''}
-                {selectedPatient.profile_type || ''}
+                {(selectedPatient.identifier || getProfileLabel(selectedPatient)) && getPatientYearLevelLabel(selectedPatient) ? ' · ' : ''}
+                {getPatientYearLevelLabel(selectedPatient) || ''}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -317,7 +317,7 @@ const PatientLookup = () => {
 
                     {patient.profile_type && (
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${PATIENT_TYPE_COLORS[patient.profile_type] || PATIENT_TYPE_COLORS.Employee}`}>
-                        {patient.profile_type}
+                        {getPatientYearLevelLabel(patient) || patient.profile_type}
                       </span>
                     )}
                   </button>

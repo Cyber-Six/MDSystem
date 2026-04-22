@@ -349,9 +349,10 @@ const Login = ({ onVerificationViewChange }) => {
     try {
       const response = await axiosRequest.post('/auth/email/2fa/verify', { email: verificationEmail, otp: twoFactorCode, verificationKey });
       if (response.data.ok) {
-        setVerificationKey(response.data.verificationKey);
+        const nextVerificationKey = response.data.verificationKey;
+        setVerificationKey(nextVerificationKey);
         setShowTwoFactor(false);
-        setShowConsent(true);
+        await completeLoginWithKey(nextVerificationKey, { promptConsentIfRequired: true });
       }
     } catch (err) {
       const errorCode = err.response?.data?.error;
@@ -381,9 +382,10 @@ const Login = ({ onVerificationViewChange }) => {
     try {
       const response = await axiosRequest.post('/settings/totp/validate', { token: totpCode, verificationKey, email });
       if (response.data.ok) {
+        const nextVerificationKey = verificationKey;
         setShowTotpVerify(false);
         setTotpCode('');
-        setShowConsent(true);
+        await completeLoginWithKey(nextVerificationKey, { promptConsentIfRequired: true });
       }
     } catch (err) {
       const errorCode = err.response?.data?.error;
@@ -408,9 +410,11 @@ const Login = ({ onVerificationViewChange }) => {
     setShowTwoFactor(true);
   };
 
-  const completeLoginWithKey = async (key) => {
+  const completeLoginWithKey = async (key, { promptConsentIfRequired = false } = {}) => {
     setError('');
     setIsLoading(true);
+    let shouldOpenConsent = false;
+
     try {
       const response = await axiosRequest.post('/auth/login/complete', { LoginKey: key });
       if (response.data.ok) {
@@ -438,14 +442,25 @@ const Login = ({ onVerificationViewChange }) => {
           setShowConsent(false); setShowTwoFactor(true);
           break;
         case 'DATA_CONSENT_REQUIRED':
-          setError('You must agree to the data consent policy to login.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the data consent policy to login.');
+          }
           break;
         case 'OUTDATED_CONSENT':
-          setError('You must agree to the latest data consent policy.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the latest data consent policy.');
+          }
           break;
         default: setError(errorMsg);
       }
-    } finally { setIsLoading(false); setShowConsent(false); }
+    } finally {
+      setIsLoading(false);
+      setShowConsent(shouldOpenConsent);
+    }
   };
 
   const handleConsentAccept = () => completeLoginWithKey(verificationKey);

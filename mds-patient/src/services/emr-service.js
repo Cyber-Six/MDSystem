@@ -4,6 +4,7 @@
 
 import { axiosRequest } from '../packages-core-adapter';
 import { sendGraphQLRequest } from '../utils/graphql-client';
+import { shouldRequireInitialRecordFromTicketStatus } from './record-status-utils';
 
 /**
  * Fetch the current update ticket (id + status) without throwing.
@@ -2289,8 +2290,7 @@ export const checkInitialRecordStatus = async () => {
     return { needsInitialRecord: true, status: null, credentialStatus: null, ticketCreatedAt: null };
   }
 
-  const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
-  const needsInitialRecord = !completedStatuses.includes(ticket.status);
+  const needsInitialRecord = shouldRequireInitialRecordFromTicketStatus(ticket.status);
 
   console.log('[EMR Service] Initial record status (fallback):', {
     needsInitialRecord,

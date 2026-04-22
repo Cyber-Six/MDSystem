@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Search, UserPlus, UserMinus, Users, AlertCircle } from 'lucide-react';
 import { listWhitelist, addWhitelist, removeWhitelist } from '../staff-appointment-service';
-import { searchPatients, formatPatientName } from '../../../services/patient-search-service';
+import { searchPatients, formatPatientName, getPatientYearLevelLabel } from '../../../services/patient-search-service';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
 
 /**
@@ -201,11 +201,11 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
                           <span className="text-xs text-secondary-600 dark:text-neutral-400">
                             ID: {patient.identifier}
                           </span>
-                          {patient.profile_type && (
+                          {getPatientYearLevelLabel(patient) && (
                             <>
                               <span className="text-xs text-neutral-400">•</span>
                               <span className="text-xs text-secondary-600 dark:text-neutral-400">
-                                {patient.profile_type}
+                                {getPatientYearLevelLabel(patient)}
                               </span>
                             </>
                           )}

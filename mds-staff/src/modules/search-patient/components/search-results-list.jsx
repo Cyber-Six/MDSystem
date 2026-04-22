@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatPatientName, getPatientInitials, getProfileLabel } from '../../../services/patient-search-service';
+import { formatPatientName, getPatientInitials, getProfileLabel, getPatientYearLevelLabel } from '../../../services/patient-search-service';
 import PatientInitialBadge from './patient-initial-badge';
 
 // ── Badge helpers ────────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ const SearchResultsList = ({ patients, hasFired, isLoading, error, searchTerm, f
                           : p.profile_type === 'Superior'
                             ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                             : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                      }`}>{p.profile_type}</span>
+                      }`}>{getPatientYearLevelLabel(p) || p.profile_type}</span>
                     )}
                     {p.access_denied && (
                       <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">
