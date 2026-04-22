@@ -463,6 +463,7 @@ const Login = ({ onVerificationViewChange }) => {
           }
           break;
         case 'STAFF_ACCOUNT_PENDING':
+        case 'STAFF_ACCOUNT_INACTIVE':
           setError('Your staff account is not yet activated. Contact your administrator to grant you access.');
           setShowConsent(false);
           break;
