@@ -606,10 +606,6 @@ const StaffTopBar = ({ onMenuClick }) => {
                       {profile.email}
                     </p>
                   )}
-                  {/* Medical Staff identity label */}
-                  <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-tight mt-0.5 mb-0">
-                    Medical Staff
-                  </p>
                   {(isAdmin || profile?.role || profile?.branch) && (
                     <div className="flex items-center gap-1.5 flex-wrap mt-1">
                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 truncate" title={isAdmin ? 'Admin' : (profile?.role ?? '')}>
