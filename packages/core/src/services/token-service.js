@@ -276,17 +276,19 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
         headers.Authorization = `Bearer ${accessToken}`;
       }
 
-      axios.post(
-        `${getApiBaseUrl()}/auth/logout`,
-        { refreshToken },
-        {
-          withCredentials: true,
-          timeout: 5000,
-          headers,
-        }
-      ).catch(() => {
+      try {
+        await axios.post(
+          `${getApiBaseUrl()}/auth/logout`,
+          { refreshToken },
+          {
+            withCredentials: true,
+            timeout: 5000,
+            headers,
+          }
+        );
+      } catch {
         // Ignore revocation failures — local logout has already completed.
-      });
+      }
     }
     
     // Redirect/navigate if requested
