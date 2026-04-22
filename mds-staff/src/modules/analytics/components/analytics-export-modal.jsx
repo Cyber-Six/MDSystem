@@ -73,6 +73,7 @@ const METRIC_LABELS = {
   'inventory-consumption-trends': 'Inventory Consumption Trends',
   'inventory-report-summary': 'Inventory Report Summary (Medicine vs MedicalSupply)',
   'patients-by-sex': 'Patients by Sex',
+  'students-by-type': 'Total Students by Student Type',
   'consultations-by-sex': 'Consultations by Sex',
   'top-diagnoses-by-sex': 'Top Diagnoses by Sex (Top 10)',
   'patients-by-age-group': 'Patients by Age Group',

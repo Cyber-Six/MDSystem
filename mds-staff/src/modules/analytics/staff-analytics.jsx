@@ -7,6 +7,7 @@ import AnalyticsSummaryCards from './components/analytics-summary-cards';
 import AnalyticsExportModal from './components/analytics-export-modal';
 import { readPersistedViewState, writePersistedViewState } from '../../utils/persistent-view-state';
 import {
+  fetchAvailableQueries,
   fetchMultipleQueries,
   fetchFilterOptions,
   QUERY_CATEGORIES,
@@ -24,6 +25,7 @@ const DEMOGRAPHIC_DIMENSIONS = [
   { key: 'all',        label: 'All' },
   { key: 'sex',        label: 'Sex' },
   { key: 'age',        label: 'Age Groups' },
+  { key: 'studentType', label: 'Student Type' },
   { key: 'department', label: 'Department' },
   { key: 'program',    label: 'Program' },
   { key: 'matrix',     label: 'Cross-dimensional' },
@@ -33,6 +35,7 @@ const DEMOGRAPHIC_DIMENSION_QUERIES = {
   all:        QUERY_CATEGORIES.demographics?.queries || [],
   sex:        ['patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex'],
   age:        ['patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group'],
+  studentType: ['students-by-type'],
   department: ['consultations-by-department', 'lifestyle-risks-by-department'],
   program:    ['consultations-by-program'],
   matrix:     ['sex-age-group-matrix', 'diagnoses-sex-age'],
@@ -92,6 +95,8 @@ const StaffAnalytics = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedSex, setSelectedSex] = useState('');
   const [filterOptions, setFilterOptions] = useState({ departments: [], sexes: [] });
+  const [supportedQueryKeys, setSupportedQueryKeys] = useState(() => new Set(ALL_QUERY_KEYS));
+  const [queryCatalogReady, setQueryCatalogReady] = useState(false);
 
   // Cache: Map<queryKey, result> — persists across tab switches, cleared on filter change
   const [cache, setCache] = useState(new Map());
@@ -119,6 +124,35 @@ const StaffAnalytics = () => {
     }
   }, [permBranch]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load backend-supported analytics query keys so the UI does not request unknown metrics.
+  useEffect(() => {
+    const loadSupportedQueries = async () => {
+      try {
+        const queries = await fetchAvailableQueries();
+        const supported = new Set(
+          (Array.isArray(queries) ? queries : [])
+            .map((entry) => {
+              if (typeof entry === 'string') return entry;
+              if (entry && typeof entry === 'object') return entry.name;
+              return '';
+            })
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+        );
+
+        if (supported.size > 0) {
+          setSupportedQueryKeys(supported);
+        }
+      } catch (error) {
+        console.error('Failed to load available analytics queries:', error);
+      } finally {
+        setQueryCatalogReady(true);
+      }
+    };
+
+    loadSupportedQueries();
+  }, []);
+
   // Load filter options on initial mount (not just demographics tab)
   useEffect(() => {
     const loadFilters = async () => {
@@ -138,10 +172,8 @@ const StaffAnalytics = () => {
       }
     };
 
-    // Load immediately on component mount
-    if (filterOptions.departments.length === 0 && filterOptions.sexes.length === 0) {
-      loadFilters();
-    }
+    // Load immediately on component mount.
+    loadFilters();
   }, []); // Run once on mount
 
   // Build filters object used by all analytics queries
@@ -152,11 +184,24 @@ const StaffAnalytics = () => {
     return f;
   }, [selectedDepartment, selectedSex]);
 
+  const getSupportedQueriesForCategory = useCallback((category, demoDimension = 'all') => {
+    const categoryQueries = getQueriesForCategory(category, demoDimension);
+    if (!supportedQueryKeys || supportedQueryKeys.size === 0) return categoryQueries;
+    return categoryQueries.filter((queryKey) => supportedQueryKeys.has(queryKey));
+  }, [supportedQueryKeys]);
+
   // Current visible queries based on active tab + dimension
-  const visibleQueries = useMemo(() =>
-    getQueriesForCategory(activeCategory, demographicDimension),
-    [activeCategory, demographicDimension]
-  );
+  const visibleQueries = useMemo(() => {
+    if (!queryCatalogReady) return [];
+    return getSupportedQueriesForCategory(activeCategory, demographicDimension);
+  }, [activeCategory, demographicDimension, getSupportedQueriesForCategory, queryCatalogReady]);
+
+  const supportedDemographicDimensions = useMemo(() => {
+    if (!queryCatalogReady) return DEMOGRAPHIC_DIMENSIONS;
+    return DEMOGRAPHIC_DIMENSIONS.filter(
+      (dimension) => getSupportedQueriesForCategory('demographics', dimension.key).length > 0
+    );
+  }, [getSupportedQueriesForCategory, queryCatalogReady]);
 
   /**
    * Fetch only the missing queries for a given list of query keys.
@@ -195,6 +240,8 @@ const StaffAnalytics = () => {
    * Uses a category-level flag so we don't re-fetch when switching back.
    */
   const loadActiveCategory = useCallback(async (force = false) => {
+    if (!queryCatalogReady) return;
+
     const deptSex = `:dept=${selectedDepartment || 'all'}:sex=${selectedSex || 'all'}`;
     const catKey = activeCategory === 'demographics'
       ? `demographics:${demographicDimension}${deptSex}`
@@ -202,12 +249,28 @@ const StaffAnalytics = () => {
 
     if (!force && fetchedCategories.has(catKey)) return;
 
-    const queries = getQueriesForCategory(activeCategory, demographicDimension);
+    const queries = getSupportedQueriesForCategory(activeCategory, demographicDimension);
+    if (queries.length === 0) {
+      setInitialLoad(false);
+      setFetchedCategories(prev => new Set(prev).add(catKey));
+      return;
+    }
     const filters = activeFilters;
     await fetchQueries(queries, { force, filters });
 
     setFetchedCategories(prev => new Set(prev).add(catKey));
-  }, [activeCategory, demographicDimension, selectedDepartment, selectedSex, activeFilters, fetchedCategories, fetchQueries]);
+  }, [queryCatalogReady, activeCategory, demographicDimension, selectedDepartment, selectedSex, getSupportedQueriesForCategory, activeFilters, fetchedCategories, fetchQueries]);
+
+  // If a persisted demographics dimension is no longer supported by the backend, switch to the first available.
+  useEffect(() => {
+    if (!queryCatalogReady || activeCategory !== 'demographics') return;
+    if (getSupportedQueriesForCategory('demographics', demographicDimension).length > 0) return;
+
+    const fallbackDimension = supportedDemographicDimensions[0]?.key || 'all';
+    if (fallbackDimension !== demographicDimension) {
+      setDemographicDimension(fallbackDimension);
+    }
+  }, [queryCatalogReady, activeCategory, demographicDimension, getSupportedQueriesForCategory, supportedDemographicDimensions]);
 
   // Fetch on tab switch or initial mount
   useEffect(() => {
@@ -243,10 +306,11 @@ const StaffAnalytics = () => {
 
   // Manual refresh — force re-fetch active tab
   const handleRefresh = useCallback(() => {
-    const queries = getQueriesForCategory(activeCategory, demographicDimension);
+    const queries = getSupportedQueriesForCategory(activeCategory, demographicDimension);
+    if (queries.length === 0) return;
     const filters = activeFilters;
     fetchQueries(queries, { force: true, filters });
-  }, [activeCategory, demographicDimension, activeFilters, fetchQueries]);
+  }, [activeCategory, demographicDimension, getSupportedQueriesForCategory, activeFilters, fetchQueries]);
 
   return (
     <div className="space-y-1.5">
@@ -330,19 +394,27 @@ const StaffAnalytics = () => {
       {activeCategory === 'demographics' && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 mr-0.5">Dimension:</span>
-          {DEMOGRAPHIC_DIMENSIONS.map((dim) => (
+          {DEMOGRAPHIC_DIMENSIONS.map((dim) => {
+            const isSupported = !queryCatalogReady || getSupportedQueriesForCategory('demographics', dim.key).length > 0;
+
+            return (
             <button
               key={dim.key}
               onClick={() => setDemographicDimension(dim.key)}
+              disabled={!isSupported}
+              title={isSupported ? undefined : 'Unavailable on the current backend'}
               className={`px-2.5 py-0.5 text-[11px] font-medium rounded-full border transition-colors ${
                 demographicDimension === dim.key
                   ? 'bg-emerald-500 border-emerald-500 text-white'
-                  : 'bg-white dark:bg-neutral-700 border-neutral-200 dark:border-neutral-600 text-secondary-500 dark:text-neutral-400 hover:border-emerald-400 hover:text-emerald-600'
+                  : isSupported
+                    ? 'bg-white dark:bg-neutral-700 border-neutral-200 dark:border-neutral-600 text-secondary-500 dark:text-neutral-400 hover:border-emerald-400 hover:text-emerald-600'
+                    : 'bg-neutral-100 dark:bg-neutral-700/40 border-neutral-200 dark:border-neutral-700 text-secondary-300 dark:text-neutral-500 cursor-not-allowed'
               }`}
             >
               {dim.label}
             </button>
-          ))}
+            );
+          })}
 
           {/* Department filter dropdown */}
           {filterOptions.departments.length > 0 && (

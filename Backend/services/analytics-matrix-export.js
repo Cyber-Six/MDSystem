@@ -127,6 +127,7 @@ const TAB_CONFIG = Object.freeze([
     name: 'Demographics',
     metrics: [
       'patients-by-sex',
+      'students-by-type',
       'consultations-by-sex',
       'top-diagnoses-by-sex',
       'patients-by-age-group',

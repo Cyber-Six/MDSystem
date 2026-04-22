@@ -48,7 +48,7 @@ export const QUERY_CATEGORIES = {
   demographics: {
     label: 'Demographics',
     queries: [
-      'patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex',
+      'patients-by-sex', 'students-by-type', 'consultations-by-sex', 'top-diagnoses-by-sex',
       'patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group',
       'consultations-by-department', 'consultations-by-program', 'lifestyle-risks-by-department',
       'sex-age-group-matrix', 'diagnoses-sex-age',
@@ -88,6 +88,7 @@ export const CHART_TYPE_MAP = {
   'inventory-report-summary': 'stacked-area',
   // Demographics
   'patients-by-sex': 'pie',
+  'students-by-type': 'bar',
   'consultations-by-sex': 'pie',
   'top-diagnoses-by-sex': 'grouped-bar',
   'patients-by-age-group': 'pie',
@@ -302,9 +303,32 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
         }
       }
     }
-  } catch {
+  } catch (error) {
+    const invalidTypes = Array.isArray(error?.response?.data?.invalidTypes)
+      ? error.response.data.invalidTypes
+      : [];
+
+    if (invalidTypes.length > 0) {
+      invalidTypes.forEach((dataType) => {
+        if (typeof dataType === 'string' && dataType.trim()) {
+          results.set(dataType, { success: false, error: true, dataType, unsupported: true });
+        }
+      });
+    }
+
+    const invalidSet = new Set(
+      invalidTypes
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    );
+    const fetchableDataTypes = dataTypes.filter((dataType) => !invalidSet.has(dataType));
+
+    if (fetchableDataTypes.length === 0) {
+      return results;
+    }
+
     // Fallback: if batch endpoint fails, fetch individually
-    const promises = dataTypes.map(async (dataType) => {
+    const promises = fetchableDataTypes.map(async (dataType) => {
       try {
         const data = await fetchQueryData(dataType, branch, startDate, endDate, groupBy, filters);
         // Guard: if the backend returned HTML instead of JSON (e.g. not yet deployed),
@@ -338,7 +362,7 @@ export const EXPORT_PRESETS = {
   'emr':            { label: 'EMR Report',                  description: 'Reproductive health, oral findings, and vital-sign analytics' },
   'general':        { label: 'General Population Report',   description: 'Credential status and branch population comparison' },
   'inventory':      { label: 'Inventory Report',            description: 'Most consumed items, trends, and stock summary' },
-  'demographics':   { label: 'Demographics Report',         description: 'Sex, age group, department, and program analytics' },
+  'demographics':   { label: 'Demographics Report',         description: 'Sex, age group, student type, department, and program analytics' },
 };
 
 /**
