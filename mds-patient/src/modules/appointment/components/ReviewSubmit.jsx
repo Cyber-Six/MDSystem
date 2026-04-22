@@ -3,8 +3,8 @@ import { Spinner, BackButton } from './shared';
 import { SESSION } from '../patient-appointment-service';
 
 const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, uploadedFiles, purpose, onPurposeChange, showPurposeError, submitting, onSubmit, onBack }) => {
-  const purposeRequired = scheduler?.purposeRequired ?? false;
-  const purposeMissing = purposeRequired && !(purpose || '').trim();
+  const purposeRequired = true;
+  const purposeMissing = !(purpose || '').trim();
   return (
   <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
     <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-6">Review &amp; Submit</h2>
@@ -46,20 +46,16 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
     <div className="mb-6 pt-4 border-t border-neutral-200 dark:border-neutral-700">
       <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
         Purpose / Reason for Visit
-        {purposeRequired
-          ? <span className="text-red-500 ml-0.5">*</span>
-          : null}
-        {' '}<span className="text-neutral-400 text-xs">({purposeRequired ? 'Required' : 'optional'} · {(purpose || '').length}/250)</span>
+        <span className="text-red-500 ml-0.5">*</span>
+        {' '}<span className="text-neutral-400 text-xs">(Required · {(purpose || '').length}/250)</span>
       </label>
       <textarea
         maxLength={250}
         rows={3}
-        required={purposeRequired}
+        required
         value={purpose || ''}
         onChange={(e) => onPurposeChange(e.target.value.slice(0, 250))}
-        placeholder={purposeRequired
-          ? 'Briefly describe the reason for your appointment (Required)'
-          : 'Briefly describe the reason for your appointment (optional)'}
+        placeholder="Briefly describe the reason for your appointment (Required)"
         className={`w-full px-3 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none ${
           showPurposeError && purposeMissing
             ? 'border-red-400 dark:border-red-600'
