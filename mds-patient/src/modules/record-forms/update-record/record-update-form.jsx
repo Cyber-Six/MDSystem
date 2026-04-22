@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ProgressStepper from './progress-stepper';
 import PersonalInfoStep from './personal-info-step';
 import MedicalHistoryStep from './medical-history-step';
@@ -7,6 +7,7 @@ import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
 import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { usePatientNotifications } from '../../notification/notification-context';
 import ValidationWarningModal from '../../../components/modals/validation-warning-modal';
 import {
   buildUpdateRecordSteps,
@@ -22,6 +23,7 @@ const RecordUpdateForm = ({
   onSubmissionSuccess = null,
   isInactiveMode = false,
 }) => {
+  const { subscribe } = usePatientNotifications();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,38 +49,51 @@ const RecordUpdateForm = ({
   const [validationErrors, setValidationErrors] = useState([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
+  const syncRevisionStatus = useCallback(async (source = 'mount') => {
+    try {
+      console.log(`[RecordUpdateForm] Syncing revision status from ${source}...`);
+      const ticket = await getUpdateRevisionStatus();
+
+      if (ticket && ticket.status === 'Revision') {
+        console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
+        setRevisionStatus(ticket);
+        setShowRevisionBanner(true);
+
+        // Pre-fetch previous data for revision
+        try {
+          const prefill = await fetchUpdateRevisionPrefill();
+          if (prefill && Object.keys(prefill).length > 0) {
+            console.log('[RecordUpdateForm] ✅ Pre-fill data fetched:', prefill);
+            setRevisionPrefillData(prefill); // Store for later use
+          }
+        } catch (err) {
+          console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
+        }
+        return;
+      }
+
+      setRevisionStatus(ticket || null);
+      setShowRevisionBanner(false);
+      setRevisionPrefillData(null);
+      console.log('[RecordUpdateForm] No revision pending');
+    } catch (error) {
+      console.error('[RecordUpdateForm] Error checking revision status:', error.message);
+    }
+  }, []);
+
   // Check for pending revision request on mount
   useEffect(() => {
-    const checkForRevision = async () => {
-      try {
-        console.log('[RecordUpdateForm] Checking for pending revision...');
-        const ticket = await getUpdateRevisionStatus();
-        
-        if (ticket && ticket.status === 'Revision') {
-          console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
-          setRevisionStatus(ticket);
-          setShowRevisionBanner(true);
-          
-          // Pre-fetch previous data for revision
-          try {
-            const prefill = await fetchUpdateRevisionPrefill();
-            if (prefill && Object.keys(prefill).length > 0) {
-              console.log('[RecordUpdateForm] ✅ Pre-fill data fetched:', prefill);
-              setRevisionPrefillData(prefill); // Store for later use
-            }
-          } catch (err) {
-            console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
-          }
-        } else {
-          console.log('[RecordUpdateForm] No revision pending');
-        }
-      } catch (error) {
-        console.error('[RecordUpdateForm] Error checking revision status:', error.message);
-      }
-    };
+    syncRevisionStatus('mount');
+  }, [syncRevisionStatus]);
 
-    checkForRevision();
-  }, []);
+  // Keep revision modal in sync with live update-ticket status changes.
+  useEffect(() => {
+    const unsubscribe = subscribe('updateTicket:statusChanged', () => {
+      syncRevisionStatus('notification');
+    });
+
+    return () => unsubscribe();
+  }, [subscribe, syncRevisionStatus]);
 
   // Fetch patient sex on mount so OB-GYN section shows correctly for female patients
   useEffect(() => {
