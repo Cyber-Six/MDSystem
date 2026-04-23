@@ -411,25 +411,62 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
               );
             })}
 
+            {/* Record Form Guidance Card */}
             <View
               style={[
-                styles.infoCard,
+                styles.guidanceCard,
                 {
-                  backgroundColor: isDark ? colors.secondary[700] : colors.neutral[100],
-                  borderColor: isDark ? colors.secondary[600] : colors.neutral[200],
+                  backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+                  borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
                 },
               ]}
             >
-              <Ionicons
-                name="information-circle"
-                size={15}
-                color={isDark ? colors.secondary[400] : colors.secondary[400]}
-                style={{ marginTop: 2 }}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.infoTitle, { color: isDark ? colors.secondary[300] : colors.secondary[600] }]}>Why separate updates?</Text>
-                <Text style={[styles.infoBody, { color: isDark ? colors.secondary[500] : colors.secondary[400] }]}>This keeps your medical and dental records organized and secure. You can update the other record type later.</Text>
+              <View style={styles.guidanceHeader}>
+                <Ionicons
+                  name="information-circle"
+                  size={22}
+                  color={isDark ? colors.primary[400] : colors.primary[600]}
+                  style={{ marginTop: 1 }}
+                />
+                <Text style={[styles.guidanceTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                  Record Form Guidance
+                </Text>
               </View>
+
+              <Text style={[styles.guidanceSectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                Guidelines
+              </Text>
+              {[
+                'Complete your record forms before proceeding to MDS (Medical and Dental Services).',
+                'Provide complete and accurate information to avoid delays in assessment and appointment processing.',
+                'Review all entries before submitting, especially personal details, medical history, and emergency information.',
+                'Bring your ID and any required supporting documents during enrollment, validation, or clinic visits.',
+                'Update your records whenever there are changes to your health status or relevant personal information.',
+              ].map((item, i) => (
+                <View key={i} style={styles.bulletRow}>
+                  <Text style={[styles.bullet, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>{'•'}</Text>
+                  <Text style={[styles.bulletText, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>{item}</Text>
+                </View>
+              ))}
+
+              <View style={[styles.guidanceDivider, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]} />
+
+              <Text style={[styles.guidanceSectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                When to Use Each Record Update
+              </Text>
+              {[
+                { label: 'Both Medical and Dental', desc: 'Use during every semestral enrollment and student ID validation.' },
+                { label: 'Medical Only', desc: 'Use for medical appointments and checkups (e.g. OJT, sports events, outside activities, and other concerns.)' },
+                { label: 'Dental Only', desc: 'Use for dental appointments, routine dental checkups, and other dental concerns.' },
+              ].map((item, i) => (
+                <View key={i} style={styles.bulletRow}>
+                  <Text style={[styles.bullet, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>{'•'}</Text>
+                  <Text style={[styles.bulletText, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+                    <Text style={[styles.bulletLabel, { color: isDark ? colors.neutral[200] : colors.secondary[800] }]}>{item.label}: </Text>
+                    {item.desc}
+                  </Text>
+                </View>
+              ))}
             </View>
           </>
         )}
@@ -585,6 +622,50 @@ const styles = StyleSheet.create({
   infoBody: {
     fontSize: 12,
     lineHeight: 20,
+  },
+  guidanceCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 4,
+  },
+  guidanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  guidanceTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  guidanceSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  guidanceDivider: {
+    borderTopWidth: 1,
+    marginVertical: 10,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingLeft: 4,
+    marginBottom: 4,
+  },
+  bullet: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  bulletText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 20,
+  },
+  bulletLabel: {
+    fontWeight: '600',
   },
   statusBadge: {
     flexDirection: 'row',
