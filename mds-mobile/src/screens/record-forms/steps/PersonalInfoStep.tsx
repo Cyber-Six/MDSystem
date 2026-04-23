@@ -326,7 +326,6 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad', maxLength: 11 })}
           {renderField('Present Address', 'address', 'Enter present address')}
           {renderField('Province Address', 'provinceAddress', 'Enter province address')}
-          {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
         </>
       )}
 
@@ -608,6 +607,8 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
               </Pressable>
             </Modal>
           </View>
+
+          {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
         </>
       )}
 
