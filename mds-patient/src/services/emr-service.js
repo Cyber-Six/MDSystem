@@ -4,6 +4,7 @@
 
 import { axiosRequest } from '../packages-core-adapter';
 import { sendGraphQLRequest } from '../utils/graphql-client';
+import { shouldRequireInitialRecordFromTicketStatus } from './record-status-utils';
 
 /**
  * Fetch the current update ticket (id + status) without throwing.
@@ -1015,6 +1016,73 @@ const buildOralApplianceRecords = (dentalHistory, catalog) => {
   return { appliances, notes: dentalHistory?.applianceOther || null };
 };
 
+const VISUAL_ACUITY_META_PREFIX = 'VA_META::';
+
+const normalizeVisualGrade = (value) => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const parseLegacyVisualAcuityFlags = (notes = '') => ({
+  eyeglasses: notes.includes('Eyeglasses: Yes'),
+  contactLenses: notes.includes('Contact Lenses: Yes'),
+});
+
+const parseVisualAcuityMetaNotes = (rawNotes) => {
+  if (typeof rawNotes !== 'string') return null;
+  if (!rawNotes.startsWith(VISUAL_ACUITY_META_PREFIX)) return null;
+
+  try {
+    const payload = JSON.parse(rawNotes.slice(VISUAL_ACUITY_META_PREFIX.length));
+    return payload && typeof payload === 'object' ? payload : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildVisualAcuityPayload = (medicalBackground = {}) => {
+  const eyeglasses = !!medicalBackground.eyeglasses;
+  const contactLenses = !!medicalBackground.contactLenses;
+
+  const baseOD = normalizeVisualGrade(medicalBackground.gradeOD);
+  const baseOS = normalizeVisualGrade(medicalBackground.gradeOS);
+
+  const eyeglassesOD = normalizeVisualGrade(medicalBackground.gradeODEyeglasses) || (eyeglasses ? baseOD : '');
+  const eyeglassesOS = normalizeVisualGrade(medicalBackground.gradeOSEyeglasses) || (eyeglasses ? baseOS : '');
+  const contactOD = normalizeVisualGrade(medicalBackground.gradeODContactLenses) || (contactLenses && !eyeglasses ? baseOD : '');
+  const contactOS = normalizeVisualGrade(medicalBackground.gradeOSContactLenses) || (contactLenses && !eyeglasses ? baseOS : '');
+
+  const rightEye = eyeglasses
+    ? (eyeglassesOD || contactOD || baseOD || 'N/A')
+    : (contactOD || baseOD || 'N/A');
+  const leftEye = eyeglasses
+    ? (eyeglassesOS || contactOS || baseOS || 'N/A')
+    : (contactOS || baseOS || 'N/A');
+
+  const metadata = {
+    version: 2,
+    eyeglasses,
+    contactLenses,
+    grades: {
+      eyeglasses: {
+        od: eyeglassesOD,
+        os: eyeglassesOS,
+      },
+      contactLenses: {
+        od: contactOD,
+        os: contactOS,
+      },
+    },
+  };
+
+  return {
+    notes: `Eyeglasses: ${eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${contactLenses ? 'Yes' : 'No'}`,
+    acuityNotes: `${VISUAL_ACUITY_META_PREFIX}${JSON.stringify(metadata)}`,
+    leftEye,
+    rightEye,
+  };
+};
+
 /**
  * Build all input objects from form data for the batched mutation
  * @param {object} formData           - Form data from the initial record form
@@ -1137,18 +1205,19 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
 
   // Visual Acuity Profile
   const hasVisualAcuity = formData.medicalBackground.eyeglasses || formData.medicalBackground.contactLenses;
+  const visualAcuityPayload = buildVisualAcuityPayload(formData.medicalBackground);
   // Use the first catalog entry for acuityId — falls back to null (acuity omitted) if catalog is empty
   const visualAcuityId = visualAcuityCatalog[0]?.id ?? null;
   inputs.visualAcuityProfile = {
     notes: hasVisualAcuity
-      ? `Eyeglasses: ${formData.medicalBackground.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.medicalBackground.contactLenses ? 'Yes' : 'No'}`
+      ? visualAcuityPayload.notes
       : null,
     acuity: hasVisualAcuity && visualAcuityId
       ? {
           acuityId: visualAcuityId,
-          left_eye: formData.medicalBackground.gradeOS || "N/A",
-          right_eye: formData.medicalBackground.gradeOD || "N/A",
-          notes: null,
+          left_eye: visualAcuityPayload.leftEye,
+          right_eye: visualAcuityPayload.rightEye,
+          notes: visualAcuityPayload.acuityNotes,
           recorded_at: formData.medicalBackground.visualAcuityDate
             ? new Date(formData.medicalBackground.visualAcuityDate).toISOString().split('T')[0]
             : new Date().toISOString().split('T')[0]
@@ -1549,7 +1618,7 @@ const createObgynHistory = async (input) => {
 // Utility function to map student category to year level
 const mapYearLevel = (category) => {
   // New dropdown values already match backend STUDENT_YEAR enum values
-  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate']);
+  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate', 'Returnee']);
   if (validEnumValues.has(category)) return category;
   // Legacy mappings for backward compatibility with old stored data
   const legacyMapping = {
@@ -1600,7 +1669,7 @@ const reverseMapDentalCleaningRange = (backendValue) => {
 /** Reverse mapping: backend year level → form student category */
 const reverseMapYearLevel = (backendYear) => {
   // Backend STUDENT_YEAR enum values match the form dropdown values directly
-  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate']);
+  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate', 'Returnee']);
   if (validEnumValues.has(backendYear)) return backendYear;
   return '';
 };
@@ -1734,6 +1803,19 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const immunDosesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, i.doseNumber || 1]));
 
   const vaNotesStr = va.notes || '';
+  const vaAcuityNotesStr = va.acuity?.notes || '';
+  const vaMeta = parseVisualAcuityMetaNotes(vaAcuityNotesStr);
+  const vaLegacyFlags = parseLegacyVisualAcuityFlags(`${vaNotesStr} ${vaAcuityNotesStr}`);
+  const vaFallbackOD = va.acuity?.right_eye || '';
+  const vaFallbackOS = va.acuity?.left_eye || '';
+  const eyeglassesFromMeta = typeof vaMeta?.eyeglasses === 'boolean' ? vaMeta.eyeglasses : null;
+  const contactLensesFromMeta = typeof vaMeta?.contactLenses === 'boolean' ? vaMeta.contactLenses : null;
+  const hasAcuityValues = !!(vaFallbackOD || vaFallbackOS);
+  const resolvedEyeglasses = (eyeglassesFromMeta ?? vaLegacyFlags.eyeglasses) || hasAcuityValues;
+  const resolvedContactLenses = contactLensesFromMeta ?? vaLegacyFlags.contactLenses;
+  const eyeglassesGrades = vaMeta?.grades?.eyeglasses || {};
+  const contactLensGrades = vaMeta?.grades?.contactLenses || {};
+
   const medicalBackground = {
     immunizations:             immunMap,
     immunizationDates:         immunDatesMap,
@@ -1764,10 +1846,14 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     vaper:                     ls.vapeUser ? 'yes' : 'no',
     vapeType:                  ls.vapeType || '',
     vapeFrequency:             ls.vapeFrequency || '',
-    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes') || !!(va.acuity?.right_eye || va.acuity?.left_eye),
-    contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
-    gradeOD:                   va.acuity?.right_eye    || '',
-    gradeOS:                   va.acuity?.left_eye     || '',
+    eyeglasses:                resolvedEyeglasses,
+    contactLenses:             resolvedContactLenses,
+    gradeOD:                   vaFallbackOD,
+    gradeOS:                   vaFallbackOS,
+    gradeODEyeglasses:         normalizeVisualGrade(eyeglassesGrades.od) || (resolvedEyeglasses ? vaFallbackOD : ''),
+    gradeOSEyeglasses:         normalizeVisualGrade(eyeglassesGrades.os) || (resolvedEyeglasses ? vaFallbackOS : ''),
+    gradeODContactLenses:      normalizeVisualGrade(contactLensGrades.od) || (resolvedContactLenses ? vaFallbackOD : ''),
+    gradeOSContactLenses:      normalizeVisualGrade(contactLensGrades.os) || (resolvedContactLenses ? vaFallbackOS : ''),
     visualAcuityDate:          va.acuity?.recorded_at
                                  ? new Date(va.acuity.recorded_at).toISOString().split('T')[0]
                                  : '',
@@ -1819,6 +1905,87 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   return { personalInfo, medicalHistory, medicalBackground, dentalHistory, obgyne };
 };
 
+const normalizeRevisionScope = (scope) => (
+  scope === 'Medical' || scope === 'Dental' || scope === 'Both' ? scope : 'Both'
+);
+
+const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
+  const normalizedScope = normalizeRevisionScope(scope);
+  const includeMedical = normalizedScope === 'Medical' || normalizedScope === 'Both';
+  const includeDental = normalizedScope === 'Dental' || normalizedScope === 'Both';
+
+  let query = `query GetRevisionEMRData {
+    emrProfile: getProfile {
+      ... on StudentProfile { program year }
+      ... on EmployeeProfile { department role }
+    }
+    emergencyContact: getEmergencyContact {
+      firstContact  { contactName relationship contactNumber address }
+      secondContact { contactName relationship contactNumber address }
+    }`;
+
+  if (includeMedical) {
+    query += `
+    medicalHistory: getMedicalHistory {
+      conditions { conditionId relationship }
+      notes
+    }
+    allergyProfile: getAllergyProfile {
+      allergies { allergenCatalogId status severity }
+      notes
+    }
+    hospitalizationProfile: getHospitalizationProfile {
+      hospitalizations { conditionId admissionDate dischargeDate notes }
+      notes
+    }
+    operationProfile: getOperationProfile {
+      operations { procedureId operationDate notes }
+      notes
+    }
+    medicationProfile: getMedicationProfile {
+      medications { medicineId description }
+      notes
+    }
+    immunizationProfile: getImmunizationProfile {
+      immunizations { vaccineTypeId immunizationDate doseNumber }
+      notes
+    }
+    lifestyle: getLifestyle {
+      smoker numberOfCigarettesPerDay yearsSmoked
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency
+    }
+    visualAcuity: getVisualAcuityProfile {
+      notes
+      acuity { left_eye right_eye notes recorded_at }
+    }
+    obgyne: getObgynHistory {
+      lastMenstrualPeriod hasDysmenorrhea notes
+    }`;
+  }
+
+  if (includeDental) {
+    query += `
+    dentalHistory: getDentalHistory {
+      seenByDentist lastDentalCleaning lastVisitDate
+    }
+    dentalProcedureProfile: getDentalProcedureProfile {
+      procedures { procedureTypeId }
+    }
+    dentalPhotoRecord: getDentalPhotoRecord {
+      upperTeeth lowerTeeth
+    }
+    oralAppliance: getOralApplianceProfile {
+      appliances { tagId arch }
+    }`;
+  }
+
+  query += `
+  }`;
+
+  return query;
+};
+
 /**
  * Fetch all existing record data for a patient in Revision status so the
  * initial record form can be pre-populated with their previous submission.
@@ -1829,8 +1996,9 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
  *
  * @returns {object|null} FormData-shaped object or null on complete failure
  */
-export const fetchRevisionPrefill = async () => {
-  console.log('[EMR Service] Fetching revision pre-fill data...');
+export const fetchRevisionPrefill = async (scope = 'Both') => {
+  const normalizedScope = normalizeRevisionScope(scope);
+  console.log('[EMR Service] Fetching revision pre-fill data (scope:', normalizedScope + ')...');
 
   const [profileResult, emrResult] = await Promise.allSettled([
     // ── Request 1: personal profile ──────────────────────
@@ -1854,68 +2022,8 @@ export const fetchRevisionPrefill = async () => {
       { endpoint: '/profile/patient' }
     ),
 
-    // ── Request 2: all EMR data (batched) ─────────────────
-    sendGraphQLRequest(
-      `query GetRevisionEMRData {
-        emrProfile: getProfile {
-          ... on StudentProfile { program year }
-          ... on EmployeeProfile { department role }
-        }
-        emergencyContact: getEmergencyContact {
-          firstContact  { contactName relationship contactNumber address }
-          secondContact { contactName relationship contactNumber address }
-        }
-        medicalHistory: getMedicalHistory {
-          conditions { conditionId relationship }
-          notes
-        }
-        allergyProfile: getAllergyProfile {
-          allergies { allergenCatalogId status severity }
-          notes
-        }
-        hospitalizationProfile: getHospitalizationProfile {
-          hospitalizations { conditionId admissionDate dischargeDate notes }
-          notes
-        }
-        operationProfile: getOperationProfile {
-          operations { procedureId operationDate notes }
-          notes
-        }
-        medicationProfile: getMedicationProfile {
-          medications { medicineId description }
-          notes
-        }
-        immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId immunizationDate doseNumber }
-          notes
-        }
-        lifestyle: getLifestyle {
-          smoker numberOfCigarettesPerDay yearsSmoked
-          alcoholConsumer frequencyOfAlcoholConsumption
-          vapeUser vapeType vapeFrequency
-        }
-        visualAcuity: getVisualAcuityProfile {
-          notes
-          acuity { left_eye right_eye recorded_at }
-        }
-        dentalHistory: getDentalHistory {
-          seenByDentist lastDentalCleaning lastVisitDate
-        }
-        dentalProcedureProfile: getDentalProcedureProfile {
-          procedures { procedureTypeId }
-        }
-        dentalPhotoRecord: getDentalPhotoRecord {
-          upperTeeth lowerTeeth
-        }
-        oralAppliance: getOralApplianceProfile {
-          appliances { tagId arch }
-        }
-        obgyne: getObgynHistory {
-          lastMenstrualPeriod hasDysmenorrhea notes
-        }
-      }`,
-      {}
-    ),
+    // ── Request 2: scope-aware EMR data (batched) ─────────
+    sendGraphQLRequest(buildRevisionPrefillEMRQuery(normalizedScope), {}),
   ]);
 
   if (profileResult.status === 'rejected') {
@@ -2074,7 +2182,9 @@ const _extractEmergencyContactNumber = (contact) => {
 export const getPatientProfile = async () => {
   if (_patientProfileCache) return _patientProfileCache;
 
-  const [profileResult, emergencyResult] = await Promise.allSettled([
+  // Three independent requests so a failure in getMyProfile never blocks
+  // the emergency contact fetch.
+  const [profileResult, emergencyResult, myProfileResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -2092,11 +2202,23 @@ export const getPatientProfile = async () => {
       {},
       { endpoint: '/profile/patient' }
     ),
+    // Emergency contacts in its own request so it is never blocked by getMyProfile
     sendGraphQLRequest(
       `query GetEmergencyContact {
         emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
+        }
+      }`,
+      {}
+    ),
+    // getMyProfile is optional — fails gracefully if backend schema cache is stale
+    sendGraphQLRequest(
+      `query GetMyProfile {
+        myProfile: getMyProfile {
+          __typename
+          ... on StudentProfile { program year }
+          ... on EmployeeProfile { department }
         }
       }`,
       {}
@@ -2116,7 +2238,15 @@ export const getPatientProfile = async () => {
     : null;
 
   if (emergencyResult.status === 'rejected') {
-    console.warn('[EMR Service] Active emergency contact fetch failed:', emergencyResult.reason?.message);
+    console.warn('[EMR Service] Could not fetch emergency contact:', emergencyResult.reason?.message);
+  }
+
+  const myProfileData = myProfileResult.status === 'fulfilled'
+    ? myProfileResult.value
+    : null;
+
+  if (myProfileResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch profile type (non-critical):', myProfileResult.reason?.message);
   }
 
   const log = profileData?.personalLog || {};
@@ -2126,6 +2256,9 @@ export const getPatientProfile = async () => {
     || null;
   const nameParts = [log.first_name, log.middle_name, log.last_name, log.suffix].filter(Boolean);
 
+  const myProfile = myProfileData?.myProfile || null;
+  const profileTypeName = myProfile?.__typename || null;
+
   _patientProfileCache = {
     name: nameParts.length > 0 ? nameParts.join(' ') : null,
     firstName: log.first_name || null,
@@ -2134,6 +2267,11 @@ export const getPatientProfile = async () => {
     firstEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.secondContact),
     identifier: profileData?.personalRecord?.identifier || null,
+    // Student/Employee profile data
+    profileType: profileTypeName, // 'StudentProfile' | 'EmployeeProfile' | null
+    yearLevel: profileTypeName === 'StudentProfile' ? (myProfile?.year || null) : null,
+    program: profileTypeName === 'StudentProfile' ? (myProfile?.program || null) : null,
+    department: profileTypeName === 'EmployeeProfile' ? (myProfile?.department || null) : null,
   };
 
   return _patientProfileCache;
@@ -2151,7 +2289,7 @@ export const checkInitialRecordStatus = async () => {
       { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
-      `query GetUpdateTicket { getUpdateTicket { id status notes created_at } }`,
+      `query GetUpdateTicket { getUpdateTicket { id status scope notes created_at } }`,
       {}
     ),
   ]);
@@ -2175,6 +2313,7 @@ export const checkInitialRecordStatus = async () => {
     return {
       needsInitialRecord: true,
       status: ticketStatus,
+      scope: ticket?.scope ?? null,
       ticketId: ticket?.id ?? null,
       notes: ticket?.notes ?? null,
       ticketCreatedAt: ticket?.created_at ?? null,
@@ -2189,6 +2328,7 @@ export const checkInitialRecordStatus = async () => {
     return {
       needsInitialRecord: false,
       status: ticket?.status ?? null,
+      scope: ticket?.scope ?? null,
       ticketId: ticket?.id ?? null,
       notes: ticket?.notes ?? null,
       ticketCreatedAt: ticket?.created_at ?? null,
@@ -2204,8 +2344,7 @@ export const checkInitialRecordStatus = async () => {
     return { needsInitialRecord: true, status: null, credentialStatus: null, ticketCreatedAt: null };
   }
 
-  const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
-  const needsInitialRecord = !completedStatuses.includes(ticket.status);
+  const needsInitialRecord = shouldRequireInitialRecordFromTicketStatus(ticket.status);
 
   console.log('[EMR Service] Initial record status (fallback):', {
     needsInitialRecord,
@@ -2215,6 +2354,7 @@ export const checkInitialRecordStatus = async () => {
   return {
     needsInitialRecord,
     status: ticket.status,
+    scope: ticket.scope ?? null,
     ticketId: ticket.id,
     notes: ticket.notes ?? null,
     ticketCreatedAt: ticket.created_at ?? null,

@@ -190,12 +190,6 @@ const DataConsent = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const isNewVersion = consentData && 
-    consentData.data_consent_version && 
-    consentData.data_consent_version !== consentData.required_version;
-
   const consentHtml = useMemo(() => {
     if (!consentData?.consent_text) return '';
 
@@ -205,7 +199,7 @@ const DataConsent = ({
     if (!version) return sanitizedHtml;
     if (/·\s*v[\w.-]+/i.test(sanitizedHtml)) return sanitizedHtml;
 
-    const versionMarkup = ` <span class="text-neutral-400 font-normal">· v${version}</span>`;
+    const versionMarkup = ` <span class="text-neutral-400 font-normal">· ${version}</span>`;
     const strongLastUpdatedPattern = /(<strong[^>]*>\s*Last\s*updated\s*:?\s*<\/strong>\s*[^<]+)/i;
     if (strongLastUpdatedPattern.test(sanitizedHtml)) {
       return sanitizedHtml.replace(strongLastUpdatedPattern, `$1${versionMarkup}`);
@@ -218,6 +212,12 @@ const DataConsent = ({
 
     return sanitizedHtml;
   }, [consentData]);
+
+  if (!isOpen) return null;
+
+  const isNewVersion = consentData && 
+    consentData.data_consent_version && 
+    consentData.data_consent_version !== consentData.required_version;
 
   return (
     <>

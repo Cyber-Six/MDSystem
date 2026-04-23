@@ -5,6 +5,7 @@ const { portalBasedIpRateLimiter, ipRateLimiter } = require('../../../config/mid
 const { getVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
 const query = require('../../../config/query.js');
 const AuthSession = require("../../../utils/authSession.js");
+const { DATA_CONSENT_REQUIRED, OUTDATED_CONSENT, getConsentGateError } = require('../../../utils/consent.js');
 const logger = require('../../../utils/logger.js');
 
 const router = express.Router();
@@ -153,18 +154,19 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
     }
 
     // ✅ 5. Check consent from Redis (NOT from client)
-    if (session.data_consent !== "true") {
+    const consentError = getConsentGateError(session, process.env.DATA_CONSENT_VERSION);
+    if (consentError === DATA_CONSENT_REQUIRED) {
         await recordAttempt(false, email, session?.user_id || null);
         return res.status(400).json({
-            error: "DATA_CONSENT_REQUIRED",
+            error: DATA_CONSENT_REQUIRED,
             message: "You must agree to the data consent policy to register."
         });
     }
 
-    if (session.data_consent_version !== process.env.DATA_CONSENT_VERSION) {
+    if (consentError === OUTDATED_CONSENT) {
         await recordAttempt(false, email, session?.user_id || null);
         return res.status(400).json({
-            error: "OUTDATED_CONSENT",
+            error: OUTDATED_CONSENT,
             message: "You must agree to the latest data consent policy."
         });
     }

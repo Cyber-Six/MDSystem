@@ -33,6 +33,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useBanner } from '../../context/BannerContext';
 import { toggleAppDrawer } from '../../navigation/drawer-utils';
+import { TopBar } from '../../components/layout/TopBar';
+import { SegmentControl } from '../../components/common/SegmentControl';
 import { getPatientProfile } from '../../services/profile-service';
 import {
   BRANCHES,
@@ -75,7 +77,7 @@ export const MedicineRequestScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { showBanner } = useBanner();
-  const showInlineMenuButton = route.name !== 'MedicineRequest';
+  const isNestedMoreRoute = route.name === 'MedicineRequest';
 
   // Views
   const [view, setView] = useState<'form' | 'status'>('form');
@@ -87,6 +89,7 @@ export const MedicineRequestScreen: React.FC = () => {
 
   // Form state
   const [purpose, setPurpose] = useState('');
+  const [isPurposeFocused, setIsPurposeFocused] = useState(false);
   const [location, setLocation] = useState<LocationDesignation | ''>('');
   const [medicines, setMedicines] = useState<AvailableMedicine[]>([]);
   const [grouped, setGrouped] = useState<GroupedMedicine[]>([]);
@@ -122,6 +125,24 @@ export const MedicineRequestScreen: React.FC = () => {
   );
   const latestPendingRequest = pendingRequests[0] ?? null;
   const hasPendingRequest = pendingRequests.length > 0;
+  const isFormValid = Boolean(purpose.trim()) && Boolean(location) && selectedCodes.size > 0;
+  const isSubmitDisabled = !isFormValid;
+
+  const segmentOptions = useMemo(
+    () => [
+      { value: 'form', label: 'New Request' },
+      {
+        value: 'status',
+        label: hasPendingRequest ? `Request Status (${pendingRequests.length})` : 'Request Status',
+      },
+    ],
+    [hasPendingRequest, pendingRequests.length],
+  );
+
+  const branchOptions = useMemo(
+    () => allowedBranches.map((branch) => ({ value: branch.value, label: branch.label })),
+    [allowedBranches],
+  );
 
   const clearErrorTimer = useCallback(() => {
     if (!errorDismissTimerRef.current) return;
@@ -220,8 +241,11 @@ export const MedicineRequestScreen: React.FC = () => {
         } else if (prefix === 'm') {
           // Main campus — can choose Arlegui or Casal
           setAllowedBranches(BRANCHES.filter((b) => b.value !== 'QuezonCity'));
+          setLocation('Casal');
+        } else {
+          setAllowedBranches(BRANCHES);
+          setLocation('Casal');
         }
-        // else: unknown prefix → show all branches
       })
       .catch(() => {})
       .finally(() => setIsProfileLoading(false));
@@ -355,10 +379,7 @@ export const MedicineRequestScreen: React.FC = () => {
       setRequests((prev) => [result, ...prev]);
       showBanner({ type: 'success', message: 'Medicine request submitted successfully!' });
       setPurpose('');
-      if (emailPrefix !== 'q') setLocation('');
       setSelectedCodes(new Set());
-      setMedicines([]);
-      setGrouped([]);
     } catch (err: any) {
       showError(err.message || 'Failed to submit request.');
     } finally {
@@ -418,7 +439,7 @@ export const MedicineRequestScreen: React.FC = () => {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
-      edges={['top']}
+      edges={['top', 'left', 'right']}
     >
       {/* ── Cancel-and-Resubmit Confirmation Modal ─────────────────────── */}
       <Modal transparent visible={showCancelConfirm} animationType="fade" onRequestClose={() => setShowCancelConfirm(false)}>
@@ -448,115 +469,19 @@ export const MedicineRequestScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {showInlineMenuButton && (
-        <View style={styles.topMenuRow}>
-          <TouchableOpacity
-            style={[
-              styles.menuButton,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-            onPress={() => toggleAppDrawer(navigation)}
-            accessibilityRole="button"
-            accessibilityLabel="Open sidebar"
-          >
-            <Ionicons
-              name="menu"
-              size={22}
-              color={isDark ? colors.neutral[100] : colors.secondary[900]}
-            />
-          </TouchableOpacity>
-        </View>
-      )}
+      <TopBar
+        title="Medicine"
+        showBack={isNestedMoreRoute}
+        onBack={() => navigation.goBack()}
+        onMenuPress={() => toggleAppDrawer(navigation)}
+      />
 
-      {/* Header */}
-      <View style={styles.headerSection}>
-        <View style={[styles.headerBanner, { backgroundColor: colors.success[500] }]}>
-          <MaterialCommunityIcons name="pill" size={28} color="#FFFFFF" style={styles.headerIcon} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Medicine Request</Text>
-            <Text style={styles.headerSubtitle}>Request medicines from the clinic</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <View style={styles.tabBarWrap}>
-        <View
-          style={[
-            styles.tabBar,
-            {
-              backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
-              borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              view === 'form' && {
-                backgroundColor: isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50],
-              },
-            ]}
-            onPress={() => setView('form')}
-          >
-            <View style={styles.tabInner}>
-              <Ionicons
-                name="create-outline"
-                size={14}
-                color={view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
-              />
-              <Text style={[styles.tabText, { color: view === 'form' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-                New Request
-              </Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              view === 'status' && {
-                backgroundColor: isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50],
-              },
-            ]}
-            onPress={() => setView('status')}
-          >
-            <View style={styles.tabInner}>
-              <Ionicons
-                name="list-outline"
-                size={14}
-                color={view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400])}
-              />
-              <Text style={[styles.tabText, { color: view === 'status' ? (isDark ? colors.primary[300] : colors.primary[700]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }]}>
-                Request Status
-              </Text>
-              {hasPendingRequest && (
-                <View
-                  style={[
-                    styles.tabCountBadge,
-                    {
-                      backgroundColor: view === 'status'
-                        ? colors.primary[500]
-                        : (isDark ? colors.neutral[700] : colors.neutral[200]),
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabCountText,
-                      {
-                        color: view === 'status'
-                          ? '#FFFFFF'
-                          : (isDark ? colors.primary[200] : colors.primary[700]),
-                      },
-                    ]}
-                  >
-                    {pendingRequests.length}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <SegmentControl
+        options={segmentOptions}
+        value={view}
+        onChange={(next) => setView(next as 'form' | 'status')}
+        className="mx-4 mt-3 mb-4"
+      />
 
       {/* ── Form View ──────────────────────────────────────────────────── */}
       {view === 'form' ? (
@@ -644,68 +569,65 @@ export const MedicineRequestScreen: React.FC = () => {
 
           {/* Purpose (Chief Complaint) */}
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-            <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-              Purpose <Text style={{ color: colors.error[500] }}>*</Text>
-            </Text>
+            <View style={styles.fieldLabelRow}>
+              <Text style={[styles.fieldLabelText, { color: isDark ? '#FFFFFF' : colors.secondary[700] }]}>Purpose</Text>
+              <Text style={styles.requiredAsterisk}>*</Text>
+            </View>
             <TextInput
               style={[
                 styles.textArea,
                 {
                   backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
                   color: isDark ? colors.neutral[100] : colors.neutral[900],
-                  borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+                  borderColor: purpose.length > 280
+                    ? colors.error[400]
+                    : isPurposeFocused
+                    ? colors.primary[500]
+                    : isDark
+                    ? colors.neutral[600]
+                    : colors.neutral[200],
                 },
               ]}
               placeholder="Describe your symptoms or reason for request..."
               placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
               value={purpose}
-              onChangeText={setPurpose}
+              onChangeText={(text) => setPurpose(text.slice(0, 300))}
+              onFocus={() => setIsPurposeFocused(true)}
+              onBlur={() => setIsPurposeFocused(false)}
               multiline
-              numberOfLines={3}
+              numberOfLines={4}
+              maxLength={300}
               textAlignVertical="top"
             />
+            <Text style={{
+              marginTop: 6,
+              textAlign: 'right',
+              fontSize: 11,
+              color: purpose.length > 280
+                ? colors.error[500]
+                : isDark
+                ? colors.neutral[500]
+                : colors.neutral[400],
+            }}>
+              {purpose.length} / 300
+            </Text>
           </View>
 
           {/* Branch Selection — uses allowedBranches from email detection */}
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-            <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-              Branch <Text style={{ color: colors.error[500] }}>*</Text>
-            </Text>
+            <View style={styles.fieldLabelRow}>
+              <Text style={[styles.fieldLabelText, { color: isDark ? '#FFFFFF' : colors.secondary[700] }]}>Branch</Text>
+              <Text style={styles.requiredAsterisk}>*</Text>
+            </View>
             {isProfileLoading ? (
               <ActivityIndicator size="small" color={colors.primary[500]} />
             ) : (
-              <View style={styles.branchRow}>
-                {allowedBranches.map((b) => (
-                  <TouchableOpacity
-                    key={b.value}
-                    disabled={emailPrefix === 'q'}
-                    style={[
-                      styles.branchChip,
-                      {
-                        backgroundColor: location === b.value
-                          ? (isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50])
-                          : (isDark ? colors.neutral[700] : colors.neutral[100]),
-                        borderColor: location === b.value ? colors.primary[500] : (isDark ? colors.neutral[600] : colors.neutral[200]),
-                      },
-                    ]}
-                    onPress={() => setLocation(b.value)}
-                  >
-                    <Text
-                      style={[
-                        styles.branchText,
-                        {
-                          color: location === b.value
-                            ? (isDark ? colors.primary[300] : colors.primary[700])
-                            : (isDark ? colors.neutral[300] : colors.neutral[600]),
-                        },
-                      ]}
-                    >
-                      {b.label}
-                      {emailPrefix === 'q' ? ' (Auto)' : ''}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <SegmentControl
+                options={branchOptions}
+                value={location || ''}
+                onChange={(value) => setLocation(value as LocationDesignation)}
+                className="mx-0 mb-0"
+              />
             )}
           </View>
 
@@ -779,13 +701,55 @@ export const MedicineRequestScreen: React.FC = () => {
           )}
 
           {/* Submit */}
-          <TouchableOpacity
-            style={[styles.submitButton, { opacity: submitting ? 0.5 : 1 }]}
-            onPress={handleSubmit}
-            disabled={submitting}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              gap: 8,
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 12,
+              backgroundColor: isDark ? colors.secondary[700] : colors.accent[50],
+            }}
           >
-            {submitting && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />}
-            <Text style={styles.submitButtonText}>{submitting ? 'Submitting...' : 'Submit Request'}</Text>
+            <Ionicons
+              name="information-circle-outline"
+              size={16}
+              color={isDark ? colors.secondary[200] : colors.accent[600]}
+              style={{ marginTop: 2 }}
+            />
+            <Text style={{
+              flex: 1,
+              fontSize: 12,
+              lineHeight: 20,
+              color: isDark ? colors.secondary[200] : colors.accent[700],
+            }}>
+              After submission, the clinic pharmacist will review your request within 1 business day. You will receive a notification with pickup instructions.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.submitButton,
+              {
+                opacity: submitting ? 0.85 : 1,
+                backgroundColor: isSubmitDisabled
+                  ? (isDark ? 'rgba(241,197,38,0.42)' : 'rgba(241,197,38,0.55)')
+                  : colors.primary[500],
+              },
+            ]}
+            onPress={handleSubmit}
+            disabled={isSubmitDisabled || submitting}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Submit request"
+            accessibilityState={{ disabled: isSubmitDisabled || submitting }}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={[styles.submitButtonText, { opacity: isSubmitDisabled ? 0.75 : 1 }]}>Submit request</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       ) : (
@@ -1042,6 +1006,9 @@ const styles = StyleSheet.create({
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
 
   label: { fontSize: 15, fontWeight: '600', marginBottom: 10 },
+  fieldLabelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  fieldLabelText: { fontSize: 13, fontWeight: '600' },
+  requiredAsterisk: { color: colors.error[500], marginLeft: 4, fontSize: 13 },
 
   textArea: {
     borderWidth: 1,
@@ -1085,13 +1052,13 @@ const styles = StyleSheet.create({
 
   // Submit
   submitButton: {
-    backgroundColor: colors.primary[500],
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 11,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
+    minHeight: 46,
   },
   submitButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
 
@@ -1118,7 +1085,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 12,
   },
-  primaryButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+  primaryButtonText: { color: colors.secondary[900], fontWeight: '600', fontSize: 15 },
   cancelButton: {
     backgroundColor: colors.error[500],
     paddingVertical: 10,

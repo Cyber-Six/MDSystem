@@ -468,7 +468,14 @@ const Mutation = {
 
       // Get old quantity count with lock
       const oldQtyResult = await client.query(
-        `SELECT COUNT(*)::int AS count FROM "MedicineEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL FOR UPDATE`,
+        `SELECT COUNT(*)::int AS count
+          FROM (
+            SELECT 1
+            FROM "MedicineEntity"
+            WHERE "batchId" = $1 AND "transactionId" IS NULL
+            FOR UPDATE
+          ) sub;
+          `,
         [batchId]
       );
       const oldQuantity = oldQtyResult.rows[0]?.count || 0;

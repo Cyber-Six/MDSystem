@@ -430,6 +430,7 @@ async function updateConsentInSession(token, purpose) {
   if (!client) throw new Error("Redis client not initialized");
 
   const key = `verify:${purpose}:${token}`;
+  const agreedAt = new Date().toISOString();
 
   const exists = await client.exists(key);
   if (!exists) return false;
@@ -437,6 +438,7 @@ async function updateConsentInSession(token, purpose) {
   await client.hSet(key, {
     data_consent: "true",
     data_consent_version: process.env.DATA_CONSENT_VERSION,
+    data_consent_agreed: agreedAt,
     data_consent_timestamp: Date.now().toString(),
   });
 
@@ -445,7 +447,7 @@ async function updateConsentInSession(token, purpose) {
     await query.updateUserConsent(userId, {
       data_consent: true,
       data_consent_version: process.env.DATA_CONSENT_VERSION,
-      data_consent_agreed: new Date().toISOString(),
+      data_consent_agreed: agreedAt,
     });
   }
   return true;

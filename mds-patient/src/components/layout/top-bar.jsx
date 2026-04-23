@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UserMenu from '@core/components/user-menu/user-menu';
-import { logout } from '../../packages-core-adapter';
 import { usePatientNotifications } from '../../modules/notification/notification-context';
 import { useSettings } from '../../context/settings-context';
+import { logoutPatientSession } from '../../services/auth-session-service';
 
 function formatRelativeTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -66,31 +66,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
 
   // Handle logout
   const handleLogout = async () => {
-    try {
-      // Clear e-consultation session data to prevent session leakage across users
-      localStorage.removeItem('econsultation_session_id');
-      sessionStorage.removeItem('econsultation_initialized');
-      // Clear stored role used for routing
-      localStorage.removeItem('patient_role');
-      localStorage.removeItem('patient_email'); // remove legacy key too
-      localStorage.removeItem('patient_inactive_reactivation_lock');
-      try {
-        const refreshToken = localStorage.getItem('patient_refreshToken') || '';
-        const [userId] = refreshToken.split(':');
-        if (userId) {
-          localStorage.removeItem(`patient_inactive_reactivation_lock:${userId}`);
-        }
-      } catch {
-        // Ignore storage parsing errors during logout cleanup.
-      }
-
-      // Call the proper logout function from token service
-      // This clears tokens, calls backend logout, and navigates to /auth
-      await logout(true);
-    } catch (error) {
-      console.error('Logout error:', error);
-      window.location.href = '/auth';
-    }
+    await logoutPatientSession(true);
   };
 
   // Responsive: yellow in light mode, black in dark mode, on mobile

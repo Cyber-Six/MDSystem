@@ -29,10 +29,11 @@ async function trackNotification(notificationId, userId, senderId, deliveredVia)
   };
 
   try {
-    await redis.getClient().setex(
+    // node-redis v4 uses `set` options or `setEx` (camelCase), not legacy `setex`.
+    await redis.getClient().set(
       key,
-      NOTIF_ACK_TTL(),
-      JSON.stringify(data)
+      JSON.stringify(data),
+      { EX: NOTIF_ACK_TTL() }
     );
     logger.debug(`[NOTIF_ACK] Tracked notif:${notificationId} to user:${userId} via ${deliveredVia}`);
   } catch (err) {
@@ -72,24 +73,18 @@ async function acknowledgeNotification(notificationId, userId) {
     data.acknowledged = true;
     data.acknowledgedAt = Date.now();
 
-    // FIXED: Use Lua script for atomic update to prevent race conditions
-    const luaScript = `
-      if redis.call("GET", KEYS[1]) then
-        return redis.call("SETEX", KEYS[1], ARGV[1], ARGV[2])
-      else
-        return nil
-      end
-    `;
-
-    const result = await redis.getClient().eval(
-      luaScript,
-      1,
+    // Keep the TTL and only write if the key still exists.
+    // `XX` prevents re-creating an expired key between read and write.
+    const result = await redis.getClient().set(
       key,
-      NOTIF_ACK_TTL(),
-      JSON.stringify(data)
+      JSON.stringify(data),
+      {
+        EX: NOTIF_ACK_TTL(),
+        XX: true,
+      }
     );
 
-    if (!result) {
+    if (result !== 'OK') {
       logger.warn(`[NOTIF_ACK] Notification expired during acknowledge: notif:${notificationId}, user:${userId}`);
       return false;
     }

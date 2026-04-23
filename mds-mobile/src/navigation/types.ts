@@ -2,27 +2,21 @@
  * Navigation type definitions for MDSystem Mobile
  */
 
+import { NavigatorScreenParams } from '@react-navigation/native';
+
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
 };
 
-export type MainTabParamList = {
-  Home: undefined;
-  Appointments: undefined;
-  HealthChat: undefined;
-  Medicine: undefined;
-  UpdateRecord: undefined;
-  More: undefined;
-};
-
-export type AppDrawerParamList = {
-  MainTabs: undefined;
+export type RecordsStackParamList = {
+  RecordsHome: undefined;
+  UpdateRecordChoice: undefined;
+  InitialRecordForm: { isRevision?: boolean; recordType?: 'medical' | 'dental' | 'both'; isUpdate?: boolean } | undefined;
 };
 
 export type MoreStackParamList = {
-  MoreMenu: undefined;
   Profile: undefined;
   MedicineRequest: undefined;
   MyDocuments: undefined;
@@ -35,6 +29,19 @@ export type MoreStackParamList = {
   UpdateRecordChoice: undefined;
   Announcements: undefined;
   Settings: undefined;
+};
+
+export type MainTabParamList = {
+  Home: undefined;
+  Appointments: undefined;
+  HealthChat: undefined;
+  Medicine: undefined;
+  Records: NavigatorScreenParams<RecordsStackParamList> | undefined;
+};
+
+export type AppDrawerParamList = {
+  MainTabs: undefined;
+  MoreStack: NavigatorScreenParams<MoreStackParamList> | undefined;
 };
 
 export type RootStackParamList = {

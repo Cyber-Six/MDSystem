@@ -8,10 +8,13 @@ import {
   View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator,
   KeyboardAvoidingView, StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import { ProgressStepper } from '../../components/ui/ProgressStepper';
+import { TopBar } from '../../components/layout/TopBar';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import PersonalInfoStep from './steps/PersonalInfoStep';
 import MedicalHistoryStep from './steps/MedicalHistoryStep';
 import MedicalBackgroundStep from './steps/MedicalBackgroundStep';
@@ -308,17 +311,28 @@ const InitialRecordFormScreen: React.FC = () => {
         await createInitialMedicalRecord(formData, { isRevision });
       }
       await refreshRecordStatus();
-      const recordTypeLabel = isUpdate
-        ? (recordType === 'both' ? 'Medical and Dental' : recordType === 'medical' ? 'Medical' : 'Dental')
-        : 'Medical';
-      Alert.alert(
-        'Record Updated Successfully!',
-        `Your ${recordTypeLabel} record has been submitted for review.\n\n` +
-        '• Your update has been received and is now pending review\n' +
-        '• The medical staff will review your submission\n' +
-        '• You\'ll receive a notification if more changes are needed',
-        [{ text: 'Back to Updates', onPress: () => navigation.goBack() }]
-      );
+      if (isUpdate) {
+        const recordTypeLabel = recordType === 'both'
+          ? 'Medical and Dental'
+          : recordType === 'medical'
+          ? 'Medical'
+          : 'Dental';
+
+        Alert.alert(
+          'Record Updated Successfully!',
+          `Your ${recordTypeLabel} record has been submitted for review.\n\n` +
+          '• Your update has been received and is now pending review\n' +
+          '• The medical staff will review your submission\n' +
+          '• You\'ll receive a notification if more changes are needed',
+          [{ text: 'Back to Updates', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        Alert.alert(
+          'Initial Record Submitted Successfully',
+          'Your initial record is now pending approval. You can use the app while waiting, and a status note will remain visible until staff verification is complete.',
+          [{ text: 'Go to Dashboard', onPress: () => navigation.navigate('Home') }]
+        );
+      }
     } catch (error: any) {
       const msg = parseSubmissionError(error);
       Alert.alert('Submission Failed', msg);
@@ -444,19 +458,36 @@ const InitialRecordFormScreen: React.FC = () => {
   };
 
   const isLastStep = currentStep === steps.length - 1;
+  const canGoBack = typeof navigation?.canGoBack === 'function' ? navigation.canGoBack() : false;
+  const showBackOnTopBar = isUpdate && canGoBack;
+  const formTitle = isUpdate
+    ? `Update ${recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Medical & Dental'} Record`
+    : 'Initial Record';
+
+  const handleTopBarAction = () => {
+    if (showBackOnTopBar) {
+      navigation.goBack();
+      return;
+    }
+    toggleAppDrawer(navigation);
+  };
 
   return (
-    <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-        <View style={styles.headerBackBtn} />
-        <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-          {isUpdate
-            ? `Update ${recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Medical & Dental'} Record`
-            : isRevision ? 'Revise Medical Record' : 'Initial Medical Record'}
-        </Text>
-        <View style={{ width: 60 }} />
-      </View>
+    <SafeAreaView
+      style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
+      edges={['top', 'left', 'right']}
+    >
+      <TopBar
+        title={formTitle}
+        centerTitle
+        showBack={showBackOnTopBar}
+        onBack={handleTopBarAction}
+        onMenuPress={handleTopBarAction}
+        containerStyle={{
+          backgroundColor: isDark ? colors.secondary[900] : '#FFFFFF',
+          borderBottomColor: isDark ? colors.secondary[700] : colors.neutral[200],
+        }}
+      />
 
       {/* Progress Stepper */}
       <View style={[styles.stepperContainer, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]}>
@@ -502,16 +533,13 @@ const InitialRecordFormScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  headerBackBtn: { width: 60 },
-  headerTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', flex: 1 },
-  stepperContainer: { paddingHorizontal: 12, paddingVertical: 10 },
+  stepperContainer: { paddingHorizontal: 16, paddingVertical: 10 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80 },
   loadingText: { marginTop: 12, fontSize: 14 },
   bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1 },

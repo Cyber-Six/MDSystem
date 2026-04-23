@@ -17,6 +17,8 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
+const recaptchaTestMode = process.env.RECAPTCHA_TEST_MODE === 'true';
+
 const router = express.Router();
 
 function isValidOtpPurpose(purpose) {
@@ -27,17 +29,24 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     const { email, recaptchaToken } = req.body;
     const purpose = req.params.purpose.toLowerCase();
     
-    // ✅ Validate perform
+    // ✅ Validate purpose
     if (!isValidOtpPurpose(purpose)) {
         return res.status(400).json({
         error: "INVALID_PERFORM_ACTION",
-        message: "Perform must be either 'verification' or '2fa'."
+        message: "Purpose must be either 'verification' or '2fa'."
         });
     }
 
     // ✅ Required fields
+    if (!email) {
+      return res.status(400).json({
+        error: "MISSING_FIELDS",
+        message: "Email is required."
+      });
+    }
+
     // For the login 2FA flow, reCAPTCHA was already verified at the login endpoint
-    if (!email || (purpose !== '2fa' && !recaptchaToken)) {
+    if (purpose !== '2fa' && !recaptchaToken && !recaptchaTestMode) {
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Email and reCAPTCHA token are required."
@@ -53,8 +62,8 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
       });
     }
 
-    // ✅ Verify reCAPTCHA (not required for login 2FA — already enforced at login endpoint)
-    if (purpose !== '2fa') {
+    // ✅ Verify reCAPTCHA (not required for login 2FA, and skipped in test mode)
+    if (purpose !== '2fa' && !recaptchaTestMode) {
       const recaptchaValid = await verifyRecaptcha(recaptchaToken);
       if (!recaptchaValid) {
         return res.status(400).json({

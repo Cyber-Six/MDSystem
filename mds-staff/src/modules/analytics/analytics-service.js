@@ -27,7 +27,7 @@ export const QUERY_CATEGORIES = {
   },
   clinical: {
     label: 'Clinical Data',
-    queries: ['immunization-coverage', 'dental-procedures'],
+    queries: ['immunization-coverage', 'dental-procedures', 'oral-findings-percentages'],
   },
   lifestyle: {
     label: 'Lifestyle & Allergies',
@@ -48,7 +48,7 @@ export const QUERY_CATEGORIES = {
   demographics: {
     label: 'Demographics',
     queries: [
-      'patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex',
+      'patients-by-sex', 'students-by-type', 'consultations-by-sex', 'top-diagnoses-by-sex',
       'patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group',
       'consultations-by-department', 'consultations-by-program', 'lifestyle-risks-by-department',
       'sex-age-group-matrix', 'diagnoses-sex-age',
@@ -81,18 +81,19 @@ export const CHART_TYPE_MAP = {
   'oral-findings-percentages': 'bar',
   'vital-signs-box-plot': 'box-plot',
   'patient-credential-status': 'pie',
-  'patient-population-by-branch': 'bar',
+  'patient-population-by-branch': 'pie',
   'most-consumed-medicine': 'bar',
   'most-consumed-supply': 'bar',
   'inventory-consumption-trends': 'stacked-area',
-  'inventory-report-summary': 'bar',
+  'inventory-report-summary': 'stacked-area',
   // Demographics
-  'patients-by-sex': 'bar',
-  'consultations-by-sex': 'bar',
-  'top-diagnoses-by-sex': 'bar',
-  'patients-by-age-group': 'bar',
-  'consultations-by-age-group': 'bar',
-  'bmi-by-age-group': 'bar',
+  'patients-by-sex': 'pie',
+  'students-by-type': 'bar',
+  'consultations-by-sex': 'pie',
+  'top-diagnoses-by-sex': 'grouped-bar',
+  'patients-by-age-group': 'pie',
+  'consultations-by-age-group': 'pie',
+  'bmi-by-age-group': 'box-plot',
   'diagnoses-by-age-group': 'heatmap',
   'consultations-by-department': 'bar',
   'consultations-by-program': 'bar',
@@ -302,9 +303,32 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
         }
       }
     }
-  } catch {
+  } catch (error) {
+    const invalidTypes = Array.isArray(error?.response?.data?.invalidTypes)
+      ? error.response.data.invalidTypes
+      : [];
+
+    if (invalidTypes.length > 0) {
+      invalidTypes.forEach((dataType) => {
+        if (typeof dataType === 'string' && dataType.trim()) {
+          results.set(dataType, { success: false, error: true, dataType, unsupported: true });
+        }
+      });
+    }
+
+    const invalidSet = new Set(
+      invalidTypes
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    );
+    const fetchableDataTypes = dataTypes.filter((dataType) => !invalidSet.has(dataType));
+
+    if (fetchableDataTypes.length === 0) {
+      return results;
+    }
+
     // Fallback: if batch endpoint fails, fetch individually
-    const promises = dataTypes.map(async (dataType) => {
+    const promises = fetchableDataTypes.map(async (dataType) => {
       try {
         const data = await fetchQueryData(dataType, branch, startDate, endDate, groupBy, filters);
         // Guard: if the backend returned HTML instead of JSON (e.g. not yet deployed),
@@ -329,16 +353,16 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
 /** Export presets mirror – used to populate presets in the UI without an API call */
 export const EXPORT_PRESETS = {
   'full-report':    { label: 'Full Analytics Report',       description: 'All analytics metrics combined' },
-  'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: type, status, trends' },
+  'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: service type, mode of delivery, and trends' },
   'diagnoses':      { label: 'Diagnoses Report',            description: 'Diagnosis metrics: top ICD-10, type distribution' },
   'vitals':         { label: 'Vital Signs Report',          description: 'BMI, blood pressure, and distribution analysis' },
   'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and accommodated trends' },
-  'clinical':       { label: 'Clinical Data Report',        description: 'Immunization coverage and dental procedures' },
+  'clinical':       { label: 'Clinical Data Report',        description: 'Immunization, dental procedures, and oral findings prevalence' },
   'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors, statistics, and allergy data' },
   'emr':            { label: 'EMR Report',                  description: 'Reproductive health, oral findings, and vital-sign analytics' },
   'general':        { label: 'General Population Report',   description: 'Credential status and branch population comparison' },
   'inventory':      { label: 'Inventory Report',            description: 'Most consumed items, trends, and stock summary' },
-  'demographics':   { label: 'Demographics Report',         description: 'Sex, age group, department, and program analytics' },
+  'demographics':   { label: 'Demographics Report',         description: 'Sex, age group, student type, department, and program analytics' },
 };
 
 /**

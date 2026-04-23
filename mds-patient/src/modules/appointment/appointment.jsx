@@ -218,10 +218,10 @@ const PatientAppointment = () => {
   };
 
   const handleSubmit = async () => {
-    const purposeRequired = selectedScheduler?.purposeRequired ?? false;
+    const purposeRequired = true;
     const normalizedPurpose = (purpose || '').trim();
 
-    if (purposeRequired && !normalizedPurpose) {
+    if (!normalizedPurpose) {
       setShowPurposeRequiredError(true);
       setError('Purpose / reason for visit is required for this appointment type.');
       return;
@@ -240,8 +240,7 @@ const PatientAppointment = () => {
         selectedDate,
         selectedSession,
         reqPayload,
-        normalizedPurpose,
-        purposeRequired
+        normalizedPurpose
       );
       setSuccessMessage('Your appointment has been submitted successfully!');
       await loadStatus();

@@ -370,7 +370,7 @@ const AvailabilityManager = () => {
       notes: '',
       isActive: true,
       whitelistOnly: false,
-      purposeRequired: false,
+      purposeRequired: true,
     });
     setRequirements([]);
     setPendingRequirements([]);
@@ -532,7 +532,7 @@ const AvailabilityManager = () => {
           notes: editForm.notes || null,
           isActive: editForm.isActive,
           whitelistOnly: editForm.whitelistOnly,
-          purposeRequired: editForm.purposeRequired ?? false,
+          purposeRequired: true,
         });
         await loadSchedulers(updated?.id ?? editForm.id);
       } else {
@@ -546,7 +546,7 @@ const AvailabilityManager = () => {
           afternoonAllowed: editForm.afternoonAllowed,
           notes: editForm.notes || null,
           whitelistOnly: editForm.whitelistOnly ?? false,
-          purposeRequired: editForm.purposeRequired ?? false,
+          purposeRequired: true,
           slotIncludedDates: [],
           slotExcludedDates: [],
           whiteLists: [],
@@ -1220,19 +1220,6 @@ const AvailabilityManager = () => {
                         <span>
                           <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Active</span>
                           <span className="block text-xs text-secondary-700 dark:text-neutral-300">Open and accepting appointments</span>
-                        </span>
-                      </label>
-
-                      <label className="flex cursor-pointer items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={editForm.purposeRequired ?? false}
-                          onChange={(e) => setEditForm({ ...editForm, purposeRequired: e.target.checked })}
-                          className="mt-0.5 h-4 w-4 rounded border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800"
-                        />
-                        <span>
-                          <span className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300">Require Purpose</span>
-                          <span className="block text-xs text-secondary-700 dark:text-neutral-300">Patients must provide a reason for their visit</span>
                         </span>
                       </label>
 

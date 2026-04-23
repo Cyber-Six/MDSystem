@@ -177,6 +177,7 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
 
   return res.status(200).json({
     ok: true,
+    email,
     requires2FA: true,
     requiresTotp,
     LoginKey: verificationKey,

@@ -5,7 +5,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal, FlatList,
-  StyleSheet, Pressable, Platform, Keyboard, ActivityIndicator,
+  StyleSheet, Pressable, Keyboard, ActivityIndicator, Animated, Easing, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
@@ -38,6 +38,7 @@ const GENDERS = ['Male', 'Female'];
 export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, errors, isUpdate = false }) => {
   const pi = formData.personalInfo;
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const { height: windowHeight } = useWindowDimensions();
 
   useEffect(() => {
     if (!pi.birthday) {
@@ -63,7 +64,22 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const [programSearch, setProgramSearch] = useState('');
   const [programSuggestions, setProgramSuggestions] = useState<Array<{ id: string; label: string }>>([]);
   const [programSearching, setProgramSearching] = useState(false);
+  const [programSearchFocused, setProgramSearchFocused] = useState(false);
+  const [programKeyboardHeight, setProgramKeyboardHeight] = useState(0);
+  const collapsedPanelHeight = Math.min(Math.max(windowHeight * 0.42, 300), windowHeight * 0.66);
+  const expandedPanelHeight = Math.min(Math.max(windowHeight * 0.78, 470), windowHeight * 0.9);
+  const programPanelHeight = useRef(new Animated.Value(collapsedPanelHeight)).current;
   const programTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!programOpen) return;
+    Animated.timing(programPanelHeight, {
+      toValue: programSearchFocused ? expandedPanelHeight : collapsedPanelHeight,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [programOpen, programSearchFocused, expandedPanelHeight, collapsedPanelHeight, programPanelHeight]);
 
   const handleProgramSearch = useCallback((value: string) => {
     setProgramSearch(value);
@@ -79,17 +95,52 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
     }, 300);
   }, []);
 
+  const closeProgramModal = useCallback(() => {
+    Keyboard.dismiss();
+    setProgramKeyboardHeight(0);
+    setProgramSearchFocused(false);
+    setProgramOpen(false);
+  }, []);
+
   const selectProgram = useCallback((item: { id: string; label: string }) => {
     onUpdate({ program: item.label, programId: item.id });
-    setProgramOpen(false);
+    closeProgramModal();
     setProgramSearch('');
     setProgramSuggestions([]);
-  }, [onUpdate]);
+  }, [closeProgramModal, onUpdate]);
 
   const openProgramModal = useCallback(() => {
+    // Keep keyboard closed until user explicitly focuses the search box.
+    Keyboard.dismiss();
+    setProgramKeyboardHeight(0);
     setProgramSearch('');
     setProgramSuggestions([]);
+    setProgramSearchFocused(false);
+    programPanelHeight.setValue(collapsedPanelHeight);
     setProgramOpen(true);
+  }, [collapsedPanelHeight, programPanelHeight]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
+      if (!programOpen) return;
+      setProgramKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setProgramKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [programOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (programTimerRef.current) clearTimeout(programTimerRef.current);
+    };
   }, []);
 
   const inputStyle = [styles.input, {
@@ -104,10 +155,10 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
     field: keyof typeof pi,
     placeholder: string,
     errorKey?: string,
-    opts?: { keyboardType?: TextInput['props']['keyboardType']; maxLength?: number },
+    opts?: { keyboardType?: TextInput['props']['keyboardType']; maxLength?: number; required?: boolean },
   ) => (
     <View style={styles.fieldGroup}>
-      <Text style={labelStyle}>{label} *</Text>
+      <Text style={labelStyle}>{label}{opts?.required === false ? '' : ' *'}</Text>
       <TextInput
         style={[...inputStyle, errors[errorKey || field] && styles.inputError]}
         value={String(pi[field] || '')}
@@ -226,7 +277,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           {renderField('Surname', 'surname', 'Enter surname')}
           {renderField('First Name', 'firstName', 'Enter first name')}
           {renderField('Middle Name', 'middleName', 'Enter middle name')}
-          {renderField('Suffix', 'suffix', 'e.g. Jr., Sr., III')}
+          {renderField('Suffix', 'suffix', 'e.g. Jr., Sr., III', undefined, { required: false })}
 
           <View style={styles.fieldGroup}>
             <DatePickerInput
@@ -288,52 +339,101 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         </TouchableOpacity>
         {errors.program && <Text style={styles.errorText}>{errors.program}</Text>}
         <Modal visible={programOpen} transparent animationType="slide">
-          <Pressable style={styles.modalOverlay} onPress={() => setProgramOpen(false)}>
-            <Pressable style={[styles.modalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Program</Text>
-                <TouchableOpacity onPress={() => setProgramOpen(false)}>
-                  <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.modalSearchRow, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-                <Ionicons name="search" size={16} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
-                <TextInput
-                  style={[styles.modalSearchInput, { color: isDark ? colors.neutral[100] : colors.neutral[900] }]}
-                  value={programSearch}
-                  onChangeText={handleProgramSearch}
-                  placeholder="Search program..."
-                  placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-                  autoFocus
-                  returnKeyType="done"
-                />
-                {programSearching && <ActivityIndicator size="small" color={colors.primary[500]} />}
-              </View>
-              {programSuggestions.length > 0 ? (
-                <FlatList
-                  data={programSuggestions}
-                  keyExtractor={item => item.id}
-                  keyboardShouldPersistTaps="handled"
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
-                      onPress={() => selectProgram(item)}
-                    >
-                      <Text style={{ flex: 1, fontSize: 15, color: item.id === pi.programId ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.id === pi.programId ? '600' : '400' }}>
-                        {item.label}
-                      </Text>
-                      {item.id === pi.programId && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
-                    </TouchableOpacity>
-                  )}
-                />
-              ) : (
-                <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
-                    {programSearch.trim().length < 2 ? 'Type at least 2 characters to search' : programSearching ? 'Searching...' : 'No programs found'}
-                  </Text>
+          <Pressable style={[styles.modalOverlay, styles.programModalOverlay]} onPress={closeProgramModal}>
+            <Animated.View
+              style={[
+                styles.modalContent,
+                styles.programModalContent,
+                {
+                  height: programPanelHeight,
+                  backgroundColor: isDark ? colors.neutral[800] : '#FFF',
+                },
+                Platform.OS === 'android' && programKeyboardHeight > 0
+                  ? { transform: [{ translateY: programKeyboardHeight }] }
+                  : null,
+              ]}
+            >
+              <Pressable
+                style={styles.modalPanelInner}
+                onPress={() => {}}
+              >
+                <View style={styles.modalHandleWrap}>
+                  <View style={[styles.modalHandle, { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[300] }]} />
                 </View>
-              )}
-            </Pressable>
+
+                <View style={styles.modalHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Program</Text>
+                    <Text style={{ fontSize: 12, marginTop: 2, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
+                      Search and choose your school program
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity onPress={closeProgramModal}>
+                    <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.modalSearchRow, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+                  <Ionicons name="search" size={16} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+                  <TextInput
+                    style={[styles.modalSearchInput, { color: isDark ? colors.neutral[100] : colors.neutral[900] }]}
+                    value={programSearch}
+                    onChangeText={handleProgramSearch}
+                    onFocus={() => setProgramSearchFocused(true)}
+                    onBlur={() => setProgramSearchFocused(false)}
+                    placeholder="Search program..."
+                    placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                    returnKeyType="done"
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                  />
+                  {programSearching && <ActivityIndicator size="small" color={colors.primary[500]} />}
+                </View>
+
+                {pi.program ? (
+                  <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6 }}>
+                    <Text style={{ fontSize: 12, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
+                      Current selection:
+                    </Text>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? colors.neutral[200] : colors.secondary[800] }} numberOfLines={1}>
+                      {pi.program}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {programSuggestions.length > 0 ? (
+                  <FlatList
+                    data={programSuggestions}
+                    keyExtractor={item => item.id}
+                    keyboardShouldPersistTaps="handled"
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 12 }}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                        onPress={() => selectProgram(item)}
+                      >
+                        <Text style={{ flex: 1, fontSize: 15, color: item.id === pi.programId ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.id === pi.programId ? '600' : '400' }}>
+                          {item.label}
+                        </Text>
+                        {item.id === pi.programId && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
+                      </TouchableOpacity>
+                    )}
+                  />
+                ) : (
+                  <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
+                      {!programSearchFocused && programSearch.trim().length < 2
+                        ? 'Tap search to start'
+                        : programSearch.trim().length < 2
+                        ? 'Type at least 2 characters to search'
+                        : programSearching
+                        ? 'Searching...'
+                        : 'No programs found'}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            </Animated.View>
           </Pressable>
         </Modal>
       </View>
@@ -357,7 +457,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         {errors.studentCategory && <Text style={styles.errorText}>{errors.studentCategory}</Text>}
         <Modal visible={categoryOpen} transparent animationType="slide">
           <Pressable style={styles.modalOverlay} onPress={() => setCategoryOpen(false)}>
-            <Pressable style={[styles.modalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
+            <Pressable style={[styles.modalContent, styles.categoryModalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
               <View style={styles.modalHeader}>
                 <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Student Category</Text>
                 <TouchableOpacity onPress={() => setCategoryOpen(false)}>
@@ -412,8 +512,27 @@ const styles = StyleSheet.create({
   contactTitle: { fontSize: 15, fontWeight: '600', marginBottom: 12 },
   selectTrigger: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { maxHeight: '60%', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.1)' },
+  programModalOverlay: { paddingHorizontal: 8 },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  categoryModalContent: { maxHeight: '60%' },
+  programModalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginBottom: 8,
+  },
+  modalPanelInner: { flex: 1 },
+  modalHandleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
+  modalHandle: { width: 44, height: 5, borderRadius: 999 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.1)', gap: 8 },
   modalTitle: { fontSize: 17, fontWeight: '700' },
   optionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1 },
   modalSearchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 4, borderBottomWidth: 1, gap: 8 },

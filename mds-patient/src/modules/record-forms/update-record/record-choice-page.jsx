@@ -1,4 +1,5 @@
 import React from 'react';
+import RecordChoiceInfoSection from './record-choice-info-section';
 
 const RecordChoicePage = ({ onSelect, disabledChoiceIds = [] }) => {
   const choices = [
@@ -112,22 +113,7 @@ const RecordChoicePage = ({ onSelect, disabledChoiceIds = [] }) => {
         })}
       </div>
 
-      {/* Info Section */}
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-700">
-        <div className="flex gap-4">
-          <div className="flex-shrink-0 mt-0.5">
-            <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Why separate updates?</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              This helps us organize your information better and ensures that your medical and dental records are kept properly and securely. You can always update the other record type later.
-            </p>
-          </div>
-        </div>
-      </div>
+      <RecordChoiceInfoSection />
     </div>
   );
 };

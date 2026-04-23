@@ -269,17 +269,6 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
                 <span className="text-base text-secondary-700 dark:text-neutral-300">Active</span>
               </label>
             )}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.purposeRequired}
-                onChange={(e) => setFormData((prev) => ({ ...prev, purposeRequired: e.target.checked }))}
-                className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500"
-              />
-              <span className="text-base text-secondary-700 dark:text-neutral-300">
-                Require Purpose / Reason for Visit
-              </span>
-            </label>
           </div>
 
           {/* ── Requirements ───────────────────────────────────────────── */}
@@ -420,7 +409,7 @@ function getDefaults(scheduler) {
     notes: scheduler?.notes || '',
     isActive: scheduler?.isActive ?? true,
     whitelistOnly: scheduler?.whitelistOnly ?? false,
-    purposeRequired: scheduler?.purposeRequired ?? false,
+    purposeRequired: true,
   };
 }
 

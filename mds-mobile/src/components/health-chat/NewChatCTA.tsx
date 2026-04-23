@@ -29,6 +29,10 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
   const hasPreviousConvo = hasPreviousTicket && messages.length > 0;
   const closedAt = ticket?.session_end ?? ticket?.archived_at ?? ticket?.expiresAt;
   const previewScrollRef = useRef<ScrollView>(null);
+  const now = new Date();
+  const day = now.getDay();
+  const hour = now.getHours();
+  const isClinicOpen = day >= 1 && day <= 5 && hour >= 8 && hour < 17;
 
   useEffect(() => {
     if (!hasPreviousConvo || isHistoryLoading) return;
@@ -212,7 +216,7 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
         ]}
       >
         <View style={styles.ctaIconCircle}>
-          <MaterialCommunityIcons name="stethoscope" size={30} color={colors.primary[500]} />
+          <MaterialCommunityIcons name="chat-processing-outline" size={30} color={colors.primary[600]} />
         </View>
         <Text
           style={[
@@ -220,9 +224,7 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
             { color: isDark ? colors.neutral[100] : colors.secondary[800] },
           ]}
         >
-          {hasPreviousTicket
-            ? 'Start a new consultation'
-            : 'Need to talk to our medical team?'}
+          Talk to our medical team
         </Text>
         <Text
           style={[
@@ -230,16 +232,29 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
             { color: isDark ? colors.neutral[400] : colors.neutral[500] },
           ]}
         >
-          Ask questions, share concerns — we're here to help.
+          Ask questions and share your health concerns with the clinic nurses.
         </Text>
+
+        <View style={styles.availabilityRow}>
+          <View
+            style={[
+              styles.availabilityDot,
+              { backgroundColor: isClinicOpen ? colors.success[500] : (isDark ? colors.secondary[500] : colors.neutral[300]) },
+            ]}
+          />
+          <Text style={[styles.availabilityText, { color: isDark ? colors.neutral[500] : colors.neutral[500] }]}>
+            {isClinicOpen
+              ? 'Clinic is open - replies within 2-4 hours'
+              : 'Clinic closed - open Mon-Fri 8am-5pm'}
+          </Text>
+        </View>
+
         <TouchableOpacity
           style={styles.ctaButton}
           onPress={onStartNew}
           activeOpacity={0.8}
         >
-          <Text style={styles.ctaButtonText}>
-            + {hasPreviousTicket ? 'New Consultation' : 'Start Health Chat'}
-          </Text>
+          <Text style={styles.ctaButtonText}>Start a conversation</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -291,7 +306,7 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   patientBubble: {
-    backgroundColor: '#F4C430',
+    backgroundColor: colors.primary[500],
   },
   staffBubble: {
     borderWidth: 1,
@@ -345,7 +360,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: 'rgba(244,196,48,0.12)',
+    backgroundColor: colors.primary[100],
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -360,15 +375,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 8,
+  },
+  availabilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 24,
+  },
+  availabilityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  availabilityText: {
+    fontSize: 12,
   },
   ctaButton: {
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 24,
-    backgroundColor: '#F4C430',
+    backgroundColor: colors.primary[500],
     elevation: 3,
-    shadowColor: '#F4C430',
+    shadowColor: colors.primary[500],
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,

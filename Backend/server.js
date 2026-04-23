@@ -15,6 +15,7 @@ const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
+const logoutAuthRoutes = require('./routes/auth/jwt/logout.js');
 const pushTokenRoutes = require('./routes/auth/push-token.js');
 const googleOAuthRoutes = require('./routes/auth/oauth/google.js');
 
@@ -120,6 +121,7 @@ app.use('/auth/user', userPasswordRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
 app.use('/auth/refresh', refreshAuthRoutes);
+app.use('/auth/logout', logoutAuthRoutes);
 app.use('/auth/push-token', pushTokenRoutes);
 app.use('/auth/oauth', googleOAuthRoutes);
 

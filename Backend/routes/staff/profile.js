@@ -4,7 +4,71 @@ const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 const logger = require('../../utils/logger.js');
 const notificationsRouter = require('./notifications.js');
-const { getStaffBranch } = require('../../services/permit.js');
+const { getStaffBranch, isMedicalPermitted, permissions } = require('../../services/permit.js');
+
+const ALLOWED_SEARCH_BRANCHES = new Set(['Manila', 'QuezonCity', 'Both']);
+const MAX_SEARCH_INPUT_LENGTH = 120;
+
+function normalizeText(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function isBranchWithinScope(scopeBranch, requestedBranch) {
+    if (!ALLOWED_SEARCH_BRANCHES.has(scopeBranch)) return false;
+    if (!ALLOWED_SEARCH_BRANCHES.has(requestedBranch)) return false;
+    return scopeBranch === 'Both' || scopeBranch === requestedBranch;
+}
+
+function validateSearchInput(value, fieldName) {
+    if (!value) {
+        return `${fieldName} is required`;
+    }
+    if (value.length > MAX_SEARCH_INPUT_LENGTH) {
+        return `${fieldName} must be at most ${MAX_SEARCH_INPUT_LENGTH} characters`;
+    }
+    return null;
+}
+
+async function authorizePatientSearch(req, res, requestedBranch) {
+    const branch = normalizeText(requestedBranch);
+
+    if (!ALLOWED_SEARCH_BRANCHES.has(branch)) {
+        res.status(400).json({
+            error: 'INVALID_BRANCH',
+            message: 'branch must be one of Manila, QuezonCity, or Both',
+        });
+        return null;
+    }
+
+    const permissionCheck = await isMedicalPermitted(req.user.id, permissions.profile_allow_view);
+    if (!permissionCheck?.permitted) {
+        res.status(403).json({
+            error: 'FORBIDDEN',
+            message: 'Insufficient permission to search patient records.',
+        });
+        return null;
+    }
+
+    const staffBranch = normalizeText(await getStaffBranch(req.user.id)) || 'Both';
+    if (!isBranchWithinScope(staffBranch, branch)) {
+        res.status(403).json({
+            error: 'FORBIDDEN',
+            message: `Forbidden: Access to branch \`${branch}\` is denied by your staff designation.`,
+        });
+        return null;
+    }
+
+    const permissionBranch = normalizeText(permissionCheck.branch || 'Both') || 'Both';
+    if (!isBranchWithinScope(permissionBranch, branch)) {
+        res.status(403).json({
+            error: 'FORBIDDEN',
+            message: `Forbidden: Access to branch \`${branch}\` is denied by your permission scope.`,
+        });
+        return null;
+    }
+
+    return branch;
+}
 
 // Helper function to get user ID via identifier
 async function getUserIDViaIdentifier(identifier, branch) {
@@ -79,9 +143,26 @@ async function searchPatients(query, branch) {
     const param = `%${query}%`;
     const sql = `
         SELECT DISTINCT uc.id AS "userId", uc.email,
-               up.first_name, up.middle_name, up.last_name, up.identifier
+               up.first_name, up.middle_name, up.last_name, up.identifier,
+               p.profile::text AS profile_type,
+               spd.label AS program,
+               sp.year,
+               ep.department,
+               ep.role
         FROM "UserCredentials" uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
+        LEFT JOIN "Patients" p ON p.id = uc.id
+        LEFT JOIN LATERAL (
+            SELECT pr2.id
+            FROM "profileRecord" pr2
+            JOIN "patientUpdateLog" pul2 ON pul2.id = pr2.id
+            WHERE pul2."patientId" = uc.id
+            ORDER BY pul2.created_at DESC
+            LIMIT 1
+        ) pr ON true
+        LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+        LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
+        LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
         WHERE (
             up.first_name  ILIKE $1 OR
             up.middle_name ILIKE $1 OR
@@ -190,21 +271,36 @@ router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
 // Route: Unified patient search by name, identifier, or email
 router.get('/id/search', jwtProtect("medical"), async (req, res) => {
     try {
-        const { query, branch } = req.query;
+        const query = normalizeText(req.query.query);
+        const branch = await authorizePatientSearch(req, res, req.query.branch);
+        if (!branch) return;
 
-        if (!query || !branch) {
-            return res.status(400).json({ error: 'query and branch params are required' });
-        }
-
-        const medicalBranch = await getStaffBranch(req.user.id);
-        if (medicalBranch !== 'Both' && medicalBranch !== branch) {
-            return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
+        const queryValidationError = validateSearchInput(query, 'query');
+        if (queryValidationError) {
+            return res.status(400).json({
+                error: 'INVALID_QUERY',
+                message: queryValidationError,
+            });
         }
 
         const users = await searchPatients(query, branch);
 
-        logger.info(`Unified patient search: "${query}" branch=${branch} → ${users.length} results`);
-        res.json({ users: users.map(u => ({ id: u.userId, email: u.email, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
+        logger.info(`[STAFF_SEARCH] userId=${req.user.id} route=/id/search branch=${branch} queryLength=${query.length} results=${users.length}`);
+        res.json({
+            users: users.map((u) => ({
+                id: u.userId,
+                email: u.email,
+                firstName: u.first_name,
+                middleName: u.middle_name,
+                lastName: u.last_name,
+                identifier: u.identifier,
+                profile_type: u.profile_type ?? null,
+                program: u.program ?? null,
+                year: u.year ?? null,
+                department: u.department ?? null,
+                role: u.role ?? null,
+            })),
+        });
     } catch (error) {
         logger.error('Error in unified patient search:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -214,16 +310,21 @@ router.get('/id/search', jwtProtect("medical"), async (req, res) => {
 // Route: Get user ID by identifier
 router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (req, res) => {
     try {
-        const { identifier, branch } = req.params;
+        const identifier = normalizeText(req.params.identifier);
+        const branch = await authorizePatientSearch(req, res, req.params.branch);
+        if (!branch) return;
 
-        const medicalBranch = await getStaffBranch(req.user.id);
-        if (medicalBranch !== 'Both' && medicalBranch !== branch) {
-            return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
+        const identifierValidationError = validateSearchInput(identifier, 'identifier');
+        if (identifierValidationError) {
+            return res.status(400).json({
+                error: 'INVALID_IDENTIFIER',
+                message: identifierValidationError,
+            });
         }
 
         const users = await getUserIDViaIdentifier(identifier, branch);
         
-        logger.info(`Retrieved user IDs by identifier: ${identifier}`);
+        logger.info(`[STAFF_SEARCH] userId=${req.user.id} route=/id/identifier branch=${branch} identifierLength=${identifier.length} results=${users.length}`);
         res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by identifier:', error);
@@ -234,16 +335,21 @@ router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (r
 // Route: Get user ID by name
 router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => {
     try {
-        const { name, branch } = req.params;
+        const name = normalizeText(req.params.name);
+        const branch = await authorizePatientSearch(req, res, req.params.branch);
+        if (!branch) return;
 
-        const medicalBranch = await getStaffBranch(req.user.id);
-        if (medicalBranch !== 'Both' && medicalBranch !== branch) {
-            return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
+        const nameValidationError = validateSearchInput(name, 'name');
+        if (nameValidationError) {
+            return res.status(400).json({
+                error: 'INVALID_NAME',
+                message: nameValidationError,
+            });
         }
 
         const users = await getUserIdViaName(name, branch);
         
-        logger.info(`Retrieved user IDs by name: ${name}`);
+        logger.info(`[STAFF_SEARCH] userId=${req.user.id} route=/id/name branch=${branch} nameLength=${name.length} results=${users.length}`);
         res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by name:', error);
@@ -254,19 +360,20 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
 // Route: Get user ID by email
 router.get('/id/email', jwtProtect("medical"), async (req, res) => {
     try {
-        const { email, branch } = req.query;
+        const email = normalizeText(req.query.email);
+        const branch = await authorizePatientSearch(req, res, req.query.branch);
+        if (!branch) return;
 
-        if (!email || !branch) {
-            return res.status(400).json({ error: 'email and branch query params are required' });
-        }
-
-        const medicalBranch = await getStaffBranch(req.user.id);
-        if (medicalBranch !== 'Both' && medicalBranch !== branch) {
-            return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
+        const emailValidationError = validateSearchInput(email, 'email');
+        if (emailValidationError) {
+            return res.status(400).json({
+                error: 'INVALID_EMAIL',
+                message: emailValidationError,
+            });
         }
         const users = await getUserIdViaEmail(email, branch);
         
-        logger.info(`Retrieved user IDs by email: ${email}`);
+        logger.info(`[STAFF_SEARCH] userId=${req.user.id} route=/id/email branch=${branch} emailLength=${email.length} results=${users.length}`);
         res.json({ users: users.map(u => ({ id: u.userId, email: u.email, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by email:', error);

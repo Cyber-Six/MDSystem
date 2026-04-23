@@ -5,8 +5,9 @@ import ForgetPassword from './forget-password.jsx';
 import DataConsent from './data-consent/data-consent.jsx';
 
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '';
+const RECAPTCHA_ENABLED = !!RECAPTCHA_SITE_KEY;
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const GOOGLE_OAUTH_ENABLED = import.meta.env.VITE_GOOGLE_OAUTH_ENABLED !== 'false';
+const GOOGLE_OAUTH_ENABLED = import.meta.env.VITE_GOOGLE_OAUTH_ENABLED !== 'false' && !!GOOGLE_CLIENT_ID;
 
 // ── Shared spinner ────────────────────────────────────────────────────────────
 const Spinner = ({ className = 'h-4 w-4' }) => (
@@ -164,7 +165,6 @@ const Login = ({ onVerificationViewChange }) => {
   const [captchaRequired, setCaptchaRequired] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState('');
   const [recaptchaWidgetId, setRecaptchaWidgetId] = useState(null);
-  const [mockCaptchaChecked, setMockCaptchaChecked] = useState(false);
   const recaptchaRef = useRef(null);
   const googleBtnRef = useRef(null);
   const navigate = useNavigate();
@@ -216,17 +216,23 @@ const Login = ({ onVerificationViewChange }) => {
       if (res.data.ok) {
         const loginKey = res.data.LoginKey;
         setVerificationKey(loginKey);
-        let googleEmail = '';
+        const responseEmail = String(res.data.email || '').trim();
+        let tokenEmail = '';
         try {
           const payload = JSON.parse(atob(response.credential.split('.')[1]));
-          googleEmail = payload.email || '';
-          setEmail(googleEmail);
+          tokenEmail = String(payload.email || '').trim();
         } catch { /* non-critical */ }
+
+        const loginEmail = responseEmail || tokenEmail;
+        if (loginEmail) {
+          setEmail(loginEmail);
+        }
+
         if (res.data.requiresTotp) {
           setShowTotpVerify(true);
         } else {
-          await handleSend2FA(googleEmail);
-          setShowTwoFactor(true);
+          const sent = await handleSend2FA(loginEmail);
+          if (sent) setShowTwoFactor(true);
         }
       }
     } catch (err) {
@@ -268,16 +274,43 @@ const Login = ({ onVerificationViewChange }) => {
   }, [handleGoogleCredential]);
 
   const handleSend2FA = async (emailOverride) => {
+    const targetEmail = String(emailOverride || email || '').trim();
+
+    if (!targetEmail) {
+      setError('Unable to send verification code. Please sign in again.');
+      return false;
+    }
+
     try {
-      await axiosRequest.post('/auth/email/2fa', { email: emailOverride || email });
-    } catch (err) { console.error('Failed to send 2FA code:', err); }
+      await axiosRequest.post('/auth/email/2fa', { email: targetEmail });
+      if (targetEmail !== email) {
+        setEmail(targetEmail);
+      }
+      return true;
+    } catch (err) {
+      const errorCode = err.response?.data?.error;
+      switch (errorCode) {
+        case 'EMAIL_COOLDOWN_ACTIVE':
+          setError('Please wait before requesting another code.');
+          break;
+        case 'EMAIL_ATTEMPT_LIMIT_REACHED':
+          setError('Too many attempts. Please try again later.');
+          break;
+        case 'MISSING_FIELDS':
+        case 'INVALID_INSTITUTION_EMAIL':
+          setError('Unable to send verification code. Please sign in again.');
+          break;
+        default:
+          setError(err.response?.data?.message || 'Failed to send verification code.');
+      }
+      return false;
+    }
   };
 
   const handleInitialLogin = async (e) => {
     e.preventDefault();
     setError('');
-    if (captchaRequired && RECAPTCHA_SITE_KEY && !recaptchaToken) { setError('Please complete the reCAPTCHA check.'); return; }
-    if (captchaRequired && !RECAPTCHA_SITE_KEY && !mockCaptchaChecked) { setError('Please complete the reCAPTCHA check.'); return; }
+    if (captchaRequired && RECAPTCHA_ENABLED && !recaptchaToken) { setError('Please complete the reCAPTCHA check.'); return; }
     setIsLoading(true);
     try {
       const payload = { email, password };
@@ -288,8 +321,8 @@ const Login = ({ onVerificationViewChange }) => {
         if (response.data.requiresTotp) {
           setShowTotpVerify(true);
         } else {
-          await handleSend2FA();
-          setShowTwoFactor(true);
+          const sent = await handleSend2FA(email);
+          if (sent) setShowTwoFactor(true);
         }
       }
     } catch (err) {
@@ -315,12 +348,21 @@ const Login = ({ onVerificationViewChange }) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+
+    const verificationEmail = String(email || '').trim();
+    if (!verificationEmail) {
+      setError('Email is missing. Please sign in again.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await axiosRequest.post('/auth/email/2fa/verify', { email, otp: twoFactorCode, verificationKey });
+      const response = await axiosRequest.post('/auth/email/2fa/verify', { email: verificationEmail, otp: twoFactorCode, verificationKey });
       if (response.data.ok) {
-        setVerificationKey(response.data.verificationKey);
+        const nextVerificationKey = response.data.verificationKey;
+        setVerificationKey(nextVerificationKey);
         setShowTwoFactor(false);
-        setShowConsent(true);
+        await completeLoginWithKey(nextVerificationKey, { promptConsentIfRequired: true });
       }
     } catch (err) {
       const errorCode = err.response?.data?.error;
@@ -339,14 +381,7 @@ const Login = ({ onVerificationViewChange }) => {
     setError('');
     setIsLoading(true);
     try {
-      await axiosRequest.post('/auth/email/2fa', { email });
-    } catch (err) {
-      const errorCode = err.response?.data?.error;
-      switch (errorCode) {
-        case 'EMAIL_COOLDOWN_ACTIVE':       setError('Please wait before requesting another code.'); break;
-        case 'EMAIL_ATTEMPT_LIMIT_REACHED': setError('Too many attempts. Please try again later.'); break;
-        default:                            setError(err.response?.data?.message || 'Failed to resend code.');
-      }
+      await handleSend2FA(email);
     } finally { setIsLoading(false); }
   };
 
@@ -357,9 +392,10 @@ const Login = ({ onVerificationViewChange }) => {
     try {
       const response = await axiosRequest.post('/settings/totp/validate', { token: totpCode, verificationKey, email });
       if (response.data.ok) {
+        const nextVerificationKey = verificationKey;
         setShowTotpVerify(false);
         setTotpCode('');
-        setShowConsent(true);
+        await completeLoginWithKey(nextVerificationKey, { promptConsentIfRequired: true });
       }
     } catch (err) {
       const errorCode = err.response?.data?.error;
@@ -377,15 +413,18 @@ const Login = ({ onVerificationViewChange }) => {
 
   const handleUseEmailInstead = async () => {
     setError('');
+    const sent = await handleSend2FA(email);
+    if (!sent) return;
     setTotpCode('');
     setShowTotpVerify(false);
-    await handleSend2FA();
     setShowTwoFactor(true);
   };
 
-  const completeLoginWithKey = async (key) => {
+  const completeLoginWithKey = async (key, { promptConsentIfRequired = false } = {}) => {
     setError('');
     setIsLoading(true);
+    let shouldOpenConsent = false;
+
     try {
       const response = await axiosRequest.post('/auth/login/complete', { LoginKey: key });
       if (response.data.ok) {
@@ -409,12 +448,21 @@ const Login = ({ onVerificationViewChange }) => {
           setShowConsent(false); setShowTwoFactor(true);
           break;
         case 'DATA_CONSENT_REQUIRED':
-          setError('You must agree to the data consent policy to login.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the data consent policy to login.');
+          }
           break;
         case 'OUTDATED_CONSENT':
-          setError('You must agree to the latest data consent policy.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the latest data consent policy.');
+          }
           break;
         case 'STAFF_ACCOUNT_PENDING':
+        case 'STAFF_ACCOUNT_INACTIVE':
           setError('Your staff account is not yet activated. Contact your administrator to grant you access.');
           setShowConsent(false);
           break;
@@ -424,7 +472,10 @@ const Login = ({ onVerificationViewChange }) => {
           break;
         default: setError(errorMsg);
       }
-    } finally { setIsLoading(false); setShowConsent(false); }
+    } finally {
+      setIsLoading(false);
+      setShowConsent(shouldOpenConsent);
+    }
   };
 
   const handleConsentAccept = () => completeLoginWithKey(verificationKey);
@@ -589,45 +640,15 @@ const Login = ({ onVerificationViewChange }) => {
 
           </div>
 
-          {/* Adaptive reCAPTCHA */}
-          {captchaRequired && (
-            RECAPTCHA_SITE_KEY ? (
-              <div ref={recaptchaRef} id="staff-recaptcha-container" className="flex justify-center" />
-            ) : (
-              <button
-                type="button"
-                onClick={() => setMockCaptchaChecked(v => !v)}
-                className="w-full border border-[#d3d3d3] rounded bg-[#f9f9f9] shadow-sm flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#f2f2f2] transition-colors text-left"
-              >
-                <div className="w-6 h-6 border-2 border-[#c1c1c1] rounded-sm flex-shrink-0 bg-white shadow-inner flex items-center justify-center">
-                  {mockCaptchaChecked && (
-                    <svg viewBox="0 0 12 12" className="w-4 h-4 text-[#1a73e8]" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="1.5,6 4.5,9.5 10.5,2.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-                <span className="flex-1 text-[13px] text-[#555] leading-tight">I'm not a robot</span>
-                <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-                  <svg viewBox="0 0 46 52" className="w-8 h-8">
-                    <path fill="#4285F4" d="M23 1L2 10.5V26C2 39 11.5 49 23 52 34.5 49 44 39 44 26V10.5L23 1Z" />
-                    <path fill="#34A853" d="M23 1V52C34.5 49 44 39 44 26V10.5L23 1Z" />
-                    <circle cx="23" cy="26" r="10" fill="none" stroke="white" strokeWidth="2.5" />
-                    <path fill="white" d="M23 15L27 21H19Z" />
-                  </svg>
-                  <span className="text-[9px] font-medium leading-none text-[#777]">reCAPTCHA</span>
-                  <span className="text-[8px] leading-none text-[#aaa]">Privacy · Terms</span>
-                </div>
-              </button>
-            )
+          {/* reCAPTCHA — only rendered when enabled and triggered by the backend */}
+          {captchaRequired && RECAPTCHA_ENABLED && (
+            <div ref={recaptchaRef} id="staff-recaptcha-container" className="flex justify-center" />
           )}
 
           <div className="mt-10">
             <PrimaryBtn
               loading={isLoading} loadingLabel="Signing in…" label="Sign in"
-              disabled={
-                (captchaRequired && RECAPTCHA_SITE_KEY && !recaptchaToken) ||
-                (captchaRequired && !RECAPTCHA_SITE_KEY && !mockCaptchaChecked)
-              }
+              disabled={captchaRequired && RECAPTCHA_ENABLED && !recaptchaToken}
             />
           </div>
         </form>

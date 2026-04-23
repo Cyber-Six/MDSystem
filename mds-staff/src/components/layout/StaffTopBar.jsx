@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { logout } from '../../packages-core-adapter';
 import { useStaffNotifications } from '../../modules/notification/notification-context';
 import { useSettings } from '../../context/settings-context';
 import { usePatientTabs } from '../../context/patient-tabs-context';
-import { useStaffProfile, clearStaffProfileCache } from '../../hooks/use-staff-profile';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
 import { usePermissions } from '../../context/permissions-context';
 import { formatBranchLabel } from '../../utils/branch-utils';
+import { logoutStaffSession } from '../../services/auth-session-service';
 
 function formatRelativeTime(iso) {
   const date = new Date(iso);
@@ -643,15 +643,10 @@ const StaffTopBar = ({ onMenuClick }) => {
               <div className="border-t border-neutral-200 dark:border-neutral-700 mt-1 pt-1">
                 <button 
                   onClick={async () => {
-                    try {
-                      clearTabs();
-                      clearStaffProfileCache();
-                      await logout(true);
-                    } catch {
-                      clearTabs();
-                      clearStaffProfileCache();
-                      window.location.href = '/auth';
-                    }
+                    await logoutStaffSession({
+                      redirectToAuth: true,
+                      clearTabs,
+                    });
                   }}
                   className="w-full px-3 py-2 text-left text-sm text-error-600 dark:text-error-400 hover:bg-neutral-50 dark:hover:bg-neutral-700"
                 >

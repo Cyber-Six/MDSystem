@@ -16,6 +16,8 @@ import {
 import { useTheme, colors } from '../../context/ThemeContext';
 import { getPatientProfile, PatientProfile } from '../../services/profile-service';
 import { Ionicons } from '@expo/vector-icons';
+import { UserAvatar } from '../../components/common/UserAvatar';
+import { formatYearLevel } from '../../utils/formatYearLevel';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -70,10 +72,11 @@ export const ProfileScreen: React.FC = () => {
   }, []);
 
   const displayName = profile?.name || profile?.email?.split('@')[0]?.replace(/[._]/g, ' ') || 'Patient';
-  const identity = profile?.identity || 'Patient';
-  const roleLabel = identity;
-  const normalizedUserType = String(profile?.identity || '').trim().toLowerCase();
-  const identifierLabel = normalizedUserType === 'student' ? 'Student ID' : 'Employee ID';
+  const isStudent = profile?.profileType === 'StudentProfile';
+  const isEmployee = profile?.profileType === 'EmployeeProfile';
+  const identityLabel = isStudent ? 'Student' : isEmployee ? 'Employee' : (profile?.identity || null);
+  const identifierLabel = isEmployee ? 'Employee ID' : 'Student ID';
+  const yearLabel = isStudent ? formatYearLevel(profile?.yearLevel) : null;
 
   if (isLoading) {
     return (
@@ -97,15 +100,8 @@ export const ProfileScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Avatar */}
         <View style={styles.avatarSection}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: colors.primary[500] },
-            ]}
-          >
-            <Text style={styles.avatarText}>
-              {displayName.charAt(0).toUpperCase()}
-            </Text>
+          <View style={{ marginBottom: 12 }}>
+            <UserAvatar name={displayName} size="lg" />
           </View>
           <Text
             style={[
@@ -115,14 +111,39 @@ export const ProfileScreen: React.FC = () => {
           >
             {displayName}
           </Text>
-          <Text
-            style={[
-              styles.role,
-              { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-            ]}
-          >
-            {roleLabel}
-          </Text>
+          {identityLabel && (
+            <Text
+              style={[
+                styles.role,
+                { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+              ]}
+            >
+              {identityLabel}
+            </Text>
+          )}
+          {/* Student: year level + program pills */}
+          {isStudent && (yearLabel || profile?.program) && (
+            <View style={styles.pillRow}>
+              {yearLabel ? (
+                <View style={[styles.pill, { backgroundColor: isDark ? colors.primary[900] + '4d' : '#eff6ff', borderColor: isDark ? colors.primary[700] + '80' : '#bfdbfe' }]}>
+                  <Text style={[styles.pillText, { color: isDark ? colors.primary[300] : colors.primary[700] }]}>{yearLabel}</Text>
+                </View>
+              ) : null}
+              {profile?.program ? (
+                <View style={[styles.pill, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100], borderColor: isDark ? colors.neutral[600] : colors.neutral[300], maxWidth: 200 }]}>
+                  <Text style={[styles.pillText, { color: isDark ? colors.neutral[200] : colors.secondary[700] }]} numberOfLines={1}>{profile.program}</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+          {/* Employee: department pill */}
+          {isEmployee && profile?.department ? (
+            <View style={styles.pillRow}>
+              <View style={[styles.pill, { backgroundColor: isDark ? '#78350f26' : '#fffbeb', borderColor: isDark ? '#92400e80' : '#fde68a', maxWidth: 220 }]}>
+                <Text style={[styles.pillText, { color: isDark ? '#fcd34d' : '#92400e' }]} numberOfLines={1}>{profile.department}</Text>
+              </View>
+            </View>
+          ) : null}
         </View>
 
         {/* Info Card */}
@@ -181,17 +202,11 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { padding: 16, paddingBottom: 40 },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  avatarText: { fontSize: 32, fontWeight: 'bold', color: '#FFFFFF' },
   name: { fontSize: 22, fontWeight: 'bold' },
   role: { fontSize: 14, marginTop: 4, textAlign: 'center', paddingHorizontal: 12 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 8 },
+  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
+  pillText: { fontSize: 12, fontWeight: '500' },
   card: { borderRadius: 16, padding: 16, marginBottom: 16 },
   cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
   field: {

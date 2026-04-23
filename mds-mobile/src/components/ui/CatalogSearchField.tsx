@@ -56,12 +56,24 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
   isDark,
   placeholder,
 }) => {
+  const [keyboardOpen, setKeyboardOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, focused && styles.containerFocused]}>
       <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
         {label}
       </Text>
-      <View style={{ position: 'relative', zIndex: 50 }}>
+      <View style={styles.inputLayer}>
         <View style={[styles.inputRow, {
           backgroundColor: isDark ? colors.neutral[700] : '#FFF',
           borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
@@ -84,10 +96,16 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
         </View>
 
         {focused && (suggestions.length > 0 || (input.trim().length >= 2 && !searching)) && (
-          <View style={[styles.dropdown, {
-            backgroundColor: isDark ? colors.neutral[800] : '#FFF',
-            borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
-          }]}>
+          <View
+            style={[
+              styles.dropdown,
+              keyboardOpen ? styles.dropdownAbove : styles.dropdownBelow,
+              {
+                backgroundColor: isDark ? colors.neutral[800] : '#FFF',
+                borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+              },
+            ]}
+          >
             {suggestions.map(item => (
               <TouchableOpacity
                 key={item.id}
@@ -130,17 +148,22 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
 
 const styles = StyleSheet.create({
   container: { marginTop: 12 },
+  containerFocused: { zIndex: 300 },
   label: { fontSize: 13, fontWeight: '500', marginBottom: 6 },
+  inputLayer: { position: 'relative', zIndex: 50 },
   inputRow: {
     borderWidth: 1, borderRadius: 12, paddingHorizontal: 14,
     flexDirection: 'row', alignItems: 'center',
   },
   input: { flex: 1, paddingVertical: 10, fontSize: 14 },
   dropdown: {
-    position: 'absolute', top: '100%', left: 0, right: 0,
-    zIndex: 100, borderWidth: 1, borderRadius: 12, marginTop: 4,
+    position: 'absolute', left: 0, right: 0,
+    zIndex: 250, borderWidth: 1, borderRadius: 12,
     maxHeight: 200, overflow: 'hidden',
+    elevation: 12,
   },
+  dropdownBelow: { top: '100%', marginTop: 4 },
+  dropdownAbove: { bottom: '100%', marginBottom: 4 },
   dropdownItem: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1,

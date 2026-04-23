@@ -4,8 +4,9 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme as useSystemColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme as useNativewindColorScheme } from 'nativewind';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -22,7 +23,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_STORAGE_KEY = '@mdsystem/theme';
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const systemColorScheme = useColorScheme();
+  const systemColorScheme = useSystemColorScheme();
+  const { setColorScheme } = useNativewindColorScheme();
   const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
 
   // Load saved theme preference
@@ -55,6 +57,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     themeMode === 'system' 
       ? (systemColorScheme || 'light') 
       : themeMode;
+
+  useEffect(() => {
+    // NativeWind expects the resolved color scheme, not the preference mode.
+    setColorScheme(theme);
+  }, [theme, setColorScheme]);
 
   const isDark = theme === 'dark';
 

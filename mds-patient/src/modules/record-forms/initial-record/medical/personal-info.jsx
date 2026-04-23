@@ -108,6 +108,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
     { value: 'Senior', label: 'Senior' },
     { value: 'Masteral', label: 'Masteral' },
     { value: 'Doctorate', label: 'Doctorate' },
+    { value: 'Returnee', label: 'Returnee' },
   ];
 
   const calculateAge = (birthday) => {
@@ -259,23 +260,26 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
 
       {/* ── School Information Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary-100 text-primary-700">
+        <div className="flex items-center gap-3 mb-5 pb-4 border-b border-neutral-200">
+          <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary-100 text-primary-700">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </span>
-          School Information
-        </h3>
+          <h3 className="text-lg font-heading font-semibold text-secondary-900" style={{ margin: 0 }}>
+            School Information
+          </h3>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-secondary-700 mb-1">
+            <label className="form-label">
               Program <span className="text-red-500">*</span>
             </label>
             <div ref={programWrapperRef} className="relative">
               <input
                 type="text"
-                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 ${fieldErrors.program ? 'border-red-400' : 'border-neutral-300'} ${data.programId ? 'bg-primary-50' : ''}`}
+                className={`w-full px-3 py-2 text-sm border rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-neutral-400 ${fieldErrors.program ? 'border-red-400' : 'border-neutral-300'} ${data.programId ? 'bg-primary-50 border-primary-300' : 'bg-white'}`}
                 placeholder="Type to search for your program..."
                 value={programInput}
                 autoComplete="off"
@@ -286,7 +290,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-primary-600 font-medium pointer-events-none">✓</span>
               )}
               {programFocused && programInput.trim() && (
-                <div className="absolute z-10 mt-1 w-full border border-neutral-200 rounded-lg bg-white shadow-md">
+                <div className="absolute z-10 mt-1 w-full border border-neutral-200 rounded-lg bg-white shadow-md max-h-60 overflow-y-auto">
                   {programSearching && (
                     <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
@@ -319,19 +323,8 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             error={fieldErrors.studentNumber}
           />
         </div>
-      </div>
 
-      {/* ── Student Status Card ── */}
-      <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary-100 text-primary-700">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </span>
-          Student Status
-        </h3>
-        <div className="grid grid-cols-1 gap-3">
+        <div className="mt-2 grid grid-cols-1 gap-3">
           <Select
             label="Student Category"
             required
@@ -340,34 +333,35 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             options={studentCategoryOptions}
             error={fieldErrors.studentCategory}
           />
-
         </div>
       </div>
 
       {/* ── Emergency Contacts Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-3 flex flex-wrap items-center gap-2">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-error-100 text-error-600 shrink-0">
+        <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-neutral-200">
+          <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-error-100 text-error-600 shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </span>
-          Emergency Contacts
-          <span className="text-xs font-normal text-secondary-500 bg-secondary-100 px-2 py-0.5 rounded-full">2 required</span>
-        </h3>
-        {[0, 1].map((index) => (
-          <div key={index} className={`${index === 0 ? 'mb-6 pb-6 border-b border-neutral-200' : ''}`}>
-            <h4 className="text-sm font-semibold text-secondary-600 mb-2 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-secondary-200 text-secondary-700 text-xs font-bold">{index + 1}</span>
-              Contact Person {index + 1}
-            </h4>
+          <h3 className="text-lg font-heading font-semibold text-secondary-900" style={{ margin: 0 }}>
+            Emergency Contact
+          </h3>
+        </div>
+
+        {[
+          { title: 'Primary Emergency Contact', relationshipPlaceholder: 'e.g., Mother, Father' },
+          { title: 'Secondary Emergency Contact', relationshipPlaceholder: 'e.g., Sibling, Guardian' },
+        ].map((contactConfig, index) => (
+          <div key={contactConfig.title} className={`border border-neutral-200 rounded-xl p-4 bg-white ${index === 0 ? 'mb-3' : ''}`}>
+            <h5 className="font-semibold text-secondary-700 mb-2 text-xs uppercase tracking-wide">{contactConfig.title}</h5>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <Input
                 label="Name"
                 required
                 value={data.emergencyContacts[index]?.name || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'name', e.target.value)}
-                placeholder="Full name"
+                placeholder="Contact Name"
                 error={index === 0 ? fieldErrors.emergencyContact1Name : fieldErrors.emergencyContact2Name}
               />
               <Input
@@ -375,7 +369,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 required
                 value={data.emergencyContacts[index]?.relationship || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'relationship', e.target.value)}
-                placeholder="e.g., Mother, Father"
+                placeholder={contactConfig.relationshipPlaceholder}
                 error={index === 0 ? fieldErrors.emergencyContact1Relationship : fieldErrors.emergencyContact2Relationship}
               />
               <Input
@@ -385,7 +379,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 reserveErrorSpace
                 value={data.emergencyContacts[index]?.contactNumber || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', handlePhone(`ec${index}`, e.target.value))}
-                placeholder="09XXXXXXXXX"
+                placeholder="Contact Number"
                 error={phoneWarnings[`ec${index}`] ? 'Contact number cannot exceed 11 digits.' : (index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber)}
               />
             </div>
@@ -395,7 +389,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 required
                 value={data.emergencyContacts[index]?.address || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'address', e.target.value)}
-                placeholder="Complete address of contact person"
+                placeholder="Contact's home address"
               />
             </div>
           </div>

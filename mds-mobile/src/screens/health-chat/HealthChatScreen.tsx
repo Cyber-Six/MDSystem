@@ -49,6 +49,7 @@ import {
   CreateTicketForm,
   NewChatCTA,
 } from '../../components/health-chat';
+import { TopBar } from '../../components/layout/TopBar';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -485,8 +486,9 @@ export const HealthChatScreen: React.FC = () => {
           styles.container,
           { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
         ]}
-        edges={['top']}
+        edges={['top', 'left', 'right']}
       >
+        <TopBar title="Health Chat" onMenuPress={() => toggleAppDrawer(navigation)} />
         <View style={styles.centeredContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text
@@ -509,25 +511,10 @@ export const HealthChatScreen: React.FC = () => {
         styles.container,
         { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
       ]}
-      edges={['top']}
+      edges={['top', 'left', 'right']}
     >
-      <View style={styles.topMenuRow}>
-        <TouchableOpacity
-          style={[
-            styles.menuButton,
-            { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-          ]}
-          onPress={() => toggleAppDrawer(navigation)}
-          accessibilityRole="button"
-          accessibilityLabel="Open sidebar"
-        >
-          <Ionicons
-            name="menu"
-            size={22}
-            color={isDark ? colors.neutral[100] : colors.secondary[900]}
-          />
-        </TouchableOpacity>
-      </View>
+      <TopBar title="Health Chat" onMenuPress={() => toggleAppDrawer(navigation)} />
+
       {/* Error Banner */}
       {error && (
         <View

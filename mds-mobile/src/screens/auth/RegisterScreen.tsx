@@ -11,12 +11,14 @@ import {
   KeyboardAvoidingView, 
   Platform,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  Image,
+  TouchableOpacity,
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
-import { Input, Button, Alert, LinkButton, Checkbox } from '../../components/ui/FormComponents';
+import { Input, Button, Alert } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
 import { axiosRequest, TokenStorage } from '../../core';
 
@@ -339,6 +341,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         value={formData.password}
         onChangeText={(value) => handleInputChange('password', value)}
         secureTextEntry
+        showPasswordToggle
         editable={!loading}
       />
 
@@ -348,6 +351,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         value={formData.confirmPassword}
         onChangeText={(value) => handleInputChange('confirmPassword', value)}
         secureTextEntry
+        showPasswordToggle
         editable={!loading}
       />
 
@@ -361,17 +365,22 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         styles.divider,
         { borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200] }
       ]}>
-        <Text style={[
-          styles.dividerText,
-          { color: isDark ? colors.neutral[400] : colors.neutral[600] }
-        ]}>
-          Already have an account?
-        </Text>
-        <Button
-          title="Sign In"
-          onPress={onNavigateToLogin}
-          variant="outline"
-        />
+        <View style={styles.inlinePromptRow}>
+          <Text style={[
+            styles.inlinePromptText,
+            { color: isDark ? colors.neutral[400] : colors.neutral[500] }
+          ]}>
+            Already have an account?{' '}
+          </Text>
+          <TouchableOpacity onPress={onNavigateToLogin} activeOpacity={0.8}>
+            <Text style={[
+              styles.inlineActionLink,
+              { color: isDark ? colors.accent[400] : colors.accent[600] }
+            ]}>
+              Sign in
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -532,32 +541,44 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
-          {/* Header */}
-          {currentStep === 1 && (
-            <View style={styles.header}>
-              <View style={styles.logoContainer}>
-                <Ionicons name="medkit" size={40} color="#FFFFFF" />
-              </View>
-              <Text style={[
-                styles.title,
-                { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-              ]}>
-                Create Account
-              </Text>
-              <Text style={[
-                styles.subtitle,
-                { color: isDark ? colors.neutral[400] : colors.neutral[600] }
-              ]}>
-                Join MDSystem today
-              </Text>
-            </View>
-          )}
-
           {/* Progress Bar */}
           {currentStep > 1 && renderProgressBar()}
 
           {/* Step Content */}
-          {renderStep()}
+          <View style={[
+            styles.formCard,
+            {
+              backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+              borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+            }
+          ]}>
+            {/* Header */}
+            {currentStep === 1 && (
+              <View style={styles.header}>
+                <View style={styles.logoContainer}>
+                  <Image
+                    source={require('../../../assets/MDSystem.png')}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={[
+                  styles.title,
+                  { color: isDark ? colors.neutral[100] : colors.secondary[900] }
+                ]}>
+                  Create Account
+                </Text>
+                <Text style={[
+                  styles.subtitle,
+                  { color: isDark ? colors.neutral[400] : colors.neutral[600] }
+                ]}>
+                  Join our healthcare platform
+                </Text>
+              </View>
+            )}
+
+            {renderStep()}
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -585,31 +606,50 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingVertical: 48,
+    paddingVertical: 40,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  formCard: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    shadowColor: '#1c1a17',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 4,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    backgroundColor: colors.primary[500],
-    borderRadius: 16,
+    width: 76,
+    height: 76,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   logoEmoji: {
     // unused
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
   },
   subtitle: {
-    fontSize: 16,
-    marginTop: 8,
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: 'center',
   },
   stepContainer: {
     width: '100%',
@@ -624,6 +664,9 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     marginBottom: 24,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
   },
   progressLabels: {
     flexDirection: 'row',
@@ -646,14 +689,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[500],
   },
   divider: {
-    marginTop: 24,
-    paddingTop: 24,
+    marginTop: 20,
+    paddingTop: 18,
     borderTopWidth: 1,
   },
-  dividerText: {
-    textAlign: 'center',
+  inlinePromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  inlinePromptText: {
     fontSize: 14,
-    marginBottom: 12,
+  },
+  inlineActionLink: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   iconCircle: {
     width: 80,

@@ -21,6 +21,8 @@ import { toggleAppDrawer } from '../../navigation/drawer-utils';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { TopBar } from '../../components/layout/TopBar';
+import { UserAvatar } from '../../components/common/UserAvatar';
 
 interface MoreMenuScreenProps {
   navigation: any;
@@ -54,7 +56,15 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
   const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
   const { recordStatus } = useRecordStatus();
+  const normalizedRecordStatus = String(recordStatus?.status || '').toLowerCase();
+  const isAwaitingInitialApproval =
+    normalizedRecordStatus === 'pending'
+    || normalizedRecordStatus === 'revisionsubmitted'
+    || normalizedRecordStatus === 'underreview'
+    || normalizedRecordStatus === 'in review';
+  const isInitialFormOnlyMode = Boolean(recordStatus?.needsInitialRecord) && !isAwaitingInitialApproval;
   const isInactive = recordStatus?.credentialStatus === 'Inactive';
+  const shouldHideMyDocuments = isInactive || isInitialFormOnlyMode;
   const [userName, setUserName] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
 
@@ -84,35 +94,11 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
         styles.container,
         { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
       ]}
-      edges={['top']}
+      edges={['top', 'left', 'right']}
     >
+      <TopBar title="More" onMenuPress={() => toggleAppDrawer(navigation)} />
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={[
-              styles.menuButton,
-              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
-            ]}
-            onPress={() => toggleAppDrawer(navigation)}
-            accessibilityRole="button"
-            accessibilityLabel="Open sidebar"
-          >
-            <Ionicons
-              name="menu"
-              size={22}
-              color={isDark ? colors.neutral[100] : colors.secondary[900]}
-            />
-          </TouchableOpacity>
-          <Text
-            style={[
-              styles.headerTitle,
-              { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-            ]}
-          >
-            More
-          </Text>
-        </View>
 
         {/* User card */}
         <View
@@ -121,16 +107,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
             { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
           ]}
         >
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] },
-            ]}
-          >
-            <Text style={styles.avatarText}>
-              {(userName || userEmail || '?')[0].toUpperCase()}
-            </Text>
-          </View>
+          <UserAvatar name={userName || userEmail || 'Patient'} size="md" />
           <View style={styles.userInfo}>
             <Text
               style={[
@@ -149,6 +126,19 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
               {userEmail || 'No email'}
             </Text>
           </View>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            className="p-2"
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+          >
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={isDark ? colors.secondary[500] : colors.secondary[300]}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Menu items */}
@@ -159,7 +149,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
           ]}
         >
           {menuItems
-            .filter((item) => !isInactive || !INACTIVE_HIDDEN_SCREENS.has(item.screen))
+            .filter((item) => !shouldHideMyDocuments || !INACTIVE_HIDDEN_SCREENS.has(item.screen))
             .map((item, index, filtered) => (
             <TouchableOpacity
               key={item.screen}
@@ -217,9 +207,6 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
           style={[
             styles.signOutBtn,
             {
-              backgroundColor: isDark
-                ? 'rgba(239,68,68,0.08)'
-                : 'rgba(239,68,68,0.06)',
               borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
             },
           ]}
@@ -280,14 +267,6 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontSize: 22, fontWeight: '600', color: colors.primary[500] },
   userInfo: { flex: 1 },
   userName: { fontSize: 16, fontWeight: '600' },
   userEmailText: { fontSize: 13, marginTop: 2 },
@@ -322,8 +301,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     paddingVertical: 14,
-    borderRadius: 16,
+    borderRadius: 999,
     borderWidth: 1,
+    marginTop: 4,
+    minHeight: 52,
   },
   signOutText: {
     fontSize: 15,

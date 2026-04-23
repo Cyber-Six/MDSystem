@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePermissions } from '../../../context/permissions-context';
+import { useStaffNotifications } from '../../notification/notification-context';
 import {
   BRANCH,
   ALL_BRANCHES,
@@ -30,6 +31,7 @@ const InitialRecordList = ({
   externalStatusFilter = null,
   showStatusFilter = true,
 }) => {
+  const { subscribe } = useStaffNotifications();
   const { branch: permBranch, allowedBranches } = usePermissions();
   const [branch, setBranch] = useState(() => permBranch || BRANCH.BOTH);
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
@@ -69,11 +71,11 @@ const InitialRecordList = ({
 
   // ── Fetch ----------------------------------------------------------------
 
-  const fetchTickets = useCallback(async () => {
+  const fetchTickets = useCallback(async (options = {}) => {
     setLoading(true);
     setError('');
     try {
-      const result = await getStatusUpdateTickets(queryStatuses, branch);
+      const result = await getStatusUpdateTickets(queryStatuses, branch, 0, 20, options);
       const enriched = await enrichWithInitialFlag(result);
       setTickets(enriched.filter((t) => t.is_initial));
     } catch (err) {
@@ -86,6 +88,16 @@ const InitialRecordList = ({
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  // Live-sync pending list when a patient submits an update ticket.
+  // Initial-record tickets are filtered client-side via enrichWithInitialFlag.
+  useEffect(() => {
+    const unsubscribe = subscribe('updateTicket', () => {
+      fetchTickets({ force: true });
+    });
+
+    return () => unsubscribe();
+  }, [subscribe, fetchTickets]);
 
   // ── After approve / revision ─────────────────────────────────────────────
 
@@ -169,7 +181,7 @@ const InitialRecordList = ({
 
           {/* Refresh button */}
           <button
-            onClick={fetchTickets}
+            onClick={() => fetchTickets({ force: true })}
             disabled={loading}
             className="ml-auto px-3 py-1 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1"
           >

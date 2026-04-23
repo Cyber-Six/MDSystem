@@ -4,9 +4,30 @@ import SettingsContext, { DEFAULT_SETTINGS } from '../../context/settings-contex
 import styles from './banner.module.css';
 
 const SLIDE_OUT_DURATION = 320; // ms — must match CSS animation duration
+const AUTO_DISMISS_DELAY_MS = 5000;
+const IS_DEV = Boolean(import.meta.env?.DEV);
 
 // When Banner renders outside SettingsProvider (e.g. auth pages), use defaults.
 const FALLBACK_SETTINGS = { ...DEFAULT_SETTINGS };
+
+function hasDisplayableSuccessMessage(message) {
+  if (typeof message !== 'string') return false;
+  const normalized = message.trim();
+  if (!normalized) return false;
+  return normalized.toLowerCase() !== 'success';
+}
+
+function applyEnvironmentBannerPolicy(banners) {
+  if (IS_DEV) {
+    return banners.filter((banner) => banner.type === 'error');
+  }
+
+  return banners.filter((banner) => {
+    if (banner.type === 'error') return true;
+    if (banner.type !== 'success') return false;
+    return hasDisplayableSuccessMessage(banner.message);
+  });
+}
 
 /**
  * Group banners by "type:message" key, preserving first-seen order.
@@ -28,6 +49,7 @@ const Banner = () => {
   const { banners, dismissBanner } = useBanner();
   const settingsCtx = useContext(SettingsContext);
   const s = settingsCtx?.settings ?? FALLBACK_SETTINGS;
+  const isCompactMode = IS_DEV;
   const autoDismissTimersRef = useRef({});
   // Tracks last-seen count per group key so we can detect new additions and restart
   // the debounce timer only when the count increases (not on manual dismissals).
@@ -70,23 +92,10 @@ const Banner = () => {
    * Normal mode   → one timer per individual banner id.
    */
   useEffect(() => {
-    if (!s.bannerAutoDismiss) {
-      Object.values(autoDismissTimersRef.current).forEach(clearTimeout);
-      autoDismissTimersRef.current = {};
-      return;
-    }
+    const delay = AUTO_DISMISS_DELAY_MS;
+    const timerBanners = applyEnvironmentBannerPolicy(banners);
 
-    const delay = Math.max(1, s.bannerDismissDelay || 5) * 1000;
-
-    // Mirror the same visibility filter used at render time.
-    let visibleBanners = [...banners];
-    if (!s.showBanners) {
-      visibleBanners = banners.filter((b) => b.type === 'error');
-    } else if (s.bannerErrorsOnly) {
-      visibleBanners = visibleBanners.filter((b) => b.type === 'error');
-    }
-
-    if (s.bannerCompact) {
+    if (isCompactMode) {
       // Remove any lingering individual timers from a previous non-compact state.
       Object.keys(autoDismissTimersRef.current).forEach((key) => {
         if (!key.startsWith('group:')) {
@@ -95,7 +104,7 @@ const Banner = () => {
         }
       });
 
-      const groupMap = buildGroupMap(visibleBanners);
+      const groupMap = buildGroupMap(timerBanners);
 
       groupMap.forEach((group, key) => {
         const timerKey = `group:${key}`;
@@ -149,7 +158,7 @@ const Banner = () => {
       });
 
       // Keys stored as strings because Object.keys always returns strings.
-      visibleBanners.forEach((banner) => {
+      timerBanners.forEach((banner) => {
         const key = String(banner.id);
         if (!autoDismissTimersRef.current[key]) {
           autoDismissTimersRef.current[key] = setTimeout(() => {
@@ -160,7 +169,7 @@ const Banner = () => {
       });
 
       return () => {
-        const currentKeys = new Set(visibleBanners.map((b) => String(b.id)));
+        const currentKeys = new Set(timerBanners.map((b) => String(b.id)));
         Object.keys(autoDismissTimersRef.current).forEach((key) => {
           if (!key.startsWith('group:') && !currentKeys.has(key)) {
             clearTimeout(autoDismissTimersRef.current[key]);
@@ -169,7 +178,7 @@ const Banner = () => {
         });
       };
     }
-  }, [banners, s, triggerDismiss, triggerDismissGroup]);
+  }, [banners, isCompactMode, triggerDismiss, triggerDismissGroup]);
 
   // Clear all timers on unmount to prevent memory leaks / setState-after-unmount.
   useEffect(() => {
@@ -182,18 +191,15 @@ const Banner = () => {
 
   if (banners.length === 0 && exitingIds.size === 0) return null;
 
-  // Apply banner visibility filters.
-  let visibleBanners = [...banners];
-  if (!s.showBanners) {
-    visibleBanners = banners.filter((b) => b.type === 'error');
-  } else if (s.bannerErrorsOnly) {
-    visibleBanners = visibleBanners.filter((b) => b.type === 'error');
-  }
+  if (!s.showBanners) return null;
+
+  // Apply environment-aware banner visibility rules.
+  const visibleBanners = applyEnvironmentBannerPolicy(banners);
 
   if (visibleBanners.length === 0 && exitingIds.size === 0) return null;
 
   // ── Compact mode: group by type:message ──────────────────────────────────
-  if (s.bannerCompact) {
+  if (isCompactMode) {
     const groupMap = buildGroupMap(visibleBanners);
     const groups = [...groupMap.values()];
 

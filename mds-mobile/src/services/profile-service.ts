@@ -17,6 +17,11 @@ export interface PatientProfile {
   secondEmergencyContactNumber: string | null;
   identifier: string | null;
   identity: PatientIdentity | null;
+  // Student / Employee profile data from EMR
+  profileType: 'StudentProfile' | 'EmployeeProfile' | null;
+  yearLevel: string | null;
+  program: string | null;
+  department: string | null;
 }
 
 let _cache: PatientProfile | null = null;
@@ -65,7 +70,9 @@ const inferIdentityFromEmail = (email: string | null | undefined): PatientIdenti
 export const getPatientProfile = async (): Promise<PatientProfile> => {
   if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
-  const [profileResult, emergencyResult] = await Promise.allSettled([
+  // Three independent requests so a failure in getMyProfile never blocks
+  // the emergency contact fetch.
+  const [profileResult, emergencyResult, myProfileResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -78,11 +85,23 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       {},
       { endpoint: '/profile/patient' },
     ),
+    // Emergency contacts in its own request so it is never blocked by getMyProfile
     sendGraphQLRequest(
       `query GetEmergencyContact {
         emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
+        }
+      }`,
+      {},
+    ),
+    // getMyProfile is optional — fails gracefully if backend schema cache is stale
+    sendGraphQLRequest(
+      `query GetMyProfile {
+        myProfile: getMyProfile {
+          __typename
+          ... on StudentProfile { program year }
+          ... on EmployeeProfile { department }
         }
       }`,
       {},
@@ -104,7 +123,16 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       : null;
 
   if (emergencyResult.status === 'rejected') {
-    console.warn('[Profile Service] Active emergency contact fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
+    console.warn('[Profile Service] Could not fetch emergency contact:', (emergencyResult as PromiseRejectedResult).reason?.message);
+  }
+
+  const myProfileData =
+    myProfileResult.status === 'fulfilled'
+      ? myProfileResult.value
+      : null;
+
+  if (myProfileResult.status === 'rejected') {
+    console.warn('[Profile Service] Could not fetch profile type (non-critical):', (myProfileResult as PromiseRejectedResult).reason?.message);
   }
 
   const log = (profileData as any)?.personalLog || {};
@@ -116,6 +144,9 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
       ? (emergencyData as any).emergencyContacts[0]
       : null) ||
     null;
+
+  const myProfile = (myProfileData as any)?.myProfile || null;
+  const profileTypeName: string | null = myProfile?.__typename || null;
 
   const nameParts = [
     sanitizeDisplayValue(log.first_name),
@@ -139,6 +170,12 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     secondEmergencyContactNumber: extractContactNumber(latestEmergency?.secondContact),
     identifier: sanitizeDisplayValue((profileData as any)?.personalRecord?.identifier),
     identity,
+    profileType: (profileTypeName === 'StudentProfile' || profileTypeName === 'EmployeeProfile')
+      ? (profileTypeName as 'StudentProfile' | 'EmployeeProfile')
+      : null,
+    yearLevel: profileTypeName === 'StudentProfile' ? sanitizeDisplayValue(myProfile?.year) : null,
+    program: profileTypeName === 'StudentProfile' ? sanitizeDisplayValue(myProfile?.program) : null,
+    department: profileTypeName === 'EmployeeProfile' ? sanitizeDisplayValue(myProfile?.department) : null,
   };
 
   return _cache;

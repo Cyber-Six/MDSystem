@@ -15,6 +15,11 @@ const sendHealthChatRequest = (query: string, variables: Record<string, any> = {
   return sendGraphQLRequest(query, variables, { endpoint: ENDPOINT });
 };
 
+const isCredentialsIncompleteError = (error: any): boolean => {
+  return error?.response?.status === 403
+    && error?.response?.data?.error === 'CREDENTIALS_INCOMPLETE';
+};
+
 // ==================== TYPES ====================
 
 export type ChatStatus = 'Open' | 'Ongoing' | 'Closed' | 'Expired';
@@ -348,6 +353,9 @@ export const getCurrentActiveTicket = async (): Promise<Ticket | null> => {
 
     return null;
   } catch (error) {
+    if (isCredentialsIncompleteError(error)) {
+      return null;
+    }
     console.error('[Health Chat Service] Error fetching active ticket:', error);
     return null;
   }
@@ -361,6 +369,9 @@ export const getMostRecentTicket = async (): Promise<Ticket | null> => {
     const result = await getMyTickets(null, 0, 1);
     return result.chats.length > 0 ? result.chats[0] : null;
   } catch (error) {
+    if (isCredentialsIncompleteError(error)) {
+      return null;
+    }
     console.error('[Health Chat Service] Error fetching recent ticket:', error);
     return null;
   }

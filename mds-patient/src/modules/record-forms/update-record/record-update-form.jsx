@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ProgressStepper from './progress-stepper';
 import PersonalInfoStep from './personal-info-step';
 import MedicalHistoryStep from './medical-history-step';
@@ -7,7 +7,13 @@ import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
 import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { usePatientNotifications } from '../../notification/notification-context';
 import ValidationWarningModal from '../../../components/modals/validation-warning-modal';
+import {
+  buildUpdateRecordSteps,
+  clampStepIndex,
+  getBackButtonState,
+} from './step-navigation-utils';
 
 const RecordUpdateForm = ({
   forceRecordType = null,
@@ -17,6 +23,7 @@ const RecordUpdateForm = ({
   onSubmissionSuccess = null,
   isInactiveMode = false,
 }) => {
+  const { subscribe } = usePatientNotifications();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,38 +49,51 @@ const RecordUpdateForm = ({
   const [validationErrors, setValidationErrors] = useState([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
+  const syncRevisionStatus = useCallback(async (source = 'mount') => {
+    try {
+      console.log(`[RecordUpdateForm] Syncing revision status from ${source}...`);
+      const ticket = await getUpdateRevisionStatus();
+
+      if (ticket && ticket.status === 'Revision') {
+        console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
+        setRevisionStatus(ticket);
+        setShowRevisionBanner(true);
+
+        // Pre-fetch previous data for revision
+        try {
+          const prefill = await fetchUpdateRevisionPrefill();
+          if (prefill && Object.keys(prefill).length > 0) {
+            console.log('[RecordUpdateForm] ✅ Pre-fill data fetched:', prefill);
+            setRevisionPrefillData(prefill); // Store for later use
+          }
+        } catch (err) {
+          console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
+        }
+        return;
+      }
+
+      setRevisionStatus(ticket || null);
+      setShowRevisionBanner(false);
+      setRevisionPrefillData(null);
+      console.log('[RecordUpdateForm] No revision pending');
+    } catch (error) {
+      console.error('[RecordUpdateForm] Error checking revision status:', error.message);
+    }
+  }, []);
+
   // Check for pending revision request on mount
   useEffect(() => {
-    const checkForRevision = async () => {
-      try {
-        console.log('[RecordUpdateForm] Checking for pending revision...');
-        const ticket = await getUpdateRevisionStatus();
-        
-        if (ticket && ticket.status === 'Revision') {
-          console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
-          setRevisionStatus(ticket);
-          setShowRevisionBanner(true);
-          
-          // Pre-fetch previous data for revision
-          try {
-            const prefill = await fetchUpdateRevisionPrefill();
-            if (prefill && Object.keys(prefill).length > 0) {
-              console.log('[RecordUpdateForm] ✅ Pre-fill data fetched:', prefill);
-              setRevisionPrefillData(prefill); // Store for later use
-            }
-          } catch (err) {
-            console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
-          }
-        } else {
-          console.log('[RecordUpdateForm] No revision pending');
-        }
-      } catch (error) {
-        console.error('[RecordUpdateForm] Error checking revision status:', error.message);
-      }
-    };
+    syncRevisionStatus('mount');
+  }, [syncRevisionStatus]);
 
-    checkForRevision();
-  }, []);
+  // Keep revision modal in sync with live update-ticket status changes.
+  useEffect(() => {
+    const unsubscribe = subscribe('updateTicket:statusChanged', () => {
+      syncRevisionStatus('notification');
+    });
+
+    return () => unsubscribe();
+  }, [subscribe, syncRevisionStatus]);
 
   // Fetch patient sex on mount so OB-GYN section shows correctly for female patients
   useEffect(() => {
@@ -95,29 +115,27 @@ const RecordUpdateForm = ({
     fetchUserSex();
   }, []);
 
-  // Dynamically build steps based on recordType
-  const getSteps = () => {
-    if (!effectiveRecordType) return skipPersonalStep ? [] : ['Personal Info'];
-    
-    const baseSteps = skipPersonalStep ? [] : ['Personal Info'];
-    
-    if (effectiveRecordType === 'medical' || effectiveRecordType === 'both') {
-      baseSteps.push('Medical History');
-    }
-    
-    if (effectiveRecordType === 'dental' || effectiveRecordType === 'both') {
-      baseSteps.push('Dental History');
-    }
-    
-    baseSteps.push('Review & Submit');
-    return baseSteps;
-  };
+  const steps = buildUpdateRecordSteps({
+    effectiveRecordType,
+    skipPersonalStep,
+  });
+  const safeCurrentStep = clampStepIndex(currentStep, steps.length);
+  const canReturnToChoicePage = !forceRecordType && !hideRecordChoice;
+  const backButtonState = getBackButtonState({
+    currentStep: safeCurrentStep,
+    canReturnToChoicePage,
+  });
 
-  const steps = getSteps();
+  // Keep the step pointer valid whenever dynamic step count changes.
+  useEffect(() => {
+    if (safeCurrentStep !== currentStep) {
+      setCurrentStep(safeCurrentStep);
+    }
+  }, [currentStep, safeCurrentStep]);
 
   // Validate required fields before allowing Next
   const validateCurrentStep = () => {
-    const stepName = steps[currentStep];
+    const stepName = steps[safeCurrentStep];
     const errors = [];
 
     if (stepName === 'Personal Info') {
@@ -240,17 +258,23 @@ const RecordUpdateForm = ({
 
   const handleNext = () => {
     if (!validateCurrentStep()) return;
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
+    if (safeCurrentStep < steps.length - 1) {
+      setCurrentStep(safeCurrentStep + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handleBack = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+    if (safeCurrentStep > 0) {
+      setCurrentStep(safeCurrentStep - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  };
+
+  const handleCancelToChoice = () => {
+    if (!canReturnToChoicePage) return;
+    handleChangeType();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleEdit = (step) => {
@@ -373,7 +397,7 @@ const RecordUpdateForm = ({
   };
 
   const renderStep = () => {
-    const stepName = steps[currentStep];
+    const stepName = steps[safeCurrentStep];
     
     switch (stepName) {
       case 'Personal Info':
@@ -669,7 +693,7 @@ const RecordUpdateForm = ({
                   onClick={handleChangeType}
                   className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm font-medium transition-colors"
                 >
-                  Change Type
+                  Cancel
                 </button>
               )}
             </div>
@@ -677,7 +701,7 @@ const RecordUpdateForm = ({
 
           {/* Progress Stepper */}
           <div className="mb-6">
-            <ProgressStepper currentStep={currentStep} steps={steps} />
+            <ProgressStepper currentStep={safeCurrentStep} steps={steps} />
           </div>
 
           {/* Form Content */}
@@ -689,10 +713,10 @@ const RecordUpdateForm = ({
           <div className="bg-white dark:bg-neutral-900 rounded-2xl px-6 py-3 shadow-md border border-neutral-200 dark:border-neutral-700">
             <div className="flex justify-between items-center">
               <button
-                onClick={handleBack}
-                disabled={currentStep === 0}
+                onClick={backButtonState.action === 'cancel-to-choice' ? handleCancelToChoice : handleBack}
+                disabled={backButtonState.disabled}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 ${
-                  currentStep === 0
+                  backButtonState.disabled
                     ? 'bg-neutral-100 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
                     : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600 hover:text-secondary-800 dark:hover:text-white'
                 }`}
@@ -700,15 +724,15 @@ const RecordUpdateForm = ({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Back
+                {backButtonState.label}
               </button>
 
               <span className="text-sm text-neutral-500 dark:text-neutral-400 hidden sm:block">
-                Step {currentStep + 1} of {steps.length}
+                Step {steps.length > 0 ? safeCurrentStep + 1 : 0} of {steps.length}
               </span>
 
               <button
-                onClick={currentStep === steps.length - 1 ? handleSubmit : handleNext}
+                onClick={safeCurrentStep === steps.length - 1 ? handleSubmit : handleNext}
                 disabled={isSubmitting}
                 className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg 
                          transition-all duration-200
@@ -722,7 +746,7 @@ const RecordUpdateForm = ({
                     </svg>
                     <span>Submitting...</span>
                   </>
-                ) : currentStep === steps.length - 1 ? (
+                ) : safeCurrentStep === steps.length - 1 ? (
                   <span>Submit</span>
                 ) : (
                   <>

@@ -23,6 +23,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import { getUpdateTicketStatus } from '../../services/emr-service';
+import { TopBar } from '../../components/layout/TopBar';
+import { toggleAppDrawer } from '../../navigation/drawer-utils';
 
 interface UpdateTicket {
   id: string;
@@ -43,7 +45,7 @@ interface Choice {
 const CHOICES: Choice[] = [
   {
     id: 'medical',
-    title: 'Medical Update',
+    title: 'Medical update',
     description: 'Update your medical history and health information',
     iconName: 'stethoscope',
     iconLib: 'MCI',
@@ -51,7 +53,7 @@ const CHOICES: Choice[] = [
   },
   {
     id: 'dental',
-    title: 'Dental Update',
+    title: 'Dental update',
     description: 'Update your dental history and teeth records',
     iconName: 'tooth',
     iconLib: 'MCI',
@@ -59,7 +61,7 @@ const CHOICES: Choice[] = [
   },
   {
     id: 'both',
-    title: 'Both Update',
+    title: 'Both records',
     description: 'Update both medical and dental information',
     iconName: 'clipboard',
     iconLib: 'Ionicons',
@@ -77,6 +79,15 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
   const [ticket, setTicket] = useState<UpdateTicket | null>(null);
   const [isLoadingTicket, setIsLoadingTicket] = useState(true);
   const hasAutoRedirected = useRef(false);
+  const canGoBack = typeof navigation?.canGoBack === 'function' ? navigation.canGoBack() : false;
+
+  const handleTopBarBack = () => {
+    if (canGoBack) {
+      navigation.goBack();
+      return;
+    }
+    toggleAppDrawer(navigation);
+  };
 
   const mapScopeToRecordType = (scope?: string): Choice['id'] | undefined => {
     if (!scope) return undefined;
@@ -187,8 +198,15 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
-        edges={['bottom']}
+        edges={['top', 'left', 'right']}
       >
+        <TopBar
+          title="Update Record"
+          showBack={canGoBack}
+          onBack={handleTopBarBack}
+          onMenuPress={() => toggleAppDrawer(navigation)}
+        />
+
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={[styles.stateCard, {
             backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
@@ -236,18 +254,19 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
         styles.container,
         { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
       ]}
-      edges={['bottom']}
+      edges={['top', 'left', 'right']}
     >
+      <TopBar
+        title="Update Record"
+        showBack={canGoBack}
+        onBack={handleTopBarBack}
+        onMenuPress={() => toggleAppDrawer(navigation)}
+      />
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={[styles.headerCard, { backgroundColor: colors.primary[500] }]}>
-          <View style={styles.headerIconWrap}>
-            <Ionicons name="document-text" size={24} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>{headerTitle}</Text>
-            <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
-          </View>
-        </View>
+        <Text style={[styles.subtitle, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
+          {headerSubtitle}
+        </Text>
 
         {isLoadingTicket && (
           <ActivityIndicator size="small" color={colors.primary[500]} style={{ marginBottom: 12 }} />
@@ -349,10 +368,6 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
               </View>
             )}
 
-            <Text style={[styles.subtitle, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
-              Select which records you want to update.
-            </Text>
-
             {CHOICES.map((choice) => {
               const disabled = disabledChoiceIds.has(choice.id);
               return (
@@ -370,11 +385,11 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
                   activeOpacity={disabled ? 1 : 0.78}
                   disabled={disabled}
                 >
-                  <View style={[styles.iconBox, { backgroundColor: `${choice.color}22` }]}>
+                  <View style={[styles.iconBox, { backgroundColor: choice.color }]}>
                     {choice.iconLib === 'MCI' ? (
-                      <MaterialCommunityIcons name={choice.iconName as any} size={28} color={choice.color} />
+                      <MaterialCommunityIcons name={choice.iconName as any} size={24} color={colors.neutral[50]} />
                     ) : (
-                      <Ionicons name={choice.iconName as any} size={28} color={choice.color} />
+                      <Ionicons name={choice.iconName as any} size={24} color={colors.neutral[50]} />
                     )}
                   </View>
                   <View style={styles.cardBody}>
@@ -385,25 +400,73 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
                       {choice.description}
                     </Text>
                   </View>
-                  {!disabled && <Text style={{ color: choice.color, fontSize: 22, fontWeight: '700' }}>›</Text>}
+                  {!disabled && (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={isDark ? colors.secondary[600] : colors.secondary[300]}
+                    />
+                  )}
                 </TouchableOpacity>
               );
             })}
 
+            {/* Record Form Guidance Card */}
             <View
               style={[
-                styles.infoCard,
+                styles.guidanceCard,
                 {
                   backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
                   borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
                 },
               ]}
             >
-              <Ionicons name="information-circle" size={22} color={colors.accent[500]} style={{ marginTop: 1 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.infoTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Why separate updates?</Text>
-                <Text style={[styles.infoBody, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>This keeps your medical and dental records organized and secure. You can update the other record type later.</Text>
+              <View style={styles.guidanceHeader}>
+                <Ionicons
+                  name="information-circle"
+                  size={22}
+                  color={isDark ? colors.primary[400] : colors.primary[600]}
+                  style={{ marginTop: 1 }}
+                />
+                <Text style={[styles.guidanceTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                  Record Form Guidance
+                </Text>
               </View>
+
+              <Text style={[styles.guidanceSectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                Guidelines
+              </Text>
+              {[
+                'Complete your record forms before proceeding to MDS (Medical and Dental Services).',
+                'Provide complete and accurate information to avoid delays in assessment and appointment processing.',
+                'Review all entries before submitting, especially personal details, medical history, and emergency information.',
+                'Bring your ID and any required supporting documents during enrollment, validation, or clinic visits.',
+                'Update your records whenever there are changes to your health status or relevant personal information.',
+              ].map((item, i) => (
+                <View key={i} style={styles.bulletRow}>
+                  <Text style={[styles.bullet, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>{'•'}</Text>
+                  <Text style={[styles.bulletText, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>{item}</Text>
+                </View>
+              ))}
+
+              <View style={[styles.guidanceDivider, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]} />
+
+              <Text style={[styles.guidanceSectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                When to Use Each Record Update
+              </Text>
+              {[
+                { label: 'Both Medical and Dental', desc: 'Use during every semestral enrollment and student ID validation.' },
+                { label: 'Medical Only', desc: 'Use for medical appointments and checkups (e.g. OJT, sports events, outside activities, and other concerns.)' },
+                { label: 'Dental Only', desc: 'Use for dental appointments, routine dental checkups, and other dental concerns.' },
+              ].map((item, i) => (
+                <View key={i} style={styles.bulletRow}>
+                  <Text style={[styles.bullet, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>{'•'}</Text>
+                  <Text style={[styles.bulletText, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+                    <Text style={[styles.bulletLabel, { color: isDark ? colors.neutral[200] : colors.secondary[800] }]}>{item.label}: </Text>
+                    {item.desc}
+                  </Text>
+                </View>
+              ))}
             </View>
           </>
         )}
@@ -414,7 +477,7 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 16, gap: 12, paddingBottom: 28 },
+  scrollContent: { padding: 16, gap: 12, paddingBottom: 96 },
   headerCard: {
     borderRadius: 16,
     padding: 16,
@@ -442,7 +505,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  subtitle: { fontSize: 14, marginBottom: 6, lineHeight: 20 },
+  subtitle: { fontSize: 14, marginBottom: 2, lineHeight: 20 },
 
   stateCard: {
     borderWidth: 1,
@@ -525,39 +588,84 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    padding: 18,
+    padding: 16,
     borderRadius: 16,
     borderWidth: 1,
+    minHeight: 76,
   },
   iconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   cardBody: { flex: 1 },
-  cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  cardTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   cardDesc: { fontSize: 13, lineHeight: 18 },
 
   infoCard: {
     marginTop: 4,
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 12,
+    padding: 12,
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     alignItems: 'flex-start',
   },
   infoTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 3,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   infoBody: {
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 20,
+  },
+  guidanceCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 4,
+  },
+  guidanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  guidanceTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  guidanceSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  guidanceDivider: {
+    borderTopWidth: 1,
+    marginVertical: 10,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingLeft: 4,
+    marginBottom: 4,
+  },
+  bullet: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  bulletText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 20,
+  },
+  bulletLabel: {
+    fontWeight: '600',
   },
   statusBadge: {
     flexDirection: 'row',

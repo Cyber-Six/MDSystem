@@ -22,7 +22,7 @@ interface RecordStatusContextType {
 const RecordStatusContext = createContext<RecordStatusContextType | undefined>(undefined);
 
 export const RecordStatusProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [recordStatus, setRecordStatus] = useState<RecordStatus | null>(null);
   const [isRecordLoading, setIsRecordLoading] = useState(true);
 
@@ -40,13 +40,18 @@ export const RecordStatusProvider: React.FC<{ children: ReactNode }> = ({ childr
   }, []);
 
   useEffect(() => {
+    if (isAuthLoading) {
+      setIsRecordLoading(true);
+      return;
+    }
+
     if (isAuthenticated) {
       refreshRecordStatus();
     } else {
       setRecordStatus(null);
       setIsRecordLoading(false);
     }
-  }, [isAuthenticated, refreshRecordStatus]);
+  }, [isAuthLoading, isAuthenticated, refreshRecordStatus]);
 
   return (
     <RecordStatusContext.Provider value={{ recordStatus, isRecordLoading, refreshRecordStatus }}>

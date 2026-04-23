@@ -17,7 +17,7 @@ import {
 import { useTheme, colors } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
-import { Input, Button, Alert, LinkButton, Checkbox } from '../../components/ui/FormComponents';
+import { Input, Button, Alert } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
 import { axiosRequest, TokenStorage } from '../../core';
 import * as AuthSession from 'expo-auth-session';
@@ -128,7 +128,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           await handleSend2FA();
           setCurrentStep('2fa');
         } else {
-          setShowConsent(true);
+          await completeLoginWithKey(res.data.LoginKey, { promptConsentIfRequired: true });
         }
       }
     } catch (err: any) {
@@ -205,7 +205,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           await handleSend2FA();
           setCurrentStep('2fa');
         } else {
-          setShowConsent(true);
+          await completeLoginWithKey(response.data.LoginKey, { promptConsentIfRequired: true });
         }
       }
     } catch (err: any) {
@@ -254,7 +254,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       if (response.data.ok) {
         const newKey = response.data.verificationKey;
         setVerificationKey(newKey);
-        setShowConsent(true);
+        setCurrentStep('credentials');
+        await completeLoginWithKey(newKey, { promptConsentIfRequired: true });
       }
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
@@ -308,9 +309,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   // Complete login after consent is accepted (DataConsent handles POST consent)
-  const completeLoginWithKey = async (key: string) => {
+  const completeLoginWithKey = async (
+    key: string,
+    { promptConsentIfRequired = false }: { promptConsentIfRequired?: boolean } = {}
+  ) => {
     setError('');
     setIsLoading(true);
+    let shouldOpenConsent = false;
 
     try {
       const response = await axiosRequest.post('/auth/login/complete', { 
@@ -338,17 +343,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           setCurrentStep('2fa');
           break;
         case 'DATA_CONSENT_REQUIRED':
-          setError('You must agree to the data consent policy to login.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the data consent policy to login.');
+          }
           break;
         case 'OUTDATED_CONSENT':
-          setError('You must agree to the latest data consent policy.');
+          if (promptConsentIfRequired) {
+            shouldOpenConsent = true;
+          } else {
+            setError('You must agree to the latest data consent policy.');
+          }
           break;
         default:
           setError(errorMsg);
       }
     } finally {
       setIsLoading(false);
-      setShowConsent(false);
+      setShowConsent(shouldOpenConsent);
     }
   };
 
@@ -394,6 +407,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        showPasswordToggle
         autoComplete={isIOS ? 'off' : 'password'}
         textContentType={isIOS ? 'none' : 'password'}
         importantForAutofill={isIOS ? 'no' : 'auto'}
@@ -401,19 +415,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         editable={!isLoading}
       />
 
+      <View style={styles.forgotInlineRow}>
+        <TouchableOpacity
+          onPress={() => onNavigateToForgotPassword?.()}
+          activeOpacity={0.8}
+        >
+          <Text style={[
+            styles.inlineActionLink,
+            { color: isDark ? colors.accent[400] : colors.accent[600] }
+          ]}>
+            Forgot password?
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <Button
         title={isLoading ? 'Signing in...' : 'Sign In'}
         onPress={handleInitialLogin}
         loading={isLoading}
         disabled={isLoading}
       />
-
-      <View style={styles.linkContainer}>
-        <LinkButton 
-          title="Forgot your password?" 
-          onPress={() => onNavigateToForgotPassword?.()} 
-        />
-      </View>
 
       {/* Google Sign-In */}
       {GOOGLE_CLIENT_ID ? (
@@ -454,17 +475,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         styles.divider,
         { borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200] }
       ]}>
-        <Text style={[
-          styles.dividerText,
-          { color: isDark ? colors.neutral[400] : colors.neutral[600] }
-        ]}>
-          Don't have an account?
-        </Text>
-        <Button
-          title="Create Account"
-          onPress={onNavigateToRegister}
-          variant="outline"
-        />
+        <View style={styles.inlinePromptRow}>
+          <Text style={[
+            styles.inlinePromptText,
+            { color: isDark ? colors.neutral[400] : colors.neutral[500] }
+          ]}>
+            Don't have an account?{' '}
+          </Text>
+          <TouchableOpacity onPress={onNavigateToRegister} activeOpacity={0.8}>
+            <Text style={[
+              styles.inlineActionLink,
+              { color: isDark ? colors.accent[400] : colors.accent[600] }
+            ]}>
+              Register
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -566,32 +592,40 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
-          {/* Header */}
-          {currentStep === 'credentials' && (
-            <View style={styles.header}>
-              <View style={styles.logoContainer}>
-                <Image
-                  source={require('../../../assets/MDSystem.png')}
-                  style={styles.logoImage}
-                  resizeMode="contain"
-                />
+          <View style={[
+            styles.formCard,
+            {
+              backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+              borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+            }
+          ]}>
+            {/* Header */}
+            {currentStep === 'credentials' && (
+              <View style={styles.header}>
+                <View style={styles.logoContainer}>
+                  <Image
+                    source={require('../../../assets/MDSystem.png')}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={[
+                  styles.title,
+                  { color: isDark ? colors.neutral[100] : colors.secondary[900] }
+                ]}>
+                  Welcome Back
+                </Text>
+                <Text style={[
+                  styles.subtitle,
+                  { color: isDark ? colors.neutral[400] : colors.neutral[600] }
+                ]}>
+                  Sign in to your MDSystem account
+                </Text>
               </View>
-              <Text style={[
-                styles.title,
-                { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-              ]}>
-                Welcome Back
-              </Text>
-              <Text style={[
-                styles.subtitle,
-                { color: isDark ? colors.neutral[400] : colors.neutral[600] }
-              ]}>
-                Sign in to your MDSystem account
-              </Text>
-            </View>
-          )}
+            )}
 
-          {renderStep()}
+            {renderStep()}
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -619,19 +653,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingVertical: 48,
+    paddingVertical: 40,
     justifyContent: 'center',
+    width: '100%',
+  },
+  formCard: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    shadowColor: '#1c1a17',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 4,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 18,
   },
   logoContainer: {
-    width: 180,
-    height: 80,
+    width: 76,
+    height: 76,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   logoImage: {
     width: '100%',
@@ -644,28 +693,39 @@ const styles = StyleSheet.create({
     // unused
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
   },
   subtitle: {
-    fontSize: 16,
-    marginTop: 8,
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: 'center',
   },
   stepContainer: {
     width: '100%',
   },
-  linkContainer: {
-    marginTop: 16,
+  forgotInlineRow: {
+    alignItems: 'flex-end',
+    marginTop: -2,
+    marginBottom: 14,
   },
   divider: {
-    marginTop: 24,
-    paddingTop: 24,
+    marginTop: 20,
+    paddingTop: 18,
     borderTopWidth: 1,
   },
-  dividerText: {
-    textAlign: 'center',
+  inlinePromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  inlinePromptText: {
     fontSize: 14,
-    marginBottom: 12,
+  },
+  inlineActionLink: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   iconCircle: {
     width: 80,

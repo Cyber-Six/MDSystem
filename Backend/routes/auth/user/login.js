@@ -12,6 +12,7 @@ const { verifyRecaptcha } = require('../../../services/recaptcha.js');
 
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
 const AuthSession = require("../../../utils/authSession.js");
+const { DATA_CONSENT_REQUIRED, OUTDATED_CONSENT, getConsentGateError } = require("../../../utils/consent.js");
 const logger = require("../../../utils/logger.js");
 const router = express.Router();
 
@@ -249,22 +250,21 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
       message: "Two-factor authentication has not been completed."
     });
   }
-
-
-  if (session.data_consent !== "true") {
+  const consentError = getConsentGateError(session, process.env.DATA_CONSENT_VERSION);
+  if (consentError) {
     await recordAttempt(false, session.email, session.user_id);
-      return res.status(400).json({
-          error: "DATA_CONSENT_REQUIRED",
-          message: "You must agree to the data consent policy to login."
-      });
-  }
 
-  if (session.data_consent_version !== process.env.DATA_CONSENT_VERSION) {
-    await recordAttempt(false, session.email, session.user_id);
+    if (consentError === DATA_CONSENT_REQUIRED) {
       return res.status(400).json({
-          error: "OUTDATED_CONSENT",
-          message: "You must agree to the latest data consent policy."
+        error: DATA_CONSENT_REQUIRED,
+        message: "You must agree to the data consent policy to login.",
       });
+    }
+
+    return res.status(400).json({
+      error: OUTDATED_CONSENT,
+      message: "You must agree to the latest data consent policy.",
+    });
   }
 
   await deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);

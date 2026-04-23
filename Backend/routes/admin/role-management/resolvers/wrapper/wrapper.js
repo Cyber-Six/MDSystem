@@ -361,6 +361,70 @@ function normalizeDeletionIds(ids, res) {
   return normalizedIds;
 }
 
+function resolveDeleteGuardRole(userRole, isAdminPermission) {
+  const normalizedRole = String(userRole || '').trim().toLowerCase();
+  if (normalizedRole === 'admin' || Boolean(isAdminPermission)) {
+    return 'admin';
+  }
+  return normalizedRole || 'unknown';
+}
+
+function isAdminSelfDeleteAttempt(targetUserId, currentUserId, currentUserRole) {
+  const normalizedTargetId = String(targetUserId || '').trim();
+  const normalizedCurrentUserId = String(currentUserId || '').trim();
+  const normalizedCurrentUserRole = String(currentUserRole || '').trim().toLowerCase();
+
+  return Boolean(
+    normalizedTargetId
+      && normalizedCurrentUserId
+      && normalizedCurrentUserRole === 'admin'
+      && normalizedTargetId === normalizedCurrentUserId
+  );
+}
+
+async function appendAccountDeleteAuditLog({
+  client,
+  actorId,
+  actorRole,
+  targetUserId,
+  targetIdentity,
+  previousStatus,
+  deleteMode,
+  actionType,
+}) {
+  const normalizedActionType = String(actionType || '').trim().toUpperCase();
+  const normalizedDeleteMode = String(deleteMode || '').trim().toLowerCase();
+  const normalizedTargetUserId = String(targetUserId || '').trim();
+  const normalizedTargetIdentity = String(targetIdentity || '').trim() || 'Unknown';
+  const normalizedPreviousStatus = String(previousStatus || '').trim() || 'Unknown';
+  const normalizedActorId = String(actorId || '').trim();
+  const normalizedActorRole = String(actorRole || '').trim().toLowerCase() || 'unknown';
+
+  const isSoftDelete = normalizedActionType === 'SOFT_DELETE';
+  const eventType = isSoftDelete ? 'ACCOUNT_SOFT_DELETE' : 'ACCOUNT_HARD_DELETE';
+  const action = isSoftDelete ? 'SOFT_DELETE_ACCOUNT' : 'HARD_DELETE_ACCOUNT';
+
+  await db.setSystemAuditLog({
+    client,
+    eventType,
+    actorId: normalizedActorId,
+    actorType: 'Staff',
+    // targetId uses FK ON DELETE CASCADE, so hard-delete logs intentionally use null.
+    targetId: isSoftDelete ? normalizedTargetUserId : null,
+    action,
+    details: JSON.stringify({
+      targetUserId: normalizedTargetUserId,
+      targetIdentity: normalizedTargetIdentity,
+      previousStatus: normalizedPreviousStatus,
+      actorRole: normalizedActorRole,
+      actionType: normalizedActionType || 'UNKNOWN',
+      deleteMode: normalizedDeleteMode || 'unknown',
+      timestamp: new Date().toISOString(),
+    }),
+    changedBy: 'Medical',
+  });
+}
+
 function quoteIdentifier(identifier) {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(identifier || ''))) {
     throw new Error(`Invalid SQL identifier: ${identifier}`);
@@ -1555,6 +1619,11 @@ const Query = {
 
     const normalizedSearch = typeof search === 'string' ? search.trim() : '';
     const searchPattern = normalizedSearch ? `%${normalizedSearch}%` : null;
+    const currentUserId = String(user?.id || '').trim();
+    const { permitted: isCurrentUserAdminPermission } = currentUserId
+      ? await isMedicalPermitted(currentUserId, permissions.is_admin)
+      : { permitted: false };
+    const currentUserRoleForGuard = resolveDeleteGuardRole(user?.role, Boolean(isCurrentUserAdminPermission));
 
     const listResult = await db.query(
       `WITH deletion_candidates AS (
@@ -1582,25 +1651,46 @@ const Query = {
              WHEN uc.credentials_status = 'Inactive'::"CredentialStatus"
                THEN COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year'
              ELSE NULL
-           END AS eligible_after
+           END AS eligible_after,
+           CASE
+             WHEN mp.id IS NOT NULL THEN true
+             ELSE false
+           END AS is_medical_personnel,
+           CASE
+             WHEN mp.id IS NOT NULL THEN 'soft'
+             ELSE 'hard'
+           END AS deletion_mode,
+           CASE
+             WHEN $5::text = 'admin' AND uc.id::text = $4::text THEN true
+             ELSE false
+           END AS blocked,
+           CASE
+             WHEN $5::text = 'admin' AND uc.id::text = $4::text
+               THEN 'Administrators cannot delete their own accounts.'
+             ELSE NULL
+           END AS blocked_reason
          FROM "UserCredentials" uc
-         JOIN "Patients" p ON p.id = uc.id
+         LEFT JOIN "Patients" p ON p.id = uc.id
+         LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
          LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-         WHERE uc.identity::text = ANY($3::text[])
+         WHERE (
+           p.id IS NOT NULL
+           OR mp.id IS NOT NULL
+         )
            AND (
              (
                uc.credentials_status = 'Inactive'::"CredentialStatus"
                AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
              )
              OR (
-               $4::text IS NOT NULL
+               $3::text IS NOT NULL
                AND uc.credentials_status = 'Locked'::"CredentialStatus"
              )
            )
            AND (
-             $4::text IS NULL
-             OR uc.email ILIKE $4
-             OR uc.id::text ILIKE $4
+             $3::text IS NULL
+             OR uc.email ILIKE $3
+             OR uc.id::text ILIKE $3
              OR TRIM(CONCAT_WS(
                ' ',
                up.first_name,
@@ -1610,7 +1700,7 @@ const Query = {
                END,
                up.last_name,
                up.suffix
-             )) ILIKE $4
+             )) ILIKE $3
            )
        )
        SELECT
@@ -1622,7 +1712,14 @@ const Query = {
          status,
          updated_at,
          eligible_after,
-         true AS eligible
+         is_medical_personnel,
+         deletion_mode,
+         blocked,
+         blocked_reason,
+         CASE
+           WHEN blocked = true THEN false
+           ELSE true
+         END AS eligible
        FROM deletion_candidates
        ORDER BY
          CASE
@@ -1635,26 +1732,30 @@ const Query = {
          id DESC
        OFFSET $1
        LIMIT $2`,
-      [offset, limit, PATIENT_IDENTITY_VALUES, searchPattern]
+      [offset, limit, searchPattern, currentUserId || null, currentUserRoleForGuard]
     );
 
     const countResult = await db.query(
       `SELECT COUNT(*)::int AS total_count
        FROM "UserCredentials" uc
-       JOIN "Patients" p ON p.id = uc.id
+       LEFT JOIN "Patients" p ON p.id = uc.id
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-       WHERE uc.identity::text = ANY($1::text[])
+       WHERE (
+         p.id IS NOT NULL
+         OR mp.id IS NOT NULL
+       )
          AND (
            (
              uc.credentials_status = 'Inactive'::"CredentialStatus"
              AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
            )
-           OR ($2::text IS NOT NULL AND uc.credentials_status = 'Locked'::"CredentialStatus")
+           OR ($1::text IS NOT NULL AND uc.credentials_status = 'Locked'::"CredentialStatus")
          )
          AND (
-           $2::text IS NULL
-           OR uc.email ILIKE $2
-           OR uc.id::text ILIKE $2
+           $1::text IS NULL
+           OR uc.email ILIKE $1
+           OR uc.id::text ILIKE $1
            OR TRIM(CONCAT_WS(
              ' ',
              up.first_name,
@@ -1664,9 +1765,9 @@ const Query = {
              END,
              up.last_name,
              up.suffix
-           )) ILIKE $2
+           )) ILIKE $1
          )`,
-      [PATIENT_IDENTITY_VALUES, searchPattern]
+      [searchPattern]
     );
 
     return {
@@ -1680,6 +1781,10 @@ const Query = {
         updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
         eligibleAfter: row.eligible_after ? new Date(row.eligible_after).toISOString() : null,
         eligible: Boolean(row.eligible),
+        isMedicalPersonnel: Boolean(row.is_medical_personnel),
+        deletionMode: row.deletion_mode || 'hard',
+        blocked: Boolean(row.blocked),
+        blockedReason: row.blocked_reason || null,
       })),
       totalCount: Number(countResult.rows?.[0]?.total_count) || 0,
     };
@@ -3093,6 +3198,11 @@ const Mutation = {
   _deletePatients: async (_, { ids }, { user, res }) => {
     const normalizedIds = normalizeDeletionIds(ids, res);
     const nowMs = Date.now();
+    const currentUserId = String(user?.id || '').trim();
+    const { permitted: isCurrentUserAdminPermission } = currentUserId
+      ? await isMedicalPermitted(currentUserId, permissions.is_admin)
+      : { permitted: false };
+    const currentUserRoleForGuard = resolveDeleteGuardRole(user?.role, Boolean(isCurrentUserAdminPermission));
 
     const client = await db.db().connect();
     try {
@@ -3111,7 +3221,12 @@ const Mutation = {
              SELECT 1
              FROM "Patients" p
              WHERE p.id = uc.id
-           ) AS is_patient
+           ) AS is_patient,
+           EXISTS (
+             SELECT 1
+             FROM "MedicalPersonnel" mp
+             WHERE mp.id = uc.id
+           ) AS is_medical
          FROM "UserCredentials" uc
          WHERE uc.id::text = ANY($1::text[])
          FOR UPDATE OF uc`,
@@ -3122,6 +3237,10 @@ const Mutation = {
       const foundIds = new Set(rows.map((row) => String(row.id)));
       const missingIds = normalizedIds.filter((id) => !foundIds.has(id));
       const failures = [];
+      const softDeleteIds = [];
+      const hardDeleteIds = [];
+      const softDeleteRows = [];
+      const hardDeleteRows = [];
 
       if (missingIds.length > 0) {
         failures.push(`Missing ids: ${missingIds.join(', ')}`);
@@ -3133,13 +3252,14 @@ const Mutation = {
         const status = String(row.status || '');
         const normalizedStatus = status.toLowerCase();
         const isPatient = Boolean(row.is_patient) || PATIENT_IDENTITY_VALUES.includes(identity);
+        const isMedicalPersonnel = Boolean(row.is_medical);
         const eligibleAfterMs = row.inactive_eligible_after ? new Date(row.inactive_eligible_after).getTime() : Number.NaN;
         const intervalElapsed = Number.isFinite(eligibleAfterMs) && eligibleAfterMs < nowMs;
         const isLocked = normalizedStatus === 'locked';
         const isInactiveAndOld = normalizedStatus === 'inactive' && intervalElapsed;
 
-        if (!isPatient) {
-          rowReasons.push('not a patient account');
+        if (isAdminSelfDeleteAttempt(row.id, currentUserId, currentUserRoleForGuard)) {
+          rowReasons.push('administrators cannot delete their own accounts');
         }
 
         if (!isLocked && !isInactiveAndOld) {
@@ -3149,6 +3269,20 @@ const Mutation = {
             rowReasons.push(`status is ${status}`);
           } else {
             rowReasons.push('account does not satisfy deletion rules');
+          }
+        }
+
+        if (!isMedicalPersonnel && !isPatient) {
+          rowReasons.push('not a deletable patient or medical personnel account');
+        }
+
+        if (rowReasons.length === 0) {
+          if (isMedicalPersonnel) {
+            softDeleteIds.push(String(row.id));
+            softDeleteRows.push(row);
+          } else {
+            hardDeleteIds.push(String(row.id));
+            hardDeleteRows.push(row);
           }
         }
 
@@ -3165,188 +3299,266 @@ const Mutation = {
       }
 
       let deletedRelatedRows = 0;
+      let deletedPatientRows = 0;
+      let deletedPersonalRows = 0;
+      let deletedCredentialCount = 0;
+      let softDeletedCredentialCount = 0;
 
-      const patientUpdateLogIds = await selectColumnValuesByFilter(client, {
-        tableName: 'patientUpdateLog',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const consultationIds = await selectColumnValuesByFilter(client, {
-        tableName: 'Consultation',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const consultationOutcomeIds = await selectColumnValuesByFilter(client, {
-        tableName: 'ConsultationOutcome',
-        selectColumn: 'id',
-        filterColumn: 'consultationId',
-        filterValues: consultationIds,
-      });
-
-      const healthChatIds = await selectColumnValuesByFilter(client, {
-        tableName: 'HealthChat',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const medicineRequestLogIds = await selectColumnValuesByFilter(client, {
-        tableName: 'MedicineRequestLog',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const medicineTransactionLogIds = await selectColumnValuesByFilter(client, {
-        tableName: 'MedicineTransactionLog',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const supplyTransactionLogIds = await selectColumnValuesByFilter(client, {
-        tableName: 'SupplyTransactionLog',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const patientDocumentIds = await selectColumnValuesByFilter(client, {
-        tableName: 'PatientDocuments',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const patientSlotIds = await selectColumnValuesByFilter(client, {
-        tableName: 'patientSlot',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const dentalRecordIds = await selectColumnValuesByFilter(client, {
-        tableName: 'DentalRecord',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const vitalSignsIds = await selectColumnValuesByFilter(client, {
-        tableName: 'VitalSigns',
-        selectColumn: 'id',
-        filterColumn: 'patientId',
-        filterValues: normalizedIds,
-      });
-
-      const patientUpdateNestedParents = [
-        'profileRecord',
-        'MedicalHistory',
-        'Hospitalization',
-        'Operation',
-        'Immunization',
-        'Allergy',
-        'OralAppliance',
-        'DentalProcedure',
-        'VisualAcuity',
-      ];
-
-      for (const tableName of patientUpdateNestedParents) {
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, [tableName], patientUpdateLogIds);
-      }
-
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['ConsultationOutcome'], consultationOutcomeIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineRequestLog'], medicineRequestLogIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineTransactionLog'], medicineTransactionLogIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['SupplyTransactionLog'], supplyTransactionLogIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['HealthChat'], healthChatIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['PatientDocuments'], patientDocumentIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientSlot'], patientSlotIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['DentalRecord'], dentalRecordIds);
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientUpdateLog'], patientUpdateLogIds);
-
-      const targetedIdDeletes = [
-        { table: 'ConsultationOutcome', ids: consultationOutcomeIds },
-        { table: 'Consultation', ids: consultationIds },
-        { table: 'HealthChat', ids: healthChatIds },
-        { table: 'MedicineRequestLog', ids: medicineRequestLogIds },
-        { table: 'MedicineTransactionLog', ids: medicineTransactionLogIds },
-        { table: 'SupplyTransactionLog', ids: supplyTransactionLogIds },
-        { table: 'PatientDocuments', ids: patientDocumentIds },
-        { table: 'patientSlot', ids: patientSlotIds },
-        { table: 'patientUpdateLog', ids: patientUpdateLogIds },
-        { table: 'VitalSigns', ids: vitalSignsIds },
-        { table: 'DentalRecord', ids: dentalRecordIds },
-      ];
-
-      for (const target of targetedIdDeletes) {
-        deletedRelatedRows += await deleteRowsByIdColumnIfExists(client, target.table, 'id', target.ids);
-      }
-
-      const preCleanupTargets = [
-        { table: 'UsersPreferences', column: 'id' },
-        { table: 'UsersPersonalLog', column: 'user_id' },
-        { table: 'UserLoginAttempt', column: 'user_id' },
-        { table: 'patientRawDocument', column: 'patientId' },
-        { table: 'schedulerWhitelist', column: 'patientId' },
-      ];
-
-      for (const target of preCleanupTargets) {
-        deletedRelatedRows += await deleteRowsByIdColumnIfExists(
-          client,
-          target.table,
-          target.column,
-          normalizedIds
+      if (softDeleteIds.length > 0) {
+        const softDeletePersonnelResult = await client.query(
+          `UPDATE "MedicalPersonnel"
+           SET is_active = false,
+               deleted_at = COALESCE(deleted_at, NOW())
+           WHERE id::text = ANY($1::text[])`,
+          [softDeleteIds]
         );
+
+        const softDeleteCredentialsResult = await client.query(
+          `UPDATE "UserCredentials"
+           SET credentials_status = 'Inactive'::"CredentialStatus",
+               locked_until = NULL,
+               updated_at = NOW()
+           WHERE id::text = ANY($1::text[])`,
+          [softDeleteIds]
+        );
+
+        const softDeletedPersonnelCount = Number(softDeletePersonnelResult.rowCount) || 0;
+        softDeletedCredentialCount = Number(softDeleteCredentialsResult.rowCount) || 0;
+
+        if (softDeletedPersonnelCount !== softDeleteIds.length || softDeletedCredentialCount !== softDeleteIds.length) {
+          throwGraphQLError(res)
+            .message('Failed to soft delete all selected medical personnel accounts. Transaction rolled back.')
+            .status(409)
+            .throw();
+        }
       }
 
-      deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(
-        client,
-        ['UserCredentials', 'UsersPersonal', 'Patients'],
-        normalizedIds
-      );
+      if (hardDeleteIds.length > 0) {
+        const hardDeletionIds = hardDeleteIds;
 
-      const deletedPatients = await client.query(
-        `DELETE FROM "Patients" WHERE id::text = ANY($1::text[])`,
-        [normalizedIds]
-      );
+        const patientUpdateLogIds = await selectColumnValuesByFilter(client, {
+          tableName: 'patientUpdateLog',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
 
-      const deletedPersonal = await client.query(
-        `DELETE FROM "UsersPersonal" WHERE id::text = ANY($1::text[])`,
-        [normalizedIds]
-      );
+        const consultationIds = await selectColumnValuesByFilter(client, {
+          tableName: 'Consultation',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
 
-      const deletedCredentials = await client.query(
-        `DELETE FROM "UserCredentials" WHERE id::text = ANY($1::text[])`,
-        [normalizedIds]
-      );
+        const consultationOutcomeIds = await selectColumnValuesByFilter(client, {
+          tableName: 'ConsultationOutcome',
+          selectColumn: 'id',
+          filterColumn: 'consultationId',
+          filterValues: consultationIds,
+        });
 
-      const deletedCredentialCount = Number(deletedCredentials.rowCount) || 0;
-      if (deletedCredentialCount !== normalizedIds.length) {
-        throwGraphQLError(res)
-          .message('Failed to delete all selected accounts. Transaction rolled back.')
-          .status(409)
-          .throw();
+        const healthChatIds = await selectColumnValuesByFilter(client, {
+          tableName: 'HealthChat',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const medicineRequestLogIds = await selectColumnValuesByFilter(client, {
+          tableName: 'MedicineRequestLog',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const medicineTransactionLogIds = await selectColumnValuesByFilter(client, {
+          tableName: 'MedicineTransactionLog',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const supplyTransactionLogIds = await selectColumnValuesByFilter(client, {
+          tableName: 'SupplyTransactionLog',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const patientDocumentIds = await selectColumnValuesByFilter(client, {
+          tableName: 'PatientDocuments',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const patientSlotIds = await selectColumnValuesByFilter(client, {
+          tableName: 'patientSlot',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const dentalRecordIds = await selectColumnValuesByFilter(client, {
+          tableName: 'DentalRecord',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const vitalSignsIds = await selectColumnValuesByFilter(client, {
+          tableName: 'VitalSigns',
+          selectColumn: 'id',
+          filterColumn: 'patientId',
+          filterValues: hardDeletionIds,
+        });
+
+        const patientUpdateNestedParents = [
+          'profileRecord',
+          'MedicalHistory',
+          'Hospitalization',
+          'Operation',
+          'Immunization',
+          'Allergy',
+          'OralAppliance',
+          'DentalProcedure',
+          'VisualAcuity',
+        ];
+
+        for (const tableName of patientUpdateNestedParents) {
+          deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, [tableName], patientUpdateLogIds);
+        }
+
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['ConsultationOutcome'], consultationOutcomeIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineRequestLog'], medicineRequestLogIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineTransactionLog'], medicineTransactionLogIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['SupplyTransactionLog'], supplyTransactionLogIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['HealthChat'], healthChatIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['PatientDocuments'], patientDocumentIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientSlot'], patientSlotIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['DentalRecord'], dentalRecordIds);
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientUpdateLog'], patientUpdateLogIds);
+
+        const targetedIdDeletes = [
+          { table: 'ConsultationOutcome', ids: consultationOutcomeIds },
+          { table: 'Consultation', ids: consultationIds },
+          { table: 'HealthChat', ids: healthChatIds },
+          { table: 'MedicineRequestLog', ids: medicineRequestLogIds },
+          { table: 'MedicineTransactionLog', ids: medicineTransactionLogIds },
+          { table: 'SupplyTransactionLog', ids: supplyTransactionLogIds },
+          { table: 'PatientDocuments', ids: patientDocumentIds },
+          { table: 'patientSlot', ids: patientSlotIds },
+          { table: 'patientUpdateLog', ids: patientUpdateLogIds },
+          { table: 'VitalSigns', ids: vitalSignsIds },
+          { table: 'DentalRecord', ids: dentalRecordIds },
+        ];
+
+        for (const target of targetedIdDeletes) {
+          deletedRelatedRows += await deleteRowsByIdColumnIfExists(client, target.table, 'id', target.ids);
+        }
+
+        const preCleanupTargets = [
+          { table: 'UsersPreferences', column: 'id' },
+          { table: 'UsersPersonalLog', column: 'user_id' },
+          { table: 'UserLoginAttempt', column: 'user_id' },
+          { table: 'patientRawDocument', column: 'patientId' },
+          { table: 'schedulerWhitelist', column: 'patientId' },
+        ];
+
+        for (const target of preCleanupTargets) {
+          deletedRelatedRows += await deleteRowsByIdColumnIfExists(
+            client,
+            target.table,
+            target.column,
+            hardDeletionIds
+          );
+        }
+
+        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(
+          client,
+          ['UserCredentials', 'UsersPersonal', 'Patients'],
+          hardDeletionIds
+        );
+
+        const deletedPatients = await client.query(
+          `DELETE FROM "Patients" WHERE id::text = ANY($1::text[])`,
+          [hardDeletionIds]
+        );
+
+        const deletedPersonal = await client.query(
+          `DELETE FROM "UsersPersonal" WHERE id::text = ANY($1::text[])`,
+          [hardDeletionIds]
+        );
+
+        const deletedCredentials = await client.query(
+          `DELETE FROM "UserCredentials" WHERE id::text = ANY($1::text[])`,
+          [hardDeletionIds]
+        );
+
+        deletedPatientRows = Number(deletedPatients.rowCount) || 0;
+        deletedPersonalRows = Number(deletedPersonal.rowCount) || 0;
+        deletedCredentialCount = Number(deletedCredentials.rowCount) || 0;
+
+        if (deletedCredentialCount !== hardDeletionIds.length) {
+          throwGraphQLError(res)
+            .message('Failed to delete all selected patient accounts. Transaction rolled back.')
+            .status(409)
+            .throw();
+        }
+      }
+
+      for (const row of softDeleteRows) {
+        await appendAccountDeleteAuditLog({
+          client,
+          actorId: currentUserId,
+          actorRole: currentUserRoleForGuard,
+          targetUserId: String(row.id),
+          targetIdentity: row.identity,
+          previousStatus: row.status,
+          deleteMode: 'soft',
+          actionType: 'SOFT_DELETE',
+        });
+      }
+
+      for (const row of hardDeleteRows) {
+        await appendAccountDeleteAuditLog({
+          client,
+          actorId: currentUserId,
+          actorRole: currentUserRoleForGuard,
+          targetUserId: String(row.id),
+          targetIdentity: row.identity,
+          previousStatus: row.status,
+          deleteMode: 'hard',
+          actionType: 'HARD_DELETE',
+        });
       }
 
       await client.query('COMMIT');
 
       logger.info('Patient account deletion completed by admin', {
-        adminId: String(user?.id || ''),
-        patientIds: normalizedIds,
+        adminId: currentUserId,
+        requestedIds: normalizedIds,
+        hardDeletedIds: hardDeleteIds,
+        softDeletedIds: softDeleteIds,
         deletedCredentialCount,
-        deletedPatientRows: Number(deletedPatients.rowCount) || 0,
-        deletedPersonalRows: Number(deletedPersonal.rowCount) || 0,
+        softDeletedCredentialCount,
+        deletedPatientRows,
+        deletedPersonalRows,
         deletedRelatedRows,
       });
 
+      const messageParts = [];
+      if (deletedCredentialCount > 0) {
+        messageParts.push(`Hard deleted ${deletedCredentialCount} patient account(s)`);
+      }
+      if (softDeletedCredentialCount > 0) {
+        messageParts.push(`Soft deleted ${softDeletedCredentialCount} medical personnel account(s)`);
+      }
+      messageParts.push(`Removed ${deletedRelatedRows} related record(s)`);
+
       return {
         ok: true,
-        message: `Deleted ${deletedCredentialCount} patient account(s) and ${deletedRelatedRows} related record(s).`,
+        message: `${messageParts.join('. ')}.`,
       };
     } catch (error) {
       await client.query('ROLLBACK');
