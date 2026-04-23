@@ -63,12 +63,28 @@ function getQueriesForCategory(category, demoDimension = 'all') {
   return QUERY_CATEGORIES[category]?.queries || [];
 }
 
-function resolveMetadataChartTitle(metricResult) {
+function toReadableChartTitle(queryKey = '') {
+  return String(queryKey || '')
+    .split('-')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ')
+    .trim();
+}
+
+function resolveMetadataChartTitle(metricResult, fallbackQueryKey = '') {
   const metadataTitle = metricResult?.data?.chartContext?.title;
   if (typeof metadataTitle === 'string' && metadataTitle.trim()) {
     return metadataTitle.trim();
   }
-  return 'No Data Available';
+
+  const fallbackKey =
+    metricResult?.dataType ||
+    metricResult?.canonicalDataType ||
+    metricResult?.data?.chartContext?.key ||
+    fallbackQueryKey;
+
+  return toReadableChartTitle(fallbackKey) || 'Analytics';
 }
 
 /**
@@ -468,7 +484,7 @@ const StaffAnalytics = () => {
             <AnalyticsChartCard
               key={queryKey}
               dataType={queryKey}
-              title={resolveMetadataChartTitle(cache.get(queryKey))}
+              title={resolveMetadataChartTitle(cache.get(queryKey), queryKey)}
               data={cache.get(queryKey)}
               loading={loading && !cache.has(queryKey)}
               error={cache.get(queryKey)?.error}
