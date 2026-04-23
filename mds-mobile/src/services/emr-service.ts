@@ -69,6 +69,7 @@ export interface PersonalInfo {
   address: string;
   provinceAddress: string;
   contactNumber: string;
+  // Student-specific fields
   program: string;
   programId?: string;
   programOther?: string;
@@ -76,6 +77,13 @@ export interface PersonalInfo {
   studentCategory: string;
   drugTestDone: string;
   lastSchoolAttended: string;
+  // Employee-specific fields
+  employeeId?: string;
+  department?: string;
+  employmentCategory?: string;
+  employmentCategoryOther?: string;
+  employmentStatus?: string;
+  position?: string;
   emergencyContacts: EmergencyContact[];
 }
 
@@ -168,6 +176,8 @@ export const createEmptyFormData = (): FormData => ({
     contactNumber: '', program: '', programId: '', programOther: '',
     studentNumber: '', studentCategory: '', drugTestDone: '',
     lastSchoolAttended: '',
+    employeeId: '', department: '', employmentCategory: '',
+    employmentCategoryOther: '', employmentStatus: '', position: '',
     emergencyContacts: [
       { name: '', relationship: '', contactNumber: '', address: '' },
       { name: '', relationship: '', contactNumber: '', address: '' },
@@ -531,18 +541,38 @@ const mapDentalCleaningRange = (frontendValue: string): string => {
 
 // ─── Batch input builder ──────────────────────────────────────────────────────
 
-const buildBatchInputs = (
+export const buildBatchInputs = (
   formData: FormData,
   photoIds: { upperTeethFileId: string | null; lowerTeethFileId: string | null },
   allCatalogs: AllCatalogs
 ) => {
   const inputs: Record<string, any> = {};
 
-  // Student profile
-  if (formData.personalInfo.programId) {
+  // Student profile — only for students
+  if (formData.personalInfo.programId && !formData.personalInfo.department) {
     inputs.studentProfile = {
       programId: formData.personalInfo.programId,
       year: mapYearLevel(formData.personalInfo.studentCategory),
+    };
+  }
+
+  // Employee profile — only for employees
+  if (formData.personalInfo.department) {
+    const ROLE_MAP: Record<string, string> = {
+      'Teaching': 'Faculty',
+      'Teaching (Officer)': 'AcademicHead',
+      'Non-Teaching': 'Staff',
+      'Non-Teaching (Officer)': 'AcademicHead',
+      'Other': 'Other',
+    };
+    const rawCategory = formData.personalInfo.employmentCategory === 'Other'
+      ? (formData.personalInfo.employmentCategoryOther || 'Other')
+      : (formData.personalInfo.employmentCategory || '');
+    const mappedRole = ROLE_MAP[rawCategory] || 'Employee';
+    inputs.employeeProfile = {
+      department: formData.personalInfo.department,
+      role: mappedRole,
+      position: formData.personalInfo.position || '',
     };
   }
 
@@ -698,6 +728,7 @@ const sendBatchedCreateMutations = async (inputs: Record<string, any>, formData:
   };
 
   if (inputs.studentProfile) addMutation('studentProfile', 'createStudentProfile', 'StudentProfileInput', 'studentProfile', 'studentInput');
+  if (inputs.employeeProfile) addMutation('employeeProfile', 'createEmployeeProfile', 'EmployeeProfileInput', 'employeeProfile', 'empInput');
   if (inputs.emergencyContact) addMutation('emergencyContact', 'createEmergencyContact', 'EmergencyContactInput', 'emergencyContact', 'emergencyInput');
 
   addMutation('medicalHistory', 'createMedicalHistory', 'MedicalHistoryInput', 'medicalHistory', 'medHistInput');
@@ -732,8 +763,12 @@ export const createInitialMedicalRecord = async (formData: FormData, { isRevisio
   try {
     const results: Record<string, any> = {};
 
-    // Phase 1: Profile setup
-    await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    // Phase 1: Profile setup — use employeeId as identifier for employees
+    const isEmployee = !!(formData.personalInfo?.department);
+    const identifier = isEmployee
+      ? formData.personalInfo?.employeeId
+      : formData.personalInfo?.studentNumber;
+    await registerProfileSetup(identifier, formData.personalInfo, isRevision);
     profileLogCreated = !isRevision;
 
     // Phase 2: Ticket + photos (parallel)
@@ -853,6 +888,12 @@ export const submitUpdateRecord = async (
         { input: allInputs.studentProfile },
       );
     }
+    if (allInputs.employeeProfile) {
+      await sendGraphQLRequest(
+        `mutation CreateEmployeeProfile($input: EmployeeProfileInput!) { createEmployeeProfile(input: $input) { id } }`,
+        { input: allInputs.employeeProfile },
+      );
+    }
     if (allInputs.emergencyContact) {
       await sendGraphQLRequest(
         `mutation CreateEmergencyContact($input: EmergencyContactInput!) { createEmergencyContact(input: $input) { id } }`,
@@ -958,6 +999,7 @@ const sendScopedUpdateMutations = async (
 
   // Personal info (profile + emergency contact) — always included
   if (inputs.studentProfile) addMutation('studentProfile', 'createStudentProfile', 'StudentProfileInput', 'studentProfile', 'studentInput');
+  if (inputs.employeeProfile) addMutation('employeeProfile', 'createEmployeeProfile', 'EmployeeProfileInput', 'employeeProfile', 'empInput');
   if (inputs.emergencyContact) addMutation('emergencyContact', 'createEmergencyContact', 'EmergencyContactInput', 'emergencyContact', 'emergencyInput');
 
   // Medical mutations — only for medical or both

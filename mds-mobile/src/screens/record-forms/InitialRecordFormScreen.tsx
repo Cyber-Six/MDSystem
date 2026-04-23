@@ -27,12 +27,58 @@ import {
   getUpdateTicketStatus,
   type FormData, type AllCatalogs,
 } from '../../services/emr-service';
+import { getPatientProfile } from '../../services/profile-service';
 
 const ALL_STEPS = ['Personal Info', 'Medical History', 'Medical Background', 'Dental History', 'OB-GYNE', 'Review'];
 
 const isValidPhilippinePhone = (raw: string): boolean => {
   const stripped = raw.replace(/[\s\-().]/g, '');
   return /^0\d{10}$/.test(stripped) || /^\+63\d{10}$/.test(stripped) || /^63\d{10}$/.test(stripped);
+};
+
+/** Pure validation helper for Step 0 personal info fields. Exported for testability. */
+export const validatePersonalInfoFields = (
+  pi: FormData['personalInfo'],
+  opts: { isEmployee: boolean; isUpdate: boolean; isRevision: boolean },
+): string[] => {
+  const errors: string[] = [];
+  const { isEmployee, isUpdate, isRevision } = opts;
+
+  if (!isUpdate) {
+    if (!pi.surname?.trim()) errors.push('Surname is required');
+    if (!pi.firstName?.trim()) errors.push('First name is required');
+    if (!pi.birthday) errors.push('Birthday is required');
+    if (!pi.gender) errors.push('Gender is required');
+    if (!pi.civilStatus) errors.push('Civil status is required');
+    if (!pi.nationality?.trim()) errors.push('Nationality is required');
+    if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
+    else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
+    if (!pi.address?.trim()) errors.push('Present address is required');
+    if (!pi.provinceAddress?.trim()) errors.push('Province address is required');
+
+    if (isEmployee) {
+      if (!pi.employeeId?.trim()) errors.push('Employee ID number is required');
+      if (!pi.department?.trim()) errors.push('Department is required');
+      if (!pi.employmentCategory) errors.push('Employment category is required');
+      if (pi.employmentCategory === 'Other' && !pi.employmentCategoryOther?.trim()) errors.push('Please specify employment category');
+      if (!pi.employmentStatus) errors.push('Employment status is required');
+    } else {
+      if (!pi.studentNumber?.trim()) errors.push('Student number is required');
+      else if (!/^[a-zA-Z0-9\-]+$/.test(pi.studentNumber.trim())) errors.push('Student number must contain only letters, numbers, and dashes');
+    }
+  }
+
+  if (!isEmployee) {
+    if (!isUpdate && !isRevision) {
+      if (!pi.programId) errors.push('Program is required - please select one from the search results');
+    } else if (!pi.program) {
+      errors.push('Program is required');
+    }
+    if (!isUpdate && pi.program === 'Other' && !pi.programOther?.trim()) errors.push('Please specify your program');
+    if (!pi.studentCategory) errors.push('Student category is required');
+  }
+
+  return errors;
 };
 
 const InitialRecordFormScreen: React.FC = () => {
@@ -48,6 +94,7 @@ const InitialRecordFormScreen: React.FC = () => {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(createEmptyFormData());
+  const [isEmployee, setIsEmployee] = useState(false);
   const [catalogs, setCatalogs] = useState<AllCatalogs & { catalogsLoading: boolean }>({
     medicalConditionCatalog: [], hospitalizationCatalog: [], operationCatalog: [],
     medicationCatalog: [], immunizationCatalog: [], allergenCatalog: [],
@@ -63,6 +110,19 @@ const InitialRecordFormScreen: React.FC = () => {
       .catch(err => {
         console.warn('[RecordForm] Catalog fetch failed:', err.message);
         setCatalogs(prev => ({ ...prev, catalogsLoading: false }));
+      });
+  }, []);
+
+  // Detect patient identity to show correct form type
+  useEffect(() => {
+    getPatientProfile()
+      .then(profile => {
+        const identity = profile?.identity;
+        setIsEmployee(identity === 'Employee' || identity === 'Superior');
+      })
+      .catch(() => {
+        // Default to student form on error
+        setIsEmployee(false);
       });
   }, []);
 
@@ -156,34 +216,10 @@ const InitialRecordFormScreen: React.FC = () => {
 
   // ─── Validation ─────────────────────────────────────────────────────────────
   const validateAllFields = (): string[] => {
-    const errors: string[] = [];
+    const errors: string[] = [
+      ...validatePersonalInfoFields(formData.personalInfo, { isEmployee, isUpdate, isRevision }),
+    ];
     const pi = formData.personalInfo;
-
-    // Personal Info — only validate personal fields for initial records (not updates)
-    if (!isUpdate) {
-      if (!pi.surname?.trim()) errors.push('Surname is required');
-      if (!pi.firstName?.trim()) errors.push('First name is required');
-      if (!pi.birthday) errors.push('Birthday is required');
-      if (!pi.gender) errors.push('Gender is required');
-      if (!pi.civilStatus) errors.push('Civil status is required');
-      if (!pi.nationality?.trim()) errors.push('Nationality is required');
-      if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
-      else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
-      if (!pi.address?.trim()) errors.push('Present address is required');
-      if (!pi.provinceAddress?.trim()) errors.push('Province address is required');
-      if (!pi.studentNumber?.trim()) errors.push('Student number is required');
-      else if (!/^[a-zA-Z0-9\-]+$/.test(pi.studentNumber.trim())) errors.push('Student number must contain only letters, numbers, and dashes');
-    }
-    // Program + student category are always required (initial + update)
-    if (!isUpdate && !isRevision) {
-      if (!pi.programId) errors.push('Program is required - please select one from the search results');
-    } else if (!pi.program) {
-      errors.push('Program is required');
-    }
-    if (!isUpdate && pi.program === 'Other' && !pi.programOther?.trim()) errors.push('Please specify your program');
-    if (!pi.studentCategory) errors.push('Student category is required');
-
-    // Emergency contacts — always required
     const c1 = pi.emergencyContacts?.[0];
     const c2 = pi.emergencyContacts?.[1];
     if (!c1?.name?.trim()) errors.push('1st emergency contact name is required');
@@ -441,7 +477,7 @@ const InitialRecordFormScreen: React.FC = () => {
 
     switch (actualStep) {
       case 0:
-        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} isUpdate={isUpdate} />;
+        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} isUpdate={isUpdate} isEmployee={isEmployee} />;
       case 1:
         return <MedicalHistoryStep formData={formData} onUpdate={(_section: string, data: any) => updateMedicalHistory(data)} isDark={isDark} catalogs={catalogs} />;
       case 2:

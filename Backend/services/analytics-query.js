@@ -1739,17 +1739,49 @@ async function bmiByAgeGroup(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const baseParams = [startDate, endDate, ...bf.params];
   const pf = profileFilterClause(options, 'p.id', baseParams.length + 1);
+
+  const resolveAgeYears = (dateOfBirth) => {
+    const dob = new Date(dateOfBirth);
+    if (Number.isNaN(dob.getTime())) return null;
+
+    const now = new Date();
+    let years = now.getUTCFullYear() - dob.getUTCFullYear();
+    const monthDiff = now.getUTCMonth() - dob.getUTCMonth();
+
+    if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < dob.getUTCDate())) {
+      years -= 1;
+    }
+
+    return years;
+  };
+
+  const resolveAgeBracket = (ageYears) => {
+    if (!Number.isFinite(ageYears) || ageYears < 0) return null;
+    if (ageYears < 17) return 'Under 17';
+    if (ageYears <= 20) return '17–20';
+    if (ageYears <= 25) return '21–25';
+    if (ageYears <= 30) return '26–30';
+    if (ageYears <= 40) return '31–40';
+    return '41+';
+  };
+
   const result = await db.query(`
-    SELECT ${AGE_BRACKET_EXPR} as age_group,
-      (vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric as bmi_value
+    SELECT
+      up."date_of_birth" AS date_of_birth,
+      CASE
+        WHEN TRIM(vs.height_cm::text) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN TRIM(vs.height_cm::text)::double precision
+        ELSE NULL
+      END AS height_cm,
+      CASE
+        WHEN TRIM(vs.weight_kg::text) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN TRIM(vs.weight_kg::text)::double precision
+        ELSE NULL
+      END AS weight_kg
     FROM "VitalSigns" vs
     INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     WHERE vs.created_at BETWEEN $1 AND $2
-      AND vs.height_cm > 0 AND vs.weight_kg > 0
-      AND up.date_of_birth IS NOT NULL
+      AND up."date_of_birth" IS NOT NULL
       ${bf.clause} ${pf.clause}
-    ORDER BY ${AGE_BRACKET_ORDER}, bmi_value
   `, [...baseParams, ...pf.params]);
 
   const groupedValues = AGE_GROUP_CANONICAL.reduce((acc, ageGroup) => {
@@ -1758,14 +1790,18 @@ async function bmiByAgeGroup(branch, startDate, endDate, options = {}) {
   }, new Map());
 
   for (const row of result.rows) {
-    const ageGroup = row.age_group;
-    const bmiValue = Number(row.bmi_value);
-    if (!groupedValues.has(ageGroup)) {
-      groupedValues.set(ageGroup, []);
-    }
-    if (Number.isFinite(bmiValue) && bmiValue > 0) {
-      groupedValues.get(ageGroup).push(bmiValue);
-    }
+    const ageYears = resolveAgeYears(row.date_of_birth);
+    const ageGroup = resolveAgeBracket(ageYears);
+    if (!ageGroup || !groupedValues.has(ageGroup)) continue;
+
+    const height = Number(row.height_cm);
+    const weight = Number(row.weight_kg);
+    if (!Number.isFinite(height) || !Number.isFinite(weight) || height <= 0 || weight <= 0) continue;
+
+    const bmiValue = weight / Math.pow(height / 100, 2);
+    if (!Number.isFinite(bmiValue) || bmiValue <= 0) continue;
+
+    groupedValues.get(ageGroup).push(bmiValue);
   }
 
   const boxPlot = [];

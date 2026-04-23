@@ -19,6 +19,7 @@ interface Props {
   isDark: boolean;
   errors: Record<string, string>;
   isUpdate?: boolean;
+  isEmployee?: boolean;
 }
 
 const STUDENT_CATEGORIES: { value: string; label: string }[] = [
@@ -32,12 +33,28 @@ const STUDENT_CATEGORIES: { value: string; label: string }[] = [
   { value: 'Doctorate', label: 'Doctorate' },
 ];
 
+const EMPLOYMENT_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'Teaching', label: 'Teaching' },
+  { value: 'Teaching (Officer)', label: 'Teaching (Officer)' },
+  { value: 'Non-Teaching', label: 'Non-Teaching' },
+  { value: 'Non-Teaching (Officer)', label: 'Non-Teaching (Officer)' },
+  { value: 'Other', label: 'Other' },
+];
+
+const EMPLOYMENT_STATUSES: { value: string; label: string }[] = [
+  { value: 'Full time', label: 'Full time' },
+  { value: 'Part time', label: 'Part time' },
+  { value: 'Agency / Contractual', label: 'Agency / Contractual' },
+];
+
 const CIVIL_STATUSES = ['Single', 'Married', 'Widowed', 'Separated'];
 const GENDERS = ['Male', 'Female'];
 
-export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, errors, isUpdate = false }) => {
+export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, errors, isUpdate = false, isEmployee = false }) => {
   const pi = formData.personalInfo;
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [empCategoryOpen, setEmpCategoryOpen] = useState(false);
+  const [empStatusOpen, setEmpStatusOpen] = useState(false);
   const { height: windowHeight } = useWindowDimensions();
 
   useEffect(() => {
@@ -309,180 +326,291 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad', maxLength: 11 })}
           {renderField('Present Address', 'address', 'Enter present address')}
           {renderField('Province Address', 'provinceAddress', 'Enter province address')}
-          {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
         </>
       )}
 
-      <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], marginTop: isUpdate ? 0 : 24 }]}>
-        School Information
-      </Text>
-
-      {/* Program — modal select with search */}
-      <View style={styles.fieldGroup}>
-        <Text style={labelStyle}>Program *</Text>
-        <TouchableOpacity
-          style={[styles.selectTrigger, {
-            backgroundColor: isDark ? colors.neutral[700] : '#FFF',
-            borderColor: errors.program ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
-          }]}
-          onPress={openProgramModal}
-          activeOpacity={0.7}
-        >
-          <Text style={{ flex: 1, fontSize: 15, color: pi.program ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
-            {pi.program || 'Select program...'}
+      {isEmployee ? (
+        /* ── Employee Information ── */
+        <>
+          <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], marginTop: isUpdate ? 0 : 24 }]}>
+            Employee Information
           </Text>
-          {pi.programId ? (
-            <Ionicons name="checkmark-circle" size={18} color={colors.success[500]} />
-          ) : (
-            <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
-          )}
-        </TouchableOpacity>
-        {errors.program && <Text style={styles.errorText}>{errors.program}</Text>}
-        <Modal visible={programOpen} transparent animationType="slide">
-          <Pressable style={[styles.modalOverlay, styles.programModalOverlay]} onPress={closeProgramModal}>
-            <Animated.View
-              style={[
-                styles.modalContent,
-                styles.programModalContent,
-                {
-                  height: programPanelHeight,
-                  backgroundColor: isDark ? colors.neutral[800] : '#FFF',
-                },
-                Platform.OS === 'android' && programKeyboardHeight > 0
-                  ? { transform: [{ translateY: programKeyboardHeight }] }
-                  : null,
-              ]}
+
+          {renderField('Employee ID Number', 'employeeId', 'Enter employee ID number')}
+          {renderField('Department', 'department', 'Enter department')}
+
+          {/* Employment Category */}
+          <View style={styles.fieldGroup}>
+            <Text style={labelStyle}>Employment Category *</Text>
+            <TouchableOpacity
+              style={[styles.selectTrigger, {
+                backgroundColor: isDark ? colors.neutral[700] : '#FFF',
+                borderColor: errors.employmentCategory ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
+              }]}
+              onPress={() => setEmpCategoryOpen(true)}
+              activeOpacity={0.7}
             >
-              <Pressable
-                style={styles.modalPanelInner}
-                onPress={() => {}}
-              >
-                <View style={styles.modalHandleWrap}>
-                  <View style={[styles.modalHandle, { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[300] }]} />
-                </View>
-
-                <View style={styles.modalHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Program</Text>
-                    <Text style={{ fontSize: 12, marginTop: 2, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
-                      Search and choose your school program
-                    </Text>
+              <Text style={{ flex: 1, fontSize: 15, color: pi.employmentCategory ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
+                {EMPLOYMENT_CATEGORIES.find(c => c.value === pi.employmentCategory)?.label || pi.employmentCategory || 'Select category...'}
+              </Text>
+              <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+            </TouchableOpacity>
+            {errors.employmentCategory && <Text style={styles.errorText}>{errors.employmentCategory}</Text>}
+            <Modal visible={empCategoryOpen} transparent animationType="slide">
+              <Pressable style={styles.modalOverlay} onPress={() => setEmpCategoryOpen(false)}>
+                <Pressable style={[styles.modalContent, styles.categoryModalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Employment Category</Text>
+                    <TouchableOpacity onPress={() => setEmpCategoryOpen(false)}>
+                      <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                    </TouchableOpacity>
                   </View>
-
-                  <TouchableOpacity onPress={closeProgramModal}>
-                    <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={[styles.modalSearchRow, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-                  <Ionicons name="search" size={16} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
-                  <TextInput
-                    style={[styles.modalSearchInput, { color: isDark ? colors.neutral[100] : colors.neutral[900] }]}
-                    value={programSearch}
-                    onChangeText={handleProgramSearch}
-                    onFocus={() => setProgramSearchFocused(true)}
-                    onBlur={() => setProgramSearchFocused(false)}
-                    placeholder="Search program..."
-                    placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-                    returnKeyType="done"
-                    onSubmitEditing={() => Keyboard.dismiss()}
-                  />
-                  {programSearching && <ActivityIndicator size="small" color={colors.primary[500]} />}
-                </View>
-
-                {pi.program ? (
-                  <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6 }}>
-                    <Text style={{ fontSize: 12, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
-                      Current selection:
-                    </Text>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? colors.neutral[200] : colors.secondary[800] }} numberOfLines={1}>
-                      {pi.program}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {programSuggestions.length > 0 ? (
                   <FlatList
-                    data={programSuggestions}
-                    keyExtractor={item => item.id}
-                    keyboardShouldPersistTaps="handled"
-                    style={{ flex: 1 }}
-                    contentContainerStyle={{ paddingBottom: 12 }}
+                    data={EMPLOYMENT_CATEGORIES}
+                    keyExtractor={item => item.value}
                     renderItem={({ item }) => (
                       <TouchableOpacity
                         style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
-                        onPress={() => selectProgram(item)}
+                        onPress={() => { onUpdate({ employmentCategory: item.value }); setEmpCategoryOpen(false); }}
                       >
-                        <Text style={{ flex: 1, fontSize: 15, color: item.id === pi.programId ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.id === pi.programId ? '600' : '400' }}>
+                        <Text style={{ flex: 1, fontSize: 15, color: item.value === pi.employmentCategory ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.value === pi.employmentCategory ? '600' : '400' }}>
                           {item.label}
                         </Text>
-                        {item.id === pi.programId && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
+                        {item.value === pi.employmentCategory && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
                       </TouchableOpacity>
                     )}
                   />
-                ) : (
-                  <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
-                      {!programSearchFocused && programSearch.trim().length < 2
-                        ? 'Tap search to start'
-                        : programSearch.trim().length < 2
-                        ? 'Type at least 2 characters to search'
-                        : programSearching
-                        ? 'Searching...'
-                        : 'No programs found'}
-                    </Text>
-                  </View>
-                )}
+                </Pressable>
               </Pressable>
-            </Animated.View>
-          </Pressable>
-        </Modal>
-      </View>
+            </Modal>
+          </View>
+          {pi.employmentCategory === 'Other' && renderField('Employment Category (Other)', 'employmentCategoryOther', 'Specify employment category')}
 
-      {/* Student Category — dropdown select */}
-      <View style={styles.fieldGroup}>
-        <Text style={labelStyle}>Student Category *</Text>
-        <TouchableOpacity
-          style={[styles.selectTrigger, {
-            backgroundColor: isDark ? colors.neutral[700] : '#FFF',
-            borderColor: errors.studentCategory ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
-          }]}
-          onPress={() => setCategoryOpen(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={{ flex: 1, fontSize: 15, color: pi.studentCategory ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
-            {STUDENT_CATEGORIES.find(c => c.value === pi.studentCategory)?.label || pi.studentCategory || 'Select category...'}
+          {/* Employment Status */}
+          <View style={styles.fieldGroup}>
+            <Text style={labelStyle}>Employment Status *</Text>
+            <TouchableOpacity
+              style={[styles.selectTrigger, {
+                backgroundColor: isDark ? colors.neutral[700] : '#FFF',
+                borderColor: errors.employmentStatus ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
+              }]}
+              onPress={() => setEmpStatusOpen(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ flex: 1, fontSize: 15, color: pi.employmentStatus ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
+                {EMPLOYMENT_STATUSES.find(s => s.value === pi.employmentStatus)?.label || pi.employmentStatus || 'Select status...'}
+              </Text>
+              <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+            </TouchableOpacity>
+            {errors.employmentStatus && <Text style={styles.errorText}>{errors.employmentStatus}</Text>}
+            <Modal visible={empStatusOpen} transparent animationType="slide">
+              <Pressable style={styles.modalOverlay} onPress={() => setEmpStatusOpen(false)}>
+                <Pressable style={[styles.modalContent, styles.categoryModalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Employment Status</Text>
+                    <TouchableOpacity onPress={() => setEmpStatusOpen(false)}>
+                      <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <FlatList
+                    data={EMPLOYMENT_STATUSES}
+                    keyExtractor={item => item.value}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                        onPress={() => { onUpdate({ employmentStatus: item.value }); setEmpStatusOpen(false); }}
+                      >
+                        <Text style={{ flex: 1, fontSize: 15, color: item.value === pi.employmentStatus ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.value === pi.employmentStatus ? '600' : '400' }}>
+                          {item.label}
+                        </Text>
+                        {item.value === pi.employmentStatus && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
+                      </TouchableOpacity>
+                    )}
+                  />
+                </Pressable>
+              </Pressable>
+            </Modal>
+          </View>
+
+          {renderField('Position', 'position', 'Enter position/designation', undefined, { required: false })}
+        </>
+      ) : (
+        /* ── School Information (Student) ── */
+        <>
+          <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], marginTop: isUpdate ? 0 : 24 }]}>
+            School Information
           </Text>
-          <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
-        </TouchableOpacity>
-        {errors.studentCategory && <Text style={styles.errorText}>{errors.studentCategory}</Text>}
-        <Modal visible={categoryOpen} transparent animationType="slide">
-          <Pressable style={styles.modalOverlay} onPress={() => setCategoryOpen(false)}>
-            <Pressable style={[styles.modalContent, styles.categoryModalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Student Category</Text>
-                <TouchableOpacity onPress={() => setCategoryOpen(false)}>
-                  <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <FlatList
-                data={STUDENT_CATEGORIES}
-                keyExtractor={item => item.value}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
-                    onPress={() => { onUpdate({ studentCategory: item.value }); setCategoryOpen(false); }}
+
+          {/* Program — modal select with search */}
+          <View style={styles.fieldGroup}>
+            <Text style={labelStyle}>Program *</Text>
+            <TouchableOpacity
+              style={[styles.selectTrigger, {
+                backgroundColor: isDark ? colors.neutral[700] : '#FFF',
+                borderColor: errors.program ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
+              }]}
+              onPress={openProgramModal}
+              activeOpacity={0.7}
+            >
+              <Text style={{ flex: 1, fontSize: 15, color: pi.program ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
+                {pi.program || 'Select program...'}
+              </Text>
+              {pi.programId ? (
+                <Ionicons name="checkmark-circle" size={18} color={colors.success[500]} />
+              ) : (
+                <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+              )}
+            </TouchableOpacity>
+            {errors.program && <Text style={styles.errorText}>{errors.program}</Text>}
+            <Modal visible={programOpen} transparent animationType="slide">
+              <Pressable style={[styles.modalOverlay, styles.programModalOverlay]} onPress={closeProgramModal}>
+                <Animated.View
+                  style={[
+                    styles.modalContent,
+                    styles.programModalContent,
+                    {
+                      height: programPanelHeight,
+                      backgroundColor: isDark ? colors.neutral[800] : '#FFF',
+                    },
+                    Platform.OS === 'android' && programKeyboardHeight > 0
+                      ? { transform: [{ translateY: programKeyboardHeight }] }
+                      : null,
+                  ]}
+                >
+                  <Pressable
+                    style={styles.modalPanelInner}
+                    onPress={() => {}}
                   >
-                    <Text style={{ flex: 1, fontSize: 15, color: item.value === pi.studentCategory ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.value === pi.studentCategory ? '600' : '400' }}>
-                      {item.label}
-                    </Text>
-                    {item.value === pi.studentCategory && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
-                  </TouchableOpacity>
-                )}
-              />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      </View>
+                    <View style={styles.modalHandleWrap}>
+                      <View style={[styles.modalHandle, { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[300] }]} />
+                    </View>
+
+                    <View style={styles.modalHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Program</Text>
+                        <Text style={{ fontSize: 12, marginTop: 2, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
+                          Search and choose your school program
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity onPress={closeProgramModal}>
+                        <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={[styles.modalSearchRow, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+                      <Ionicons name="search" size={16} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+                      <TextInput
+                        style={[styles.modalSearchInput, { color: isDark ? colors.neutral[100] : colors.neutral[900] }]}
+                        value={programSearch}
+                        onChangeText={handleProgramSearch}
+                        onFocus={() => setProgramSearchFocused(true)}
+                        onBlur={() => setProgramSearchFocused(false)}
+                        placeholder="Search program..."
+                        placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+                        returnKeyType="done"
+                        onSubmitEditing={() => Keyboard.dismiss()}
+                      />
+                      {programSearching && <ActivityIndicator size="small" color={colors.primary[500]} />}
+                    </View>
+
+                    {pi.program ? (
+                      <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6 }}>
+                        <Text style={{ fontSize: 12, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
+                          Current selection:
+                        </Text>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? colors.neutral[200] : colors.secondary[800] }} numberOfLines={1}>
+                          {pi.program}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {programSuggestions.length > 0 ? (
+                      <FlatList
+                        data={programSuggestions}
+                        keyExtractor={item => item.id}
+                        keyboardShouldPersistTaps="handled"
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{ paddingBottom: 12 }}
+                        renderItem={({ item }) => (
+                          <TouchableOpacity
+                            style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                            onPress={() => selectProgram(item)}
+                          >
+                            <Text style={{ flex: 1, fontSize: 15, color: item.id === pi.programId ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.id === pi.programId ? '600' : '400' }}>
+                              {item.label}
+                            </Text>
+                            {item.id === pi.programId && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
+                          </TouchableOpacity>
+                        )}
+                      />
+                    ) : (
+                      <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
+                          {!programSearchFocused && programSearch.trim().length < 2
+                            ? 'Tap search to start'
+                            : programSearch.trim().length < 2
+                            ? 'Type at least 2 characters to search'
+                            : programSearching
+                            ? 'Searching...'
+                            : 'No programs found'}
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                </Animated.View>
+              </Pressable>
+            </Modal>
+          </View>
+
+          {/* Student Category — dropdown select */}
+          <View style={styles.fieldGroup}>
+            <Text style={labelStyle}>Student Category *</Text>
+            <TouchableOpacity
+              style={[styles.selectTrigger, {
+                backgroundColor: isDark ? colors.neutral[700] : '#FFF',
+                borderColor: errors.studentCategory ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
+              }]}
+              onPress={() => setCategoryOpen(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ flex: 1, fontSize: 15, color: pi.studentCategory ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
+                {STUDENT_CATEGORIES.find(c => c.value === pi.studentCategory)?.label || pi.studentCategory || 'Select category...'}
+              </Text>
+              <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+            </TouchableOpacity>
+            {errors.studentCategory && <Text style={styles.errorText}>{errors.studentCategory}</Text>}
+            <Modal visible={categoryOpen} transparent animationType="slide">
+              <Pressable style={styles.modalOverlay} onPress={() => setCategoryOpen(false)}>
+                <Pressable style={[styles.modalContent, styles.categoryModalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Student Category</Text>
+                    <TouchableOpacity onPress={() => setCategoryOpen(false)}>
+                      <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <FlatList
+                    data={STUDENT_CATEGORIES}
+                    keyExtractor={item => item.value}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                        onPress={() => { onUpdate({ studentCategory: item.value }); setCategoryOpen(false); }}
+                      >
+                        <Text style={{ flex: 1, fontSize: 15, color: item.value === pi.studentCategory ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.value === pi.studentCategory ? '600' : '400' }}>
+                          {item.label}
+                        </Text>
+                        {item.value === pi.studentCategory && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
+                      </TouchableOpacity>
+                    )}
+                  />
+                </Pressable>
+              </Pressable>
+            </Modal>
+          </View>
+
+          {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
+        </>
+      )}
 
       <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], marginTop: 24 }]}>
         Emergency Contacts
