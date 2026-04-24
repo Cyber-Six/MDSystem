@@ -157,7 +157,12 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
           if (otpErrorCode === 'RECAPTCHA_REQUIRED' || otpErrorCode === 'INVALID_RECAPTCHA') {
             setError('Account created but failed to send verification code. Use resend below.');
           } else {
-            setError(otpErr.response?.data?.message || 'Account created but failed to send verification code. Use resend below.');
+            setError(
+              sanitizeErrorMessage(
+                otpErr.response?.data?.message ||
+                  'Account created but failed to send verification code. Use resend below.'
+              )
+            );
           }
         }
         setCurrentStep(2);
@@ -171,7 +176,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
       } else if (errorCode === 'RECAPTCHA_REQUIRED' || errorCode === 'INVALID_RECAPTCHA') {
         setError('Registration failed. Please try again.');
       } else {
-        setError(errorMessage || 'Registration failed. Please try again.');
+        setError(sanitizeErrorMessage(errorMessage || 'Registration failed. Please try again.'));
       }
     } finally {
       setLoading(false);
@@ -294,7 +299,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
       } else if (errorCode === 'DATA_CONSENT_REQUIRED') {
         setError('You must agree to the data consent policy.');
       } else {
-        setError(errorMessage || 'Registration failed. Please try again.');
+        setError(sanitizeErrorMessage(errorMessage || 'Registration failed. Please try again.'));
       }
     } finally {
       setLoading(false);

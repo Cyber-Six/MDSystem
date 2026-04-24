@@ -11,11 +11,11 @@ describe('mobile auth feature flags', () => {
     expect(config.googleOAuthEnabled).toBe(false);
     expect(config.googleOAuthConfigured).toBe(false);
     expect(config.googleOAuthAvailable).toBe(false);
-    expect(config.googleOAuthStatusMessage).toBe('Google sign-in is disabled for this build.');
+    expect(config.googleOAuthStatusMessage).toBeNull();
     expect(config.recaptchaEnabled).toBe(false);
     expect(config.recaptchaConfigured).toBe(false);
     expect(config.recaptchaAvailable).toBe(false);
-    expect(config.recaptchaStatusMessage).toBe('reCAPTCHA is disabled for this build.');
+    expect(config.recaptchaStatusMessage).toBeNull();
   });
 
   it('only enables Google OAuth when both the flag and client ID are present', () => {
@@ -53,7 +53,7 @@ describe('mobile auth feature flags', () => {
     });
   });
 
-  it('returns notices for disabled features that can be shown in the UI', () => {
+  it('does not return UI notices for disabled features', () => {
     const config = resolveMobileAuthFeatureConfig({}, 'android');
 
     expect(
@@ -64,9 +64,26 @@ describe('mobile auth feature flags', () => {
         },
         config
       )
-    ).toEqual([
-      'Google sign-in is disabled for this build.',
-      'reCAPTCHA is disabled for this build.',
-    ]);
+    ).toEqual([]);
+  });
+
+  it('does not return UI notices for enabled but unconfigured features', () => {
+    const config = resolveMobileAuthFeatureConfig(
+      {
+        EXPO_PUBLIC_ENABLE_GOOGLE_OAUTH: 'true',
+        EXPO_PUBLIC_ENABLE_RECAPTCHA: 'true',
+      },
+      'android'
+    );
+
+    expect(
+      getAuthFeatureNotices(
+        {
+          includeGoogleOAuth: true,
+          includeRecaptcha: true,
+        },
+        config
+      )
+    ).toEqual([]);
   });
 });

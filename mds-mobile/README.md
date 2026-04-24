@@ -67,8 +67,8 @@ Notes:
 
 - Mobile uses absolute backend URLs (no Vite proxy layer).
 - `src/core.ts` reads `EXPO_PUBLIC_API_URL` and defaults to `https://www.mdsystemtip.space`.
-- When `EXPO_PUBLIC_ENABLE_GOOGLE_OAUTH=false`, the Google sign-in button stays unmounted and the screen shows a non-blocking status notice instead.
-- When `EXPO_PUBLIC_ENABLE_RECAPTCHA=false`, login/register/forgot-password requests omit the mobile reCAPTCHA token and the UI shows that status up front.
+- When `EXPO_PUBLIC_ENABLE_GOOGLE_OAUTH=false`, the Google sign-in button stays unmounted with no disabled-state notice.
+- When `EXPO_PUBLIC_ENABLE_RECAPTCHA=false`, login/register/forgot-password requests omit the mobile reCAPTCHA token with no disabled-state notice.
 
 ## Available Scripts
 

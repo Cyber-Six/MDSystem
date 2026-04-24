@@ -22,6 +22,18 @@ import {
 } from '../../config/authFeatures';
 import { axiosRequest } from '../../core';
 
+const sanitizeErrorMessage = (message: string): string => {
+  if (!message) return 'Failed to send reset link. Please try again.';
+  const sanitized = message
+    .replace(/recaptcha/gi, '')
+    .replace(/reCAPTCHA/g, '')
+    .replace(/verification failed/gi, 'request failed')
+    .replace(/verify/gi, 'process')
+    .replace(/  +/g, ' ')
+    .trim();
+  return sanitized || 'Failed to send reset link. Please try again.';
+};
+
 interface ForgotPasswordScreenProps {
   onBackToLogin: () => void;
 }
@@ -66,8 +78,10 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
         setError('Too many attempts. Please try again later.');
       } else {
         setError(
-          err.response?.data?.message ||
-            'Failed to send reset link. Please try again.',
+          sanitizeErrorMessage(
+            err.response?.data?.message ||
+              'Failed to send reset link. Please try again.',
+          ),
         );
       }
     } finally {

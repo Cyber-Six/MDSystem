@@ -69,20 +69,12 @@ export function resolveMobileAuthFeatureConfig(
     googleOAuthConfigured,
     googleOAuthAvailable,
     googleOAuthClientId,
-    googleOAuthStatusMessage: !googleOAuthEnabled
-      ? 'Google sign-in is disabled for this build.'
-      : !googleOAuthConfigured
-        ? 'Google sign-in is enabled, but no Google client ID is configured.'
-        : null,
+    googleOAuthStatusMessage: null,
     recaptchaEnabled,
     recaptchaConfigured,
     recaptchaAvailable,
     recaptchaToken,
-    recaptchaStatusMessage: !recaptchaEnabled
-      ? 'reCAPTCHA is disabled for this build.'
-      : !recaptchaConfigured
-        ? 'reCAPTCHA is enabled, but no mobile secret is configured.'
-        : null,
+    recaptchaStatusMessage: null,
   };
 }
 
