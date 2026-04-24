@@ -45,6 +45,7 @@ module.exports = ({ config }) => ({
   // ── Identity ──────────────────────────────────────────────────────────────
   name: 'MDSystem',
   slug: 'mds-mobile',
+  scheme: 'mdsystem',
   version,
 
   // ── Display ───────────────────────────────────────────────────────────────

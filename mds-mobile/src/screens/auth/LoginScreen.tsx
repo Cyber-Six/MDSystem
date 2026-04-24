@@ -26,12 +26,13 @@ import * as WebBrowser from 'expo-web-browser';
 // Complete any pending auth sessions on app load
 WebBrowser.maybeCompleteAuthSession();
 
+const AUTH_REDIRECT_SCHEME = 'mdsystem';
 const GOOGLE_CLIENT_ID = Platform.OS === 'ios'
-  ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '')
-  : (process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '');
+  ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '').trim()
+  : (process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '').trim();
 // Server-side secret exchanged instead of a reCAPTCHA browser token.
 // Mobile native apps cannot render v2 checkbox widgets.
-const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || '';
+const MOBILE_RECAPTCHA_SECRET = (process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || '').trim();
 
 // Import validation functions from core package
 const validatePassword = (password: string): boolean => {
@@ -50,6 +51,116 @@ interface LoginScreenProps {
   onNavigateToForgotPassword?: () => void;
   onLoginSuccess: () => void;
 }
+
+interface GoogleSignInSectionProps {
+  clientId: string;
+  isDark: boolean;
+  isLoading: boolean;
+  onError: (message: string) => void;
+  onLoadingChange: (value: boolean) => void;
+  onIdToken: (idToken: string) => Promise<void>;
+}
+
+const GoogleSignInSection: React.FC<GoogleSignInSectionProps> = ({
+  clientId,
+  isDark,
+  isLoading,
+  onError,
+  onLoadingChange,
+  onIdToken,
+}) => {
+  const discovery = AuthSession.useAutoDiscovery('https://accounts.google.com');
+  const nonceRef = useRef(Math.random().toString(36).substring(2));
+
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId,
+      redirectUri: AuthSession.makeRedirectUri({
+        scheme: AUTH_REDIRECT_SCHEME,
+      }),
+      scopes: ['openid', 'profile', 'email'],
+      responseType: AuthSession.ResponseType.IdToken,
+      extraParams: {
+        hd: 'tip.edu.ph',
+        nonce: nonceRef.current,
+      },
+    },
+    discovery
+  );
+
+  useEffect(() => {
+    if (!response) {
+      return;
+    }
+
+    if (response.type === 'success') {
+      const idToken = response.params?.id_token;
+      if (idToken) {
+        void onIdToken(idToken);
+        return;
+      }
+
+      onError('Google sign-in did not return an ID token.');
+      onLoadingChange(false);
+      return;
+    }
+
+    if (response.type === 'error') {
+      onError('Google sign-in was cancelled or failed.');
+      onLoadingChange(false);
+      return;
+    }
+
+    if (response.type === 'cancel' || response.type === 'dismiss' || response.type === 'locked') {
+      onLoadingChange(false);
+    }
+  }, [response, onError, onIdToken, onLoadingChange]);
+
+  const handlePress = async () => {
+    try {
+      onError('');
+      onLoadingChange(true);
+      await promptAsync();
+    } catch {
+      onError('Google sign-in was cancelled or failed.');
+      onLoadingChange(false);
+    }
+  };
+
+  return (
+    <>
+      <View style={styles.oauthDivider}>
+        <View style={[styles.oauthDividerLine, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[300] }]} />
+        <Text style={[styles.oauthDividerText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>or</Text>
+        <View style={[styles.oauthDividerLine, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[300] }]} />
+      </View>
+
+      <TouchableOpacity
+        style={[
+          styles.googleButton,
+          {
+            borderColor: isDark ? colors.neutral[600] : colors.neutral[300],
+            backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+          }
+        ]}
+        onPress={handlePress}
+        disabled={isLoading || !request}
+        activeOpacity={0.7}
+      >
+        <Image
+          source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
+          style={styles.googleIcon}
+        />
+        <Text style={[
+          styles.googleButtonText,
+          { color: isDark ? colors.neutral[100] : colors.secondary[900] }
+        ]}>
+          {isLoading ? 'Signing in...' : 'Sign in with Google'}
+        </Text>
+      </TouchableOpacity>
+    </>
+  );
+};
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ 
   onNavigateToRegister,
@@ -74,37 +185,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-
-  // ── Google OAuth ──────────────────────────────────────────────────────
-  const discovery = AuthSession.useAutoDiscovery('https://accounts.google.com');
-  // Generate nonce once per component mount to prevent request invalidation on re-renders
-  const nonceRef = useRef(Math.random().toString(36).substring(2));
-
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CLIENT_ID,
-      redirectUri: AuthSession.makeRedirectUri(),
-      scopes: ['openid', 'profile', 'email'],
-      responseType: AuthSession.ResponseType.IdToken,
-      extraParams: {
-        hd: 'tip.edu.ph',
-        nonce: nonceRef.current,
-      },
-    },
-    discovery
-  );
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken = response.params?.id_token;
-      if (idToken) {
-        handleGoogleLogin(idToken);
-      }
-    } else if (response?.type === 'error') {
-      setError('Google sign-in was cancelled or failed.');
-      setIsGoogleLoading(false);
-    }
-  }, [response]);
 
   const handleGoogleLogin = async (idToken: string) => {
     setError('');
@@ -150,13 +230,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     } finally {
       setIsGoogleLoading(false);
     }
-  };
-
-  const handleGooglePress = async () => {
-    if (!GOOGLE_CLIENT_ID || !request) return;
-    setError('');
-    setIsGoogleLoading(true);
-    await promptAsync();
   };
 
   // Send 2FA code
@@ -438,37 +511,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       {/* Google Sign-In */}
       {GOOGLE_CLIENT_ID ? (
-        <>
-          <View style={styles.oauthDivider}>
-            <View style={[styles.oauthDividerLine, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[300] }]} />
-            <Text style={[styles.oauthDividerText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>or</Text>
-            <View style={[styles.oauthDividerLine, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[300] }]} />
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.googleButton,
-              { 
-                borderColor: isDark ? colors.neutral[600] : colors.neutral[300],
-                backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
-              }
-            ]}
-            onPress={handleGooglePress}
-            disabled={isGoogleLoading || !request}
-            activeOpacity={0.7}
-          >
-            <Image
-              source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
-              style={styles.googleIcon}
-            />
-            <Text style={[
-              styles.googleButtonText,
-              { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-            ]}>
-              {isGoogleLoading ? 'Signing in...' : 'Sign in with Google'}
-            </Text>
-          </TouchableOpacity>
-        </>
+        <GoogleSignInSection
+          clientId={GOOGLE_CLIENT_ID}
+          isDark={isDark}
+          isLoading={isGoogleLoading}
+          onError={setError}
+          onLoadingChange={setIsGoogleLoading}
+          onIdToken={handleGoogleLogin}
+        />
       ) : null}
 
       <View style={[
