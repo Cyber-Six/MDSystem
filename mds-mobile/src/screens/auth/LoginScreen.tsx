@@ -21,7 +21,6 @@ import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
 import {
-  getAuthFeatureNotices,
   mobileAuthFeatureConfig,
   withOptionalRecaptcha,
 } from '../../config/authFeatures';
@@ -30,6 +29,19 @@ import { axiosRequest, TokenStorage } from '../../core';
 const isValidTipEmail = (email: string): boolean => {
   const tipDomains = ['@tip.edu.ph'];
   return tipDomains.some(domain => email.toLowerCase().endsWith(domain));
+};
+
+// Sanitize error messages to remove reCAPTCHA references
+const sanitizeErrorMessage = (message: string): string => {
+  if (!message) return 'An error occurred. Please try again.';
+  const sanitized = message
+    .replace(/recaptcha/gi, '')
+    .replace(/reCAPTCHA/g, '')
+    .replace(/verification failed/gi, 'request failed')
+    .replace(/verify/gi, 'process')
+    .replace(/  +/g, ' ')
+    .trim();
+  return sanitized || 'An error occurred. Please try again.';
 };
 
 type LoginStep = 'credentials' | '2fa';
@@ -48,10 +60,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
   const isIOS = Platform.OS === 'ios';
-  const authFeatureNotices = getAuthFeatureNotices({
-    includeGoogleOAuth: true,
-    includeRecaptcha: true,
-  });
   
   // Form state
   const [email, setEmail] = useState('');
@@ -111,7 +119,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           setError(errorMsg);
           break;
         default:
-          setError(errorMsg);
+          setError(sanitizeErrorMessage(errorMsg));
       }
     } finally {
       setIsGoogleLoading(false);
@@ -173,11 +181,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           break;
         case 'RECAPTCHA_REQUIRED':
         case 'INVALID_RECAPTCHA':
-          setError(
-            mobileAuthFeatureConfig.recaptchaAvailable
-              ? errorMsg
-              : `${mobileAuthFeatureConfig.recaptchaStatusMessage ?? 'reCAPTCHA is unavailable for this build.'} Password login can continue only while the server does not require extra verification.`
-          );
+          setError('Login failed. Please try again.');
           break;
         case 'INVALID_EMAIL_FORMAT':
           setError('Invalid email format.');
@@ -189,7 +193,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           setError('Email or password is incorrect.');
           break;
         default:
-          setError(errorMsg);
+          setError(sanitizeErrorMessage(errorMsg));
       }
     } finally {
       setIsLoading(false);
@@ -345,9 +349,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const renderCredentialsStep = () => (
     <View style={styles.stepContainer}>
       <Alert message={error} type="error" />
-      {authFeatureNotices.map((notice) => (
-        <Alert key={notice} message={notice} type="info" />
-      ))}
       
       <Input
         label="Email Address"

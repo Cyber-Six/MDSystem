@@ -21,7 +21,6 @@ import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
 import {
-  getAuthFeatureNotices,
   mobileAuthFeatureConfig,
   withOptionalRecaptcha,
 } from '../../config/authFeatures';
@@ -41,6 +40,19 @@ const isValidTipEmail = (email: string): boolean => {
   return tipDomains.some(domain => email.toLowerCase().endsWith(domain));
 };
 
+// Sanitize error messages to remove reCAPTCHA references
+const sanitizeErrorMessage = (message: string): string => {
+  if (!message) return 'An error occurred. Please try again.';
+  const sanitized = message
+    .replace(/recaptcha/gi, '')
+    .replace(/reCAPTCHA/g, '')
+    .replace(/verification failed/gi, 'request failed')
+    .replace(/verify/gi, 'process')
+    .replace(/  +/g, ' ')
+    .trim();
+  return sanitized || 'An error occurred. Please try again.';
+};
+
 const TOTAL_STEPS = 4;
 
 interface RegisterScreenProps {
@@ -54,9 +66,6 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
 }) => {
   const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
-  const authFeatureNotices = getAuthFeatureNotices({
-    includeRecaptcha: true,
-  });
 
   // Multi-step state
   const [currentStep, setCurrentStep] = useState(1);
@@ -145,13 +154,8 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
           setSuccessMessage('Verification code sent to your email!');
         } catch (otpErr: any) {
           const otpErrorCode = otpErr.response?.data?.error;
-          if (
-            !mobileAuthFeatureConfig.recaptchaAvailable &&
-            (otpErrorCode === 'MISSING_FIELDS' || otpErrorCode === 'INVALID_RECAPTCHA')
-          ) {
-            setError(
-              `${mobileAuthFeatureConfig.recaptchaStatusMessage ?? 'reCAPTCHA is unavailable for this build.'} Account creation finished, but email verification cannot continue until reCAPTCHA is enabled again.`
-            );
+          if (otpErrorCode === 'RECAPTCHA_REQUIRED' || otpErrorCode === 'INVALID_RECAPTCHA') {
+            setError('Account created but failed to send verification code. Use resend below.');
           } else {
             setError(otpErr.response?.data?.message || 'Account created but failed to send verification code. Use resend below.');
           }
@@ -164,6 +168,8 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
 
       if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
         setError('Email must follow TIP institutional format.');
+      } else if (errorCode === 'RECAPTCHA_REQUIRED' || errorCode === 'INVALID_RECAPTCHA') {
+        setError('Registration failed. Please try again.');
       } else {
         setError(errorMessage || 'Registration failed. Please try again.');
       }
@@ -232,13 +238,8 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
 
-      if (
-        !mobileAuthFeatureConfig.recaptchaAvailable &&
-        (errorCode === 'MISSING_FIELDS' || errorCode === 'INVALID_RECAPTCHA')
-      ) {
-        setError(
-          `${mobileAuthFeatureConfig.recaptchaStatusMessage ?? 'reCAPTCHA is unavailable for this build.'} Registration email verification cannot continue until reCAPTCHA is enabled again.`
-        );
+      if (errorCode === 'RECAPTCHA_REQUIRED' || errorCode === 'INVALID_RECAPTCHA') {
+        setError('Failed to resend code. Please try again.');
       } else if (errorCode === 'EMAIL_COOLDOWN_ACTIVE') {
         setError('Please wait before requesting another code.');
       } else if (errorCode === 'EMAIL_ATTEMPT_LIMIT_REACHED') {
@@ -345,9 +346,6 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
   const renderAccountStep = () => (
     <View style={styles.stepContainer}>
       <Alert message={error} type="error" />
-      {authFeatureNotices.map((notice) => (
-        <Alert key={notice} message={notice} type="info" />
-      ))}
 
       <Input
         label="Email Address"
@@ -443,9 +441,6 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
       </View>
 
       <Alert message={error} type="error" />
-      {authFeatureNotices.map((notice) => (
-        <Alert key={notice} message={notice} type="info" />
-      ))}
       {successMessage && <Alert message={successMessage} type="success" />}
 
       <Input

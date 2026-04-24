@@ -18,8 +18,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { Input, Button, Alert } from '../../components/ui/FormComponents';
 import {
-  getAuthFeatureNotices,
-  mobileAuthFeatureConfig,
   withOptionalRecaptcha,
 } from '../../config/authFeatures';
 import { axiosRequest } from '../../core';
@@ -32,9 +30,6 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
   onBackToLogin,
 }) => {
   const { isDark } = useTheme();
-  const authFeatureNotices = getAuthFeatureNotices({
-    includeRecaptcha: true,
-  });
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -63,15 +58,10 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
       setTimeout(() => onBackToLogin(), 3000);
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
-      if (
-        !mobileAuthFeatureConfig.recaptchaAvailable &&
-        (errorCode === 'MISSING_FIELDS' || errorCode === 'INVALID_RECAPTCHA')
-      ) {
-        setError(
-          `${mobileAuthFeatureConfig.recaptchaStatusMessage ?? 'reCAPTCHA is unavailable for this build.'} Password reset cannot continue until reCAPTCHA is enabled again.`
-        );
-      } else if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
+      if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
         setError('Email must follow TIP institutional format (@tip.edu.ph).');
+      } else if (errorCode === 'RECAPTCHA_REQUIRED' || errorCode === 'INVALID_RECAPTCHA') {
+        setError('Failed to send reset link. Please try again.');
       } else if (errorCode === 'EMAIL_COOLDOWN_ACTIVE') {
         setError('Too many attempts. Please try again later.');
       } else {
@@ -140,9 +130,6 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
               {/* Alerts */}
               {error ? <Alert type="error" message={error} /> : null}
               {success ? <Alert type="success" message={success} /> : null}
-              {authFeatureNotices.map((notice) => (
-                <Alert key={notice} type="info" message={notice} />
-              ))}
 
               {/* Form */}
               <View style={styles.form}>
