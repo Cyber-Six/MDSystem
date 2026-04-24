@@ -1781,7 +1781,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const rawYear          = emrProfile?.year || patientBasicInfo?.year || '';
   const rawDepartment    = emrProfile?.department || patientBasicInfo?.department || '';
   const rawRole          = emrProfile?.role || patientBasicInfo?.role || '';
-  const rawPosition      = emrProfile?.position || '';
+  const rawPosition      = emrProfile?.position || patientBasicInfo?.position || '';
   const identifier       = bid?.identifier || patientBasicInfo?.identifier || '';
   const branch           = bid?.branch || patientBasicInfo?.branch || '';
   const ec               = emr?.emergencyContact || {};
@@ -2003,6 +2003,7 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
       year
       department
       role
+      position
     }
     emergencyContact: getEmergencyContact {
       firstContact  { contactName relationship contactNumber address }
