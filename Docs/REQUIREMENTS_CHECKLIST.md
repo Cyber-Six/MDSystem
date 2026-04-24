@@ -27,7 +27,7 @@
   All users receive both an in-system notification and an email notification when their account/initial record has been approved.
   > *Tagalog: Lahat ng users makakatanggap ng email notification kapag na-approve na ang kanilang account.*
 
-- [ ] **Req 12 – Dental Grading Completion Notification**
+- [x] **Req 12 – Dental Grading Completion Notification**
   When a dentist finishes dental grading, the patient is notified (in-system and email) with the recommendation details (e.g., "Tooth filling – Tooth 24").
   > *Tagalog: Kapag natapos ng dentist ang dental grading, dapat ma-notify ang patient sa system at email tungkol sa recommendation (e.g., tooth filling tooth 24).*
 
