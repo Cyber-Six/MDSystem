@@ -1985,11 +1985,10 @@ const normalizeRevisionScope = (scope) => (
   scope === 'Medical' || scope === 'Dental' || scope === 'Both' ? scope : 'Both'
 );
 
-const buildRevisionPrefillEMRQuery = (scope = 'Both', { includePatientBasicInfoPosition = true } = {}) => {
+const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
   const normalizedScope = normalizeRevisionScope(scope);
   const includeMedical = normalizedScope === 'Medical' || normalizedScope === 'Both';
   const includeDental = normalizedScope === 'Dental' || normalizedScope === 'Both';
-  const patientBasicInfoPositionField = includePatientBasicInfoPosition ? '\n      position' : '';
 
   let query = `query GetRevisionEMRData {
     emrProfile: getProfile {
@@ -2004,7 +2003,6 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both', { includePatientBasicInfoP
       year
       department
       role
-      ${patientBasicInfoPositionField}
     }
     emergencyContact: getEmergencyContact {
       firstContact  { contactName relationship contactNumber address }
@@ -2074,37 +2072,11 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both', { includePatientBasicInfoP
 };
 
 const fetchRevisionPrefillEMRData = async (scope = 'Both') => {
-  try {
-    return await sendGraphQLRequest(
-      buildRevisionPrefillEMRQuery(scope, { includePatientBasicInfoPosition: true }),
-      {},
-      { allowPartialData: true }
-    );
-  } catch (error) {
-    const msg = (error?.message || '').toLowerCase();
-    const gqlMessages = Array.isArray(error?.graphQLErrors)
-      ? error.graphQLErrors
-          .map((e) => (typeof e === 'string' ? e : e?.message || ''))
-          .join(' ')
-          .toLowerCase()
-      : '';
-    const combined = `${msg} ${gqlMessages}`;
-    const isPositionFieldCompatIssue =
-      combined.includes('cannot query field') &&
-      combined.includes('position') &&
-      combined.includes('patientsearchresult');
-
-    if (!isPositionFieldCompatIssue) {
-      throw error;
-    }
-
-    console.warn('[EMR Service] position is not available on PatientSearchResult in this backend schema — retrying revision prefill query without it.');
-    return sendGraphQLRequest(
-      buildRevisionPrefillEMRQuery(scope, { includePatientBasicInfoPosition: false }),
-      {},
-      { allowPartialData: true }
-    );
-  }
+  return sendGraphQLRequest(
+    buildRevisionPrefillEMRQuery(scope),
+    {},
+    { allowPartialData: true }
+  );
 };
 
 /**
@@ -2143,7 +2115,7 @@ export const fetchRevisionPrefill = async (scope = 'Both') => {
       { endpoint: '/profile/patient', allowPartialData: true }
     ),
 
-    // ── Request 2: scope-aware EMR data (batched, schema-compatible retry) ─────────
+    // ── Request 2: scope-aware EMR data (batched) ───────────────────────────────────
     fetchRevisionPrefillEMRData(normalizedScope),
   ]);
 
