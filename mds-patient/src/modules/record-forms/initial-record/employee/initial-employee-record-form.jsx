@@ -447,7 +447,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     
     try {
       console.log('[Employee Record Form] Submitting to backend...');
-      const result = await createInitialEmployeeRecord(sanitizedData);
+      const result = await createInitialEmployeeRecord(sanitizedData, { isRevision });
       console.log('[Employee Record Form] Submission successful!', result);
       setSubmittedRecord(result);
       setShowSuccessModal(true);

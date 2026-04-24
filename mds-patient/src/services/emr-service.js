@@ -563,8 +563,8 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
  * Create a complete initial medical record for an employee
  * Same 3-phase flow as createInitialMedicalRecord but uses employeeId as identifier
  */
-export const createInitialEmployeeRecord = async (formData) => {
-  console.log('[EMR Service] Starting initial EMPLOYEE medical record creation (batched)');
+export const createInitialEmployeeRecord = async (formData, { isRevision = false } = {}) => {
+  console.log('[EMR Service] Starting initial EMPLOYEE medical record creation (batched)', isRevision ? '(revision)' : '(new)');
 
   let ticketCreated = false;
   let profileLogCreated = false;
@@ -575,21 +575,52 @@ export const createInitialEmployeeRecord = async (formData) => {
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    // Uses the reworked createInitialPersonalRecord which atomically creates both
-    // the personal record log and branch identifier in a single mutation.
+    // For new submissions: uses createInitialPersonalRecord which atomically
+    // creates both the personal record log and branch identifier in a single mutation.
+    // For revisions: registerProfileSetup cancels the existing Revision log then
+    // also calls createInitialPersonalRecord (Unverified users only).
     console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
-    await registerInitialProfile(formData.personalInfo?.employeeId, formData.personalInfo, { branch: formData.personalInfo?.branch });
-    profileLogCreated = true;
+    if (isRevision) {
+      await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo, isRevision, { branch: formData.personalInfo?.branch });
+    } else {
+      await registerInitialProfile(formData.personalInfo?.employeeId, formData.personalInfo, { branch: formData.personalInfo?.branch });
+    }
+    profileLogCreated = !isRevision;
 
     // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
+    // For revisions: pre-fetch and reuse the existing Revision ticket when present.
+    // For new submissions: create/reuse the active InProgress ticket.
     console.log('[EMR Service] [2/3] Creating ticket & uploading photos (parallel)...');
+
+    let ticketPromise;
+    if (isRevision) {
+      const existing = await fetchCurrentUpdateTicket();
+      if (existing?.status === 'Revision') {
+        console.log('[EMR Service] Employee revision: reusing existing ticket:', existing.id);
+        ticketPromise = Promise.resolve(existing.id);
+      } else {
+        ticketPromise = createUpdateTicket('Both');
+      }
+    } else {
+      const existing = await fetchCurrentUpdateTicket();
+      if (existing?.id && existing.status === 'InProgress') {
+        console.log('[EMR Service] Employee flow reusing early-created ticket:', existing.id);
+        ticketPromise = Promise.resolve(existing.id);
+      } else {
+        ticketPromise = createUpdateTicket('Both');
+      }
+    }
+
     const [ticketResult, upperResult, lowerResult] = await Promise.allSettled([
-      createUpdateTicket('Both'),
+      ticketPromise,
       uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null),
       uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null),
     ]);
 
-    if (ticketResult.status === 'fulfilled') { ticketCreated = true; results.ticketId = ticketResult.value; }
+    if (ticketResult.status === 'fulfilled') {
+      if (!isRevision) ticketCreated = true;
+      results.ticketId = ticketResult.value;
+    }
     upperTeethFileId = upperResult.status === 'fulfilled' ? upperResult.value : null;
     lowerTeethFileId = lowerResult.status === 'fulfilled' ? lowerResult.value : null;
 
@@ -1674,6 +1705,35 @@ const reverseMapYearLevel = (backendYear) => {
   return '';
 };
 
+/** Reverse mapping: backend employee role → form employment category */
+const reverseMapEmploymentCategory = (backendRole = '') => {
+  const role = String(backendRole || '').trim();
+  if (!role) {
+    return { employmentCategory: '', employmentCategoryOther: '' };
+  }
+
+  const roleMap = {
+    Faculty: 'Teaching',
+    Staff: 'Non-Teaching',
+    AcademicHead: 'Teaching (Officer)',
+    Teaching: 'Teaching',
+    'Teaching (Officer)': 'Teaching (Officer)',
+    'Non-Teaching': 'Non-Teaching',
+    'Non-Teaching (Officer)': 'Non-Teaching (Officer)',
+  };
+
+  if (roleMap[role]) {
+    return { employmentCategory: roleMap[role], employmentCategoryOther: '' };
+  }
+
+  if (role === 'Other') {
+    return { employmentCategory: 'Other', employmentCategoryOther: '' };
+  }
+
+  // Preserve unknown role strings in the free-text field.
+  return { employmentCategory: 'Other', employmentCategoryOther: role };
+};
+
 /** Known program values (matches the form's programOptions list) */
 const KNOWN_PROGRAMS = new Set([
   'BS Architecture',
@@ -1715,8 +1775,17 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const emr = emrData || {};
 
   // ── Personal Info ──────────────────────────────────────────
-  const rawProgram       = emr?.emrProfile?.program || '';
+  const emrProfile       = emr?.emrProfile || {};
+  const patientBasicInfo = emr?.patientBasicInfo || {};
+  const rawProgram       = emrProfile?.program || patientBasicInfo?.program || '';
+  const rawYear          = emrProfile?.year || patientBasicInfo?.year || '';
+  const rawDepartment    = emrProfile?.department || patientBasicInfo?.department || '';
+  const rawRole          = emrProfile?.role || patientBasicInfo?.role || '';
+  const rawPosition      = emrProfile?.position || '';
+  const identifier       = bid?.identifier || patientBasicInfo?.identifier || '';
+  const branch           = bid?.branch || patientBasicInfo?.branch || '';
   const ec               = emr?.emergencyContact || {};
+  const { employmentCategory, employmentCategoryOther } = reverseMapEmploymentCategory(rawRole);
 
   const personalInfo = {
     firstName:          pr.first_name     || '',
@@ -1734,10 +1803,17 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     address:            pr.present_address   || '',
     provinceAddress:    pr.province_address  || '',
     contactNumber:      pr.contactNumber     || '',
-    studentNumber:      bid?.identifier   || '',
+    studentNumber:      identifier,
     program:            rawProgram,
     programId:          '',   // resolved asynchronously in fetchRevisionPrefill
-    studentCategory:    reverseMapYearLevel(emr?.emrProfile?.year || ''),
+    studentCategory:    reverseMapYearLevel(rawYear),
+    employeeId:         identifier,
+    department:         rawDepartment,
+    employmentCategory,
+    employmentCategoryOther,
+    employmentStatus:   '',   // not persisted in backend
+    position:           rawPosition,
+    branch,
     drugTestDone:       '',   // not persisted
     lastSchoolAttended: '',   // not persisted
     emergencyContacts: [
@@ -1917,7 +1993,16 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
   let query = `query GetRevisionEMRData {
     emrProfile: getProfile {
       ... on StudentProfile { program year }
-      ... on EmployeeProfile { department role }
+      ... on EmployeeProfile { department role position }
+    }
+    patientBasicInfo: getPatientBasicInfo(userId: "self") {
+      identifier
+      branch
+      profile_type
+      program
+      year
+      department
+      role
     }
     emergencyContact: getEmergencyContact {
       firstContact  { contactName relationship contactNumber address }
@@ -2019,11 +2104,11 @@ export const fetchRevisionPrefill = async (scope = 'Both') => {
         }
       }`,
       {},
-      { endpoint: '/profile/patient' }
+      { endpoint: '/profile/patient', allowPartialData: true }
     ),
 
     // ── Request 2: scope-aware EMR data (batched) ─────────
-    sendGraphQLRequest(buildRevisionPrefillEMRQuery(normalizedScope), {}),
+    sendGraphQLRequest(buildRevisionPrefillEMRQuery(normalizedScope), {}, { allowPartialData: true }),
   ]);
 
   if (profileResult.status === 'rejected') {
@@ -2051,7 +2136,7 @@ export const fetchRevisionPrefill = async (scope = 'Both') => {
 
   // Resolve the student programId from the label returned by the backend.
   // StudentProfile.program is a label string; StudentProfileInput requires programId: ID!
-  const rawProgramLabel = emrData?.emrProfile?.program;
+  const rawProgramLabel = emrData?.emrProfile?.program || emrData?.patientBasicInfo?.program;
   if (rawProgramLabel) {
     try {
       const programs = await searchStudentProgram(rawProgramLabel);
