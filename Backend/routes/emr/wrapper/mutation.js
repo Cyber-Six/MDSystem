@@ -60,7 +60,16 @@ const Mutation = {
       await client.query('COMMIT');
       logger.info(`User ID ${user.id} updated ticket ID ${recordId} to status ${newStatus}`);
 
-      
+      await db.setSystemAuditLog({
+        eventType: "TICKET_STATUS_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: recordId,
+        action: "UPDATE_TICKET_STATUS",
+        details: JSON.stringify({ newStatus, scope }),
+        changedBy: "Medical"
+      });
+
       return newStatus;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -101,6 +110,17 @@ const Mutation = {
       ]
     );
     logger.debug("Upserted Student Profile:", result.rows[0]);
+    
+    await db.setSystemAuditLog({
+      eventType: "PROFILE_UPDATE",
+      actorId: user.id,
+      actorType: "Student",
+      targetId: recordId,
+      action: "UPSERT_STUDENT_PROFILE",
+      details: JSON.stringify({ programId: args.input.programId, year: args.input.year }),
+      changedBy: "Medical"
+    });
+
     return {...result.rows[0], id: recordId, archived_at: null};
   },
 
@@ -138,6 +158,16 @@ const Mutation = {
       ]
     );
 
+    await db.setSystemAuditLog({
+      eventType: "PROFILE_UPDATE",
+      actorId: user.id,
+      actorType: "Employee",
+      targetId: recordId,
+      action: "UPSERT_EMPLOYEE_PROFILE",
+      details: JSON.stringify({ department: args.input.department, role: args.input.role, position: args.input.position }),
+      changedBy: "Medical"
+    });
+
     logger.debug("Upserted Employee Profile:", result.rows[0]);
     //return result.rows[0];
     return {...(args.input), id: recordId, archived_at: null};
@@ -173,6 +203,16 @@ const Mutation = {
           recordId
         ]
       );
+
+      await db.setSystemAuditLog({
+        eventType: "VITAL_SIGNS_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: recordId,
+        action: "UPSERT_VITAL_SIGNS",
+        details: JSON.stringify({ height_cm: args.input.height_cm, weight_kg: args.input.weight_kg, blood_pressure: args.input.blood_pressure, heart_rate: args.input.heart_rate, temperature: args.input.temperature }),
+        changedBy: "Medical"
+      });
 
       await client.query('COMMIT');
       logger.debug("Inserted Vital Signs + Updated Log:", result.rows[0]);
@@ -257,6 +297,16 @@ const Mutation = {
         oralFindingsResult.push(resultFinder.rows[0]);
       }
 
+      await db.setSystemAuditLog({
+        eventType: "DENTAL_RECORD_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: recordId,
+        action: "UPSERT_DENTAL_RECORD",
+        details: JSON.stringify({ notes: args.input.notes, toothPlacements: args.input.ToothPlacements, oralFindings: args.input.oralFindings }),
+        changedBy: "Medical"
+      });
+
       await client.query('COMMIT');
       return {
         ...args.input,
@@ -285,8 +335,6 @@ const Mutation = {
     }
   },
 
-
-
   _DentalHistory: async (_, {args, recordId}, { user, res }) => {
     const result = await db.query(
       `INSERT INTO "DentalHistory" 
@@ -306,6 +354,17 @@ const Mutation = {
         args.input.lastVisitDate
       ]
     );  
+
+    await db.setSystemAuditLog({
+      eventType: "DENTAL_HISTORY_UPDATE",
+      actorId: user.id,
+      actorType: "Staff",
+      targetId: recordId,
+      action: "UPSERT_DENTAL_HISTORY",
+
+      details: JSON.stringify({ seenByDentist: args.input.seenByDentist, lastDentalCleaning: args.input.lastDentalCleaning, purpose: args.input.purpose, lastVisitDate: args.input.lastVisitDate }),
+      changedBy: "Medical"
+    });
 
     logger.debug("Upserted Dental History:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
@@ -328,6 +387,17 @@ const Mutation = {
           args.input.notes
         ]
       );
+
+    await db.setSystemAuditLog({
+      eventType: "OBGYN_HISTORY_UPDATE",
+      actorId: user.id,
+      actorType: "Staff",
+      targetId: recordId,
+      action: "UPSERT_OBGYN_HISTORY",
+      details: JSON.stringify({ lastMenstrualPeriod: args.input.lastMenstrualPeriod, hasDysmenorrhea: args.input.hasDysmenorrhea, notes: args.input.notes }),
+      changedBy: "Medical"
+    });
+
     logger.debug("Upserted ObGynHistory:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
@@ -365,6 +435,16 @@ const Mutation = {
     );
     logger.debug("Upserted Lifestyle:", result.rows[0]);
 
+    await db.setSystemAuditLog({
+      eventType: "LIFESTYLE_UPDATE",
+      actorId: user.id,
+      actorType: "Staff",
+      targetId: recordId,
+      action: "UPSERT_LIFESTYLE",
+      details: JSON.stringify({ smoker: args.input.smoker, numberOfCigarettesPerDay: args.input.numberOfCigarettesPerDay, yearsSmoked: args.input.yearsSmoked, alcoholConsumer: args.input.alcoholConsumer, frequencyOfAlcoholConsumption: args.input.frequencyOfAlcoholConsumption, vapeUser: args.input.vapeUser, vapeType: args.input.vapeType, vapeFrequency: args.input.vapeFrequency, yearsVaping: args.input.yearsVaping }),
+      changedBy: "Medical"
+    });
+
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -398,6 +478,17 @@ const Mutation = {
         lowerUUID
         ]
       );
+    
+    await db.setSystemAuditLog({
+      eventType: "DENTAL_PHOTO_UPDATE",
+      actorId: user.id,
+      actorType: "Staff",
+      targetId: recordId,
+      action: "UPSERT_DENTAL_PHOTO",
+      details: JSON.stringify({ upperTeeth: upperUUID, lowerTeeth: lowerUUID }),
+      changedBy: "Medical"
+    });
+
     const record = result.rows[0];
     return {...record, id: recordId, isValid: result.rows[0].isValid, archived_at: null};
   },
@@ -443,6 +534,18 @@ const Mutation = {
         else throw err;
       }
     }
+
+    await db.setSystemAuditLog({
+      eventType: "ORAL_APPLIANCE_UPDATE",
+      actorId: user.id,
+
+      actorType: "Staff",
+      targetId: recordId,
+      action: "UPSERT_ORAL_APPLIANCE",
+      details: JSON.stringify({ appliances: args.input.appliances }),
+      changedBy: "Medical"
+    });
+
     logger.warn("Inserted Oral Appliances:", inserted);
     return {
       id: recordId,
@@ -467,6 +570,16 @@ const Mutation = {
       [recordId, firstNumber.id, secondNumber.id]
     );
     logger.debug("Upserted Emergency Contact:", result.rows[0]);
+    
+    await db.setSystemAuditLog({
+      eventType: "EMERGENCY_CONTACT_UPDATE",
+      actorId: user.id,
+      actorType: "Staff",
+      targetId: recordId,
+      action: "UPSERT_EMERGENCY_CONTACT",
+      details: JSON.stringify({ firstContact: firstNumber, secondContact: secondNumber }),
+      changedBy: "Medical"
+    });
 
     return {
       id: recordId,
@@ -515,6 +628,16 @@ const Mutation = {
 
       const acuityRecord = result.rows[0];
       logger.debug("Upserted Visual Acuity Profile:", acuityRecord);
+
+      await db.setSystemAuditLog({
+        eventType: "VISUAL_ACUITY_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: recordId,
+        action: "UPSERT_VISUAL_ACUITY",
+        details: JSON.stringify({ acuity: args.input.acuity }),
+        changedBy: "Medical"
+      });
 
       // Return the proper shape expected by GraphQL
       return {
