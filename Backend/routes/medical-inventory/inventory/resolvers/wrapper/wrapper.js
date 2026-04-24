@@ -686,9 +686,16 @@ const Mutation = {
 
       const oldValues = batchResult.rows[0];
 
-      // Fetch real current quantity from entity count with lock
+      // Fetch real current quantity from entity rows while locking those rows.
+      // PostgreSQL does not allow FOR UPDATE directly on aggregate queries.
       const oldQtyResult = await client.query(
-        `SELECT COUNT(*)::int AS count FROM "SupplyEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL FOR UPDATE`,
+        `SELECT COUNT(*)::int AS count
+           FROM (
+             SELECT 1
+             FROM "SupplyEntity"
+             WHERE "batchId" = $1 AND "transactionId" IS NULL
+             FOR UPDATE
+           ) sub;`,
         [batchId]
       );
       const oldQuantity = oldQtyResult.rows[0]?.count || 0;
