@@ -759,6 +759,7 @@ type PatientSearchResult {
   year: String
   department: String
   role: String
+  position: String
   credentials_status: CredentialStatus
   latest_ticket_id: ID
   latest_status: UpdateStatus

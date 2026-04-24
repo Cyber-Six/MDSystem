@@ -2,6 +2,7 @@ const db = require("../../../config/query.js");
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
 const permit = require("../../../services/permit.js");
+const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const dotenv = require("dotenv");
 
@@ -10,6 +11,135 @@ dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 // Configurable update lock duration in hours (default: 24 hours = 1 day)
 const UPDATE_LOCK_HOURS = parseInt(process.env.EMR_UPDATE_LOCK_HOURS, 10) || 24;
 const UPDATE_LOCK_MS = UPDATE_LOCK_HOURS * 60 * 60 * 1000;
+
+const DENTAL_LEGEND_TO_RECOMMENDATION = {
+  DUE_FILLING_DECAYED: "Tooth filling",
+  DUE_EXTRACTION: "Tooth extraction",
+  ROOT_FRAGMENT: "Root fragment treatment",
+  MISSING: "Missing tooth management",
+  FILLED: "Existing filling",
+  GOLD_CROWN: "Gold crown",
+  JACKET_CROWN: "Jacket crown",
+  ABUTMENT: "Abutment",
+  PONTIC: "Pontic",
+  FIXED_BRIDGE: "Fixed bridge",
+  REMOVABLE_DENTURE: "Removable denture",
+  FULL_DENTURE: "Full denture",
+};
+
+const MAX_RECOMMENDATIONS_IN_MESSAGE = 8;
+
+function toRecommendationLabel(legend = "") {
+  if (DENTAL_LEGEND_TO_RECOMMENDATION[legend]) {
+    return DENTAL_LEGEND_TO_RECOMMENDATION[legend];
+  }
+
+  return String(legend)
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function buildRecommendationDetails(toothPlacements = []) {
+  return toothPlacements
+    .filter((tooth) =>
+      tooth?.legend &&
+      tooth.legend !== "PRESENT" &&
+      tooth.toothIndex !== undefined &&
+      tooth.toothIndex !== null
+    )
+    .map((tooth) => `${toRecommendationLabel(tooth.legend)} - Tooth ${tooth.toothIndex}`);
+}
+
+function summarizeRecommendations(recommendationDetails = []) {
+  if (recommendationDetails.length === 0) {
+    return "No tooth-specific procedure recommendations were marked.";
+  }
+
+  const preview = recommendationDetails.slice(0, MAX_RECOMMENDATIONS_IN_MESSAGE).join("; ");
+  const remainingCount = recommendationDetails.length - MAX_RECOMMENDATIONS_IN_MESSAGE;
+
+  if (remainingCount <= 0) {
+    return preview;
+  }
+
+  return `${preview}; and ${remainingCount} more recommendation${remainingCount === 1 ? "" : "s"}.`;
+}
+
+async function getStaffDisplayName(staffUserId) {
+  const staffNameResult = await db.query(
+    `SELECT first_name, last_name FROM "UsersPersonal" WHERE id = $1;`,
+    [staffUserId]
+  );
+
+  const profile = staffNameResult.rows[0];
+  if (!profile) return "Dentist";
+
+  const fullName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
+  return fullName || "Dentist";
+}
+
+async function notifyDentalGradingCompletion({ patientId, staffUserId, dentalRecordId, toothPlacements }) {
+  if (!patientId || !staffUserId) return;
+
+  try {
+    const { isConnectedAnywhere, emitToUser } = require("../../../config/sockets");
+    const { enqueueNotificationEmail } = require("../../../services/emailservice");
+
+    const recommendationDetails = buildRecommendationDetails(toothPlacements);
+    const recommendationSummary = summarizeRecommendations(recommendationDetails);
+    const title = "Dental Grading Completed";
+    const message = `Your dentist has completed your dental grading. Recommendation details: ${recommendationSummary}`;
+    const fromName = await getStaffDisplayName(staffUserId);
+    const notificationId = `notif_dental_grade_${uuidv4()}`;
+
+    const notificationData = {
+      id: notificationId,
+      type: "dental_grading_completed",
+      message: JSON.stringify({
+        title,
+        body: message,
+      }),
+      timestamp: new Date().toISOString(),
+      from: String(staffUserId),
+      fromName,
+      patientId: String(patientId),
+      recordId: dentalRecordId ? String(dentalRecordId) : null,
+      recommendations: recommendationDetails,
+    };
+
+    const targetPatientId = String(patientId);
+    const isOnline = await isConnectedAnywhere(targetPatientId);
+    let deliveryState = "none";
+
+    if (isOnline) {
+      const emitted = emitToUser(targetPatientId, "staff:notification", notificationData);
+      deliveryState = emitted ? "in_system" : "emit_failed";
+    }
+
+    if (!isOnline || deliveryState === "emit_failed") {
+      const patientEmail = await db.findEmailByUserId(targetPatientId);
+      if (patientEmail) {
+        await enqueueNotificationEmail(patientEmail, title, message);
+        deliveryState = "email";
+      } else {
+        logger.warn(
+          `[DENTAL_NOTIFY] No email found for patient ${patientId}; unable to send offline dental grading email.`
+        );
+      }
+    }
+
+    logger.info(
+      `[DENTAL_NOTIFY] Sent dental grading completion notification ${notificationId} to patient ${patientId} (record ${dentalRecordId}) via ${deliveryState}`
+    );
+  } catch (error) {
+    logger.error(
+      `[DENTAL_NOTIFY] Failed to send dental grading completion notification for patient ${patientId}: ${error.message}`
+    );
+  }
+}
 
 const Mutation = {
   // Create standalone VitalSigns
@@ -127,6 +257,13 @@ const Mutation = {
       await client.query('COMMIT');
 
       logger.info(`Staff ${user.id} created DentalRecord for patient ${patientId}`);
+
+      await notifyDentalGradingCompletion({
+        patientId,
+        staffUserId: user.id,
+        dentalRecordId,
+        toothPlacements,
+      });
 
       return {
         ...dentalRecordResult.rows[0],
@@ -358,6 +495,13 @@ const Mutation = {
       const oralFindings = await db.query(findingsQuery, [id]);
 
       logger.info(`Staff ${user.id} updated DentalRecord ${id}`);
+
+      await notifyDentalGradingCompletion({
+        patientId: record.patientId,
+        staffUserId: user.id,
+        dentalRecordId: id,
+        toothPlacements: ToothPlacements.rows,
+      });
 
       return {
         ...updatedRecord.rows[0],

@@ -50,12 +50,6 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
     { value: 'Other', label: 'Other' },
   ];
 
-  const employmentStatusOptions = [
-    { value: 'Full time', label: 'Full time' },
-    { value: 'Part time', label: 'Part time' },
-    { value: 'Agency / Contractual', label: 'Agency / Contractual' },
-  ];
-
   const calculateAge = (birthday) => {
     if (!birthday) return '';
     const today = new Date();
@@ -253,14 +247,6 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               error={fieldErrors.employmentCategoryOther}
             />
           )}
-          <Select
-            label="Employment Status"
-            required
-            value={data.employmentStatus || ''}
-            onChange={(e) => handleChange('employmentStatus', e.target.value)}
-            options={employmentStatusOptions}
-            error={fieldErrors.employmentStatus}
-          />
           <Input
             label="Position"
             value={data.position || ''}

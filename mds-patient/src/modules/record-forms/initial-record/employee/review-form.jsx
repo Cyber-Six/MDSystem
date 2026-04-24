@@ -102,7 +102,6 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
               : formData.personalInfo?.employmentCategory
             } 
           />
-          <DataRow label="Employment Status" value={formData.personalInfo?.employmentStatus} />
           <DataRow label="Position" value={formData.personalInfo?.position} />
           <DataRow label="Campus Branch" value={formData.personalInfo?.branch === 'QuezonCity' ? 'Quezon City' : formData.personalInfo?.branch} />
         </dl>

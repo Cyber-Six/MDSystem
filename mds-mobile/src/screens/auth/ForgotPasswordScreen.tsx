@@ -17,6 +17,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { Input, Button, Alert } from '../../components/ui/FormComponents';
+import {
+  getAuthFeatureNotices,
+  mobileAuthFeatureConfig,
+  withOptionalRecaptcha,
+} from '../../config/authFeatures';
 import { axiosRequest } from '../../core';
 
 interface ForgotPasswordScreenProps {
@@ -27,6 +32,9 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
   onBackToLogin,
 }) => {
   const { isDark } = useTheme();
+  const authFeatureNotices = getAuthFeatureNotices({
+    includeRecaptcha: true,
+  });
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -43,17 +51,26 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
     setSuccess('');
 
     try {
-      await axiosRequest.post('/auth/password/forget-password', {
-        email: email.trim(),
-        recaptchaToken: process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET ?? '',
-      });
+      await axiosRequest.post(
+        '/auth/password/forget-password',
+        withOptionalRecaptcha({
+          email: email.trim(),
+        })
+      );
 
       setSuccess('Password reset link sent! Please check your email.');
       setEmail('');
       setTimeout(() => onBackToLogin(), 3000);
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
-      if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
+      if (
+        !mobileAuthFeatureConfig.recaptchaAvailable &&
+        (errorCode === 'MISSING_FIELDS' || errorCode === 'INVALID_RECAPTCHA')
+      ) {
+        setError(
+          `${mobileAuthFeatureConfig.recaptchaStatusMessage ?? 'reCAPTCHA is unavailable for this build.'} Password reset cannot continue until reCAPTCHA is enabled again.`
+        );
+      } else if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
         setError('Email must follow TIP institutional format (@tip.edu.ph).');
       } else if (errorCode === 'EMAIL_COOLDOWN_ACTIVE') {
         setError('Too many attempts. Please try again later.');
@@ -123,6 +140,9 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
               {/* Alerts */}
               {error ? <Alert type="error" message={error} /> : null}
               {success ? <Alert type="success" message={success} /> : null}
+              {authFeatureNotices.map((notice) => (
+                <Alert key={notice} type="info" message={notice} />
+              ))}
 
               {/* Form */}
               <View style={styles.form}>

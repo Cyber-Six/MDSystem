@@ -58,6 +58,8 @@ Set values in `mds-mobile/.env` (or your environment profile):
 | `EXPO_PUBLIC_API_URL` | Yes | Absolute backend base URL used by mobile API calls. |
 | `EXPO_PUBLIC_APP_ENV` | No | App environment label (for display/config). |
 | `EXPO_PUBLIC_APP_VERSION` | No | Version label shown in UI surfaces. |
+| `EXPO_PUBLIC_ENABLE_GOOGLE_OAUTH` | No | Enables the Google sign-in section. Defaults to `false`. |
+| `EXPO_PUBLIC_ENABLE_RECAPTCHA` | No | Enables sending the mobile reCAPTCHA token in auth flows. Defaults to `false`. |
 | `EXPO_PUBLIC_GOOGLE_CLIENT_ID` | Optional | Google login configuration. |
 | `EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET` | Optional | Mobile recaptcha token value used by auth flows. |
 
@@ -65,6 +67,8 @@ Notes:
 
 - Mobile uses absolute backend URLs (no Vite proxy layer).
 - `src/core.ts` reads `EXPO_PUBLIC_API_URL` and defaults to `https://www.mdsystemtip.space`.
+- When `EXPO_PUBLIC_ENABLE_GOOGLE_OAUTH=false`, the Google sign-in button stays unmounted and the screen shows a non-blocking status notice instead.
+- When `EXPO_PUBLIC_ENABLE_RECAPTCHA=false`, login/register/forgot-password requests omit the mobile reCAPTCHA token and the UI shows that status up front.
 
 ## Available Scripts
 

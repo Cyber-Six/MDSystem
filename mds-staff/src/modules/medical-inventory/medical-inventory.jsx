@@ -440,13 +440,14 @@ const MedicalInventory = () => {
 
   const handleSplit = async ({ sourceBatchId, quantity, toClinic, notes }) => {
     try {
-      const source = batches.find((b) => b.id === sourceBatchId);
+      const source = batches.find((b) => String(b.id) === String(sourceBatchId));
       if (!source) {
         setError('Source batch not found.');
         return;
       }
 
-      const isMedicine = source.dosageUnit !== undefined;
+      const sourceItem = items.find((i) => String(i.id) === String(source.medicalItemId));
+      const isMedicine = sourceItem?.category?.toLowerCase() === 'medicine';
 
       // Collect all raw batch records sharing the same batchNumber+location+item.
       // computeItemStats merges these into one UI row, but each DB record has its
@@ -717,8 +718,14 @@ const MedicalInventory = () => {
 
   const handleAdjust = async ({ batchId, type, quantity, reason }) => {
     try {
-      const source = batches.find((b) => b.id === batchId);
-      const isMedicine = source?.dosageUnit !== undefined;
+      const source = batches.find((b) => String(b.id) === String(batchId));
+      if (!source) {
+        setError('Source batch not found.');
+        return;
+      }
+
+      const sourceItem = items.find((i) => String(i.id) === String(source.medicalItemId));
+      const isMedicine = sourceItem?.category?.toLowerCase() === 'medicine';
 
       if (type === 'add') {
         // ADD: apply the full increase to the source record directly.
