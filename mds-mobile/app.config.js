@@ -14,6 +14,14 @@ process.env.EXPO_PUBLIC_API_URL =
   ?? process.env.VITE_PATIENT_BACKEND_URL
   ?? process.env.VITE_BACKEND_URL
   ?? 'https://www.mdsystemtip.space';
+process.env.EXPO_PUBLIC_ENABLE_GOOGLE_OAUTH =
+  process.env.EXPO_PUBLIC_ENABLE_GOOGLE_OAUTH
+  ?? process.env.ENABLE_GOOGLE_OAUTH
+  ?? 'false';
+process.env.EXPO_PUBLIC_ENABLE_RECAPTCHA =
+  process.env.EXPO_PUBLIC_ENABLE_RECAPTCHA
+  ?? process.env.ENABLE_RECAPTCHA
+  ?? 'false';
 process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID
   ?? process.env.GOOGLE_CLIENT_ID
@@ -45,6 +53,7 @@ module.exports = ({ config }) => ({
   // ── Identity ──────────────────────────────────────────────────────────────
   name: 'MDSystem',
   slug: 'mds-mobile',
+  scheme: 'mdsystem',
   version,
 
   // ── Display ───────────────────────────────────────────────────────────────

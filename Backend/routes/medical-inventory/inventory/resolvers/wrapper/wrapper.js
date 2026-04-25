@@ -97,6 +97,16 @@ const Mutation = {
         input.item_code, input.item_name, input.category, input.description || null,
       ]);
       return result.rows[0];
+
+      await db.setSystemAuditLog({
+        eventType: "INVENTORY_CREATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: result.rows[0].id,
+        action: "CREATE_MEDICAL_ITEM",
+        details: JSON.stringify({ itemId: result.rows[0].id, itemCode: input.item_code }),
+        changedBy: "Medical"
+      });
     } catch (err) {
       if (err.code === '23505') {
         throwGraphQLError(res).message("Item code already exists").status(409).throw();
@@ -137,6 +147,17 @@ const Mutation = {
       if (result.rows.length === 0) {
         throwGraphQLError(res).message("Medical item not found").status(404).throw();
       }
+
+      await db.setSystemAuditLog({
+        eventType: "INVENTORY_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: parseInt(id),
+        action: "UPDATE_MEDICAL_ITEM",
+        details: JSON.stringify({ itemId: parseInt(id), updatedFields: input }),
+        changedBy: "Medical"
+      });
+
       return result.rows[0];
     } catch (err) {
       if (err.code === '23505') {
@@ -163,6 +184,17 @@ const Mutation = {
     if (result.rows.length === 0) {
       throwGraphQLError(res).message("Medical item not found").status(404).throw();
     }
+
+    await db.setSystemAuditLog({
+      eventType: "INVENTORY_DELETE",
+      actorId: user.id,
+      actorType: "Staff",
+      targetId: parseInt(id),
+      action: "DELETE_MEDICAL_ITEM",
+      details: JSON.stringify({ itemId: parseInt(id) }),
+      changedBy: "Medical"
+    });
+
     return true;
   },
 
@@ -214,6 +246,16 @@ const Mutation = {
       } catch (emitErr) {
         logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
       }
+
+      await db.setSystemAuditLog({
+        eventType: "INVENTORY_CREATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: batch.id,
+        action: "CREATE_MEDICAL_SUPPLY",
+        details: JSON.stringify({ batchId: batch.id, itemId: input.medicalItemId }),
+        changedBy: "Medical"
+      });
 
       return batch;
     } catch (err) {
@@ -270,6 +312,16 @@ const Mutation = {
       } catch (emitErr) {
         logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
       }
+
+      await db.setSystemAuditLog({
+        eventType: "INVENTORY_CREATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: batch.id,
+        action: "CREATE_SUPPLY_BATCH",
+        details: JSON.stringify({ batchId: batch.id, itemId: input.supplyItemId }),
+        changedBy: "Medical"
+      });
 
       return batch;
     } catch (err) {
@@ -350,6 +402,22 @@ const Mutation = {
           .status(409)
           .throw();
       }
+
+      await db.setSystemAuditLog({
+        eventType: "INVENTORY_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: newBatch.id,
+        action: "SPLIT_SUPPLY_BATCH",
+        details: JSON.stringify({
+          sourceBatchId: batchId,
+          newBatchId: newBatch.id,
+          quantityMoved: input.quantity,
+          sourceLocation: batch.location,
+          targetLocation: newBatch.location
+        }),
+        changedBy: "Medical"
+      });
 
       await client.query('COMMIT');
       return newBatch;
@@ -436,6 +504,22 @@ const Mutation = {
           .status(409)
           .throw();
       }
+
+      await db.setSystemAuditLog({
+        eventType: "INVENTORY_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: newBatch.id,
+        action: "SPLIT_MEDICINE_BATCH",
+        details: JSON.stringify({
+          sourceBatchId: batchId,
+          newBatchId: newBatch.id,
+          quantityMoved: input.quantity,
+          sourceLocation: batch.location,
+          targetLocation: newBatch.location
+        }),
+        changedBy: "Medical"
+      });      
 
       await client.query('COMMIT');
       return newBatch;
@@ -602,9 +686,16 @@ const Mutation = {
 
       const oldValues = batchResult.rows[0];
 
-      // Fetch real current quantity from entity count with lock
+      // Fetch real current quantity from entity rows while locking those rows.
+      // PostgreSQL does not allow FOR UPDATE directly on aggregate queries.
       const oldQtyResult = await client.query(
-        `SELECT COUNT(*)::int AS count FROM "SupplyEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL FOR UPDATE`,
+        `SELECT COUNT(*)::int AS count
+           FROM (
+             SELECT 1
+             FROM "SupplyEntity"
+             WHERE "batchId" = $1 AND "transactionId" IS NULL
+             FOR UPDATE
+           ) sub;`,
         [batchId]
       );
       const oldQuantity = oldQtyResult.rows[0]?.count || 0;

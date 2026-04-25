@@ -222,7 +222,6 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     if (!pi.department?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Department is required' });
     if (!pi.employmentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employment category is required' });
     if (pi.employmentCategory === 'Other' && !pi.employmentCategoryOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your employment category' });
-    if (!pi.employmentStatus) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employment status is required' });
     if (!pi.branch) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Campus branch is required' });
 
     // Emergency contacts — first contact required, second is optional
@@ -293,7 +292,6 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
         if (msg.includes('department')) errors.department = err.message;
         if (msg.includes('employment category') && !msg.includes('specify')) errors.employmentCategory = err.message;
         if (msg.includes('specify') && msg.includes('employment category')) errors.employmentCategoryOther = err.message;
-        if (msg.includes('employment status')) errors.employmentStatus = err.message;
         if (msg.includes('campus branch') || msg.includes('branch')) errors.branch = err.message;
         if (msg.includes('emergency contact name') && !msg.includes('additional')) errors.emergencyContact1Name = err.message;
         if (msg.includes('emergency contact relationship') && !msg.includes('additional')) errors.emergencyContact1Relationship = err.message;
@@ -447,7 +445,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     
     try {
       console.log('[Employee Record Form] Submitting to backend...');
-      const result = await createInitialEmployeeRecord(sanitizedData);
+      const result = await createInitialEmployeeRecord(sanitizedData, { isRevision });
       console.log('[Employee Record Form] Submission successful!', result);
       setSubmittedRecord(result);
       setShowSuccessModal(true);

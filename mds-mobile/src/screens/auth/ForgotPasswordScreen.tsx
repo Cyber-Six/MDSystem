@@ -17,7 +17,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { Input, Button, Alert } from '../../components/ui/FormComponents';
+import {
+  withOptionalRecaptcha,
+} from '../../config/authFeatures';
 import { axiosRequest } from '../../core';
+
+const sanitizeErrorMessage = (message: string): string => {
+  if (!message) return 'Failed to send reset link. Please try again.';
+  const sanitized = message
+    .replace(/recaptcha/gi, '')
+    .replace(/reCAPTCHA/g, '')
+    .replace(/verification failed/gi, 'request failed')
+    .replace(/verify/gi, 'process')
+    .replace(/  +/g, ' ')
+    .trim();
+  return sanitized || 'Failed to send reset link. Please try again.';
+};
 
 interface ForgotPasswordScreenProps {
   onBackToLogin: () => void;
@@ -43,10 +58,12 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
     setSuccess('');
 
     try {
-      await axiosRequest.post('/auth/password/forget-password', {
-        email: email.trim(),
-        recaptchaToken: process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET ?? '',
-      });
+      await axiosRequest.post(
+        '/auth/password/forget-password',
+        withOptionalRecaptcha({
+          email: email.trim(),
+        })
+      );
 
       setSuccess('Password reset link sent! Please check your email.');
       setEmail('');
@@ -55,12 +72,16 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
       const errorCode = err.response?.data?.error;
       if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
         setError('Email must follow TIP institutional format (@tip.edu.ph).');
+      } else if (errorCode === 'RECAPTCHA_REQUIRED' || errorCode === 'INVALID_RECAPTCHA') {
+        setError('Failed to send reset link. Please try again.');
       } else if (errorCode === 'EMAIL_COOLDOWN_ACTIVE') {
         setError('Too many attempts. Please try again later.');
       } else {
         setError(
-          err.response?.data?.message ||
-            'Failed to send reset link. Please try again.',
+          sanitizeErrorMessage(
+            err.response?.data?.message ||
+              'Failed to send reset link. Please try again.',
+          ),
         );
       }
     } finally {

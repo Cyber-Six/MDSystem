@@ -20,6 +20,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
+import {
+  mobileAuthFeatureConfig,
+  withOptionalRecaptcha,
+} from '../../config/authFeatures';
 import { axiosRequest, TokenStorage } from '../../core';
 
 // Import validation functions - inline for now to avoid module resolution issues
@@ -36,11 +40,20 @@ const isValidTipEmail = (email: string): boolean => {
   return tipDomains.some(domain => email.toLowerCase().endsWith(domain));
 };
 
-const TOTAL_STEPS = 4;
+// Sanitize error messages to remove reCAPTCHA references
+const sanitizeErrorMessage = (message: string): string => {
+  if (!message) return 'An error occurred. Please try again.';
+  const sanitized = message
+    .replace(/recaptcha/gi, '')
+    .replace(/reCAPTCHA/g, '')
+    .replace(/verification failed/gi, 'request failed')
+    .replace(/verify/gi, 'process')
+    .replace(/  +/g, ' ')
+    .trim();
+  return sanitized || 'An error occurred. Please try again.';
+};
 
-// Server-side secret exchanged instead of a reCAPTCHA browser token.
-// Mobile native apps cannot render v2 checkbox widgets.
-const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || '';
+const TOTAL_STEPS = 4;
 
 interface RegisterScreenProps {
   onNavigateToLogin: () => void;
@@ -132,14 +145,25 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         }
         // Auto-send OTP immediately after successful registration
         try {
-          const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
-          await axiosRequest.post('/auth/email/verification', {
-            email: formData.email,
-            recaptchaToken
-          });
+          await axiosRequest.post(
+            '/auth/email/verification',
+            withOptionalRecaptcha({
+              email: formData.email,
+            })
+          );
           setSuccessMessage('Verification code sent to your email!');
         } catch (otpErr: any) {
-          setError(otpErr.response?.data?.message || 'Account created but failed to send verification code. Use resend below.');
+          const otpErrorCode = otpErr.response?.data?.error;
+          if (otpErrorCode === 'RECAPTCHA_REQUIRED' || otpErrorCode === 'INVALID_RECAPTCHA') {
+            setError('Account created but failed to send verification code. Use resend below.');
+          } else {
+            setError(
+              sanitizeErrorMessage(
+                otpErr.response?.data?.message ||
+                  'Account created but failed to send verification code. Use resend below.'
+              )
+            );
+          }
         }
         setCurrentStep(2);
       }
@@ -149,8 +173,10 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
 
       if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
         setError('Email must follow TIP institutional format.');
+      } else if (errorCode === 'RECAPTCHA_REQUIRED' || errorCode === 'INVALID_RECAPTCHA') {
+        setError('Registration failed. Please try again.');
       } else {
-        setError(errorMessage || 'Registration failed. Please try again.');
+        setError(sanitizeErrorMessage(errorMessage || 'Registration failed. Please try again.'));
       }
     } finally {
       setLoading(false);
@@ -203,12 +229,12 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     setLoading(true);
 
     try {
-      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
-
-      const response = await axiosRequest.post('/auth/email/verification', {
-        email: formData.email,
-        recaptchaToken
-      });
+      const response = await axiosRequest.post(
+        '/auth/email/verification',
+        withOptionalRecaptcha({
+          email: formData.email,
+        })
+      );
 
       if (response.data.ok) {
         setSuccessMessage('A new verification code has been sent!');
@@ -217,7 +243,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
 
-      if (errorCode === 'EMAIL_COOLDOWN_ACTIVE') {
+      if (errorCode === 'RECAPTCHA_REQUIRED' || errorCode === 'INVALID_RECAPTCHA') {
+        setError('Failed to resend code. Please try again.');
+      } else if (errorCode === 'EMAIL_COOLDOWN_ACTIVE') {
         setError('Please wait before requesting another code.');
       } else if (errorCode === 'EMAIL_ATTEMPT_LIMIT_REACHED') {
         setError('Too many attempts. Please try again later.');
@@ -271,7 +299,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
       } else if (errorCode === 'DATA_CONSENT_REQUIRED') {
         setError('You must agree to the data consent policy.');
       } else {
-        setError(errorMessage || 'Registration failed. Please try again.');
+        setError(sanitizeErrorMessage(errorMessage || 'Registration failed. Please try again.'));
       }
     } finally {
       setLoading(false);
