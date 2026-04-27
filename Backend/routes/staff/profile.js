@@ -74,7 +74,7 @@ async function authorizePatientSearch(req, res, requestedBranch) {
 async function getUserIDViaIdentifier(identifier, branch) {
     const query = `
         SELECT uc.id as "userId", up.first_name, up.middle_name, up.last_name, up.identifier
-        FROM "UserCredentials" uc
+        FROM active_user_credentials uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
         WHERE up.identifier::text ILIKE '%' || $1 || '%' AND 
         (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both')
@@ -113,7 +113,7 @@ async function getUserIdViaName(name, branch) {
         SELECT DISTINCT uc.id AS "userId",
                up.first_name, up.middle_name, up.last_name, up.identifier,
                (${scoreClauses.join(' + ')}) AS score
-        FROM "UserCredentials" uc
+        FROM active_user_credentials uc
         JOIN "UsersPersonal" up ON uc.id = up.id
         WHERE (${searchConditions.join(' AND ')})
           AND (up.branch = $${branchIndex} OR up.branch = 'Both' OR $${branchIndex} = 'Both')
@@ -129,7 +129,7 @@ async function getUserIdViaName(name, branch) {
 async function getUserIdViaEmail(email, branch) {
     const query = `
         SELECT uc.id as "userId", uc.email, up.first_name, up.middle_name, up.last_name, up.identifier
-        FROM "UserCredentials" uc
+        FROM active_user_credentials uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
         WHERE LOWER(uc.email) LIKE '%' || LOWER($1) || '%' AND 
         (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both' OR up.branch IS NULL)
@@ -149,7 +149,7 @@ async function searchPatients(query, branch) {
                sp.year,
                ep.department,
                ep.role
-        FROM "UserCredentials" uc
+        FROM active_user_credentials uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
         LEFT JOIN "Patients" p ON p.id = uc.id
         LEFT JOIN LATERAL (
@@ -187,9 +187,9 @@ router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
                mp.role AS personnel_role,
                mp.designation AS branch,
                mp.is_active
-             FROM "UserCredentials" uc
+             FROM active_user_credentials uc
              LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-             LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+             LEFT JOIN active_medical_personnel mp ON mp.id = uc.id
              WHERE uc.id = $1`,
             [req.user.id]
         );

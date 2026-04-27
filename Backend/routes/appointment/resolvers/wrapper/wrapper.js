@@ -345,7 +345,7 @@ const Query = {
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
       LEFT JOIN "Patients" p ON p.id = ps."patientId"
-      LEFT JOIN "UserCredentials" uc ON uc.id = ps."patientId"
+      LEFT JOIN active_user_credentials uc ON uc.id = ps."patientId"
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
       WHERE ps.status = $1

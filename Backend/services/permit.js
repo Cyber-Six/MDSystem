@@ -224,7 +224,7 @@ async function getMedicalpermits(personnelId) {
  */
 async function getStaffBranch(userId) {
   const result = await db.query(
-    `SELECT designation FROM "MedicalPersonnel" WHERE id = $1 LIMIT 1`,
+    `SELECT designation FROM active_medical_personnel WHERE id = $1 LIMIT 1`,
     [userId]
   );
   return result.rows[0]?.designation || 'Both';
@@ -494,7 +494,7 @@ async function isMedicalPermittedPatientBasedMulti(userId, labels, patientId, st
     `SELECT p.profile AS identity
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-     JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
+     JOIN active_medical_personnel mp ON mp.id = rm."personnelId"
      JOIN "UsersPersonal" up ON up.id = $3
      JOIN "Patients" p ON p.id = up.id
      WHERE rm."personnelId" = $1
@@ -1077,7 +1077,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
   // Find all staff with this role
   const staffResult = await db.query(
     `SELECT mp.id, mp.designation, mp.is_active
-     FROM "MedicalPersonnel" mp
+     FROM active_medical_personnel mp
      WHERE mp.role = $1`,
     [roleLabel]
   );

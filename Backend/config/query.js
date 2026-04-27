@@ -62,7 +62,7 @@ async function queryControlledClient(db, text, params) {
 async function countUserByEmail(email) {
     const sql = `
         SELECT COUNT(*) AS count
-        FROM "UserCredentials"
+        FROM active_user_credentials
         WHERE email = $1;
     `;
 
@@ -74,7 +74,7 @@ async function countUserByEmail(email) {
 async function findUserByEmail(email) {
     const sql = `
         SELECT *
-        FROM "UserCredentials"
+        FROM active_user_credentials
         WHERE email = $1
         LIMIT 1;
     `;
@@ -86,7 +86,7 @@ async function findUserByEmail(email) {
 async function findEmailByUserId(userId) {
   const sql = `
       SELECT email
-      FROM "UserCredentials"
+      FROM active_user_credentials
       WHERE id = $1
       LIMIT 1;
   `;
@@ -154,6 +154,7 @@ async function updateUserPasswordById(userId, newPassword) {
       UPDATE "UserCredentials"
       SET password_hash = $1
       WHERE id = $2
+        AND deleted_at IS NULL
       RETURNING id;
     `;
 
@@ -177,7 +178,7 @@ async function updateUserPasswordById(userId, newPassword) {
 async function getUserConsentStateByEmail(email) { // i add allow_email_2fa because im tired :(
   const sql = `
     SELECT id, data_consent_version, data_consent, data_consent_agreed, allow_email_2fa, totp_enabled
-    FROM "UserCredentials" WHERE email = $1 LIMIT 1;`;
+    FROM active_user_credentials WHERE email = $1 LIMIT 1;`;
 
   const params = [email];
 
@@ -197,6 +198,7 @@ async function updateUserConsent(userId, { data_consent, data_consent_version, d
       data_consent_version = $2,
       data_consent_agreed = $3
     WHERE id = $4
+      AND deleted_at IS NULL
     RETURNING *;
   `;
 
@@ -214,7 +216,7 @@ async function updateUserConsent(userId, { data_consent, data_consent_version, d
 async function getUserIdentity(userId) {
   const sql = `
     SELECT identity
-    FROM "UserCredentials"
+    FROM active_user_credentials
     WHERE id = $1
     LIMIT 1;
   `;
@@ -268,7 +270,7 @@ async function setExpiredPersonalTickets(id) {
 async function isUserValidated(userId) {
   const sql = `
     SELECT credentials_status AS status
-    FROM "UserCredentials"
+    FROM active_user_credentials
     WHERE id = $1
     LIMIT 1;
   `;
@@ -291,7 +293,7 @@ async function isUserValidated(userId) {
 async function getUserCredentialStatus(userId) {
   const sql = `
     SELECT credentials_status AS status
-    FROM "UserCredentials"
+    FROM active_user_credentials
     WHERE id = $1
     LIMIT 1;
   `;
@@ -315,7 +317,7 @@ async function getCredentialLockStateByEmail(email) {
     SELECT
       id,
       credentials_status AS status
-    FROM "UserCredentials"
+    FROM active_user_credentials
     WHERE email = $1
     LIMIT 1;
   `;
@@ -341,7 +343,7 @@ async function getCredentialLockStateByUserId(userId) {
       id,
       email,
       credentials_status AS status
-    FROM "UserCredentials"
+    FROM active_user_credentials
     WHERE id = $1
     LIMIT 1;
   `;
@@ -414,7 +416,7 @@ async function recordLoginAttempt(emailOrInput, wasSuccessfulLegacy, metadata = 
     VALUES (
       COALESCE(
         $1::integer,
-        (SELECT id FROM "UserCredentials" WHERE email = $2 LIMIT 1)
+        (SELECT id FROM active_user_credentials WHERE email = $2 LIMIT 1)
       ),
       $3,
       $4,
@@ -437,6 +439,7 @@ async function updateUserIdentity(userId, identity) {
     UPDATE "UserCredentials"
     SET identity = $1
     WHERE id = $2
+      AND deleted_at IS NULL
     RETURNING id, identity;
   `;
   const result = await query(sql, [identity, userId]);
@@ -465,8 +468,8 @@ async function getUserPatientType(userId) {
 async function isActiveMedicalPersonnel(userId) {
   const sql = `
     SELECT mp.id
-    FROM "MedicalPersonnel" mp
-    JOIN "UserCredentials" uc ON uc.id = mp.id
+    FROM active_medical_personnel mp
+    JOIN active_user_credentials uc ON uc.id = mp.id
     WHERE mp.id = $1
       AND mp.is_active = true
     LIMIT 1;
@@ -484,8 +487,8 @@ async function isActiveMedicalPersonnel(userId) {
 async function getMedicalPersonnelStatus(userId) {
   const sql = `
     SELECT mp.is_active
-    FROM "MedicalPersonnel" mp
-    JOIN "UserCredentials" uc ON uc.id = mp.id
+    FROM active_medical_personnel mp
+    JOIN active_user_credentials uc ON uc.id = mp.id
     WHERE mp.id = $1
     LIMIT 1;
   `;
@@ -528,7 +531,7 @@ async function verifyUserIdentities(userIds) {
       uc.id,
       uc.identity,
       uc.credentials_status AS status
-    FROM "UserCredentials" uc
+    FROM active_user_credentials uc
     WHERE uc.id = ANY($1)
     ORDER BY uc.id;
   `;
@@ -580,8 +583,8 @@ async function getUserIdentitiesDetailed(userIds) {
       CASE WHEN mp.id IS NOT NULL THEN true ELSE false END AS is_medical_personnel,
       CASE WHEN mp.is_active = true THEN true ELSE false END AS is_active,
       mp.designation AS branch
-    FROM "UserCredentials" uc
-    LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+    FROM active_user_credentials uc
+    LEFT JOIN active_medical_personnel mp ON mp.id = uc.id
     WHERE uc.id = ANY($1)
     ORDER BY uc.id;
   `;

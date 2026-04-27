@@ -20,7 +20,7 @@ async function checkCredentialsStatus(req, res, next) {
     // Query user credentials status
     const sql = `
       SELECT credentials_status 
-      FROM "UserCredentials" 
+      FROM active_user_credentials 
       WHERE id = $1
       LIMIT 1;
     `;
@@ -79,7 +79,7 @@ function checkCredentialsStatusWith(allowedStatuses = ['Active']) {
 
       const sql = `
         SELECT credentials_status 
-        FROM "UserCredentials" 
+        FROM active_user_credentials 
         WHERE id = $1
         LIMIT 1;
       `;

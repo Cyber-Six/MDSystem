@@ -921,7 +921,7 @@ const Query = {
         END AS document_status
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
-      LEFT JOIN "UserCredentials" uc ON uc.id = up.id
+      LEFT JOIN active_user_credentials uc ON uc.id = up.id
       LEFT JOIN LATERAL (
         SELECT l.first_name, l.last_name, l.middle_name, l.suffix
         FROM "UsersPersonalLog" l
@@ -1047,7 +1047,7 @@ const Query = {
         ${selectedColumns.join(',\n        ')}
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
-      JOIN "UserCredentials" uc ON uc.id = up.id
+      JOIN active_user_credentials uc ON uc.id = up.id
       -- latest personal name snapshot
       LEFT JOIN LATERAL (
         SELECT l.first_name, l.last_name, l.middle_name, l.suffix

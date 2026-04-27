@@ -12,7 +12,7 @@ const Query = {
     try {
       // Get user's branch designation for data filtering
       const userBranchResult = await db.query(
-        `SELECT designation FROM "MedicalPersonnel" WHERE id = $1`,
+        `SELECT designation FROM active_medical_personnel WHERE id = $1`,
         [userId]
       );
 

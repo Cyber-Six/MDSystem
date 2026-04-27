@@ -468,7 +468,7 @@ const Query = {
       whereConditions.push(`EXISTS (
         SELECT 1
         FROM "UsersPersonal" up
-        JOIN "UserCredentials" uc ON uc.id = up.id
+        JOIN active_user_credentials uc ON uc.id = up.id
         LEFT JOIN LATERAL (
           SELECT l.first_name, l.last_name
           FROM "UsersPersonalLog" l
@@ -781,9 +781,9 @@ const Query = {
          up.first_name,
          up.last_name,
          uc.email
-       FROM "MedicalPersonnel" mp
+       FROM active_medical_personnel mp
        JOIN "UsersPersonal" up ON up.id = mp.id
-       JOIN "UserCredentials" uc ON uc.id = mp.id
+       JOIN active_user_credentials uc ON uc.id = mp.id
        WHERE uc.credentials_status = 'Active'
          AND mp.id <> $1
          AND (
@@ -1421,8 +1421,8 @@ const Mutation = {
     const [targetStaffResult, patientBranch, isTargetPermitted] = await Promise.all([
       db.query(
         `SELECT mp.designation, uc.credentials_status
-         FROM "MedicalPersonnel" mp
-         JOIN "UserCredentials" uc ON uc.id = mp.id
+         FROM active_medical_personnel mp
+         JOIN active_user_credentials uc ON uc.id = mp.id
          WHERE mp.id = $1
          LIMIT 1`,
         [toMedicalId]
