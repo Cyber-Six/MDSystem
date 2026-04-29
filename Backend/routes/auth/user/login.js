@@ -200,7 +200,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   try {
   const { LoginKey: verificationKey } = req.body;
-  const portal = detectPortalFromSubdomain(req);
+  let portal = detectPortalFromSubdomain(req);
   const auditMetadata = getRequestAuditMetadata(req);
   const recordAttempt = async (wasSuccessful, targetEmail = null, userId = null) => {
     try {
@@ -269,7 +269,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   await deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
-
+  portal = portal.toLowerCase();
   const lockState = await query.getCredentialLockStateByUserId(session.user_id);
   if (portal === "patient") {
     if (isCredentialTemporarilyLocked(lockState)) {
