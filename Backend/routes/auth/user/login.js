@@ -132,14 +132,6 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     status: user.credentials_status,
   };
 
-  if (isCredentialTemporarilyLocked(lockState)) {
-    await recordAttempt(false, email, user.id);
-    return res.status(403).json({
-      error: 'ACCOUNT_LOCKED',
-      message: 'This account is locked.',
-    });
-  }
-
   // ✅ Check password
   const passwordValid = await verifyPassword(password, user.password_hash);
   if (!passwordValid) {
@@ -153,8 +145,17 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
+  if (account_type === "patient") {
+    if (isCredentialTemporarilyLocked(lockState)) {
+      await recordAttempt(false, email, user.id);
+      return res.status(403).json({
+        error: 'ACCOUNT_LOCKED',
+        message: 'This account is locked.',
+      });
+    }
+  }
   // ✅ Check if account type matches portal
-  if (account_type === "medical") {
+  else if (account_type === "medical") {
     const isMedical = await query.isActiveMedicalPersonnel(user.id);
     if (!isMedical) {
       const count = await incrementLoginFailure(email, account_type);
