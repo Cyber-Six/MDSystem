@@ -271,16 +271,18 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   await deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
 
   const lockState = await query.getCredentialLockStateByUserId(session.user_id);
-  if (isCredentialTemporarilyLocked(lockState)) {
-    await recordAttempt(false, lockState?.email || session.email, session.user_id);
-    return res.status(403).json({
-      error: 'ACCOUNT_LOCKED',
-      message: 'This account is locked.',
-    });
+  if (portal === "patient") {
+    if (isCredentialTemporarilyLocked(lockState)) {
+      await recordAttempt(false, lockState?.email || session.email, session.user_id);
+      return res.status(403).json({
+        error: 'ACCOUNT_LOCKED',
+        message: 'This account is locked.',
+      });
+    }
   }
 
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
-  if (portal === "medical") {
+  else if (portal === "medical") {
     const isMedical = await query.isActiveMedicalPersonnel(session.user_id);
     if (!isMedical) {
       const isActive = await query.getMedicalPersonnelStatus(session.user_id);
