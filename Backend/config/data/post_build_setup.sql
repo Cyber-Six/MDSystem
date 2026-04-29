@@ -83,17 +83,15 @@ CREATE INDEX IF NOT EXISTS idx_usercredentials_deleted_at
 CREATE INDEX IF NOT EXISTS idx_medicalpersonnel_deleted_at
   ON "MedicalPersonnel"(deleted_at);
 
--- Enforce soft-delete rules on row writes:
--- 1) Locked accounts are soft-deleted immediately.
--- 2) Inactive/Unverified accounts older than 1 year are soft-deleted.
+
 CREATE OR REPLACE FUNCTION apply_user_soft_delete_policy()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Only apply soft-delete if deleted_at is not already set
   IF NEW.deleted_at IS NULL THEN
-    IF NEW.credentials_status = 'Locked'::"CredentialStatus" THEN
-      NEW.deleted_at := NOW();
-    ELSIF NEW.credentials_status IN ('Inactive'::"CredentialStatus", 'Unverified'::"CredentialStatus")
-      AND COALESCE(NEW.updated_at, NOW()) < NOW() - INTERVAL '1 year' THEN
+    -- Rule: Inactive/Unverified accounts older than 1 year
+    IF NEW.credentials_status IN ('Inactive'::"CredentialStatus", 'Unverified'::"CredentialStatus")
+       AND COALESCE(NEW.updated_at, NOW()) < NOW() - INTERVAL '1 year' THEN
       NEW.deleted_at := NOW();
     END IF;
   END IF;
@@ -911,6 +909,15 @@ CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 
 ALTER TABLE "rolesMap"
 ADD CONSTRAINT rolesmap_unique UNIQUE ("personnelId", "rolesId");
+
+-- resetting of constraint on db to allow partial unique index for active users (soft-deletion support)
+-- Step 1: Drop the existing unique constraint
+ALTER TABLE "UserCredentials" DROP CONSTRAINT "UserCredentials_email_key";
+
+-- Step 2: Create a partial unique index that only applies to active rows
+CREATE UNIQUE INDEX user_email_unique_active
+ON "UserCredentials"(email)
+WHERE deleted_at IS NULL;
 
 CREATE OR REPLACE VIEW active_user_credentials AS
 SELECT *

@@ -3020,7 +3020,7 @@ const Mutation = {
     }
 
     const existingResult = await db.query(
-      `SELECT id
+      `SELECT id, credentials_status
        FROM active_user_credentials
        WHERE id = $1
        LIMIT 1`,
@@ -3031,15 +3031,18 @@ const Mutation = {
       throwGraphQLError(res).message('User not found').status(404).throw();
     }
 
+    const allowedStatuses = ['Active', 'Locked'];
+    if (!allowedStatuses.includes(existingResult.rows[0].credentials_status)) {
+      throwGraphQLError(res)
+        .message(`User account with status "${existingResult.rows[0].credentials_status}" cannot be locked or unlocked.`)
+        .status(400)
+        .throw();
+    }
+
     const nextStatus = shouldLock ? 'Locked' : 'Active';
     await db.query(
       `UPDATE "UserCredentials"
        SET credentials_status = $1::"CredentialStatus",
-           deleted_at = CASE
-             WHEN $1::"CredentialStatus" = 'Locked'::"CredentialStatus"
-               THEN COALESCE(deleted_at, NOW())
-             ELSE deleted_at
-           END,
            updated_at = NOW()
        WHERE id = $2
          AND deleted_at IS NULL`,
