@@ -286,7 +286,7 @@ async function getPatientIdFromSlotId(slotId) {
 async function getUserIDViaIdentifier(identifier, branch) {
   const query = `
     SELECT uc.id as "userId"
-    FROM "UserCredentials" uc
+    FROM active_user_credentials uc
     INNER JOIN "UsersPersonal" up ON uc.id = up.id
     WHERE up.identifier::text = $1::text AND
     (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both')

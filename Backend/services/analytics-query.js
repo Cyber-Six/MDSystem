@@ -1120,7 +1120,7 @@ async function patientCredentialStatus(branch, startDate, endDate, options = {})
   const result = await db.query(`
     SELECT uc.credentials_status::text AS status, COUNT(DISTINCT p.id)::int AS count
     FROM "Patients" p
-    INNER JOIN "UserCredentials" uc ON uc.id = p.id
+    INNER JOIN active_user_credentials uc ON uc.id = p.id
     INNER JOIN "UsersPersonal" up ON up.id = p.id
     WHERE 1 = 1 ${bf.clause} ${pf.clause}
     GROUP BY uc.credentials_status

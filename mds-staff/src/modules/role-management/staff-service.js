@@ -298,6 +298,10 @@ const GQL_SEARCH_PATIENT_DELETION_CANDIDATES = `
         updatedAt
         eligibleAfter
         eligible
+        isMedicalPersonnel
+        deletionMode
+        blocked
+        blockedReason
       }
       totalCount
     }

@@ -70,6 +70,217 @@ ALTER TABLE "UserCredentials"
   ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(255) DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
 
+-- Soft deletion columns (idempotent)
+ALTER TABLE "UserCredentials"
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE "MedicalPersonnel"
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_usercredentials_deleted_at
+  ON "UserCredentials"(deleted_at);
+
+CREATE INDEX IF NOT EXISTS idx_medicalpersonnel_deleted_at
+  ON "MedicalPersonnel"(deleted_at);
+
+
+CREATE OR REPLACE FUNCTION apply_user_soft_delete_policy()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Only apply soft-delete if deleted_at is not already set
+  IF NEW.deleted_at IS NULL THEN
+    -- Rule: Inactive/Unverified accounts older than 1 year
+    IF NEW.credentials_status IN ('Inactive'::"CredentialStatus", 'Unverified'::"CredentialStatus")
+       AND COALESCE(NEW.updated_at, NOW()) < NOW() - INTERVAL '1 year' THEN
+      NEW.deleted_at := NOW();
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_usercredentials_soft_delete_policy ON "UserCredentials";
+
+CREATE TRIGGER trg_usercredentials_soft_delete_policy
+BEFORE INSERT OR UPDATE OF credentials_status, updated_at, deleted_at
+ON "UserCredentials"
+FOR EACH ROW
+EXECUTE FUNCTION apply_user_soft_delete_policy();
+
+-- Batch procedure for existing rows. Run periodically (e.g., cron) to enforce
+-- age-based rules even when rows are not updated.
+CREATE OR REPLACE FUNCTION soft_delete_eligible_user_accounts()
+RETURNS INTEGER AS $$
+DECLARE
+  affected_rows INTEGER := 0;
+BEGIN
+  UPDATE "UserCredentials" uc
+  SET deleted_at = NOW()
+  WHERE uc.deleted_at IS NULL
+    AND (
+      uc.credentials_status = 'Locked'::"CredentialStatus"
+      OR (
+        uc.credentials_status IN ('Inactive'::"CredentialStatus", 'Unverified'::"CredentialStatus")
+        AND COALESCE(uc.updated_at, NOW()) < NOW() - INTERVAL '1 year'
+      )
+    );
+
+  GET DIAGNOSTICS affected_rows = ROW_COUNT;
+  RETURN affected_rows;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply once during setup.
+SELECT soft_delete_eligible_user_accounts();
+
+-- Mark linked patient-facing records as inactive/expired when an account is
+-- soft-deleted. This preserves audit history while preventing active use.
+CREATE OR REPLACE FUNCTION mark_linked_records_inactive_on_account_soft_delete()
+RETURNS TRIGGER AS $$
+DECLARE
+  has_patients_is_active BOOLEAN;
+  has_patients_isactive BOOLEAN;
+  has_raw_document_archived_at BOOLEAN;
+  has_raw_document_is_active BOOLEAN;
+  has_raw_document_isactive BOOLEAN;
+  has_raw_document_archived_status BOOLEAN;
+  has_patient_documents_expired_at BOOLEAN;
+  has_patient_documents_is_active BOOLEAN;
+  has_patient_documents_isactive BOOLEAN;
+BEGIN
+  IF OLD.deleted_at IS NOT NULL OR NEW.deleted_at IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'Patients'
+      AND column_name = 'is_active'
+  ) INTO has_patients_is_active;
+
+  IF has_patients_is_active THEN
+    EXECUTE 'UPDATE "Patients" SET is_active = false WHERE id = $1' USING NEW.id;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'Patients'
+      AND column_name = 'isActive'
+  ) INTO has_patients_isactive;
+
+  IF has_patients_isactive THEN
+    EXECUTE 'UPDATE "Patients" SET "isActive" = false WHERE id = $1' USING NEW.id;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'patientRawDocument'
+      AND column_name = 'archived_at'
+  ) INTO has_raw_document_archived_at;
+
+  IF has_raw_document_archived_at THEN
+    UPDATE "patientRawDocument"
+    SET archived_at = COALESCE(archived_at, NOW())
+    WHERE "patientId" = NEW.id;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'patientRawDocument'
+      AND column_name = 'is_active'
+  ) INTO has_raw_document_is_active;
+
+  IF has_raw_document_is_active THEN
+    EXECUTE 'UPDATE "patientRawDocument" SET is_active = false WHERE "patientId" = $1' USING NEW.id;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'patientRawDocument'
+      AND column_name = 'isActive'
+  ) INTO has_raw_document_isactive;
+
+  IF has_raw_document_isactive THEN
+    EXECUTE 'UPDATE "patientRawDocument" SET "isActive" = false WHERE "patientId" = $1' USING NEW.id;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_enum e ON e.enumtypid = t.oid
+    WHERE t.typname = 'RawDocumentStatus'
+      AND e.enumlabel = 'Archived'
+  ) INTO has_raw_document_archived_status;
+
+  IF has_raw_document_archived_status THEN
+    UPDATE "patientRawDocument"
+    SET status = 'Archived'::"RawDocumentStatus"
+    WHERE "patientId" = NEW.id
+      AND status::text <> 'Archived';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'PatientDocuments'
+      AND column_name = 'expired_at'
+  ) INTO has_patient_documents_expired_at;
+
+  IF has_patient_documents_expired_at THEN
+    UPDATE "PatientDocuments"
+    SET "expired_at" = COALESCE("expired_at", NOW())
+    WHERE "patientId" = NEW.id;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'PatientDocuments'
+      AND column_name = 'is_active'
+  ) INTO has_patient_documents_is_active;
+
+  IF has_patient_documents_is_active THEN
+    EXECUTE 'UPDATE "PatientDocuments" SET is_active = false WHERE "patientId" = $1' USING NEW.id;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'PatientDocuments'
+      AND column_name = 'isActive'
+  ) INTO has_patient_documents_isactive;
+
+  IF has_patient_documents_isactive THEN
+    EXECUTE 'UPDATE "PatientDocuments" SET "isActive" = false WHERE "patientId" = $1' USING NEW.id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_usercredentials_mark_linked_inactive ON "UserCredentials";
+
+CREATE TRIGGER trg_usercredentials_mark_linked_inactive
+AFTER UPDATE OF deleted_at
+ON "UserCredentials"
+FOR EACH ROW
+WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
+EXECUTE FUNCTION mark_linked_records_inactive_on_account_soft_delete();
+
 ALTER TABLE "DomainTypeCatalog"
 ADD CONSTRAINT uniq_domain_name UNIQUE (domain, name);
 
@@ -698,3 +909,41 @@ CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 
 ALTER TABLE "rolesMap"
 ADD CONSTRAINT rolesmap_unique UNIQUE ("personnelId", "rolesId");
+
+-- resetting of constraint on db to allow partial unique index for active users (soft-deletion support)
+-- Step 1: Drop the existing unique constraint
+ALTER TABLE "UserCredentials" DROP CONSTRAINT "UserCredentials_email_key";
+
+-- Step 2: Create a partial unique index that only applies to active rows
+CREATE UNIQUE INDEX user_email_unique_active
+ON "UserCredentials"(email)
+WHERE deleted_at IS NULL;
+
+CREATE OR REPLACE VIEW active_user_credentials AS
+SELECT *
+FROM "UserCredentials"
+WHERE deleted_at IS NULL;
+
+CREATE OR REPLACE VIEW active_medical_personnel AS
+SELECT mp.*
+FROM "MedicalPersonnel" mp
+JOIN active_user_credentials uc ON uc.id = mp.id
+WHERE mp.deleted_at IS NULL;
+
+-- Example active-only queries
+-- SELECT id, email, credentials_status FROM active_user_credentials ORDER BY id DESC LIMIT 50;
+-- SELECT id, role, designation, is_active FROM active_medical_personnel ORDER BY id DESC LIMIT 50;
+-- SELECT uc.id, up.first_name, up.last_name
+-- FROM active_user_credentials uc
+-- JOIN "UsersPersonal" up ON up.id = uc.id
+-- ORDER BY uc.id DESC
+-- LIMIT 50;
+
+-- Example soft-delete operations
+-- UPDATE "UserCredentials" SET deleted_at = NOW() WHERE id = 123;
+-- UPDATE "MedicalPersonnel" SET is_active = false, deleted_at = NOW() WHERE id = 123;
+
+-- Optional retention hard-delete example (run only with approved policy)
+-- DELETE FROM "UserCredentials"
+-- WHERE deleted_at IS NOT NULL
+--   AND deleted_at < NOW() - INTERVAL '3 years';

@@ -137,16 +137,18 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   const lockState = await query.getCredentialLockStateByEmail(email);
-  if (isCredentialTemporarilyLocked(lockState)) {
-    await recordAttempt(false, email, user.id);
-    return res.status(403).json({
-      error: 'ACCOUNT_LOCKED',
-      message: 'This account is locked.',
-    });
+  if (account_type === "patient") {
+    if (isCredentialTemporarilyLocked(lockState)) {
+      await recordAttempt(false, email, user.id);
+      return res.status(403).json({
+        error: 'ACCOUNT_LOCKED',
+        message: 'This account is locked.',
+      });
+    }
   }
 
   // ✅ Staff portal: must be active medical personnel
-  if (account_type === "medical") {
+  else if (account_type === "medical") {
     const isMedical = await query.isActiveMedicalPersonnel(user.id);
     if (!isMedical) {
       const isActive = await query.getMedicalPersonnelStatus(user.id);
