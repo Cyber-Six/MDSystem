@@ -1,5 +1,5 @@
 const db  = require("../../../../../config/query.js");
-const { getLatestOutcome, getOutcomeData, groupByOutcome } = require("./helper.js");
+const { getLatestOutcome, getOutcomeData, groupByOutcome, getPatientIdFromConsultationId, getPatientIdFromOutcomeId } = require("./helper.js");
 const { GetIcd, GetTitle, getIcdDetails } = require("../../../../../config/icdapi/icdmain.js");
 const { throwGraphQLError, GraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
@@ -143,6 +143,23 @@ const Mutation = {
         input.notes || null
       ]);
 
+      await db.setSystemAuditLog({
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(input.patientId)) ? Number(input.patientId) : null,
+        action: "CREATE_CONSULTATION",
+        details: JSON.stringify({
+          consultationId: result.rows[0].id,
+          patientId: Number(input.patientId),
+          followUpId: input.followUpId || null,
+          mode: input.mode,
+          type: input.type,
+          status: "Created",
+        }),
+        changedBy: "Medical",
+      });
+
       return result.rows[0];
     } catch (error) {
       logger.error(`Error creating consultation: ${error.message}`);
@@ -206,7 +223,6 @@ const Mutation = {
       if (drResult.rows.length === 0) {
         throwGraphQLError(res).message("DentalRecord not found").status(404).throw();
       }
-
       if (drResult.rows[0].patientId !== patientId) {
         throwGraphQLError(res).message("DentalRecord does not belong to this patient").status(403).throw();
       }
@@ -265,6 +281,23 @@ const Mutation = {
         JSON.stringify(input.diagnoses)
       ]);
 
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "OPEN_CONSULTATION",
+        details: JSON.stringify({
+          consultationId: Number(input.consultationId),
+          outcomeId,
+          patientId: Number(patientId),
+          status: _status,
+          recordedBy: user.id,
+        }),
+        changedBy: "Medical",
+      });
+
       await client.query("COMMIT");
       return {
         ...outcomeResult.rows[0],
@@ -310,6 +343,7 @@ const Mutation = {
       }
 
       const currentStatus = queryResult.rows[0].status;
+      const patientId = await getPatientIdFromConsultationId(consultationId);
       const recordedBy = queryResult.rows[0].recordedBy;
 
       // Protect against submitting consultation without an outcome or invalid status
@@ -337,6 +371,23 @@ const Mutation = {
         throwGraphQLError(res).message("Consultation not found").status(404).throw();
       }
 
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "SUBMIT_CONSULTATION",
+        details: JSON.stringify({
+          consultationId,
+          patientId: Number(patientId),
+          previousStatus: currentStatus,
+          newStatus: status,
+          recordedBy,
+        }),
+        changedBy: "Medical",
+      });
+
       await client.query('COMMIT');
       return true;
     } catch (err) {
@@ -362,7 +413,7 @@ const Mutation = {
 
       // Lock the consultation row
       const queryResult = await client.query(
-        `SELECT status FROM "Consultation" WHERE id = $1 FOR UPDATE;`,
+        `SELECT status, "patientId" FROM "Consultation" WHERE id = $1 FOR UPDATE;`,
         [consultationId]
       );
 
@@ -389,6 +440,21 @@ const Mutation = {
         throwGraphQLError(res).message("Consultation not found").status(404).throw();
       }
 
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(queryResult.rows[0].patientId)) ? Number(queryResult.rows[0].patientId) : null,
+        action: "UPDATE_CONSULTATION_NOTES",
+        details: JSON.stringify({
+          consultationId,
+          patientId: Number(queryResult.rows[0].patientId),
+          notes,
+        }),
+        changedBy: "Medical",
+      });
+
       await client.query('COMMIT');
       return true;
     } catch (error) {
@@ -411,7 +477,7 @@ const Mutation = {
 
       // Lock the consultation row
       const queryResult = await client.query(
-        `SELECT status FROM "Consultation" WHERE id = $1 FOR UPDATE;`,
+        `SELECT status, "patientId" FROM "Consultation" WHERE id = $1 FOR UPDATE;`,
         [consultationId]
       );
 
@@ -437,6 +503,21 @@ const Mutation = {
         await client.query('ROLLBACK');
         throwGraphQLError(res).message("Consultation not found").status(404).throw();
       }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(queryResult.rows[0].patientId)) ? Number(queryResult.rows[0].patientId) : null,
+        action: "UPDATE_CONSULTATION_FOLLOW_UP",
+        details: JSON.stringify({
+          consultationId,
+          patientId: Number(queryResult.rows[0].patientId),
+          followUpId: followUpId || null,
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query('COMMIT');
       return true;
@@ -465,6 +546,7 @@ const Mutation = {
     } // protect against other medical personnel updating the consultation outcome created by another personnel
 
     try {
+      const patientId = await getPatientIdFromOutcomeId(outcome.id);
       const result = await db.query(`
         UPDATE "ConsultationOutcome"
         SET remarks = $1
@@ -475,6 +557,21 @@ const Mutation = {
       if (result.rows.length === 0) {
         throwGraphQLError(res).message("Consultation outcome not found").status(404).throw();
       }
+
+      await db.setSystemAuditLog({
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "UPDATE_OUTCOME_REMARKS",
+        details: JSON.stringify({
+          consultationId,
+          outcomeId: outcome.id,
+          patientId: Number(patientId),
+          remarks,
+        }),
+        changedBy: "Medical",
+      });
       return true;
     } catch (error) {
       logger.error(`Error updating consultation outcome remarks: ${error.message}`);
@@ -497,6 +594,7 @@ const Mutation = {
     } // protect against other medical personnel updating the consultation outcome created by another personnel
 
     const outcomeId = outcome.id;
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -511,6 +609,22 @@ const Mutation = {
         SELECT $1, unnest($2::text[])
         RETURNING *;
       `, [ outcomeId, complaints || [] ]);
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "UPDATE_COMPLAINTS",
+        details: JSON.stringify({
+          consultationId,
+          outcomeId,
+          patientId: Number(patientId),
+          complaints: complaints || [],
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query("COMMIT");
 
@@ -538,6 +652,7 @@ const Mutation = {
     } // protect against other medical personnel updating the consultation outcome created by another personnel
 
     const outcomeId = outcome.id;
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -552,6 +667,22 @@ const Mutation = {
         SELECT $1, unnest($2::text[])
         RETURNING *;
       `, [ outcomeId, findings || [] ]);
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "UPDATE_PE_FINDINGS",
+        details: JSON.stringify({
+          consultationId,
+          outcomeId,
+          patientId: Number(patientId),
+          findings: findings || [],
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query("COMMIT");
 
@@ -579,6 +710,7 @@ const Mutation = {
     } // protect against other medical personnel updating the consultation outcome created by another personnel
 
     const outcomeId = outcome.id;
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -593,6 +725,22 @@ const Mutation = {
         SELECT $1, unnest($2::text[])
         RETURNING *;
       `, [ outcomeId, treatments || [] ]);
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "UPDATE_TREATMENTS",
+        details: JSON.stringify({
+          consultationId,
+          outcomeId,
+          patientId: Number(patientId),
+          treatments: treatments || [],
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query("COMMIT");
 
@@ -620,6 +768,7 @@ const Mutation = {
     } // protect against other medical personnel updating the consultation outcome created by another personnel
 
     const outcomeId = outcome.id;
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -639,6 +788,22 @@ const Mutation = {
         outcomeId,
         JSON.stringify(diagnoses)
       ]);
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "CONSULTATION_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "UPDATE_DIAGNOSES",
+        details: JSON.stringify({
+          consultationId,
+          outcomeId,
+          patientId: Number(patientId),
+          diagnoses: diagnoses || [],
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query("COMMIT");
 
