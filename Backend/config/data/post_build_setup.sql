@@ -951,3 +951,17 @@ WHERE mp.deleted_at IS NULL;
 -- DELETE FROM "UserCredentials"
 -- WHERE deleted_at IS NOT NULL
 --   AND deleted_at < NOW() - INTERVAL '3 years';
+
+INSERT INTO "rawDocumentTag" (label)
+VALUES
+  ('CBC'),
+  ('Urinalysis'),
+  ('Drug Test'),
+  ('Chest X-ray'),
+  ('Medical Certificate'),
+  ('Fecalysis'),
+  ('Pregnancy Test'),
+  ('Lipid Profile'),
+  ('Blood Chemistry'),
+  ('ECG');
+
