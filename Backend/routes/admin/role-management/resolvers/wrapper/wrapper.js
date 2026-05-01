@@ -2463,16 +2463,6 @@ const Mutation = {
           .throw();
       }
 
-      await client.query(
-        `UPDATE "UserCredentials"
-         SET credentials_status = 'Inactive'::"CredentialStatus",
-             locked_until = NULL,
-             deleted_at = COALESCE(deleted_at, NOW()),
-             updated_at = NOW()
-         WHERE id::text = $1`,
-        [normalizedMedicalId]
-      );
-
       await db.setSystemAuditLog({
         client,
         eventType: 'SOFT_DELETE_MEDICAL_STAFF',
