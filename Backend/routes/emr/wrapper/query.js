@@ -684,6 +684,7 @@ const Query = {
             up.branch         AS branch
           FROM "patientUpdateLog" pul
           JOIN "UsersPersonal" up ON up.id = pul."patientId"
+          JOIN "UserCredentials" uc ON uc.id = pul."patientId"
           LEFT JOIN LATERAL (
             SELECT first_name, last_name
             FROM "UsersPersonalLog"
@@ -691,6 +692,7 @@ const Query = {
             ORDER BY created_at DESC
             LIMIT 1
           ) upl ON true
+          WHERE uc.deleted_at IS NULL
           ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC
         ) latest
         WHERE ($1 = 'Both' OR latest.branch::text = $1)
