@@ -177,7 +177,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
           client,
           eventType: "ANNOUNCEMENT_MANAGEMENT",
           actorId: userId,
-          actorType: "Medical",
+          actorType: "Staff",
           targetId: null,
           action: "CREATE_ANNOUNCEMENT",
           details: JSON.stringify({
@@ -325,7 +325,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         client,
         eventType: "ANNOUNCEMENT_MANAGEMENT",
         actorId: userId,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: null,
         action: "UPDATE_ANNOUNCEMENT",
         details: JSON.stringify({
@@ -429,7 +429,7 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
               client,
               eventType: "ANNOUNCEMENT_MANAGEMENT",
               actorId: userId,
-              actorType: "Medical",
+              actorType: "Staff",
               targetId: null,
               action: "DELETE_ANNOUNCEMENT",
               details: JSON.stringify({

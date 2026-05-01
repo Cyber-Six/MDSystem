@@ -53,10 +53,6 @@ dotenv.config({ path: path.resolve(__dirname, "../../../../../.env") });
 
 const REFRESH_SESSION_TTL_SECONDS = Number(process.env.JWT_REFRESH_EXPIRATION) || 604800;
 const REFRESH_SESSION_TTL_MS = REFRESH_SESSION_TTL_SECONDS * 1000;
-const ACCESS_PATIENT_EXPIRATION_SECONDS = Number(process.env.JWT_PATIENT_ACCESS_EXPIRATION) || 0;
-const ACCESS_STAFF_EXPIRATION_SECONDS = Number(process.env.JWT_STAFF_ACCESS_EXPIRATION) || 0;
-const ACCESS_PATIENT_EXPIRATION_MS = ACCESS_PATIENT_EXPIRATION_SECONDS * 1000;
-const ACCESS_STAFF_EXPIRATION_MS = ACCESS_STAFF_EXPIRATION_SECONDS * 1000;
 const USER_IDENTITY_ENUM_CANDIDATES = ['userIdentity', 'userIdentity_new'];
 const REQUIRED_USER_IDENTITY_VALUES = ['Student', 'Employee', 'Superior'];
 const SEMESTRAL_ALLOWED_IDENTITIES = ['Student', 'Employee'];
@@ -739,36 +735,6 @@ function getSessionExpirationMs(session) {
   }
 
   return lastTouchedAt + REFRESH_SESSION_TTL_MS;
-}
-
-function getAccessTokenExpirationMs(session) {
-  const explicitExpiration = toTimestampMs(session?.accessTokenExp);
-  if (explicitExpiration) {
-    return explicitExpiration;
-  }
-
-  const issuedAt = toTimestampMs(session?.accessTokenIssuedAt);
-  const fallbackBase = issuedAt || toTimestampMs(session?.updatedAt) || toTimestampMs(session?.createdAt);
-  if (!fallbackBase) {
-    return null;
-  }
-
-  const role = String(session?.role || '').toLowerCase();
-  const accessTtlMs = role === 'medical' ? ACCESS_STAFF_EXPIRATION_MS : ACCESS_PATIENT_EXPIRATION_MS;
-  if (!accessTtlMs) {
-    return null;
-  }
-
-  return fallbackBase + accessTtlMs;
-}
-
-function getAccessTokenExpired(session, nowMs = Date.now()) {
-  const expMs = getAccessTokenExpirationMs(session);
-  if (!expMs) {
-    return false;
-  }
-
-  return expMs <= nowMs;
 }
 
 function normalizeActiveRefreshSession(session, nowMs) {
@@ -1919,93 +1885,36 @@ const Query = {
       throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
     }
 
-    const nowMs = Date.now();
-    const sessionRecords = await scanAllRefreshSessionsWithMeta();
+    const activeSessions = await getActiveRefreshSessionsAcrossUsers({ includeEmails: true });
+
     const groupedByUser = new Map();
 
-    for (const record of sessionRecords) {
-      const rawSession = record?.session;
-      if (!rawSession || typeof rawSession !== 'object') {
-        continue;
-      }
+    for (const session of activeSessions) {
+      const userId = String(session.userId || 'unknown');
+      const existing = groupedByUser.get(userId);
 
-      const key = String(record.key || '').trim();
-      const keyParts = key.split(':');
-      const keyUserId = keyParts[1];
-      const keyDeviceId = keyParts[2];
-
-      const resolvedUserId = String(rawSession.userId ?? keyUserId ?? '').trim();
-      if (!resolvedUserId) {
-        continue;
-      }
-
-      const status = String(rawSession.status || 'active').trim().toLowerCase();
-      if (!['active', 'revoked'].includes(status)) {
-        continue;
-      }
-
-      const ttlSeconds = Number(record.ttlSeconds) || 0;
-      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
-        continue;
-      }
-
-      const deviceId = String(rawSession.deviceId || keyDeviceId || 'unknown').trim();
-      if (!deviceId) {
-        continue;
-      }
-
-      const createdAtMs = toTimestampMs(rawSession.createdAt);
-      const updatedAtMs = toTimestampMs(rawSession.updatedAt);
-      const expMs = getSessionExpirationMs(rawSession) || (nowMs + ttlSeconds * 1000);
-      const lastActiveMs = getSessionActivityMs({
-        createdAtMs,
-        updatedAtMs,
-        expMs,
-      });
-
-      const mappedSession = {
-        sessionId: String(rawSession.sessionId || `${resolvedUserId}:${deviceId}`),
-        userId: resolvedUserId,
-        deviceId,
-        role: String(rawSession.role || 'unknown'),
-        ttlSeconds,
-        status,
-        expMs,
-        lastActiveMs,
-        createdAtMs,
-        updatedAtMs,
-        accessTokenExpired: getAccessTokenExpired(rawSession, nowMs),
-      };
-
-      const existing = groupedByUser.get(resolvedUserId);
       if (!existing) {
-        groupedByUser.set(resolvedUserId, {
-          userId: resolvedUserId,
-          role: mappedSession.role || 'unknown',
+        groupedByUser.set(userId, {
+          userId,
+          email: session.email || 'unknown',
+          role: session.role || 'unknown',
           numberOfSessions: 1,
-          hasActiveSession: status === 'active',
-          latestSession: mappedSession,
+          latestSession: session,
         });
         continue;
       }
 
       existing.numberOfSessions += 1;
-      existing.hasActiveSession = existing.hasActiveSession || status === 'active';
-
+      if (!existing.email || existing.email === 'unknown') {
+        existing.email = session.email || existing.email;
+      }
       if (!existing.role || existing.role === 'unknown') {
-        existing.role = mappedSession.role || existing.role;
+        existing.role = session.role || existing.role;
       }
 
-      if (isSessionMoreRecent(mappedSession, existing.latestSession)) {
-        existing.latestSession = mappedSession;
+      if (isSessionMoreRecent(session, existing.latestSession)) {
+        existing.latestSession = session;
       }
-    }
-
-    const userIds = [...groupedByUser.keys()];
-    const userEmailMap = await getUserEmailMap(userIds);
-
-    for (const [userId, entry] of groupedByUser.entries()) {
-      entry.email = userEmailMap.get(userId) || 'unknown';
     }
 
     const sortedUsers = Array.from(groupedByUser.values()).sort((left, right) => {
@@ -2023,14 +1932,14 @@ const Query = {
           sessionId: latest.sessionId,
           userId: entry.userId,
           device: latest.deviceId,
+          refreshToken: latest.refreshToken || '',
           ttlSeconds: Number(latest.ttlSeconds) || 0,
           numberOfSessions: Number(entry.numberOfSessions) || 0,
           lastActive: latest.lastActiveMs,
-          status: entry.hasActiveSession ? 'active' : 'revoked',
+          status: latest.status,
           email: entry.email || 'unknown',
           role: entry.role || 'unknown',
           exp: latest.expMs,
-          accessTokenExpired: Boolean(latest.accessTokenExpired),
         };
       });
 
@@ -2086,24 +1995,31 @@ const Query = {
       }
 
       const deviceId = String(rawSession.deviceId || keyDeviceId || 'unknown');
+      const refreshToken = typeof rawSession.refreshToken === 'string'
+        ? rawSession.refreshToken.trim()
+        : '';
+
+      if (!refreshToken) {
+        continue;
+      }
+
       const createdAtMs = toTimestampMs(rawSession.createdAt);
       const updatedAtMs = toTimestampMs(rawSession.updatedAt);
       const expMs = getSessionExpirationMs(rawSession) || (nowMs + ttlSeconds * 1000);
       const sortMs = updatedAtMs || createdAtMs || expMs || 0;
-      const accessTokenExpired = getAccessTokenExpired(rawSession, nowMs);
 
       const mappedSession = {
         deviceId,
+        refreshToken,
         status,
         createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : null,
         updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : null,
         ttlSeconds,
         expiresAt: Number.isFinite(expMs) && expMs > 0 ? new Date(expMs).toISOString() : null,
-        accessTokenExpired,
         _sortMs: sortMs,
       };
 
-      const dedupeKey = deviceId;
+      const dedupeKey = `${deviceId}:${refreshToken}`;
       const existing = dedupedSessions.get(dedupeKey);
 
       if (!existing || sortMs > (existing._sortMs || 0)) {

@@ -146,7 +146,7 @@ const Mutation = {
       await db.setSystemAuditLog({
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(input.patientId)) ? Number(input.patientId) : null,
         action: "CREATE_CONSULTATION",
         details: JSON.stringify({
@@ -285,7 +285,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
         action: "OPEN_CONSULTATION",
         details: JSON.stringify({
@@ -375,7 +375,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
         action: "SUBMIT_CONSULTATION",
         details: JSON.stringify({
@@ -444,7 +444,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(queryResult.rows[0].patientId)) ? Number(queryResult.rows[0].patientId) : null,
         action: "UPDATE_CONSULTATION_NOTES",
         details: JSON.stringify({
@@ -508,7 +508,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(queryResult.rows[0].patientId)) ? Number(queryResult.rows[0].patientId) : null,
         action: "UPDATE_CONSULTATION_FOLLOW_UP",
         details: JSON.stringify({
@@ -561,7 +561,7 @@ const Mutation = {
       await db.setSystemAuditLog({
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
         action: "UPDATE_OUTCOME_REMARKS",
         details: JSON.stringify({
@@ -614,7 +614,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
         action: "UPDATE_COMPLAINTS",
         details: JSON.stringify({
@@ -672,7 +672,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
         action: "UPDATE_PE_FINDINGS",
         details: JSON.stringify({
@@ -730,7 +730,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
         action: "UPDATE_TREATMENTS",
         details: JSON.stringify({
@@ -793,7 +793,7 @@ const Mutation = {
         client,
         eventType: "CONSULTATION_MANAGEMENT",
         actorId: user.id,
-        actorType: "Medical",
+        actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
         action: "UPDATE_DIAGNOSES",
         details: JSON.stringify({
