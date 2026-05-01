@@ -1084,32 +1084,60 @@ const Mutation = {
         .throw();
     }
 
-    const result = await db.query(
-      `UPDATE "HealthChat"
-       SET status = 'Ongoing',
-           "medicalId" = $1,
-           session_start = NOW(),
-           notes = COALESCE($2, notes),
-           consent_logged = true
-       WHERE id = $3 AND status = 'Open'
-       RETURNING *`,
-      [user.id, notes, chatId]
-    );
+    const client = await db.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res)
-        .message("Ticket is no longer pending. Another staff may have already handled it.")
-        .status(409)
-        .throw();
+      result = await client.query(
+        `UPDATE "HealthChat"
+         SET status = 'Ongoing',
+             "medicalId" = $1,
+             session_start = NOW(),
+             notes = COALESCE($2, notes),
+             consent_logged = true
+         WHERE id = $3 AND status = 'Open'
+         RETURNING *`,
+        [user.id, notes, chatId]
+      );
+
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message("Ticket is no longer pending. Another staff may have already handled it.")
+          .status(409)
+          .throw();
+      }
+
+      // Add system message inside transaction
+      await client.query(
+        `INSERT INTO "HealthChatPrompt"
+         ("consultationVirtualId", "text", "promptType", "userId", "userType")
+         VALUES ($1, 'Staff has approved this consultation. Chat session started. Session will expire after ${CHAT_EXPIRY_DAYS} days of inactivity.', 'system', $2, 'Medical')`,
+        [chatId, user.id]
+      );
+
+      // Audit log (targetId = patientId)
+      const patientId = result.rows[0].patientId || null;
+      await db.setSystemAuditLog({
+        client,
+        eventType: "HEALTHCHAT_UPDATE",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "APPROVE_TICKET",
+        details: JSON.stringify({ chatId, patientId: patientId || null, approvedBy: user.id }),
+        changedBy: "Medical",
+      });
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (e) {}
+      client.release();
+      throw err;
     }
 
-    // Add system message
-    await db.query(
-      `INSERT INTO "HealthChatPrompt"
-       ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Staff has approved this consultation. Chat session started. Session will expire after ${CHAT_EXPIRY_DAYS} days of inactivity.', 'system', $2, 'Medical')`,
-      [chatId, user.id]
-    );
+    client.release();
 
     const chat = await formatChatRecord(result.rows[0]);
 
@@ -1160,32 +1188,59 @@ const Mutation = {
         .throw();
     }
 
-    const result = await db.query(
-      `UPDATE "HealthChat"
-       SET status = 'Closed',
-           "medicalId" = $1,
-           notes = $2,
-           session_end = NOW(),
-           closed_by_type = 'Staff'
-       WHERE id = $3 AND status = 'Open'
-       RETURNING *`,
-      [user.id, reason || 'Ticket rejected by staff.', chatId]
-    );
+    const client = await db.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res)
-        .message("Ticket is no longer pending. Another staff may have already handled it.")
-        .status(409)
-        .throw();
+      result = await client.query(
+        `UPDATE "HealthChat"
+         SET status = 'Closed',
+             "medicalId" = $1,
+             notes = $2,
+             session_end = NOW(),
+             closed_by_type = 'Staff'
+         WHERE id = $3 AND status = 'Open'
+         RETURNING *`,
+        [user.id, reason || 'Ticket rejected by staff.', chatId]
+      );
+
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message("Ticket is no longer pending. Another staff may have already handled it.")
+          .status(409)
+          .throw();
+      }
+
+      // Add system message
+      await client.query(
+        `INSERT INTO "HealthChatPrompt"
+         ("consultationVirtualId", "text", "promptType", "userId", "userType")
+         VALUES ($1, $2, 'system', $3, 'Medical')`,
+        [chatId, `Ticket rejected. Reason: ${reason || 'Not specified'}`, user.id]
+      );
+
+      const patientId = result.rows[0].patientId || null;
+      await db.setSystemAuditLog({
+        client,
+        eventType: "HEALTHCHAT_UPDATE",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "REJECT_TICKET",
+        details: JSON.stringify({ chatId, patientId: patientId || null, reason: reason || null }),
+        changedBy: "Medical",
+      });
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (e) {}
+      client.release();
+      throw err;
     }
 
-    // Add system message
-    await db.query(
-      `INSERT INTO "HealthChatPrompt"
-       ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, $2, 'system', $3, 'Medical')`,
-      [chatId, `Ticket rejected. Reason: ${reason || 'Not specified'}`, user.id]
-    );
+    client.release();
 
     const chat = await formatChatRecord(result.rows[0]);
 
@@ -1342,19 +1397,46 @@ const Mutation = {
 
     closeQuery += ` RETURNING *`;
 
-    const result = await db.query(closeQuery, closeParams);
+    const client = await db.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Ticket not found, already closed/expired, or not assigned to you").status(400).throw();
+      result = await client.query(closeQuery, closeParams);
+
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Ticket not found, already closed/expired, or not assigned to you").status(400).throw();
+      }
+
+      // Add system message
+      await client.query(
+        `INSERT INTO "HealthChatPrompt"
+         ("consultationVirtualId", "text", "promptType", "userId", "userType")
+         VALUES ($1, 'Staff closed this ticket.', 'system', $2, 'Medical')`,
+        [chatId, user.id]
+      );
+
+      const patientId = result.rows[0].patientId || null;
+      await db.setSystemAuditLog({
+        client,
+        eventType: "HEALTHCHAT_UPDATE",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "CLOSE_TICKET",
+        details: JSON.stringify({ chatId, patientId: patientId || null, closedBy: user.id }),
+        changedBy: "Medical",
+      });
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (e) {}
+      client.release();
+      throw err;
     }
 
-    // Add system message
-    await db.query(
-      `INSERT INTO "HealthChatPrompt"
-       ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Staff closed this ticket.', 'system', $2, 'Medical')`,
-      [chatId, user.id]
-    );
+    client.release();
 
     const chat = await formatChatRecord(result.rows[0]);
 
@@ -1455,17 +1537,44 @@ const Mutation = {
     }
 
     // Update the medicalId to the new medical staff
-    const result = await db.query(
-      `UPDATE "HealthChat"
-       SET "medicalId" = $1
-       WHERE id = $2 AND status = 'Ongoing'
-       RETURNING *`,
-      [toMedicalId, chatId]
-    );
+    const client = await db.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to transfer ticket").status(500).throw();
+      result = await client.query(
+        `UPDATE "HealthChat"
+         SET "medicalId" = $1
+         WHERE id = $2 AND status = 'Ongoing'
+         RETURNING *`,
+        [toMedicalId, chatId]
+      );
+
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Failed to transfer ticket").status(500).throw();
+      }
+
+      const patientId = result.rows[0].patientId || null;
+      await db.setSystemAuditLog({
+        client,
+        eventType: "HEALTHCHAT_UPDATE",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "TRANSFER_TICKET",
+        details: JSON.stringify({ chatId, fromMedicalId, toMedicalId, patientId: patientId || null }),
+        changedBy: "Medical",
+      });
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (e) {}
+      client.release();
+      throw err;
     }
+
+    client.release();
 
     const updatedChat = await formatChatRecord(result.rows[0]);
 
@@ -1535,17 +1644,44 @@ const Mutation = {
     const previousMedicalId = chat.medicalId;
 
     // Update the medicalId to the current user
-    const result = await db.query(
-      `UPDATE "HealthChat"
-       SET "medicalId" = $1
-       WHERE id = $2 AND status = 'Ongoing'
-       RETURNING *`,
-      [user.id, chatId]
-    );
+    const client = await db.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to take over ticket").status(500).throw();
+      result = await client.query(
+        `UPDATE "HealthChat"
+         SET "medicalId" = $1
+         WHERE id = $2 AND status = 'Ongoing'
+         RETURNING *`,
+        [user.id, chatId]
+      );
+
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Failed to take over ticket").status(500).throw();
+      }
+
+      const patientId = result.rows[0].patientId || null;
+      await db.setSystemAuditLog({
+        client,
+        eventType: "HEALTHCHAT_UPDATE",
+        actorId: user.id,
+        actorType: "Medical",
+        targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+        action: "TAKEOVER_TICKET",
+        details: JSON.stringify({ chatId, fromMedicalId: previousMedicalId, toMedicalId: user.id, patientId: patientId || null }),
+        changedBy: "Medical",
+      });
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (e) {}
+      client.release();
+      throw err;
     }
+
+    client.release();
 
     const updatedChat = await formatChatRecord(result.rows[0]);
 
