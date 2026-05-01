@@ -1121,7 +1121,7 @@ const Mutation = {
       const patientId = result.rows[0].patientId || null;
       await db.setSystemAuditLog({
         client,
-        eventType: "HEALTHCHAT_UPDATE",
+        eventType: "HEALTHCHAT_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
@@ -1224,7 +1224,7 @@ const Mutation = {
       const patientId = result.rows[0].patientId || null;
       await db.setSystemAuditLog({
         client,
-        eventType: "HEALTHCHAT_UPDATE",
+        eventType: "HEALTHCHAT_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
@@ -1420,7 +1420,7 @@ const Mutation = {
       const patientId = result.rows[0].patientId || null;
       await db.setSystemAuditLog({
         client,
-        eventType: "HEALTHCHAT_UPDATE",
+        eventType: "HEALTHCHAT_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
@@ -1558,7 +1558,7 @@ const Mutation = {
       const patientId = result.rows[0].patientId || null;
       await db.setSystemAuditLog({
         client,
-        eventType: "HEALTHCHAT_UPDATE",
+        eventType: "HEALTHCHAT_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
@@ -1665,7 +1665,7 @@ const Mutation = {
       const patientId = result.rows[0].patientId || null;
       await db.setSystemAuditLog({
         client,
-        eventType: "HEALTHCHAT_UPDATE",
+        eventType: "HEALTHCHAT_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
