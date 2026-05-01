@@ -2407,7 +2407,7 @@ const Mutation = {
          WHERE id = $1`,
         [userId]
       );
-      await Mutation._updateStaffAccount(_, { userId, status: "Suspended", client }, { user, res });
+      await Mutation._updateStaffAccount(_, { userId, status: "Suspended", clientdb: client }, { user, res });
 
       await client.query('COMMIT');
 
@@ -2464,7 +2464,7 @@ const Mutation = {
           .throw();
       }
 
-      await Mutation._updateStaffAccount(_, { userId: normalizedUserId, status: "Suspended", client }, { user, res });
+      await Mutation._updateStaffAccount(_, { userId: normalizedUserId, status: "Suspended", clientdb: client }, { user, res });
 
       await db.setSystemAuditLog({
         client,
@@ -2696,7 +2696,7 @@ const Mutation = {
    * - status: optional Active/Suspended toggle
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
-  _updateStaffAccount: async (_, { userId, status, role, templateId, designation, client=null }, { user, res }) => {
+  _updateStaffAccount: async (_, { userId, status, role, templateId, designation, clientdb=null }, { user, res }) => {
     if (!status && !role && !designation) {
       throwGraphQLError(res)
         .message('At least one of status, role, or designation must be provided.')
@@ -2794,13 +2794,16 @@ const Mutation = {
       }
     }
 
+    let client;
     // START TRANSACTION FOR ALL DATABASE UPDATES
-    if (!client) {
+    if (!clientdb) {
       client = await db.connect();
+    } else {
+      client = clientdb;
     }
 
     try {
-      await client.query('BEGIN');
+      if (!clientdb) await client.query('BEGIN');
 
       // Handle role change
       if (role) {
@@ -2875,8 +2878,6 @@ const Mutation = {
         logger.info(`Staff branch changed to "${designation}" for userId=${userId} by adminId=${user.id}`);
       }
 
-      await client.query('COMMIT');
-
       // If status was Suspended, save new anchor AFTER successful transaction
       if (status === 'Suspended' && targetUser.is_active) {
         await saveStaffAnchor(userId, generateUUID());
@@ -2921,21 +2922,23 @@ const Mutation = {
         );
       }
 
+      if (!clientdb) await client.query('COMMIT');
+
       return {
         ok: true,
         message: 'Staff account updated successfully.',
         staff: updatedStaff,
       };
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (!clientdb) await client.query('ROLLBACK');
       logger.error(`Error updating staff account: ${error.message}`);
       throwGraphQLError(res).message(error.message || 'Failed to update staff account.').status(500).throw();
     } finally {
-      client.release();
+      if (!clientdb) client.release();
     }
   },
 
-  _rotateStaffAnchor: async (_, { userId, pool = db.db() }, { user, res }) => {
+  _rotateStaffAnchor: async (_, { userId }, { user, res }) => {
     // Verify target user exists and is Medical staff
     const targetResult = await pool.query(
       `SELECT uc.id, uc.identity, uc.credentials_status, mp.id AS "medicalId"
