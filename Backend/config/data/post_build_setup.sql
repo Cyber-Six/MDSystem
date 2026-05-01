@@ -83,6 +83,10 @@ CREATE INDEX IF NOT EXISTS idx_usercredentials_deleted_at
 CREATE INDEX IF NOT EXISTS idx_medicalpersonnel_deleted_at
   ON "MedicalPersonnel"(deleted_at);
 
+CREATE UNIQUE INDEX IF NOT EXISTS medicalpersonnel_userid_active
+  ON "MedicalPersonnel"("userId")
+  WHERE deleted_at IS NULL;
+
 
 CREATE OR REPLACE FUNCTION apply_user_soft_delete_policy()
 RETURNS TRIGGER AS $$
@@ -927,7 +931,7 @@ WHERE deleted_at IS NULL;
 CREATE OR REPLACE VIEW active_medical_personnel AS
 SELECT mp.*
 FROM "MedicalPersonnel" mp
-JOIN active_user_credentials uc ON uc.id = mp.id
+JOIN active_user_credentials uc ON uc.id = mp."userId"
 WHERE mp.deleted_at IS NULL;
 
 -- Example active-only queries
@@ -947,3 +951,20 @@ WHERE mp.deleted_at IS NULL;
 -- DELETE FROM "UserCredentials"
 -- WHERE deleted_at IS NOT NULL
 --   AND deleted_at < NOW() - INTERVAL '3 years';
+
+INSERT INTO "rawDocumentTag" (label)
+VALUES
+  ('CBC'),
+  ('Urinalysis'),
+  ('Drug Test'),
+  ('Chest X-ray'),
+  ('Medical Certificate'),
+  ('Fecalysis'),
+  ('Pregnancy Test'),
+  ('Lipid Profile'),
+  ('Blood Chemistry'),
+  ('ECG');
+
+-- Reset MedicalPersonnel ID sequence to prevent conflicts with pre-seeded data
+ALTER TABLE "MedicalPersonnel"
+ALTER COLUMN id RESTART WITH 2;

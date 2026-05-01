@@ -37,9 +37,9 @@ async function notifyStaffs(adminUserId, message, recipientIds = null) {
   try {
     // Validate that the sender is an active staff member
     const adminQuery = `
-      SELECT mp.id
+      SELECT mp."userId"
       FROM active_medical_personnel mp
-      WHERE mp.id = $1 AND mp.is_active = true
+      WHERE mp."userId" = $1 AND mp.is_active = true
     `;
 
     const adminResult = await db.query(adminQuery, [adminUserId]);
@@ -52,10 +52,10 @@ async function notifyStaffs(adminUserId, message, recipientIds = null) {
     if (recipientIds && recipientIds.length > 0) {
       // Notify specific staff — validate each ID belongs to an active staff member
       const filteredQuery = `
-        SELECT DISTINCT mp.id as "userId"
+        SELECT DISTINCT mp."userId" as "userId"
         FROM active_medical_personnel mp
         WHERE mp.is_active = true
-          AND mp.id::text = ANY($1)
+          AND mp."userId"::text = ANY($1)
       `;
       const filteredResult = await db.query(filteredQuery, [recipientIds.map(String)]);
       staffMembers = filteredResult.rows;
@@ -63,7 +63,7 @@ async function notifyStaffs(adminUserId, message, recipientIds = null) {
     } else {
       // Notify all active staff members
       const staffQuery = `
-        SELECT DISTINCT mp.id as "userId"
+        SELECT DISTINCT mp."userId" as "userId"
         FROM active_medical_personnel mp
         WHERE mp.is_active = true
       `;

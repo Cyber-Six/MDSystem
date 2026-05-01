@@ -396,7 +396,7 @@ async function resolvePhysicianData(physicianId, existingPhysician = {}) {
       `SELECT up.first_name, up.last_name,
               mp.title, mp.designation
        FROM "UsersPersonal" up
-       LEFT JOIN active_medical_personnel mp ON mp.id = up.id
+      LEFT JOIN active_medical_personnel mp ON mp."userId" = up.id
        WHERE up.id = $1`,
       [physicianId]
     );

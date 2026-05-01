@@ -328,7 +328,7 @@ if (!enrichedData.physician?.firstName) {
     `SELECT up.first_name, up.last_name, up.sex,
             mp.role, mp.title, mp.designation
      FROM "UsersPersonal" up
-     LEFT JOIN "MedicalPersonnel" mp ON mp.id = up.id
+    LEFT JOIN "MedicalPersonnel" mp ON mp."userId" = up.id
      WHERE up.id = $1`,
     [req.user.id]
   );

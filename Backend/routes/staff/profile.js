@@ -189,7 +189,7 @@ router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
                mp.is_active
              FROM active_user_credentials uc
              LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-             LEFT JOIN active_medical_personnel mp ON mp.id = uc.id
+             LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
              WHERE uc.id = $1`,
             [req.user.id]
         );
