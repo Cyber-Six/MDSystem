@@ -205,6 +205,7 @@ type SessionBlacklistResult {
   message: String!
   tokenId: String
   blacklisted: Boolean
+  results: [SessionBlacklistEntry!]!
 }
 
 type SessionBlacklistListResult {

@@ -930,8 +930,14 @@ async function getRefreshSession(userId, deviceId) {
 // -----------------------------------------------------//
 
 const SESSION_BLACKLIST_SET_KEY = "blacklist:tokens";
+const SESSION_BLACKLIST_TTL_SET_KEY = "blacklist:tokens:ttl";
+const SESSION_BLACKLIST_TOKEN_PREFIX = "blacklist:token:";
 
-async function setSessionBlacklist(tokenIds, revoked) {
+function buildSessionBlacklistTokenKey(tokenId) {
+  return `${SESSION_BLACKLIST_TOKEN_PREFIX}${tokenId}`;
+}
+
+async function setSessionBlacklist(tokenIds, revoked, ttlSeconds = null) {
   if (!client) throw new Error("Redis client not initialized");
   if (!Array.isArray(tokenIds)) {
     throw new Error("setSessionBlacklist: tokenIds must be an array");
@@ -946,14 +952,30 @@ async function setSessionBlacklist(tokenIds, revoked) {
   }
 
   const shouldRevoke = Boolean(revoked);
+  const ttlValue = Number(ttlSeconds);
+  const hasTtl = Number.isFinite(ttlValue) && ttlValue > 0;
   const pipeline = client.multi();
   if (shouldRevoke) {
     for (const tokenId of normalizedTokenIds) {
       pipeline.sAdd(SESSION_BLACKLIST_SET_KEY, tokenId);
+      if (hasTtl) {
+        pipeline.sAdd(SESSION_BLACKLIST_TTL_SET_KEY, tokenId);
+      } else {
+        pipeline.sRem(SESSION_BLACKLIST_TTL_SET_KEY, tokenId);
+      }
+
+      const tokenKey = buildSessionBlacklistTokenKey(tokenId);
+      if (hasTtl) {
+        pipeline.set(tokenKey, "1", { EX: ttlValue });
+      } else {
+        pipeline.set(tokenKey, "1");
+      }
     }
   } else {
     for (const tokenId of normalizedTokenIds) {
       pipeline.sRem(SESSION_BLACKLIST_SET_KEY, tokenId);
+      pipeline.sRem(SESSION_BLACKLIST_TTL_SET_KEY, tokenId);
+      pipeline.del(buildSessionBlacklistTokenKey(tokenId));
     }
   }
 
@@ -972,8 +994,21 @@ async function getSessionBlacklist(tokenId) {
     throw new Error("getSessionBlacklist: tokenId is required");
   }
 
-  const exists = await client.sIsMember(SESSION_BLACKLIST_SET_KEY, normalizedTokenId);
-  return Boolean(exists);
+  const tokenKey = buildSessionBlacklistTokenKey(normalizedTokenId);
+  const keyExists = await client.exists(tokenKey);
+  if (keyExists) {
+    return true;
+  }
+
+  const ttlMember = await client.sIsMember(SESSION_BLACKLIST_TTL_SET_KEY, normalizedTokenId);
+  if (ttlMember) {
+    await client.sRem(SESSION_BLACKLIST_SET_KEY, normalizedTokenId);
+    await client.sRem(SESSION_BLACKLIST_TTL_SET_KEY, normalizedTokenId);
+    return false;
+  }
+
+  const baseMember = await client.sIsMember(SESSION_BLACKLIST_SET_KEY, normalizedTokenId);
+  return Boolean(baseMember);
 }
 
 // -----------------------------------------------------//
