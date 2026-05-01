@@ -92,13 +92,15 @@ const Mutation = {
       RETURNING *
     `;
 
+    const client = await db.connect();
     try {
-      const result = await db.query(sql, [
+      await client.query('BEGIN');
+      const result = await client.query(sql, [
         input.item_code, input.item_name, input.category, input.description || null,
       ]);
-      return result.rows[0];
 
       await db.setSystemAuditLog({
+        client,
         eventType: "INVENTORY_CREATE",
         actorId: user.id,
         actorType: "Staff",
@@ -107,12 +109,18 @@ const Mutation = {
         details: JSON.stringify({ itemId: result.rows[0].id, itemCode: input.item_code }),
         changedBy: "Medical"
       });
+      
+      await client.query('COMMIT');
+      return result.rows[0];
     } catch (err) {
+      await client.query('ROLLBACK');
       if (err.code === '23505') {
         throwGraphQLError(res).message("Item code already exists").status(409).throw();
       }
       logger.error("Error in _createMedicalItems:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -120,7 +128,6 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-
     const allowed = ['item_code', 'item_name', 'category', 'description', 'active'];
     const params = [];
 
@@ -142,13 +149,17 @@ const Mutation = {
       RETURNING *
     `;
 
+    const client = await db.connect();
     try {
-      const result = await db.query(sql, params);
+      await client.query('BEGIN');
+      const result = await client.query(sql, params);
       if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Medical item not found").status(404).throw();
       }
 
       await db.setSystemAuditLog({
+        client,
         eventType: "INVENTORY_UPDATE",
         actorId: user.id,
         actorType: "Staff",
@@ -158,13 +169,17 @@ const Mutation = {
         changedBy: "Medical"
       });
 
+      await client.query('COMMIT');
       return result.rows[0];
     } catch (err) {
+      await client.query('ROLLBACK');
       if (err.code === '23505') {
         throwGraphQLError(res).message("Item code already exists").status(409).throw();
       }
       logger.error("Error in _updateMedicalItems:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -172,7 +187,6 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-
     const sql = `
       UPDATE "MedicalItems"
       SET active = false, updated_at = current_timestamp
@@ -180,22 +194,35 @@ const Mutation = {
       RETURNING id
     `;
 
-    const result = await db.query(sql, [id]);
-    if (result.rows.length === 0) {
-      throwGraphQLError(res).message("Medical item not found").status(404).throw();
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(sql, [id]);
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Medical item not found").status(404).throw();
+      }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "INVENTORY_DELETE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: parseInt(id),
+        action: "DELETE_MEDICAL_ITEM",
+        details: JSON.stringify({ itemId: parseInt(id) }),
+        changedBy: "Medical"
+      });
+
+      await client.query('COMMIT');
+      return true;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _deleteMedicalItems:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
-
-    await db.setSystemAuditLog({
-      eventType: "INVENTORY_DELETE",
-      actorId: user.id,
-      actorType: "Staff",
-      targetId: parseInt(id),
-      action: "DELETE_MEDICAL_ITEM",
-      details: JSON.stringify({ itemId: parseInt(id) }),
-      changedBy: "Medical"
-    });
-
-    return true;
   },
 
   _addMedicalSupply: async (_, { input, receivedBy }, { res, user }) => {
@@ -212,8 +239,10 @@ const Mutation = {
       RETURNING *
     `;
 
+    const client = await db.connect();
     try {
-      const result = await db.query(sql, [
+      await client.query('BEGIN');
+      const result = await client.query(sql, [
         input.medicalItemId, input.supplierName || null, input.batchNumber,
         input.dosageUnit, input.dosageValue, input.expiryDate,
         input.location, receivedBy, input.notes || null,
@@ -225,11 +254,24 @@ const Mutation = {
       // Bulk insert individual MedicineEntity records for each unit
       if (quantity > 0) {
         const placeholders = Array(quantity).fill('($1)').join(', ');
-        await db.query(
+        await client.query(
           `INSERT INTO "MedicineEntity" ("batchId") VALUES ${placeholders}`,
           [batch.id],
         );
       }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "INVENTORY_CREATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "CREATE_MEDICAL_SUPPLY",
+        details: JSON.stringify({ batchId: batch.id, itemId: input.medicalItemId }),
+        changedBy: "Medical"
+      });
+
+      await client.query('COMMIT');
 
       try {
         const itemRow = await db.query(`SELECT item_name FROM "MedicalItems" WHERE id = $1`, [input.medicalItemId]);
@@ -247,20 +289,13 @@ const Mutation = {
         logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
       }
 
-      await db.setSystemAuditLog({
-        eventType: "INVENTORY_CREATE",
-        actorId: user.id,
-        actorType: "Staff",
-        targetId: batch.id,
-        action: "CREATE_MEDICAL_SUPPLY",
-        details: JSON.stringify({ batchId: batch.id, itemId: input.medicalItemId }),
-        changedBy: "Medical"
-      });
-
       return batch;
     } catch (err) {
+      await client.query('ROLLBACK');
       logger.error("Error in _addMedicalSupply:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -278,8 +313,10 @@ const Mutation = {
       RETURNING *
     `;
 
+    const client = await db.connect();
     try {
-      const result = await db.query(sql, [
+      await client.query('BEGIN');
+      const result = await client.query(sql, [
         input.supplyItemId, input.batchNumber, input.unit,
         input.expiryDate || null, input.location,
         receivedBy, input.supplierName || null, input.notes || null,
@@ -291,11 +328,24 @@ const Mutation = {
       // Bulk insert individual SupplyEntity records for each unit
       if (quantity > 0) {
         const placeholders = Array(quantity).fill('($1)').join(', ');
-        await db.query(
+        await client.query(
           `INSERT INTO "SupplyEntity" ("batchId") VALUES ${placeholders}`,
           [batch.id],
         );
       }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "INVENTORY_CREATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "CREATE_SUPPLY_BATCH",
+        details: JSON.stringify({ batchId: batch.id, itemId: input.supplyItemId }),
+        changedBy: "Medical"
+      });
+
+      await client.query('COMMIT');
 
       try {
         const itemRow = await db.query(`SELECT item_name FROM "MedicalItems" WHERE id = $1`, [input.supplyItemId]);
@@ -313,20 +363,13 @@ const Mutation = {
         logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
       }
 
-      await db.setSystemAuditLog({
-        eventType: "INVENTORY_CREATE",
-        actorId: user.id,
-        actorType: "Staff",
-        targetId: batch.id,
-        action: "CREATE_SUPPLY_BATCH",
-        details: JSON.stringify({ batchId: batch.id, itemId: input.supplyItemId }),
-        changedBy: "Medical"
-      });
-
       return batch;
     } catch (err) {
+      await client.query('ROLLBACK');
       logger.error("Error in _addSupplyBatch:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -407,7 +450,7 @@ const Mutation = {
         eventType: "INVENTORY_UPDATE",
         actorId: user.id,
         actorType: "Staff",
-        targetId: newBatch.id,
+        targetId: null,
         action: "SPLIT_SUPPLY_BATCH",
         details: JSON.stringify({
           sourceBatchId: batchId,
@@ -416,7 +459,8 @@ const Mutation = {
           sourceLocation: batch.location,
           targetLocation: newBatch.location
         }),
-        changedBy: "Medical"
+        changedBy: "Medical",
+        client
       });
 
       await client.query('COMMIT');
@@ -509,7 +553,7 @@ const Mutation = {
         eventType: "INVENTORY_UPDATE",
         actorId: user.id,
         actorType: "Staff",
-        targetId: newBatch.id,
+        targetId: null,
         action: "SPLIT_MEDICINE_BATCH",
         details: JSON.stringify({
           sourceBatchId: batchId,
@@ -518,7 +562,8 @@ const Mutation = {
           sourceLocation: batch.location,
           targetLocation: newBatch.location
         }),
-        changedBy: "Medical"
+        changedBy: "Medical",
+        client
       });      
 
       await client.query('COMMIT');
@@ -625,6 +670,7 @@ const Mutation = {
       // Log to SystemAuditLog
       if (user && user.id) {
         await db.setSystemAuditLog({
+          client,
           eventType: "INVENTORY_UPDATE",
           actorId: user.id,
           actorType: "Staff",
@@ -758,6 +804,7 @@ const Mutation = {
       // Log to SystemAuditLog
       if (user && user.id) {
         await db.setSystemAuditLog({
+          client,
           eventType: "INVENTORY_UPDATE",
           actorId: user.id,
           actorType: "Staff",

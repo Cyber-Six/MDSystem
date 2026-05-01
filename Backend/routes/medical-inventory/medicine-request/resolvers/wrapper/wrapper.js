@@ -232,6 +232,8 @@ const Mutation = {
         params
       );
 
+      // patient audit log for request creation with item details
+
       await client.query('COMMIT');
       
       // Fetch items with medicine names
@@ -307,6 +309,24 @@ const Mutation = {
       }
 
       const result = await client.query(updateSql, params);
+      const patientId = result.rows[0].patientId;
+      await db.setSystemAuditLog({
+        client,
+        eventType: "MEDICINE_REQUEST_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: patientId,
+        action: "UPDATE_MEDICINE_REQUEST_STATUS",
+        details: JSON.stringify({
+          requestId,
+          previousStatus: currentStatus,
+          newStatus: status,
+          approvedBy: approvedBy ?? null,
+          notes: notes ?? null,
+        }),
+        changedBy: "Medical"
+      });
+
       await client.query('COMMIT');
 
       // Fetch items with medicine names
@@ -338,30 +358,32 @@ const Mutation = {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }
 
-    // Fetch current request
-    const requestResult = await db.query(
-      `SELECT * FROM "MedicineRequestLog" WHERE id = $1 LIMIT 1`,
-      [requestId]
-    );
-
-    if (requestResult.rows.length === 0) {
-      throwGraphQLError(res).message("Medicine request not found").status(404).throw();
-    }
-
-    const currentRequest = requestResult.rows[0];
-
-    // Only allow adding medicines to Pending requests
-    if (currentRequest.status !== 'Pending') {
-      throwGraphQLError(res)
-        .message(`Cannot add medicines to ${currentRequest.status} request. Only Pending requests can be modified.`)
-        .status(400)
-        .throw();
-    }
-
     const client = await db.connect();
 
     try {
       await client.query('BEGIN');
+
+      // Lock and validate the request inside the transaction to avoid races.
+      const requestResult = await client.query(
+        `SELECT * FROM "MedicineRequestLog" WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [requestId]
+      );
+
+      if (requestResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Medicine request not found").status(404).throw();
+      }
+
+      const currentRequest = requestResult.rows[0];
+      const patientId = currentRequest.patientId;
+      // Only allow adding medicines to Pending requests
+      if (currentRequest.status !== 'Pending') {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message(`Cannot add medicines to ${currentRequest.status} request. Only Pending requests can be modified.`)
+          .status(400)
+          .throw();
+      }
 
       // Insert new medicine request entities
       for (const item of items) {
@@ -376,6 +398,24 @@ const Mutation = {
           item.quantity || 1
         ]);
       }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "MEDICINE_REQUEST_UPDATE",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: patientId,
+        action: "ADD_MEDICINE_TO_REQUEST",
+        details: JSON.stringify({
+          requestId,
+          addedItemCount: items.length,
+          addedItems: items.map((item) => ({
+            medicineId: item.medicineId || item.batchId,
+            quantity: item.quantity || 1,
+          })),
+        }),
+        changedBy: "Medical"
+      });
 
       await client.query('COMMIT');
 
