@@ -965,3 +965,6 @@ VALUES
   ('Blood Chemistry'),
   ('ECG');
 
+-- Reset MedicalPersonnel ID sequence to prevent conflicts with pre-seeded data
+ALTER TABLE "MedicalPersonnel"
+ALTER COLUMN id RESTART WITH 2;
