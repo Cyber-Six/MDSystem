@@ -2367,7 +2367,7 @@ const Mutation = {
   },
 
   _deleteMedicalPersonnel: async (_, { userId, revertIdentity = true }, { user, res }) => {
-    const client = await db.db().connect();
+    const client = await db.connect();
     try {
       await client.query('BEGIN');
 
@@ -2407,7 +2407,7 @@ const Mutation = {
          WHERE id = $1`,
         [userId]
       );
-      await Mutation._updateStaffAccount(_, { userId, status: "Suspended" }, { user, res });
+      await Mutation._updateStaffAccount(_, { userId, status: "Suspended", client }, { user, res });
 
       await client.query('COMMIT');
 
@@ -2464,7 +2464,7 @@ const Mutation = {
           .throw();
       }
 
-      await Mutation._rotateStaffAnchor(userId, client);
+      await Mutation._updateStaffAccount(_, { userId: normalizedUserId, status: "Suspended", client }, { user, res });
 
       await db.setSystemAuditLog({
         client,
