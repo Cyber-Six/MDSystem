@@ -323,6 +323,15 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
 
     }
 
+    // Build audit details with only updated fields
+    const updatedFields = { announcementId: Number(id) };
+    if (label !== undefined) updatedFields.title = label;
+    if (description !== undefined) updatedFields.description = description;
+    if (pubmat !== undefined) updatedFields.pubmat = promotedPubmat;
+    if (isActive !== undefined) updatedFields.isActive = isActive;
+    if (location !== undefined) updatedFields.location = location;
+    if (hasViewableUntil) updatedFields.viewableUntil = viewableUntil;
+
     await setSystemAuditLog({
       client,
       eventType: "ANNOUNCEMENT_MANAGEMENT",
@@ -330,18 +339,10 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
       actorType: "Staff",
       targetId: null,
       action: "UPDATE_ANNOUNCEMENT",
-      details: JSON.stringify({
-        announcementId: Number(id),
-        title: label || result.rows[0].label || null,
-        description: description || result.rows[0].description || null,
-        pubmat: promotedPubmat,
-        isActive: isActive !== undefined ? isActive : result.rows[0].isActive,
-        location: location || result.rows[0].location || null,
-        viewableUntil: hasViewableUntil ? viewableUntil : result.rows[0].viewableUntil || null,
-      }),
+      details: JSON.stringify(updatedFields),
       changedBy: "Medical",
     });
-    
+
     await client.query("COMMIT");
     logger.info(`Announcement updated by userId=${userId}`, { id });
     return res.status(200).json({ success: true, data: result.rows[0] });
