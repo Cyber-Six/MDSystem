@@ -22,7 +22,7 @@ function isValidUserRole(role) {
 }
 
 // Generate short-lived access token
-function generateAccessToken(user, anchorSessionId = null) {
+function generateAccessToken(user, tokenId, anchorSessionId = null) {
   // Validate user.id
   if (typeof user.id !== "string" && typeof user.id !== "number") {
     throw new Error("Invalid user.id");
@@ -39,7 +39,7 @@ function generateAccessToken(user, anchorSessionId = null) {
   const payload = {
     id: user.id,
     role: normalizedRole, // store normalized role
-    jti: crypto.randomUUID(),
+    jti: tokenId // JWT ID for potential future use in blacklisting or introspection
   };
 
   // Only staff/medical roles get sid (anchor)
@@ -226,11 +226,13 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
   session.status = "active";
   session.cooldownUntil = null;
 
+  session.tokenId = crypto.randomUUID(); // rotate tokenId for access tokens
   await saveRefreshSession(userId, deviceId, session, REFRESH_EXP);
 
   // Generate new access token
   const accessToken = generateAccessToken(
     { id: userId, role: session.role },
+    session.tokenId, // unique identifier for the access token
     session.sessionId // anchor for medical
   );
 
@@ -278,6 +280,7 @@ async function handleLogin({ userId, deviceId, role }) {
     status: "active",
     cooldownUntil: null,
     suspiciousCount: 0,
+    tokenId: crypto.randomUUID(),
     createdAt: now,
     updatedAt: now
   };
@@ -291,6 +294,7 @@ async function handleLogin({ userId, deviceId, role }) {
 
   const accessToken = generateAccessToken(
     { id: userId, role: normalizedRole },
+    newSession.tokenId,
     newSessionId
   );
 
