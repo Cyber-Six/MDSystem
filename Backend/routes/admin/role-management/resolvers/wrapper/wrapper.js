@@ -1919,36 +1919,93 @@ const Query = {
       throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
     }
 
-    const activeSessions = await getActiveRefreshSessionsAcrossUsers({ includeEmails: true });
-
+    const nowMs = Date.now();
+    const sessionRecords = await scanAllRefreshSessionsWithMeta();
     const groupedByUser = new Map();
 
-    for (const session of activeSessions) {
-      const userId = String(session.userId || 'unknown');
-      const existing = groupedByUser.get(userId);
+    for (const record of sessionRecords) {
+      const rawSession = record?.session;
+      if (!rawSession || typeof rawSession !== 'object') {
+        continue;
+      }
 
+      const key = String(record.key || '').trim();
+      const keyParts = key.split(':');
+      const keyUserId = keyParts[1];
+      const keyDeviceId = keyParts[2];
+
+      const resolvedUserId = String(rawSession.userId ?? keyUserId ?? '').trim();
+      if (!resolvedUserId) {
+        continue;
+      }
+
+      const status = String(rawSession.status || 'active').trim().toLowerCase();
+      if (!['active', 'revoked'].includes(status)) {
+        continue;
+      }
+
+      const ttlSeconds = Number(record.ttlSeconds) || 0;
+      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+        continue;
+      }
+
+      const deviceId = String(rawSession.deviceId || keyDeviceId || 'unknown').trim();
+      if (!deviceId) {
+        continue;
+      }
+
+      const createdAtMs = toTimestampMs(rawSession.createdAt);
+      const updatedAtMs = toTimestampMs(rawSession.updatedAt);
+      const expMs = getSessionExpirationMs(rawSession) || (nowMs + ttlSeconds * 1000);
+      const lastActiveMs = getSessionActivityMs({
+        createdAtMs,
+        updatedAtMs,
+        expMs,
+      });
+
+      const mappedSession = {
+        sessionId: String(rawSession.sessionId || `${resolvedUserId}:${deviceId}`),
+        userId: resolvedUserId,
+        deviceId,
+        role: String(rawSession.role || 'unknown'),
+        ttlSeconds,
+        status,
+        expMs,
+        lastActiveMs,
+        createdAtMs,
+        updatedAtMs,
+        accessTokenExpired: getAccessTokenExpired(rawSession, nowMs),
+      };
+
+      const existing = groupedByUser.get(resolvedUserId);
       if (!existing) {
-        groupedByUser.set(userId, {
-          userId,
-          email: session.email || 'unknown',
-          role: session.role || 'unknown',
+        groupedByUser.set(resolvedUserId, {
+          userId: resolvedUserId,
+          role: mappedSession.role || 'unknown',
           numberOfSessions: 1,
-          latestSession: session,
+          hasActiveSession: status === 'active',
+          latestSession: mappedSession,
         });
         continue;
       }
 
       existing.numberOfSessions += 1;
-      if (!existing.email || existing.email === 'unknown') {
-        existing.email = session.email || existing.email;
-      }
+      existing.hasActiveSession = existing.hasActiveSession || status === 'active';
+
       if (!existing.role || existing.role === 'unknown') {
-        existing.role = session.role || existing.role;
+        existing.role = mappedSession.role || existing.role;
       }
 
-      if (isSessionMoreRecent(session, existing.latestSession)) {
-        existing.latestSession = session;
+      if (isSessionMoreRecent(mappedSession, existing.latestSession)) {
+        existing.latestSession = mappedSession;
       }
+    }
+
+    const userIds = [...groupedByUser.keys()];
+    const userEmailMap = await getUserEmailMap(userIds);
+
+    for (const [userId, entry] of groupedByUser.entries()) {
+      entry.email = userEmailMap.get(userId) || 'unknown';
     }
 
     const sortedUsers = Array.from(groupedByUser.values()).sort((left, right) => {
@@ -1969,11 +2026,11 @@ const Query = {
           ttlSeconds: Number(latest.ttlSeconds) || 0,
           numberOfSessions: Number(entry.numberOfSessions) || 0,
           lastActive: latest.lastActiveMs,
-          status: latest.status,
+          status: entry.hasActiveSession ? 'active' : 'revoked',
           email: entry.email || 'unknown',
           role: entry.role || 'unknown',
           exp: latest.expMs,
-          accessTokenExpired: getAccessTokenExpired(latest),
+          accessTokenExpired: Boolean(latest.accessTokenExpired),
         };
       });
 
