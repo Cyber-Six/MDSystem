@@ -83,6 +83,10 @@ CREATE INDEX IF NOT EXISTS idx_usercredentials_deleted_at
 CREATE INDEX IF NOT EXISTS idx_medicalpersonnel_deleted_at
   ON "MedicalPersonnel"(deleted_at);
 
+CREATE UNIQUE INDEX IF NOT EXISTS medicalpersonnel_userid_active
+  ON "MedicalPersonnel"("userId")
+  WHERE deleted_at IS NULL;
+
 
 CREATE OR REPLACE FUNCTION apply_user_soft_delete_policy()
 RETURNS TRIGGER AS $$
@@ -927,7 +931,7 @@ WHERE deleted_at IS NULL;
 CREATE OR REPLACE VIEW active_medical_personnel AS
 SELECT mp.*
 FROM "MedicalPersonnel" mp
-JOIN active_user_credentials uc ON uc.id = mp.id
+JOIN active_user_credentials uc ON uc.id = mp."userId"
 WHERE mp.deleted_at IS NULL;
 
 -- Example active-only queries

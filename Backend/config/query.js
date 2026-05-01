@@ -469,9 +469,10 @@ async function isActiveMedicalPersonnel(userId) {
   const sql = `
     SELECT mp.id
     FROM active_medical_personnel mp
-    JOIN active_user_credentials uc ON uc.id = mp.id
-    WHERE mp.id = $1
+    JOIN active_user_credentials uc ON uc.id = mp."userId"
+    WHERE mp."userId" = $1
       AND mp.is_active = true
+    ORDER BY mp.created_at DESC
     LIMIT 1;
   `;
 
@@ -488,8 +489,8 @@ async function getMedicalPersonnelStatus(userId) {
   const sql = `
     SELECT mp.is_active
     FROM active_medical_personnel mp
-    JOIN active_user_credentials uc ON uc.id = mp.id
-    WHERE mp.id = $1
+    JOIN active_user_credentials uc ON uc.id = mp."userId"
+    WHERE mp."userId" = $1
     LIMIT 1;
   `;
 
@@ -584,7 +585,7 @@ async function getUserIdentitiesDetailed(userIds) {
       CASE WHEN mp.is_active = true THEN true ELSE false END AS is_active,
       mp.designation AS branch
     FROM active_user_credentials uc
-    LEFT JOIN active_medical_personnel mp ON mp.id = uc.id
+    LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
     WHERE uc.id = ANY($1)
     ORDER BY uc.id;
   `;

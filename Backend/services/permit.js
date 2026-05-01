@@ -205,7 +205,12 @@ async function isMedicalAdmin(userId) {
   return await findMedicalPermit(userId, permissions.is_admin);;
 }
 
-async function getMedicalpermits(personnelId) {
+async function getMedicalpermits(userId) {
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+  if (!personnelId) {
+    return [];
+  }
+
   const result = await db.query(
     `SELECT rt.label, rm.branch FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
@@ -213,6 +218,19 @@ async function getMedicalpermits(personnelId) {
     [personnelId]
   );
   return result.rows;
+}
+
+async function getActivePersonnelIdByUserId(userId, queryClient = db) {
+  const result = await queryClient.query(
+    `SELECT id
+     FROM active_medical_personnel
+     WHERE "userId" = $1
+     ORDER BY created_at DESC
+     LIMIT 1;`,
+    [userId]
+  );
+
+  return result.rows[0]?.id || null;
 }
 
 /**
@@ -224,13 +242,18 @@ async function getMedicalpermits(personnelId) {
  */
 async function getStaffBranch(userId) {
   const result = await db.query(
-    `SELECT designation FROM active_medical_personnel WHERE id = $1 LIMIT 1`,
+    `SELECT designation FROM active_medical_personnel WHERE "userId" = $1 LIMIT 1`,
     [userId]
   );
   return result.rows[0]?.designation || 'Both';
 }
 
-async function findMedicalPermit(personnelId, label) {
+async function findMedicalPermit(userId, label) {
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+  if (!personnelId) {
+    return false;
+  }
+
   const result = await db.query(
     `SELECT 1 FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
@@ -306,19 +329,23 @@ async function clearMedicalPermits(personnelId, client) {
 
 /**
  * Get all permission keys with enabled status and branch information
- * @param {number} personnelId
+ * @param {number|string} userId
  * @returns {Promise<Object>} { permissions: [{ key, label, enabled, branch }], count }
  */
-async function getStaffPermissions(personnelId) {
+async function getStaffPermissions(userId) {
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+
   // Get all labels with their branches for this staff
-  const result = await db.query(
-    `SELECT rt.label, rm.branch 
-      FROM "rolesMap" rm
-      JOIN "rolesTable" rt
-      ON rm."rolesId" = rt.id
-     WHERE rm."personnelId" = $1;`,
-    [personnelId]
-  );
+  const result = personnelId
+    ? await db.query(
+        `SELECT rt.label, rm.branch 
+         FROM "rolesMap" rm
+         JOIN "rolesTable" rt
+           ON rm."rolesId" = rt.id
+        WHERE rm."personnelId" = $1;`,
+        [personnelId]
+      )
+    : { rows: [] };
 
   // Create a map of label -> branch for active permissions
   const activePermissions = new Map();
@@ -459,6 +486,14 @@ async function isMedicalPermittedMulti(userId, labels) {
     return { permitted: true, branch: 'Both' };
   }
 
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+  if (!personnelId) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without any of [${[].concat(labels).join(', ')}] permission(s).`
+    );
+    return { permitted: false, branch: null };
+  }
+
   const result = await db.query(
     `SELECT rm.branch
      FROM "rolesMap" rm
@@ -466,7 +501,7 @@ async function isMedicalPermittedMulti(userId, labels) {
      WHERE rm."personnelId" = $1
        AND rt.label = ANY($2::text[])
      LIMIT 1;`,
-    [userId, [].concat(labels)]
+    [personnelId, [].concat(labels)]
   );
 
   if (result.rows.length === 0) {
@@ -490,6 +525,14 @@ async function isMedicalPermittedPatientBasedMulti(userId, labels, patientId, st
     return true;
   }
 
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+  if (!personnelId) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without any of [${[].concat(labels).join(', ')}] permission(s)${patientId ? ` on patient ${patientId}` : ""}`
+    );
+    return false;
+  }
+
   const result = await db.query(
     `SELECT p.profile AS identity
      FROM "rolesMap" rm
@@ -505,7 +548,7 @@ async function isMedicalPermittedPatientBasedMulti(userId, labels, patientId, st
          up.branch = rm.branch
        )
      LIMIT 1;`,
-    [userId, [].concat(labels), patientId]
+    [personnelId, [].concat(labels), patientId]
   );
 
   if (result.rows.length === 0) {
@@ -540,6 +583,14 @@ async function isMedicalPermittedLocationBasedMulti(userId, labels, location) {
     return true;
   }
 
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+  if (!personnelId) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without any of [${labels.join(', ')}] permission(s) with location context ${location}`
+    );
+    return false;
+  }
+
   let result = await db.query(
     `SELECT 1
      FROM "rolesMap" rm
@@ -548,7 +599,7 @@ async function isMedicalPermittedLocationBasedMulti(userId, labels, location) {
        AND rt.label = ANY($2::text[])
        AND (rm.branch = 'Both' OR rm.branch = $3 OR $3 = 'Both')
      LIMIT 1;`,
-    [userId, labels, location]
+    [personnelId, labels, location]
   );
 
   if (result.rows.length === 0) {
@@ -572,6 +623,14 @@ async function isMedicalPermittedBranchBasedMulti(userId, labels, branch) {
     return true;
   }
 
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+  if (!personnelId) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without any of [${labels.join(', ')}] permission(s) with branch context ${branch}`
+    );
+    return false;
+  }
+
   let result = await db.query(
     `SELECT 1
      FROM "rolesMap" rm
@@ -584,7 +643,7 @@ async function isMedicalPermittedBranchBasedMulti(userId, labels, branch) {
          (rm.branch = 'QuezonCity' AND $3::"LocationDesignation" = 'QuezonCity')
        )
      LIMIT 1;`,
-    [userId, labels, branch]
+    [personnelId, labels, branch]
   );
 
   if (result.rows.length === 0) {
@@ -597,13 +656,21 @@ async function isMedicalPermittedBranchBasedMulti(userId, labels, branch) {
 }
 
 async function getMedicalPermissionBranch(userId, label) {
+  const personnelId = await getActivePersonnelIdByUserId(userId);
+  if (!personnelId) {
+    logger.warn(
+      `Permission designation query: staff ${userId} does not have ${label} permission`
+    );
+    return null;
+  }
+
   const result = await db.query(
     `SELECT rm.branch
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
      WHERE rm."personnelId" = $1 AND rt.label = $2
      LIMIT 1;`,
-    [userId, label]
+    [personnelId, label]
   );
 
   if (result.rows.length === 0) {
@@ -1076,7 +1143,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
 
   // Find all staff with this role
   const staffResult = await db.query(
-    `SELECT mp.id, mp.designation, mp.is_active
+    `SELECT mp.id, mp."userId", mp.designation, mp.is_active
      FROM active_medical_personnel mp
      WHERE mp.role = $1`,
     [roleLabel]
@@ -1119,7 +1186,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
 
     affectedCount++;
     affectedStaff.push({
-      userId: String(staff.id),
+      userId: String(staff.userId),
       branch,
       status: staff.is_active ? 'Active' : 'Suspended',
     });
@@ -1288,11 +1355,11 @@ async function setStaffModulePermissions({ personnelId, modules, assignedBy, bra
 /**
  * Derive module-level permission status from existing granular permissions.
  * A module is considered enabled only if ALL its mapped keys are enabled.
- * @param {number|string} personnelId
+ * @param {number|string} userId
  * @returns {Promise<{modules: Array<{moduleId: string, label: string, enabled: boolean}>, count: number}>}
  */
-async function getStaffModulePermissions(personnelId) {
-  const { permissions: permsList } = await getStaffPermissions(personnelId);
+async function getStaffModulePermissions(userId) {
+  const { permissions: permsList } = await getStaffPermissions(userId);
 
   // Build a set of enabled permission keys
   const enabledKeys = new Set();

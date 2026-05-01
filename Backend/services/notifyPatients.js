@@ -40,9 +40,9 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
   try {
     // Get staff member's branch scope from MedicalPersonnel
     const staffQuery = `
-      SELECT mp.id, mp.designation AS branch
+      SELECT mp."userId", mp.designation AS branch
       FROM active_medical_personnel mp
-      WHERE mp.id = $1 AND mp.is_active = true
+      WHERE mp."userId" = $1 AND mp.is_active = true
     `;
 
     const staffResult = await db.query(staffQuery, [staffUserId]);

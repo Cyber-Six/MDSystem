@@ -775,17 +775,17 @@ const Query = {
 
     const staffResult = await db.query(
       `SELECT
-         mp.id,
+         mp."userId" AS id,
          mp.designation AS branch,
          mp.role,
          up.first_name,
          up.last_name,
          uc.email
        FROM active_medical_personnel mp
-       JOIN "UsersPersonal" up ON up.id = mp.id
-       JOIN active_user_credentials uc ON uc.id = mp.id
+        JOIN "UsersPersonal" up ON up.id = mp."userId"
+        JOIN active_user_credentials uc ON uc.id = mp."userId"
        WHERE uc.credentials_status = 'Active'
-         AND mp.id <> $1
+          AND mp."userId" <> $1
          AND (
            EXISTS (
              SELECT 1
@@ -1422,8 +1422,8 @@ const Mutation = {
       db.query(
         `SELECT mp.designation, uc.credentials_status
          FROM active_medical_personnel mp
-         JOIN active_user_credentials uc ON uc.id = mp.id
-         WHERE mp.id = $1
+         JOIN active_user_credentials uc ON uc.id = mp."userId"
+         WHERE mp."userId" = $1
          LIMIT 1`,
         [toMedicalId]
       ),

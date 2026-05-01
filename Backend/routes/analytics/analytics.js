@@ -351,7 +351,7 @@ router.get('/report/:reportType', jwtProtect('medical'), async (req, res) => {
     const physicianResult = await require('../../config/db.js').query(
       `SELECT up.first_name, up.last_name, mp.title
        FROM "UsersPersonal" up
-       LEFT JOIN active_medical_personnel mp ON up.id = mp.id
+       LEFT JOIN active_medical_personnel mp ON up.id = mp."userId"
        WHERE up.id = $1`,
       [req.user.id]
     );
@@ -573,7 +573,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
       const physicianResult = await require('../../config/db.js').query(
         `SELECT up.first_name, up.last_name, mp.title
          FROM "UsersPersonal" up
-         LEFT JOIN active_medical_personnel mp ON up.id = mp.id
+         LEFT JOIN active_medical_personnel mp ON up.id = mp."userId"
          WHERE up.id = $1`,
         [req.user.id]
       );
@@ -664,7 +664,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     const physicianResult = await require('../../config/db.js').query(
       `SELECT up.first_name, up.last_name, mp.title
        FROM "UsersPersonal" up
-       LEFT JOIN active_medical_personnel mp ON up.id = mp.id
+      LEFT JOIN active_medical_personnel mp ON up.id = mp."userId"
        WHERE up.id = $1`,
       [req.user.id]
     );
