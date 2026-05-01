@@ -321,36 +321,27 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         return res.status(500).json({ error: "FILE_DELETE_ERROR", message: "Failed to delete old pubmat file" });
       }
 
-      await setSystemAuditLog({
-        client,
-        eventType: "ANNOUNCEMENT_MANAGEMENT",
-        actorId: userId,
-        actorType: "Staff",
-        targetId: null,
-        action: "UPDATE_ANNOUNCEMENT",
-        details: JSON.stringify({
-          announcementId: Number(id),
-          before: {
-            title: existsResult.rows[0].title,
-            description: existsResult.rows[0].content,
-            pubmat: existsResult.rows[0].pubmat,
-            isActive: existsResult.rows[0].isActive,
-            location: existsResult.rows[0].location,
-            viewableUntil: existsResult.rows[0].viewableUntil,
-          },
-          after: {
-            title: result.rows[0].label,
-            description: result.rows[0].description,
-            pubmat: result.rows[0].pubmat,
-            isActive: result.rows[0].isActive,
-            location: result.rows[0].location,
-            viewableUntil: result.rows[0].viewableUntil,
-          },
-        }),
-        changedBy: "Medical",
-      });
     }
 
+    await setSystemAuditLog({
+      client,
+      eventType: "ANNOUNCEMENT_MANAGEMENT",
+      actorId: userId,
+      actorType: "Staff",
+      targetId: null,
+      action: "UPDATE_ANNOUNCEMENT",
+      details: JSON.stringify({
+        announcementId: Number(id),
+        title: label || result.rows[0].label || null,
+        description: description || result.rows[0].description || null,
+        pubmat: promotedPubmat,
+        isActive: isActive !== undefined ? isActive : result.rows[0].isActive,
+        location: location || result.rows[0].location || null,
+        viewableUntil: hasViewableUntil ? viewableUntil : result.rows[0].viewableUntil || null,
+      }),
+      changedBy: "Medical",
+    });
+    
     await client.query("COMMIT");
     logger.info(`Announcement updated by userId=${userId}`, { id });
     return res.status(200).json({ success: true, data: result.rows[0] });
