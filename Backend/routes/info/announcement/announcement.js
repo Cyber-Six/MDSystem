@@ -175,7 +175,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
 
         await setSystemAuditLog({
           client,
-          eventType: "ANNOUNCEMENT_CREATE",
+          eventType: "ANNOUNCEMENT_MANAGEMENT",
           actorId: userId,
           actorType: "Medical",
           targetId: null,
@@ -323,7 +323,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
 
       await setSystemAuditLog({
         client,
-        eventType: "ANNOUNCEMENT_UPDATE",
+        eventType: "ANNOUNCEMENT_MANAGEMENT",
         actorId: userId,
         actorType: "Medical",
         targetId: null,
@@ -427,7 +427,7 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
 
             await setSystemAuditLog({
               client,
-              eventType: "ANNOUNCEMENT_DELETE",
+              eventType: "ANNOUNCEMENT_MANAGEMENT",
               actorId: userId,
               actorType: "Medical",
               targetId: null,
