@@ -2885,6 +2885,8 @@ const Mutation = {
 
       logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);
 
+      if (!clientdb) await client.query('COMMIT');
+
       // Fetch and return the updated staff account to avoid a round-trip on the frontend
       const updatedStaff = await Query._getStaffAccount(_, { userId }, { user, res });
 
@@ -2921,8 +2923,6 @@ const Mutation = {
           `accountUpdated emitted to userId=${payload.userId} (roleChanged=${roleChanged}, branchChanged=${branchChanged}, statusChanged=${statusChanged})`
         );
       }
-
-      if (!clientdb) await client.query('COMMIT');
 
       return {
         ok: true,
