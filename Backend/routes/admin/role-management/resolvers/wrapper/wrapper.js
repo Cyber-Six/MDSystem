@@ -656,8 +656,8 @@ async function getAdminPersonnelId(adminUserId, queryClient = db) {
   return adminPersonnelId;
 }
 
-async function getMedicalPersonnelRecordById(medicalId, queryClient = db) {
-  const normalizedMedicalId = String(medicalId || '').trim();
+async function getMedicalPersonnelRecordById(userId, queryClient = db) {
+  const normalizedMedicalId = String(userId || '').trim();
   if (!normalizedMedicalId) {
     return null;
   }
@@ -2407,6 +2407,7 @@ const Mutation = {
          WHERE id = $1`,
         [userId]
       );
+      await Mutation._updateStaffAccount(_, { userId, status: "Suspended" }, { user, res });
 
       await client.query('COMMIT');
 
@@ -2426,20 +2427,20 @@ const Mutation = {
     }
   },
 
-  _deleteMedicalStaff: async (_, { medicalId }, { user, res }) => {
-    const normalizedMedicalId = String(medicalId || '').trim();
-    if (!normalizedMedicalId) {
+  _deleteMedicalStaff: async (_, { medicalId: userId }, { user, res }) => {
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedUserId) {
       throwGraphQLError(res).message('medicalId is required.').status(400).throw();
     }
 
-    const client = await db.db().connect();
+    const client = await db.connect();
     try {
       await client.query('BEGIN');
 
-      const medicalRecord = await getMedicalPersonnelRecordById(normalizedMedicalId, client);
+      const medicalRecord = await getMedicalPersonnelRecordById(normalizedUserId, client);
       if (!medicalRecord) {
         throwGraphQLError(res)
-          .message(`No medical personnel record exists for medicalId ${normalizedMedicalId}.`)
+          .message(`No medical personnel record exists for medicalId ${normalizedUserId}.`)
           .status(404)
           .throw();
       }
@@ -2458,20 +2459,22 @@ const Mutation = {
 
       if (!softDeleteResult.rowCount) {
         throwGraphQLError(res)
-          .message(`No medical personnel record exists for medicalId ${normalizedMedicalId}.`)
+          .message(`No medical personnel record exists for medicalId ${normalizedUserId}.`)
           .status(404)
           .throw();
       }
 
+      await Mutation._rotateStaffAnchor(userId, client);
+
       await db.setSystemAuditLog({
         client,
         eventType: 'SOFT_DELETE_MEDICAL_STAFF',
-        actorId: normalizedMedicalId,
+        actorId: user?.id ? String(user.id) : null,
         actorType: 'Staff',
-        targetId: normalizedMedicalId,
+        targetId: normalizedUserId,
         action: 'SOFT_DELETE_MEDICAL_STAFF',
         details: JSON.stringify({
-          medicalId: normalizedMedicalId,
+          medicalId: normalizedUserId,
           deletedBy: String(user?.id || ''),
           timestamp: new Date().toISOString(),
         }),
@@ -2481,7 +2484,7 @@ const Mutation = {
       await client.query('COMMIT');
 
       logger.info('Medical staff record soft deleted', {
-        medicalId: normalizedMedicalId,
+        medicalId: normalizedUserId,
         deletedBy: String(user?.id || ''),
       });
 
@@ -2498,7 +2501,7 @@ const Mutation = {
       }
 
       logger.error('Failed to soft delete medical staff record', {
-        medicalId: normalizedMedicalId,
+        medicalId: normalizedUserId,
         deletedBy: String(user?.id || ''),
         error: error.message,
       });
@@ -2929,9 +2932,9 @@ const Mutation = {
     }
   },
 
-  _rotateStaffAnchor: async (_, { userId }, { user, res }) => {
+  _rotateStaffAnchor: async (_, { userId, pool = db.db() }, { user, res }) => {
     // Verify target user exists and is Medical staff
-    const targetResult = await db.query(
+    const targetResult = await pool.query(
       `SELECT uc.id, uc.identity, uc.credentials_status, mp.id AS "medicalId"
        FROM active_user_credentials uc
       LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
@@ -2956,7 +2959,7 @@ const Mutation = {
     const sessions = await listUserSessions(userId);
     const sessionCount = sessions.length;
 
-    const client = await db.db().connect();
+    const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
