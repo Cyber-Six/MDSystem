@@ -2696,7 +2696,7 @@ const Mutation = {
    * - status: optional Active/Suspended toggle
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
-  _updateStaffAccount: async (_, { userId, status, role, templateId, designation }, { user, res }) => {
+  _updateStaffAccount: async (_, { userId, status, role, templateId, designation, client=null }, { user, res }) => {
     if (!status && !role && !designation) {
       throwGraphQLError(res)
         .message('At least one of status, role, or designation must be provided.')
@@ -2795,7 +2795,10 @@ const Mutation = {
     }
 
     // START TRANSACTION FOR ALL DATABASE UPDATES
-    const client = await db.db().connect();
+    if (!client) {
+      client = await db.connect();
+    }
+
     try {
       await client.query('BEGIN');
 
