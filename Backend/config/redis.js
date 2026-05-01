@@ -926,6 +926,57 @@ async function getRefreshSession(userId, deviceId) {
 }
 
 // -----------------------------------------------------//
+// Access token blacklist helpers
+// -----------------------------------------------------//
+
+const SESSION_BLACKLIST_SET_KEY = "blacklist:tokens";
+
+async function setSessionBlacklist(tokenIds, revoked) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!Array.isArray(tokenIds)) {
+    throw new Error("setSessionBlacklist: tokenIds must be an array");
+  }
+
+  const normalizedTokenIds = tokenIds
+    .map((tokenId) => String(tokenId || "").trim())
+    .filter(Boolean);
+
+  if (normalizedTokenIds.length === 0) {
+    return [];
+  }
+
+  const shouldRevoke = Boolean(revoked);
+  const pipeline = client.multi();
+  if (shouldRevoke) {
+    for (const tokenId of normalizedTokenIds) {
+      pipeline.sAdd(SESSION_BLACKLIST_SET_KEY, tokenId);
+    }
+  } else {
+    for (const tokenId of normalizedTokenIds) {
+      pipeline.sRem(SESSION_BLACKLIST_SET_KEY, tokenId);
+    }
+  }
+
+  await pipeline.exec();
+
+  return normalizedTokenIds.map((tokenId) => ({
+    tokenId,
+    blacklisted: shouldRevoke,
+  }));
+}
+
+async function getSessionBlacklist(tokenId) {
+  if (!client) throw new Error("Redis client not initialized");
+  const normalizedTokenId = String(tokenId || "").trim();
+  if (!normalizedTokenId) {
+    throw new Error("getSessionBlacklist: tokenId is required");
+  }
+
+  const exists = await client.sIsMember(SESSION_BLACKLIST_SET_KEY, normalizedTokenId);
+  return Boolean(exists);
+}
+
+// -----------------------------------------------------//
 // Generic Fail Limiter Helper 
 // -----------------------------------------------------//
 
@@ -1447,6 +1498,8 @@ module.exports = {
 
   saveRefreshSession,
   getRefreshSession,
+  setSessionBlacklist,
+  getSessionBlacklist,
   saveStaffAnchor,
   getStaffAnchor,
   listUserSessions,

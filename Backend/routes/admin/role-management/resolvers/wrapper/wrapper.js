@@ -27,6 +27,7 @@ const {
   scanAllRefreshSessions,
   scanAllRefreshSessionsWithMeta,
   deleteAllUserSessions,
+  setSessionBlacklist,
   getStaffAnchor,
   saveStaffAnchor,
   createAdminTransferSession,
@@ -3024,11 +3025,22 @@ const Mutation = {
     const currentSession = matchedRecord.session;
     const currentStatus = matchedRecord.status;
     const nextStatus = shouldRevoke ? 'revoked' : 'active';
+    const tokenId = typeof currentSession.tokenId === 'string'
+      ? currentSession.tokenId.trim()
+      : '';
+    const blacklistEntries = tokenId
+      ? await setSessionBlacklist([tokenId], shouldRevoke)
+      : [];
+    const blacklistEntry = blacklistEntries[0] || null;
+    const blacklistTokenId = blacklistEntry ? blacklistEntry.tokenId : null;
+    const blacklistStatus = blacklistEntry ? blacklistEntry.blacklisted : null;
 
     if (currentStatus === nextStatus) {
       return {
         ok: true,
         message: shouldRevoke ? 'Session already revoked.' : 'Session already active.',
+        tokenId: blacklistTokenId,
+        blacklisted: blacklistStatus,
       };
     }
 
@@ -3050,6 +3062,8 @@ const Mutation = {
     return {
       ok: true,
       message: shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.',
+      tokenId: blacklistTokenId,
+      blacklisted: blacklistStatus,
     };
   },
 
@@ -3071,17 +3085,11 @@ const Mutation = {
       return {
         ok: true,
         message: 'No active sessions found for this user.',
+        results: [],
       };
     }
 
     const recordsToUpdate = mutableRecords.filter((record) => record.status !== nextStatus);
-
-    if (recordsToUpdate.length === 0) {
-      return {
-        ok: true,
-        message: shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.',
-      };
-    }
 
     const updatedAt = Date.now();
     for (const record of recordsToUpdate) {
@@ -3094,6 +3102,16 @@ const Mutation = {
       await setKey(record.sessionKey, JSON.stringify(updatedPayload), record.ttlSeconds);
     }
 
+    const tokenIds = [...new Set(
+      mutableRecords
+        .map((record) => String(record.session?.tokenId || '').trim())
+        .filter(Boolean)
+    )];
+
+    const blacklistResults = tokenIds.length > 0
+      ? await setSessionBlacklist(tokenIds, shouldRevoke)
+      : [];
+
     logger.info('All user refresh sessions status toggled by admin', {
       adminId: String(user?.id || ''),
       userId: normalizedUserId,
@@ -3102,11 +3120,16 @@ const Mutation = {
       updatedSessions: recordsToUpdate.length,
     });
 
+    const message = recordsToUpdate.length === 0
+      ? (shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.')
+      : (shouldRevoke
+        ? `${recordsToUpdate.length} session(s) revoked successfully.`
+        : `${recordsToUpdate.length} session(s) unrevoked successfully.`);
+
     return {
       ok: true,
-      message: shouldRevoke
-        ? `${recordsToUpdate.length} session(s) revoked successfully.`
-        : `${recordsToUpdate.length} session(s) unrevoked successfully.`,
+      message,
+      results: blacklistResults,
     };
   },
 
