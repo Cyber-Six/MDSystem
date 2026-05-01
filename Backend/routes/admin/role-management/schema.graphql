@@ -195,6 +195,24 @@ type RotateAnchorResult {
   sessionsInvalidated: Int!
 }
 
+type SessionBlacklistEntry {
+  tokenId: String!
+  blacklisted: Boolean!
+}
+
+type SessionBlacklistResult {
+  ok: Boolean!
+  message: String!
+  tokenId: String
+  blacklisted: Boolean
+}
+
+type SessionBlacklistListResult {
+  ok: Boolean!
+  message: String!
+  results: [SessionBlacklistEntry!]!
+}
+
 # Admin transfer result type
 type InitiateAdminTransferResult {
   ok: Boolean!
@@ -457,8 +475,8 @@ type Mutation {
   # Session Management
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!
   revokeUserSession(userId: ID!, deviceId: String!): MutationResult!
-  setUserSessionRevoked(userId: ID!, deviceId: String!, revoked: Boolean!): MutationResult!
-  setAllUserSessionsRevoked(userId: ID!, revoked: Boolean!): MutationResult!
+  setUserSessionRevoked(userId: ID!, deviceId: String!, revoked: Boolean!): SessionBlacklistResult!
+  setAllUserSessionsRevoked(userId: ID!, revoked: Boolean!): SessionBlacklistListResult!
 
   # Patient/User Account Controls
   setUserAccountLocked(userId: ID!, locked: Boolean!): MutationResult!
