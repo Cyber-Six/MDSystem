@@ -312,7 +312,7 @@ const Mutation = {
       const patientId = result.rows[0].patientId;
       await db.setSystemAuditLog({
         client,
-        eventType: "MEDICINE_REQUEST_UPDATE",
+        eventType: "MEDICINE_REQUESTS",
         actorId: user.id,
         actorType: "Staff",
         targetId: patientId,
@@ -401,7 +401,7 @@ const Mutation = {
 
       await db.setSystemAuditLog({
         client,
-        eventType: "MEDICINE_REQUEST_UPDATE",
+        eventType: "MEDICINE_REQUESTS",
         actorId: user.id,
         actorType: "Staff",
         targetId: patientId,

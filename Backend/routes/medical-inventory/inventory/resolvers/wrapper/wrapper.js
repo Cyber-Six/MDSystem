@@ -101,10 +101,10 @@ const Mutation = {
 
       await db.setSystemAuditLog({
         client,
-        eventType: "INVENTORY_CREATE",
+        eventType: "INVENTORY_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
-        targetId: result.rows[0].id,
+        targetId: null,
         action: "CREATE_MEDICAL_ITEM",
         details: JSON.stringify({ itemId: result.rows[0].id, itemCode: input.item_code }),
         changedBy: "Medical"
@@ -160,10 +160,10 @@ const Mutation = {
 
       await db.setSystemAuditLog({
         client,
-        eventType: "INVENTORY_UPDATE",
+        eventType: "INVENTORY_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
-        targetId: parseInt(id),
+        targetId: null,
         action: "UPDATE_MEDICAL_ITEM",
         details: JSON.stringify({ itemId: parseInt(id), updatedFields: input }),
         changedBy: "Medical"
@@ -205,10 +205,10 @@ const Mutation = {
 
       await db.setSystemAuditLog({
         client,
-        eventType: "INVENTORY_DELETE",
+        eventType: "INVENTORY_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
-        targetId: parseInt(id),
+        targetId: null,
         action: "DELETE_MEDICAL_ITEM",
         details: JSON.stringify({ itemId: parseInt(id) }),
         changedBy: "Medical"
@@ -262,7 +262,7 @@ const Mutation = {
 
       await db.setSystemAuditLog({
         client,
-        eventType: "INVENTORY_CREATE",
+        eventType: "INVENTORY_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: null,
@@ -336,7 +336,7 @@ const Mutation = {
 
       await db.setSystemAuditLog({
         client,
-        eventType: "INVENTORY_CREATE",
+        eventType: "INVENTORY_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: null,
@@ -447,7 +447,7 @@ const Mutation = {
       }
 
       await db.setSystemAuditLog({
-        eventType: "INVENTORY_UPDATE",
+        eventType: "INVENTORY_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: null,
@@ -550,7 +550,7 @@ const Mutation = {
       }
 
       await db.setSystemAuditLog({
-        eventType: "INVENTORY_UPDATE",
+        eventType: "INVENTORY_MANAGEMENT",
         actorId: user.id,
         actorType: "Staff",
         targetId: null,
@@ -671,10 +671,10 @@ const Mutation = {
       if (user && user.id) {
         await db.setSystemAuditLog({
           client,
-          eventType: "INVENTORY_UPDATE",
+          eventType: "INVENTORY_MANAGEMENT",
           actorId: user.id,
           actorType: "Staff",
-          targetId: parseInt(batchId),
+          targetId: null,
           action: "UPDATE_MEDICINE_BATCH",
           details: JSON.stringify({
             oldQuantity: oldQuantity,
@@ -805,10 +805,10 @@ const Mutation = {
       if (user && user.id) {
         await db.setSystemAuditLog({
           client,
-          eventType: "INVENTORY_UPDATE",
+          eventType: "INVENTORY_MANAGEMENT",
           actorId: user.id,
           actorType: "Staff",
-          targetId: parseInt(batchId),
+          targetId: null,
           action: "UPDATE_SUPPLY_BATCH",
           details: JSON.stringify({
             oldQuantity,

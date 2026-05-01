@@ -203,7 +203,7 @@ const Mutation = {
 
       await db.setSystemAuditLog({
         client,
-        eventType: "PRESCRIPTION_CREATE",
+        eventType: "MEDICINE_REQUESTS",
         actorId: issuedBy,
         actorType: "Staff",
         targetId: input.patientId,
