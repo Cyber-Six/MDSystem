@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const logger = require("../../utils/logger.js");
-const { getStaffAnchor } = require("../redis.js");
+const { getStaffAnchor, getSessionBlacklist } = require("../redis.js");
 const { isActiveMedicalPersonnel } = require("../query.js");
 const { convertIdentity } = require("../../utils/converter.js");
 const { required } = require("joi");
@@ -33,6 +33,16 @@ function jwtProtect(requiredRole = "patient") {
         issuer: "mdsystem-auth",
       });
 
+      if (decoded.jti){
+        const isBlacklisted = await getSessionBlacklist(decoded.jti);
+        if (isBlacklisted) {
+          logger.warn(`[AUTH] Token blacklisted jti=${decoded.jti}, route=${req.path}, ip=${req.ip}`);
+          return res.status(401).json({
+            error: "TOKEN_INVALID",
+            message: "Token has been revoked"
+          });
+        }
+      }
       const role = decoded.role?.toLowerCase();
 
       if (decoded.id === undefined || role === undefined) {
