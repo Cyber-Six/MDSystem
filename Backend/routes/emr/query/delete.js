@@ -1,11 +1,12 @@
 const logger = require("../../../utils/logger.js");
 
-const { query } = require("../../../config/query.js");
+const db = require("../../../config/query.js");
 
 // Generic delete helper
-async function deleteRecord(tableName, field, id) {
+async function deleteRecord(tableName, field, id, clientdb = null) {
+  let client = clientdb ? clientdb : await db.db();
   try {
-    const result = await query(
+    const result = await client.query(
       `DELETE FROM "${tableName}"
        WHERE "${field}" = $1
        RETURNING *;`,
@@ -22,41 +23,41 @@ async function deleteRecord(tableName, field, id) {
   }
 }
 
-async function VisualAcuityRecord(id) {
-  return deleteRecord("VisualAcuityRecord", "id", id);
+async function VisualAcuityRecord(id, clientdb = null) {
+  return deleteRecord("VisualAcuityRecord", "id", id, clientdb);
 }
 
 
-async function MedicalCondition(id) { 
-  return deleteRecord("MedicalCondition", "medicalHistoryId", id);
+async function MedicalCondition(id, clientdb = null) { 
+  return deleteRecord("MedicalCondition", "medicalHistoryId", id, clientdb);
 }
 
-async function MedicationRecord(id) {
-  return deleteRecord("MedicationRecord", "medicationId",id);
+async function MedicationRecord(id, clientdb = null) {
+  return deleteRecord("MedicationRecord", "medicationId",id, clientdb);
 }
 
-async function HospitalizationRecord(id) {
-  return deleteRecord("HospitalizationRecord", "hospitalizationId", id);
+async function HospitalizationRecord(id, clientdb = null) {
+  return deleteRecord("HospitalizationRecord", "hospitalizationId", id, clientdb);
 }
 
-async function OperationRecord(id) {
-  return deleteRecord("OperationRecord", "operationId", id);
+async function OperationRecord(id, clientdb = null) {
+  return deleteRecord("OperationRecord", "operationId", id, clientdb);
 }
 
-async function ImmunizationRecord(id) {
-  return deleteRecord("ImmunizationRecord", "immunizationId", id);
+async function ImmunizationRecord(id, clientdb = null) {
+  return deleteRecord("ImmunizationRecord", "immunizationId", id, clientdb);
 }
 
-async function DentalProcedureRecord(id) {
-  return deleteRecord("DentalProcedureRecord", "dentalProcedureId", id);
+async function DentalProcedureRecord(id, clientdb = null) {
+  return deleteRecord("DentalProcedureRecord", "dentalProcedureId", id, clientdb);
 }
 
-async function AllergyRecord(id) {
-  return deleteRecord("AllergyRecord", "allergyId", id);
+async function AllergyRecord(id, clientdb = null) {
+  return deleteRecord("AllergyRecord", "allergyId", id, clientdb);
 }
 
-async function OralApplianceRecord(id) {
-  return deleteRecord("OralApplianceRecord", "applianceId", id);
+async function OralApplianceRecord(id, clientdb = null) {
+  return deleteRecord("OralApplianceRecord", "applianceId", id, clientdb);
 }
 
 module.exports = {

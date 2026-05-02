@@ -62,6 +62,7 @@ const Mutation = {
     assertActiveUpdateTicket(record, res);
 
     // Update the ticket
+
     const updateResult = await Wrapper._StaffUpdateTicket(
       _,
       { args, recordId: record.id, scope: record.scope },

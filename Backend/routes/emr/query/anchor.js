@@ -1,11 +1,12 @@
 const logger = require("../../../utils/logger.js");
 
-const { query } = require("../../../config/query.js");
+const db = require("../../../config/query.js");
 
 // ✅ Generic query wrapper
 // Generic helper
-async function queryAnchor(tableName, id, notes) {
+async function queryAnchor(tableName, id, notes, clientdb = null) {
   let queryText, values;
+  let client = clientdb ? clientdb : await db.db();
 
   if (notes) {
     queryText = `
@@ -26,47 +27,48 @@ async function queryAnchor(tableName, id, notes) {
     values = [id];
   }
 
-  const result = await query(queryText, values);
+  const result = await client.query(queryText, values);
   return result.rows[0];
 }
 
-async function VisualAcuity(id, notes) {
-  return queryAnchor("VisualAcuity", id, notes);
+async function VisualAcuity(id, notes, clientdb = null) {
+  return queryAnchor("VisualAcuity", id, notes, clientdb);
 }
 
-async function MaintenanceMedication(id, notes) {
-  return queryAnchor("MaintenanceMedication", id, notes);
+async function MaintenanceMedication(id, notes, clientdb = null) {
+  return queryAnchor("MaintenanceMedication", id, notes, clientdb);
 }
 
-async function MedicalHistory (id, notes) {
-  return queryAnchor("MedicalHistory", id, notes);}
-
-async function Hospitalization(id, notes) {
-  return queryAnchor("Hospitalization", id, notes);
+async function MedicalHistory (id, notes, clientdb = null) {
+  return queryAnchor("MedicalHistory", id, notes, clientdb);
 }
 
-async function Operation(id, notes) {
-  return queryAnchor("Operation", id, notes);
+async function Hospitalization(id, notes, clientdb = null) {
+  return queryAnchor("Hospitalization", id, notes, clientdb);
 }
 
-async function Immunization(id, notes) {
-  return queryAnchor("Immunization", id, notes);
+async function Operation(id, notes, clientdb = null) {
+  return queryAnchor("Operation", id, notes, clientdb);
 }
 
-async function DentalProcedure(id, notes) {
-  return queryAnchor("DentalProcedure", id, notes);
+async function Immunization(id, notes, clientdb = null) {
+  return queryAnchor("Immunization", id, notes, clientdb);
 }
 
-async function Allergy(id, notes) {
-  return queryAnchor("Allergy", id, notes);
+async function DentalProcedure(id, notes, clientdb = null) {
+  return queryAnchor("DentalProcedure", id, notes, clientdb);
 }
 
-async function OralAppliance(id, notes) {
-  return queryAnchor("OralAppliance", id, notes);
+async function Allergy(id, notes, clientdb = null) {
+  return queryAnchor("Allergy", id, notes, clientdb);
 }
 
-async function DentalRecord(id, notes) {
-  return queryAnchor("DentalRecord", id, notes);
+async function OralAppliance(id, notes, clientdb = null) {
+  return queryAnchor("OralAppliance", id, notes, clientdb);
+}
+
+async function DentalRecord(id, notes, clientdb = null) {
+  return queryAnchor("DentalRecord", id, notes, clientdb);
 }
 
 module.exports = {

@@ -1,15 +1,17 @@
 const { normalizeName, normalizeNumber } = require("../../../utils/validator.js");
 const logger = require("../../../utils/logger.js");
 
-const { query } = require("../../../config/query.js");
+const db = require("../../../config/query.js");
 
 // ✅ Generic query wrapper
 
-async function upsertEmergencyNumber(input) {
+async function upsertEmergencyNumber(input, clientdb = null) {
   const normalizedName = normalizeName(input.contactName);
   const normalizedNumber = normalizeNumber(input.contactNumber);
+  
+  let client = clientdb ? clientdb : await db.db();
   // Check if number already exists
-  const existing = await query(
+  const existing = await client.query(
     `SELECT * FROM "EmergencyNumber" WHERE "contactNumber" = $1 AND "contactName" = $2 AND "address" = $3;`,
     [normalizedNumber, normalizedName, input.address || null]
   );
@@ -18,8 +20,9 @@ async function upsertEmergencyNumber(input) {
     // Reuse existing record
     return existing.rows[0];
   }
+
   // Otherwise insert new
-  const result = await query(
+  const result = await client.query(
     `INSERT INTO "EmergencyNumber"
       ("contactName", "relationship", "contactNumber", address, "isVerified", "created_at")
      VALUES ($1, $2, $3, $4, $5, NOW())
