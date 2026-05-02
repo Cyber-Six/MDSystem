@@ -384,7 +384,6 @@ const UserManagement = () => {
           return {
             rowId: `${userId}:${session.deviceId || 'unknown'}:${nextOffset + index}`,
             deviceId: session.deviceId || '--',
-            refreshToken: session.refreshToken || '--',
             status: session.status || 'unknown',
             createdAt: session.createdAt || null,
             updatedAt: session.updatedAt || null,
@@ -1325,24 +1324,24 @@ const UserManagement = () => {
   const handleRevokeSession = useCallback(async (row) => {
     if (rateLimitedRef.current) return;
     if (!selectedSessionUser?.id || !row?.deviceId) return;
+    if (getStatusKey(row.status) === 'revoked') return;
 
     setRevokingSessionRowId(row.rowId);
     setUserSessionsError(null);
 
     try {
-      const shouldRevoke = getStatusKey(row.status) !== 'revoked';
-      await setUserSessionRevoked(String(selectedSessionUser.id), String(row.deviceId), shouldRevoke);
+      await setUserSessionRevoked(String(selectedSessionUser.id), String(row.deviceId), true);
 
       setUserSessionRows((currentRows) => currentRows.map((currentRow) => {
         if (currentRow.rowId !== row.rowId) return currentRow;
         return {
           ...currentRow,
-          status: shouldRevoke ? 'revoked' : 'active',
+          status: 'revoked',
           updatedAt: new Date().toISOString(),
         };
       }));
 
-      setSessionToastMessage(shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.');
+      setSessionToastMessage('Session revoked successfully.');
     } catch (error) {
       if (isRateLimitedError(error)) {
         markRateLimited();
@@ -1353,7 +1352,7 @@ const UserManagement = () => {
         markNetworkError();
       }
 
-      setUserSessionsError(error?.message || 'Failed to update this session ticket.');
+      setUserSessionsError(error?.message || 'Failed to revoke this session ticket.');
     } finally {
       setRevokingSessionRowId(null);
     }
@@ -1363,24 +1362,22 @@ const UserManagement = () => {
     selectedSessionUser,
   ]);
 
-  const handleBulkSessionAction = useCallback(async (revoked) => {
+  const handleBulkSessionAction = useCallback(async () => {
     if (rateLimitedRef.current) return;
     if (!selectedSessionUser?.id) return;
 
-    const shouldRevoke = Boolean(revoked);
-    const targetStatus = shouldRevoke ? 'revoked' : 'active';
-    const hasRowsToChange = userSessionRows.some((row) => getStatusKey(row.status) !== targetStatus);
+    const hasActiveRows = userSessionRows.some((row) => getStatusKey(row.status) !== 'revoked');
 
-    if (!hasRowsToChange) {
-      setSessionToastMessage(shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.');
+    if (!hasActiveRows) {
+      setSessionToastMessage('All sessions are already revoked.');
       return;
     }
 
-    setBulkSessionAction(shouldRevoke ? 'revoke' : 'unrevoke');
+    setBulkSessionAction('revoke');
     setUserSessionsError(null);
 
     try {
-      const result = await setAllUserSessionsRevoked(String(selectedSessionUser.id), shouldRevoke);
+      const result = await setAllUserSessionsRevoked(String(selectedSessionUser.id), true);
 
       setUserSessionRows((currentRows) => currentRows.map((currentRow) => {
         const currentStatus = getStatusKey(currentRow.status);
@@ -1388,14 +1385,12 @@ const UserManagement = () => {
 
         return {
           ...currentRow,
-          status: targetStatus,
+          status: 'revoked',
           updatedAt: new Date().toISOString(),
         };
       }));
 
-      setSessionToastMessage(result?.message || (shouldRevoke
-        ? 'All sessions revoked successfully.'
-        : 'All sessions unrevoked successfully.'));
+      setSessionToastMessage(result?.message || 'All sessions revoked successfully.');
     } catch (error) {
       if (isRateLimitedError(error)) {
         markRateLimited();
@@ -1406,7 +1401,7 @@ const UserManagement = () => {
         markNetworkError();
       }
 
-      setUserSessionsError(error?.message || 'Failed to update all session tickets.');
+      setUserSessionsError(error?.message || 'Failed to revoke all session tickets.');
     } finally {
       setBulkSessionAction(null);
     }
@@ -2720,7 +2715,7 @@ const UserManagement = () => {
           <div className="relative w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
               <div>
-                <h3 id="user-session-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Active Tickets (Devices and Refresh Tokens)</h3>
+                <h3 id="user-session-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Active Tickets (Devices)</h3>
                 <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{selectedSessionUser.name} ({selectedSessionUser.email})</p>
               </div>
 
@@ -2739,7 +2734,7 @@ const UserManagement = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    void handleBulkSessionAction(true);
+                    void handleBulkSessionAction();
                   }}
                   disabled={userSessionsLoading || bulkSessionAction !== null || revokingSessionRowId !== null || isRateLimited}
                   className="px-2.5 py-1 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2747,16 +2742,7 @@ const UserManagement = () => {
                   {bulkSessionAction === 'revoke' ? 'Revoking...' : 'Revoke All'}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleBulkSessionAction(false);
-                  }}
-                  disabled={userSessionsLoading || bulkSessionAction !== null || revokingSessionRowId !== null || isRateLimited}
-                  className="px-2.5 py-1 text-xs rounded border border-success-300 dark:border-success-700 text-success-700 dark:text-success-300 hover:bg-success-50 dark:hover:bg-success-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {bulkSessionAction === 'unrevoke' ? 'Updating...' : 'Unrevoke All'}
-                </button>
+
 
                 <button
                   type="button"
@@ -2808,7 +2794,6 @@ const UserManagement = () => {
                         <thead>
                           <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Device ID</th>
-                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Refresh Token</th>
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Action</th>
@@ -2821,7 +2806,6 @@ const UserManagement = () => {
                             return (
                               <tr key={row.rowId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
                                 <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">{row.deviceId}</td>
-                                <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300 max-w-[360px] truncate" title={row.refreshToken}>{row.refreshToken}</td>
                                 <td className="py-2.5 px-3">
                                   <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
                                     <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
@@ -2835,11 +2819,11 @@ const UserManagement = () => {
                                     onClick={() => {
                                       void handleRevokeSession(row);
                                     }}
-                                    disabled={isRevoking || bulkSessionAction !== null || isRateLimited}
+                                    disabled={isRevoking || bulkSessionAction !== null || isRateLimited || getStatusKey(row.status) === 'revoked'}
                                     className="px-2.5 py-1 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    aria-label={`${getStatusKey(row.status) === 'revoked' ? 'Unrevoke' : 'Revoke'} session for device ${row.deviceId}`}
+                                    aria-label={`Revoke session for device ${row.deviceId}`}
                                   >
-                                    {isRevoking ? 'Updating...' : (getStatusKey(row.status) === 'revoked' ? 'Unrevoke' : 'Revoke')}
+                                    {isRevoking ? 'Revoking...' : 'Revoke'}
                                   </button>
                                 </td>
                               </tr>
