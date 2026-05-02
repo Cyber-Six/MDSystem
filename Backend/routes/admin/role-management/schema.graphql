@@ -271,12 +271,12 @@ type PatientDeletionCandidatePage {
 # Linked user sessions (detail view when clicking a user row)
 type LinkedUserSession {
   deviceId: String!
-  refreshToken: String!
   status: String!
   createdAt: String
   updatedAt: String
   ttlSeconds: Int!
   expiresAt: String
+  accessTokenExpired: Boolean!
 }
 
 type UserLoginAttempt {
@@ -298,12 +298,12 @@ type UserSession {
   email: String!
   role: String!
   device: String!
-  refreshToken: String!
   ttlSeconds: Int!
   numberOfSessions: Int!
   status: String!
   lastActive: Float
   exp: Float!
+  accessTokenExpired: Boolean!
 }
 
 # Paginated user sessions response

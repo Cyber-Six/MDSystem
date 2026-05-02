@@ -688,6 +688,25 @@ const Mutation = {
         );
       }
 
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Patient",
+        targetId: null,
+        action: "SUBMIT_APPOINTMENT",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          scheduleDate: date,
+          session,
+          requirementCount: requirements?.length || 0,
+          purpose: normalizedPurpose || null,
+          slotEntityId: schedule.id,
+          patientSlotId,
+        }),
+        changedBy: "Patient",
+      });
+
       await client.query('COMMIT');
 
       // Fetch inserted requirements to attach to the slot
@@ -764,6 +783,24 @@ const Mutation = {
         `UPDATE "patientSlot" SET status = $1 WHERE id = $2;`,
         [newStatus, slotId]
       );
+      const isStaffTriggered = parseInt(cancelledBy) !== parseInt(patientId);
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: isStaffTriggered ? "Staff" : "Patient",
+        targetId: isStaffTriggered ? patientId : null,
+        action: "CANCEL_APPOINTMENT",
+        details: JSON.stringify({
+          slotId: Number(slotId),
+          previousStatus: appointment.status,
+          newStatus,
+          cancelledBy: cancelledBy,
+          patientId: patientId,
+        }),
+        changedBy: isStaffTriggered ? "Medical" : "Patient",
+      });
 
       await client.query('COMMIT');
 
@@ -825,6 +862,23 @@ const Mutation = {
         [status, notes || null, user.id, slotId]
       );
 
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: updateResult.rows[0]?.patientId || null,
+        action: "RESPOND_APPOINTMENT",
+        details: JSON.stringify({
+          slotId: Number(slotId),
+          previousStatus: currentStatus,
+          newStatus: status,
+          notes: notes || null,
+          approvedBy: user.id,
+        }),
+        changedBy: "Medical",
+      });
+
       await client.query('COMMIT');
 
       // Resolve approver name (outside transaction)
@@ -879,6 +933,22 @@ const Mutation = {
         `UPDATE "patientSlot" SET status = 'InProgress', arrived_at = $1 WHERE id = $2 RETURNING *;`,
         [arrived_at, slotId]
       );
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: updateResult.rows[0]?.patientId || null,
+        action: "RECORD_APPOINTMENT_ATTENDANCE",
+        details: JSON.stringify({
+          slotId: Number(slotId),
+          previousStatus: rows[0].status,
+          newStatus: "InProgress",
+          arrivedAt: arrived_at || null,
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query('COMMIT');
 
@@ -994,6 +1064,29 @@ const Mutation = {
       if (input.whiteLists && input.whiteLists.length > 0) {
         await insertSchedulerWhitelist(schedulerId, input.whiteLists, client);
       }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "CREATE_APPOINTMENT_SCHEDULER",
+        details: JSON.stringify({
+          schedulerId,
+          label: input.label,
+          location: input.location,
+          patientType: input.patientType || null,
+          morningAllowed: input.morningAllowed,
+          afternoonAllowed: input.afternoonAllowed,
+          whitelistOnly: input.whitelistOnly || false,
+          purposeRequired: input.purposeRequired || false,
+          includeDatesCount: input.slotIncludedDates?.length || 0,
+          excludeDatesCount: input.slotExcludedDates?.length || 0,
+          whitelistCount: input.whiteLists?.length || 0,
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query("COMMIT");
       logger.info(`Created new scheduler with ID ${schedulerId} by user ${user.id}`);
@@ -1130,6 +1223,28 @@ const Mutation = {
       );
     }
 
+    const updatedFields = { schedulerId: Number(schedulerId) };
+    if (input.label !== undefined) updatedFields.label = input.label;
+    if (input.location !== undefined) updatedFields.location = input.location;
+    if (input.patientType !== undefined) updatedFields.patientType = input.patientType ?? null;
+    if (input.schedulePerWeek !== undefined) updatedFields.schedulePerWeek = input.schedulePerWeek;
+    if (input.morningAllowed !== undefined) updatedFields.morningAllowed = input.morningAllowed;
+    if (input.afternoonAllowed !== undefined) updatedFields.afternoonAllowed = input.afternoonAllowed;
+    if (input.whitelistOnly !== undefined) updatedFields.whitelistOnly = input.whitelistOnly;
+    if (input.isActive !== undefined) updatedFields.isActive = input.isActive;
+    if (input.purposeRequired !== undefined) updatedFields.purposeRequired = input.purposeRequired;
+    if (input.notes !== undefined) updatedFields.notes = input.notes;
+
+    await db.setSystemAuditLog({
+      eventType: "APPOINTMENT_MANAGEMENT",
+      actorId: user.id,
+      actorType: "Staff",
+      targetId: null,
+      action: "UPDATE_APPOINTMENT_SCHEDULER",
+      details: JSON.stringify(updatedFields),
+      changedBy: "Medical",
+    });
+
     const scheduler = result.rows[0];
     scheduler.schedulePerWeek = decodeSchedulingFlags(scheduler.scheduleFlags);
     return scheduler;
@@ -1182,6 +1297,19 @@ const Mutation = {
         `DELETE FROM "slotScheduler" WHERE id = $1;`,
         [schedulerId]
       );
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "DELETE_APPOINTMENT_SCHEDULER",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query('COMMIT');
 
@@ -1244,6 +1372,23 @@ const Mutation = {
         throwGraphQLError(res).message("Failed to update scheduler requirement").status(500).throw();
       }
 
+      await db.setSystemAuditLog({
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "UPDATE_SCHEDULER_REQUIREMENT",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          requirementId: existing.rows[0].id,
+          label: input.label,
+          notes: input.notes,
+          isDigital: input.isDigital,
+          isActive: input.isActive,
+        }),
+        changedBy: "Medical",
+      });
+
       return result.rows[0];
     } else {
       // Insert new requirement
@@ -1257,6 +1402,23 @@ const Mutation = {
       if (result.rowCount === 0) {
         throwGraphQLError(res).message("Failed to create scheduler requirement").status(500).throw();
       }
+
+      await db.setSystemAuditLog({
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "CREATE_SCHEDULER_REQUIREMENT",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          requirementId: result.rows[0].id,
+          label: input.label,
+          notes: input.notes || null,
+          isDigital: input.isDigital ?? true,
+          isActive: input.isActive ?? true,
+        }),
+        changedBy: "Medical",
+      });
 
       return result.rows[0];
     }
@@ -1286,6 +1448,22 @@ const Mutation = {
       `DELETE FROM "scheduleRequirement" WHERE id = $1;`,
       [reqId]
     );
+
+    if (result.rowCount > 0) {
+      await db.setSystemAuditLog({
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "DELETE_SCHEDULER_REQUIREMENT",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          requirementId: reqId,
+          label,
+        }),
+        changedBy: "Medical",
+      });
+    }
 
     return result.rowCount > 0;
   },
@@ -1379,6 +1557,21 @@ const Mutation = {
           [schedulerId]
         );
       }
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "SET_APPOINTMENT_CUSTOM_DATES",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          datesCount: dates.length,
+          dates,
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query('COMMIT');
 
@@ -1506,6 +1699,22 @@ const Mutation = {
         [remaining.rowCount > 0, schedulerId]
       );
 
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "UNSET_APPOINTMENT_CUSTOM_DATES",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          removedDatesCount: deletedDates.length,
+          removedDates: deletedDates,
+          containsCustomDates: remaining.rowCount > 0,
+        }),
+        changedBy: "Medical",
+      });
+
       await client.query('COMMIT');
 
       return deletedDates;
@@ -1557,6 +1766,20 @@ const Mutation = {
           .throw();
       }
 
+      await db.setSystemAuditLog({
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "ADD_SCHEDULER_WHITELIST",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          addedPatientIds: result.rows.map(r => r.patientId),
+          addedCount: result.rowCount,
+        }),
+        changedBy: "Medical",
+      });
+
       // Return the list of patient IDs that were actually inserted
       return result.rows.map(r => r.patientId);
     } catch (err) {
@@ -1594,6 +1817,20 @@ const Mutation = {
           .status(404)
           .throw();
       }
+
+      await db.setSystemAuditLog({
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "REMOVE_SCHEDULER_WHITELIST",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          removedPatientIds: result.rows.map(r => r.patientId),
+          removedCount: result.rowCount,
+        }),
+        changedBy: "Medical",
+      });
 
       // Return the list of patient IDs that were actually removed
       return result.rows.map(r => r.patientId);
@@ -1692,6 +1929,26 @@ const Mutation = {
 
       // Attach computed counts so GraphQL can resolve morningRegistered, etc.
       const updated = result.rows[0];
+
+      const updatedFields = {
+        schedulerId: Number(schedulerId),
+        originalDate: date,
+      };
+      if (input.morningAllowed !== undefined) updatedFields.morningAllowed = input.morningAllowed;
+      if (input.afternoonAllowed !== undefined) updatedFields.afternoonAllowed = input.afternoonAllowed;
+      if (input.allowDuring !== undefined) updatedFields.allowDuring = input.allowDuring;
+      if (input.scheduledDate !== undefined) updatedFields.scheduledDate = input.scheduledDate;
+
+      await db.setSystemAuditLog({
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "UPDATE_DATE_IDENTITY",
+        details: JSON.stringify(updatedFields),
+        changedBy: "Medical",
+      });
+
       const counts = await getAppointmentCounts(schedulerId, updated.scheduledDate);
       return { ...updated, ...counts };
     } catch (err) {
@@ -1727,6 +1984,22 @@ const Mutation = {
          RETURNING ps.id, ps."patientId";`,
         [cancelReason, user.id, schedulerId, date]
       );
+
+      await db.setSystemAuditLog({
+        client,
+        eventType: "APPOINTMENT_MANAGEMENT",
+        actorId: user.id,
+        actorType: "Staff",
+        targetId: null,
+        action: "CANCEL_DATE_APPOINTMENTS",
+        details: JSON.stringify({
+          schedulerId: Number(schedulerId),
+          scheduleDate: date,
+          reason: cancelReason,
+          cancelledCount: result.rowCount,
+        }),
+        changedBy: "Medical",
+      });
 
       await client.query('COMMIT');
 

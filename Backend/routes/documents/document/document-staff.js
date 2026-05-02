@@ -2,7 +2,7 @@ const express = require('express');
 const logger = require('../../../utils/logger.js');
 const { jwtProtect } = require('../../../config/middleware/jwtProtect.js');
 const db = require('../../../config/db.js');
-const { connect } = require('../../../config/query.js');
+const { connect, setSystemAuditLog } = require('../../../config/query.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
 const docGen = require('../../../services/doc-generate-module/index.js');
 const {
@@ -1020,6 +1020,22 @@ router.post('/required/:documentId', jwtProtect('medical'), async (req, res) => 
       submissionId = insertResult.rows[0].id;
     }
 
+    await setSystemAuditLog({
+      client,
+      eventType: 'DOCUMENT_MANAGEMENT',
+      actorId: req.user.id,
+      actorType: 'Staff',
+      targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+      action: 'RECORD_REQUIRED_DOCUMENT',
+      details: JSON.stringify({
+        documentTagId: Number(documentId),
+        patientId: Number(patientId),
+        submissionId,
+        fileUploaded: Boolean(promotedFile),
+      }),
+      changedBy: 'Medical',
+    });
+
     // Delete old file only after SQL succeeds
     if (oldFile && promotedFile && promotedFile !== oldFile) {
       try {
@@ -1116,6 +1132,25 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
     );
 
     const submissionId = updateResult.rows[0].id;
+
+    await setSystemAuditLog({
+      client,
+      eventType: 'DOCUMENT_MANAGEMENT',
+      actorId: req.user.id,
+      actorType: 'Staff',
+      targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+      action: 'APPROVE_REQUIRED_DOCUMENT',
+      details: JSON.stringify({
+        documentTagId: Number(documentId),
+        patientId: Number(patientId),
+        submissionId,
+        previousStatus: existing.status,
+        newStatus: 'Recorded',
+        notes: notes || null,
+      }),
+      changedBy: 'Medical',
+    });
+
     await client.query('COMMIT');
 
     // Notify patient
@@ -1205,6 +1240,23 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
       `DELETE FROM "patientRawDocument" WHERE id = $1`,
       [existing.id]
     );
+
+    await setSystemAuditLog({
+      client,
+      eventType: 'DOCUMENT_MANAGEMENT',
+      actorId: req.user.id,
+      actorType: 'Staff',
+      targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+      action: 'REJECT_REQUIRED_DOCUMENT',
+      details: JSON.stringify({
+        documentTagId: Number(documentId),
+        patientId: Number(patientId),
+        deletedSubmissionId: existing.id,
+        previousStatus: existing.status,
+        notes: notes || null,
+      }),
+      changedBy: 'Medical',
+    });
 
     await client.query('COMMIT');
 
@@ -1304,6 +1356,22 @@ router.delete('/required/:documentId/cancel', jwtProtect('medical'), async (req,
       `DELETE FROM "patientRawDocument" WHERE id = $1`,
       [existing.id]
     );
+
+    await setSystemAuditLog({
+      client,
+      eventType: 'DOCUMENT_MANAGEMENT',
+      actorId: req.user.id,
+      actorType: 'Staff',
+      targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+      action: 'CANCEL_REQUIRED_DOCUMENT_REQUEST',
+      details: JSON.stringify({
+        documentTagId: Number(documentId),
+        patientId: Number(patientId),
+        deletedSubmissionId: existing.id,
+        previousStatus: existing.status,
+      }),
+      changedBy: 'Medical',
+    });
 
     await client.query('COMMIT');
 
@@ -1423,6 +1491,25 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
       submissionId = insertResult.rows[0].id;
     }
 
+    await setSystemAuditLog({
+      client,
+      eventType: 'DOCUMENT_MANAGEMENT',
+      actorId: req.user.id,
+      actorType: 'Staff',
+      targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+      action: 'REQUEST_REQUIRED_DOCUMENT',
+      details: JSON.stringify({
+        documentTagId: Number(documentId),
+        patientId: Number(patientId),
+        submissionId,
+        reusedExistingSubmission: Boolean(existing),
+        previousStatus: existing?.status || null,
+        newStatus: 'Requested',
+        notes: notes || null,
+      }),
+      changedBy: 'Medical',
+    });
+
     await client.query('COMMIT');
 
     // Notify patient about the document request
@@ -1521,6 +1608,25 @@ router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, 
     );
 
     const submissionId = updateResult.rows[0].id;
+
+    await setSystemAuditLog({
+      client,
+      eventType: 'DOCUMENT_MANAGEMENT',
+      actorId: req.user.id,
+      actorType: 'Staff',
+      targetId: Number.isInteger(Number(patientId)) ? Number(patientId) : null,
+      action: 'ARCHIVE_REQUIRED_DOCUMENT',
+      details: JSON.stringify({
+        documentTagId: Number(documentId),
+        patientId: Number(patientId),
+        submissionId,
+        previousStatus: existing.status,
+        newStatus: 'Archived',
+        notes: notes || null,
+      }),
+      changedBy: 'Medical',
+    });
+
     await client.query('COMMIT');
 
     // Notify patient
@@ -1863,6 +1969,23 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
             requirementTag: GENERIC_BINARY_TAG,
           });
         }
+
+        await setSystemAuditLog({
+          client,
+          eventType: 'DOCUMENT_MANAGEMENT',
+          actorId: req.user.id,
+          actorType: 'Staff',
+          targetId: Number.isInteger(Number(actualPatientId)) ? Number(actualPatientId) : null,
+          action: 'GENERATE_PATIENT_DOCUMENT',
+          details: JSON.stringify({
+            documentId,
+            patientId: Number(actualPatientId),
+            docType: normalizeTag(docType),
+            issuedBy: req.user.id,
+            linkedChatId: validatedChat?.id || null,
+          }),
+          changedBy: 'Medical',
+        });
 
         await client.query('COMMIT');
       } catch (err) {
