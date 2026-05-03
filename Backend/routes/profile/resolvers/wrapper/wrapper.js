@@ -31,7 +31,7 @@ const Query = {
     }
 
     const result = await db.query(
-       `SELECT up.*, uc.email
+       `SELECT up.*, uc.email, uc.identity
         FROM "UsersPersonal" AS up
         JOIN active_user_credentials AS uc
           ON up.id = uc.id

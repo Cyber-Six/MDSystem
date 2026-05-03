@@ -35,6 +35,7 @@ type userProfile{
   present_address: String!
   province_address: String!
   status: UpdateStatus!
+  identity: UserIdentity!
   email: String
   branch: USER_BRANCH
   identifier: ID
@@ -109,8 +110,6 @@ enum CredentialStatus{
 enum UserIdentity {
   Student
   Employee
-  Superior
-  Medical
 }
 
 type UserCredentials {
