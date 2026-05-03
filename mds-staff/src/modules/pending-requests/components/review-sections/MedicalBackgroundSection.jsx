@@ -7,6 +7,22 @@ import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
  * Displays sub-sections for: Allergies, Immunizations, Hospitalizations,
  * Operations/Surgeries, Medications, Lifestyle, Visual Acuity, Vital Signs.
  */
+
+const LIFESTYLE_FREQUENCY_OPTIONS = [
+  { value: 'Daily', label: 'Daily' },
+  { value: 'Weekly', label: 'Weekly' },
+  { value: 'Monthly', label: 'Monthly' },
+  { value: 'Occasional', label: 'Occasionally' },
+  { value: 'Rare', label: 'Rare' },
+];
+
+const VAPE_TYPE_OPTIONS = [
+  { value: 'Nicotine', label: 'Nicotine' },
+  { value: 'CBD', label: 'CBD' },
+  { value: 'THC', label: 'THC' },
+  { value: 'Flavored', label: 'Flavored' },
+];
+
 const MedicalBackgroundSection = ({
   allergyProfile,
   immunizationProfile,
@@ -282,6 +298,8 @@ const MedicalBackgroundSection = ({
               originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
+              type="select"
+              options={LIFESTYLE_FREQUENCY_OPTIONS}
             />
             <EditableField
               label="Vaper"
@@ -298,6 +316,8 @@ const MedicalBackgroundSection = ({
               originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('vapeType', v)}
+              type="select"
+              options={VAPE_TYPE_OPTIONS}
             />
             <EditableField
               label="Vape Frequency"
@@ -305,6 +325,8 @@ const MedicalBackgroundSection = ({
               originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('vapeFrequency', v)}
+              type="select"
+              options={LIFESTYLE_FREQUENCY_OPTIONS}
             />
             <EditableField
               label="Notes"

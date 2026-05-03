@@ -92,7 +92,7 @@ const Mutation = {
 
       await client.query(
         `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
-          ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
+          ON CONFLICT (id) DO UPDATE SET profile_type = COALESCE(EXCLUDED.profile_type, "profileRecord".profile_type);`,
         [recordId, identity]
       );
 
@@ -141,7 +141,7 @@ const Mutation = {
       // Always record profile_type as 'Employee' so downstream queries expecting
       await client.query(
         `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
-          ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
+          ON CONFLICT (id) DO UPDATE SET profile_type = COALESCE(EXCLUDED.profile_type, "profileRecord".profile_type);`,
         [recordId, "Employee"]
       );
 
@@ -150,8 +150,8 @@ const Mutation = {
           ("profileId", department, role, position)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT ("profileId") DO UPDATE
-           SET department = EXCLUDED.department,
-               role = EXCLUDED.role,
+           SET department = COALESCE(EXCLUDED.department, "employee_profile".department),
+               role = COALESCE(EXCLUDED.role, "employee_profile".role),
                position = EXCLUDED.position
                RETURNING *;`,
         [
@@ -189,10 +189,10 @@ const Mutation = {
           ("id","seenByDentist", "lastDentalCleaning", "purpose", "lastVisitDate")
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (id) DO UPDATE
-           SET "seenByDentist" = EXCLUDED."seenByDentist",
-               "lastDentalCleaning" = EXCLUDED."lastDentalCleaning",
-               "purpose" = EXCLUDED."purpose",
-               "lastVisitDate" = EXCLUDED."lastVisitDate"
+           SET "seenByDentist" = COALESCE(EXCLUDED."seenByDentist", "DentalHistory"."seenByDentist"),
+               "lastDentalCleaning" = COALESCE(EXCLUDED."lastDentalCleaning", "DentalHistory"."lastDentalCleaning"),
+               "purpose" = COALESCE(EXCLUDED."purpose", "DentalHistory"."purpose"),
+               "lastVisitDate" = COALESCE(EXCLUDED."lastVisitDate", "DentalHistory"."lastVisitDate")
                RETURNING *;`,
         [
           recordId,
@@ -229,9 +229,9 @@ const Mutation = {
           ("id", "lastMenstrualPeriod", "hasDysmenorrhea", "notes")
           VALUES ($1, $2, $3, $4) 
           ON CONFLICT (id) DO UPDATE
-            SET "lastMenstrualPeriod" = EXCLUDED."lastMenstrualPeriod",
-                "hasDysmenorrhea" = EXCLUDED."hasDysmenorrhea",
-                "notes" = EXCLUDED."notes"
+            SET "lastMenstrualPeriod" = COALESCE(EXCLUDED."lastMenstrualPeriod", "ObGynHistory"."lastMenstrualPeriod"),
+                "hasDysmenorrhea" = COALESCE(EXCLUDED."hasDysmenorrhea", "ObGynHistory"."hasDysmenorrhea"),
+                "notes" = COALESCE(EXCLUDED."notes", "ObGynHistory"."notes")
                 RETURNING *;`,
         [
           recordId,
@@ -269,15 +269,15 @@ const Mutation = {
           "vapeUser", "vapeType", "vapeFrequency", "yearsVaping")
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id) DO UPDATE
-           SET "smoker" = EXCLUDED."smoker",
-               "numberOfCigarettesPerDay" = EXCLUDED."numberOfCigarettesPerDay",
-               "yearsSmoked" = EXCLUDED."yearsSmoked",
-               "alcoholConsumer" = EXCLUDED."alcoholConsumer",
-               "frequencyOfAlcoholConsumption" = EXCLUDED."frequencyOfAlcoholConsumption",
-               "vapeUser" = EXCLUDED."vapeUser",
-               "vapeType" = EXCLUDED."vapeType",
-               "vapeFrequency" = EXCLUDED."vapeFrequency",
-               "yearsVaping" = EXCLUDED."yearsVaping"
+             SET "smoker" = COALESCE(EXCLUDED."smoker", "Lifestyle"."smoker"),
+                 "numberOfCigarettesPerDay" = COALESCE(EXCLUDED."numberOfCigarettesPerDay", "Lifestyle"."numberOfCigarettesPerDay"),
+                 "yearsSmoked" = COALESCE(EXCLUDED."yearsSmoked", "Lifestyle"."yearsSmoked"),
+                 "alcoholConsumer" = COALESCE(EXCLUDED."alcoholConsumer", "Lifestyle"."alcoholConsumer"),
+                 "frequencyOfAlcoholConsumption" = COALESCE(EXCLUDED."frequencyOfAlcoholConsumption", "Lifestyle"."frequencyOfAlcoholConsumption"),
+                 "vapeUser" = COALESCE(EXCLUDED."vapeUser", "Lifestyle"."vapeUser"),
+                 "vapeType" = COALESCE(EXCLUDED."vapeType", "Lifestyle"."vapeType"),
+                 "vapeFrequency" = COALESCE(EXCLUDED."vapeFrequency", "Lifestyle"."vapeFrequency"),
+                 "yearsVaping" = COALESCE(EXCLUDED."yearsVaping", "Lifestyle"."yearsVaping")
                RETURNING *;`,
         [
           recordId,
@@ -418,8 +418,8 @@ const Mutation = {
           ("id", "firstNumber", "secondNumber")
          VALUES ($1, $2, $3)
          ON CONFLICT (id) DO UPDATE
-           SET "firstNumber" = EXCLUDED."firstNumber",
-               "secondNumber" = EXCLUDED."secondNumber"
+           SET "firstNumber" = COALESCE(EXCLUDED."firstNumber", "EmergencyContact"."firstNumber"),
+               "secondNumber" = COALESCE(EXCLUDED."secondNumber", "EmergencyContact"."secondNumber")
          RETURNING *;`,
         [recordId, firstNumber.id, secondNumber.id]
       );
@@ -470,11 +470,11 @@ const Mutation = {
           ("id", "acuityId", "recorded_at", "left_eye", "right_eye", "notes")
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (id) DO UPDATE
-           SET "acuityId"   = EXCLUDED."acuityId",
-               "recorded_at"= EXCLUDED."recorded_at",
-               "left_eye"   = EXCLUDED."left_eye",
-               "right_eye"  = EXCLUDED."right_eye",
-               "notes"      = EXCLUDED."notes"
+           SET "acuityId"   = COALESCE(EXCLUDED."acuityId", "VisualAcuityRecord"."acuityId"),
+               "recorded_at"= COALESCE(EXCLUDED."recorded_at", "VisualAcuityRecord"."recorded_at"),
+               "left_eye"   = COALESCE(EXCLUDED."left_eye", "VisualAcuityRecord"."left_eye"),
+               "right_eye"  = COALESCE(EXCLUDED."right_eye", "VisualAcuityRecord"."right_eye"),
+               "notes"      = COALESCE(EXCLUDED."notes", "VisualAcuityRecord"."notes")
          RETURNING *;`,
         [
           recordId,
@@ -971,7 +971,7 @@ const Mutation = {
       SELECT $1, UNNEST($2::text[]), true, $3, UNNEST($4::text[])
       ON CONFLICT (domain, LOWER(name)) DO UPDATE
         SET "isValid" = true,
-            name = EXCLUDED.name
+            name = COALESCE(EXCLUDED.name, "DomainTypeCatalog".name),
       RETURNING *;
     `;
 
