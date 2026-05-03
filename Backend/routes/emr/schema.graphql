@@ -193,7 +193,7 @@ input LifestyleInput {
     numberOfCigarettesPerDay: Int
     yearsSmoked: Int
     alcoholConsumer: Boolean!
-    frequencyOfAlcoholConsumption: String
+    frequencyOfAlcoholConsumption: LifeStyleFrequency
     vapeUser: Boolean!
     vapeType: VapeType
     vapeFrequency: LifeStyleFrequency
@@ -201,12 +201,20 @@ input LifestyleInput {
     notes: String
 }
 
+enum LifeStyleFrequency {
+  Daily
+  Weekly
+  Monthly
+  Occasional
+  Rare
+}
+
 input LifestyleUpdateInput {
     smoker: Boolean
     numberOfCigarettesPerDay: Int
     yearsSmoked: Int
     alcoholConsumer: Boolean
-    frequencyOfAlcoholConsumption: String
+    frequencyOfAlcoholConsumption: LifeStyleFrequency
     vapeUser: Boolean
     vapeType: VapeType
     vapeFrequency: LifeStyleFrequency
