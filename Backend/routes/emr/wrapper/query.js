@@ -94,6 +94,7 @@ const Query = {
         return {
           __typename: "EmployeeProfile",
           id: row.id,
+          profile_type: row.profile_type,
           department: row.department,
           role: row.role,
           position: row.position,
