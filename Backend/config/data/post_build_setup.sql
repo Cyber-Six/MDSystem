@@ -979,3 +979,10 @@ VALUES
   ('Nicotine/Tetracycline Stains', 'Discoloration due to smoking or medication', 1, CURRENT_TIMESTAMP),
   ('Orthodontic Appliance U/L', 'Presence of orthodontic appliance (upper/lower)', 1, CURRENT_TIMESTAMP),
   ('Periodontal Pocket', 'Deepened gum pocket indicating periodontal disease', 1, CURRENT_TIMESTAMP);
+
+CREATE INDEX ON "patientUpdateLog" ("patientId", created_at DESC);
+CREATE INDEX ON "Consultation" ("patientId", "updatedAt" DESC);
+CREATE INDEX ON "patientSlot" ("patientId", id DESC);
+CREATE INDEX ON "MedicineRequestLog" ("patientId", created_at DESC);
+CREATE INDEX ON "HealthChat" ("patientId", id DESC);
+CREATE INDEX ON "patientRawDocument" ("patientId", created_at DESC);

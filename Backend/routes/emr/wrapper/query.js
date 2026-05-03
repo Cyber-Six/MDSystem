@@ -895,31 +895,41 @@ const Query = {
         latest.scope        AS latest_scope,
         latest.created_at   AS latest_updated_at,
         CASE
-          WHEN latest.status IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted') THEN 'pending'
+          WHEN latest.status IN ('InProgress', 'Revision') THEN 'pending'
+          WHEN latest.status IN ('Pending', 'RevisionSubmitted') THEN 'submitted'
+          WHEN latest.status IN ('Cancelled', 'Expired') THEN 'voided'
+          WHEN latest.status = 'Rejected' THEN 'rejected'
           WHEN latest.status = 'Approved' THEN 'approved'
-          WHEN latest_consult.status IN ('Completed', 'Referred', 'Monitored') THEN 'completed'
           ELSE NULL
         END AS medical_status,
         CASE
           WHEN latest_appt.status IN ('Scheduled', 'InProgress') THEN 'scheduled'
           WHEN latest_appt.status = 'Pending' THEN 'pending'
-          WHEN latest_appt.status = 'Completed' THEN 'completed'
+          WHEN latest_appt.status IN ('Expired', 'NoShow') AND latest_appt.updated_at + INTERVAL '1 day' > NOW() THEN 'missed'
+          WHEN latest_appt.status IN ('CancelledByPatient', 'CancelledByMedical') AND latest_appt.updated_at + INTERVAL '1 day' > NOW() THEN 'cancelled'
+          WHEN latest_appt.status = 'Completed' AND latest_appt.updated_at + INTERVAL '1 day' > NOW() THEN 'completed'
           ELSE NULL
         END AS appointment_status,
         CASE
           WHEN latest_med.status = 'Pending' THEN 'pending'
           WHEN latest_med.status = 'Approved' THEN 'approved'
+          WHEN latest_med.status = 'Cancelled' AND latest_med.updated_at + INTERVAL '1 day' > NOW() THEN 'cancelled'
+          WHEN latest_med.status = 'Rejected' AND latest_med.updated_at + INTERVAL '1 day' > NOW() THEN 'rejected'
           WHEN latest_med.status = 'Completed' AND latest_med.updated_at + INTERVAL '1 day' > NOW() THEN 'dispensed'
           ELSE NULL
         END AS medicine_status,
         CASE
           WHEN latest_chat.status IN ('Open', 'Ongoing') THEN 'active'
-          WHEN latest_chat.archived_at + INTERVAL '1 day' > NOW() THEN 'inactive'
+          WHEN latest_chat.status = 'Closed' AND latest_chat.archived_at + INTERVAL '1 day' > NOW() THEN 'closed'
+          WHEN latest_chat.status = 'Expired' AND latest_chat.archived_at + INTERVAL '1 day' > NOW() THEN 'expired'
+          ELSE NULL
         END AS healthchat_status,
         CASE
           WHEN latest_doc.status = 'Pending' THEN 'submitted'
           WHEN latest_doc.status = 'Requested' THEN 'pending'
-          WHEN latest_doc.status = 'Recorded' THEN 'approved'
+          WHEN latest_doc.status = 'Recorded' AND latest_doc.updated_at + INTERVAL '1 day' > NOW() THEN 'recorded'
+          WHEN latest_doc.status = 'Rejected' AND latest_doc.updated_at + INTERVAL '1 day' > NOW() THEN 'rejected'
+          WHEN latest_doc.status = 'Archived' AND latest_doc.updated_at + INTERVAL '1 day' > NOW() THEN 'archived'
           ELSE NULL
         END AS document_status
       FROM "UsersPersonal" up
