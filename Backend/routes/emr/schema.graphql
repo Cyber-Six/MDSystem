@@ -209,18 +209,6 @@ enum LifeStyleFrequency {
   Rare
 }
 
-input LifestyleUpdateInput {
-    smoker: Boolean
-    numberOfCigarettesPerDay: Int
-    yearsSmoked: Int
-    alcoholConsumer: Boolean
-    frequencyOfAlcoholConsumption: LifeStyleFrequency
-    vapeUser: Boolean
-    vapeType: VapeType
-    vapeFrequency: LifeStyleFrequency
-    yearsVaping: Int
-    notes: String
-}
 ## -------- Dental Photo Record -------- ##
 
 type DentalPhotoRecord{
@@ -925,7 +913,7 @@ type Mutation {
   updateObgynHistory(userId: ID!, input: ObgynHistoryUpdateInput!): ObgynHistory
 
   createLifestyle(input: LifestyleInput!): Lifestyle
-  updateLifestyle(userId: ID!, input: LifestyleUpdateInput!): Lifestyle
+  updateLifestyle(userId: ID!, input: LifestyleInput!): Lifestyle
 
   createDentalHistory(input: DentalHistoryInput!): DentalHistory
   updateDentalHistory(userId: ID!, input: DentalHistoryUpdateInput!): DentalHistory
