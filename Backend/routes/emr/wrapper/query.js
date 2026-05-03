@@ -1119,6 +1119,32 @@ const Query = {
     );
     return result.rows;
   },
+
+  _getUserUpdateTickets: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+    if (!user?.id) {
+      throwGraphQLError(res).status(401).message("Unauthorized").throw();
+    }
+
+    const query = `
+      SELECT pul.id, pul.status, pul.scope, pul.created_at
+      FROM "patientUpdateLog" pul
+      WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+      ORDER BY pul.created_at DESC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      userId,
+      limit || 10,
+      offset || 0,
+      new Date(from),
+      statuses || null
+    ]);
+
+    logger.debug("User Update Tickets Query Result:", result.rows);
+    return result.rows;
+  }
 };
 
 

@@ -878,6 +878,7 @@ type Query {
   getOralApplianceCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralApplianceTag!]
   # render the list of options per catalog
 
+  getUserUpdateTickets(userId: ID!, statuses: [UpdateStatus!]!, offset: Int, limit: Int): [UpdateTicket!]
 
   getStatusUpdateTickets(statuses: [UpdateStatus!]!, branch: DesignationBranch!, offset: Int, limit: Int): [UpdateTicket!]
   # fetch all latest ticket of users

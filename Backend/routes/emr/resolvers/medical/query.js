@@ -412,6 +412,16 @@ const Query = {
     return mappedRows;
   },
 
+  getUserUpdateTickets: async (_, args, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserUpdateTickets for user ${args.userId}`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    
+    const result = await Wrapper._getUserUpdateTickets(_, args, { user, res });
+    return result;
+   },
 };
 
 
