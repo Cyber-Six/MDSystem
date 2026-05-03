@@ -122,6 +122,7 @@ Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    throwGraphQLError(res).message("This endpoint is deprecated, please use updatePersonalRecordLog instead").status(400).throw();
 
     const credential_status = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
     if (!["Active", "Inactive"].includes(credential_status)) {
