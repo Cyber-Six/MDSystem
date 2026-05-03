@@ -957,7 +957,7 @@ const Query = {
         LIMIT 1
       ) latest_consult ON true
       LEFT JOIN LATERAL (
-        SELECT ps.status
+        SELECT ps.status, ps.updated_at
         FROM "patientSlot" ps
         WHERE ps."patientId" = up.id
         ORDER BY ps.id DESC
