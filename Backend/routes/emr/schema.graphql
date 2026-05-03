@@ -69,7 +69,7 @@ type StudentProfile implements UserProfile {
 type EmployeeProfile implements UserProfile {
   id: ID!
   department: String
-  role: String
+  role: EmployeeRole
   position: String
   status: UpdateStatus
   archived_at: Date
@@ -81,9 +81,17 @@ input StudentProfileInput{
   year: STUDENT_YEAR!
 }
 
+enum EmployeeRole {
+  StaffOfficer     # Administrative/support staff with officer-level authority
+  Staff            # Non-teaching, administrative, support staff
+  NonStaff         # Teaching faculty, academic personnel
+  NonStaffOfficer  # Faculty with officer-level authority (e.g., department chair)
+  Other            # Contractors, consultants, or special cases
+}
+
 input EmployeeProfileInput {
   department: String!
-  role: String!
+  role: EmployeeRole!
   position: String!
 }
 
@@ -94,7 +102,7 @@ input StudentProfileUpdateInput{
 
 input EmployeeProfileUpdateInput {
   department: String
-  role: String
+  role: EmployeeRole
   position: String
 }
 
