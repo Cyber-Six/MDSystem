@@ -84,12 +84,21 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    
     throwGraphQLError(res).message("This endpoint is deprecated, please use updatePersonalRecordLog instead").status(400).throw();
 
-    // record self update is allowed for staff
-    await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
-    return await Mutation.setPersonalRecordLog(_, { userId: user.id, status: "Approved" }, { user, res });
+    const credential_status = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
+    if (!["Active", "Inactive"].includes(credential_status)) {
+      throwGraphQLError(res).message("Only active or inactive users can create update tickets. Please contact support.").status(403).throw();
+    }
+
+    const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
+    if (latest?.status === "Pending" || latest?.status === "InProgress") {
+      throwGraphQLError(res).message("An update is already in progress. Please wait for it to complete before creating a new one.").status(400).throw();
+      }
+    if (latest?.status === "Revision" || latest?.status === "RevisionSubmitted"){
+      throwGraphQLError(res).message("Revision still pending. Please complete the revision before creating a new update.").status(400).throw();
+    }
+    return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
   },
 
   updatePersonalRecordLog: async (_, { userId, input }, { user, res }) => {
