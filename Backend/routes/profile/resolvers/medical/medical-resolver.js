@@ -104,8 +104,8 @@ const Mutation = {
     }
 
     const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId }, { user, res });
-    if (latest.status !== "InProgress" && latest.status !== "Revision") {
-      throwGraphQLError(res).message("No in-progress log to update").status(400).throw();
+    if (latest.status !== "Pending" && latest.status !== "Revision") {
+      throwGraphQLError(res).message("Not in Pending nor Revision log state.").status(400).throw();
     }
 
     const result = await Wrapper.Mutation._StaffUpdatePersonalRecordLog(_, { userId, id: latest.id, input }, { user, res });
