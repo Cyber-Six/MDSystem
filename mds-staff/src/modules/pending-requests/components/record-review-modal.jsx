@@ -7,6 +7,7 @@ import {
   EmergencyContactSection,
   MedicalHistorySection,
   MedicalBackgroundSection,
+  PhysicalMeasurementsSection,
   DentalHistorySection,
   ObGyneSection,
   SectionSkeleton,
@@ -323,6 +324,19 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                   editedFields={editedFields.medicalBackground ?? {}}
                   onFieldChange={(f, v) => setFieldValue('medicalBackground', f, v)}
                   onToggleEdit={canAccessMedical ? () => toggleEdit('medicalBackground') : undefined}
+                  isPending={isPending && canAccessMedical}
+                  isLocked={!canAccessMedical}
+                />
+              )}
+
+              {/* Physical Measurements (height/weight/vitals) */}
+              {includeMedical && (
+                <PhysicalMeasurementsSection
+                  vitalSigns={recordData.vitalSigns}
+                  isEditing={editingSections.physicalMeasurements ?? false}
+                  editedFields={editedFields.physicalMeasurements ?? {}}
+                  onFieldChange={(f, v) => setFieldValue('physicalMeasurements', f, v)}
+                  onToggleEdit={canAccessMedical ? () => toggleEdit('physicalMeasurements') : undefined}
                   isPending={isPending && canAccessMedical}
                   isLocked={!canAccessMedical}
                 />

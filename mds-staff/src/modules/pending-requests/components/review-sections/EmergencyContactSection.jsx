@@ -59,7 +59,11 @@ const EmergencyContactSection = ({
             value={getVal(`${prefix}.contactNumber`, contact.contactNumber)}
             originalValue={getOriginal(`${prefix}.contactNumber`, contact.contactNumber)}
             isEditing={isEditing}
-            onChange={(v) => onFieldChange?.(`${prefix}.contactNumber`, v)}
+            type="tel"
+            onChange={(v) => {
+              const sanitized = v === undefined || v === null ? v : String(v).replace(/\D/g, '').slice(0, 12);
+              onFieldChange?.(`${prefix}.contactNumber`, sanitized);
+            }}
           />
           {contact.isVerified !== null && contact.isVerified !== undefined && (
             <DataRow label="Verified" value={contact.isVerified ? 'Yes' : 'No'} />

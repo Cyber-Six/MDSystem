@@ -61,12 +61,32 @@ export default function PatientPersonalInfoTab({ patient }) {
           <Field label="Contact Number" value={patient.personal.contactNumber} />
           <Field label="Email" value={patient.email} />
         </div>
-      </PatientSectionCard>
 
-      <PatientSectionCard title="Address">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-700 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Present Address" value={patient.personal.presentAddress} />
           <Field label="Province Address" value={patient.personal.provinceAddress} />
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-700">
+          <p className="text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-3">Emergency Contacts</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x md:divide-neutral-100 dark:md:divide-neutral-700">
+            {Object.entries(patient.emergencyContacts).map(([key, contact]) => (
+              <div
+                key={key}
+                className={`py-4 space-y-3 ${key === 'first' ? 'md:pr-4 md:py-0' : 'md:pl-4 md:py-0'}`}
+              >
+                <p className="text-sm font-semibold text-secondary-600 dark:text-neutral-400">
+                  {key === 'first' ? 'Contact 1' : 'Contact 2'}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Name" value={contact.name} />
+                  <Field label="Relationship" value={contact.relationship} />
+                  <Field label="Contact" value={contact.contact} />
+                  <Field label="Address" value={contact.address} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </PatientSectionCard>
 
@@ -91,20 +111,7 @@ export default function PatientPersonalInfoTab({ patient }) {
         </div>
       </PatientSectionCard>
 
-      <PatientSectionCard title="Emergency Contacts">
-        <div className="grid md:grid-cols-2 gap-3">
-          {Object.entries(patient.emergencyContacts).map(([key, contact]) => (
-            <div key={key} className="p-3 rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-700/30">
-              <p className="text-sm font-semibold text-secondary-800 dark:text-white mb-2">{contact.name || 'N/A'}</p>
-              <div className="space-y-1 text-xs">
-                <p className="text-secondary-600 dark:text-neutral-300"><span className="text-secondary-500 dark:text-neutral-400">Relationship:</span> {contact.relationship || 'N/A'}</p>
-                <p className="text-secondary-600 dark:text-neutral-300"><span className="text-secondary-500 dark:text-neutral-400">Contact:</span> {contact.contact || 'N/A'}</p>
-                <p className="text-secondary-600 dark:text-neutral-300"><span className="text-secondary-500 dark:text-neutral-400">Address:</span> {contact.address || 'N/A'}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </PatientSectionCard>
+      
     </div>
   );
 }

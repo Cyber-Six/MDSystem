@@ -768,7 +768,7 @@ export const staffUpdateMedicalHistory = async (userId, input) => {
 
 export const staffUpdateLifestyle = async (userId, input) => {
   const data = await sendGraphQL(
-    `mutation UpdateLifestyle($userId: ID!, $input: LifestyleUpdateInput!) {
+    `mutation UpdateLifestyle($userId: ID!, $input: LifestyleInput!) {
        updateLifestyle(userId: $userId, input: $input) { id }
      }`,
     { userId, input },
@@ -1017,15 +1017,34 @@ export const submitStaffEdits = async (userId, editedFields, recordData) => {
   const mb = editedFields.medicalBackground;
   if (mb && Object.keys(mb).length > 0) {
     // — Lifestyle —
-    const lifestyleKeys = ['smoker', 'cigarettesPerDay', 'yearsSmoked', 'alcoholConsumer', 'alcoholFrequency', 'lifestyleNotes'];
+    const lifestyleKeys = ['smoker', 'cigarettesPerDay', 'yearsSmoked', 'alcoholConsumer', 'alcoholFrequency', 'vaper', 'vapeType', 'vapeFrequency', 'lifestyleNotes'];
     if (lifestyleKeys.some((k) => mb[k] !== undefined)) {
+      const origLifestyle = recordData?.lifestyle || {};
       const input = {};
-      if (mb.smoker !== undefined) input.smoker = mb.smoker === 'Yes';
+      
+      // Always include required Boolean fields, fallback to original data
+      input.smoker = mb.smoker !== undefined ? (mb.smoker === 'Yes') : (origLifestyle.smoker ?? true);
+      input.alcoholConsumer = mb.alcoholConsumer !== undefined ? (mb.alcoholConsumer === 'Yes') : (origLifestyle.alcoholConsumer ?? true);
+      input.vapeUser = mb.vaper !== undefined ? (mb.vaper === 'Yes') : (origLifestyle.vapeUser ?? false);
+      
+      // Optional fields
       if (mb.cigarettesPerDay !== undefined) input.numberOfCigarettesPerDay = parseInt(mb.cigarettesPerDay, 10) || null;
+      else if (origLifestyle.numberOfCigarettesPerDay !== undefined) input.numberOfCigarettesPerDay = origLifestyle.numberOfCigarettesPerDay;
+      
       if (mb.yearsSmoked !== undefined) input.yearsSmoked = parseInt(mb.yearsSmoked, 10) || null;
-      if (mb.alcoholConsumer !== undefined) input.alcoholConsumer = mb.alcoholConsumer === 'Yes';
+      else if (origLifestyle.yearsSmoked !== undefined) input.yearsSmoked = origLifestyle.yearsSmoked;
+      
       if (mb.alcoholFrequency !== undefined) input.frequencyOfAlcoholConsumption = mb.alcoholFrequency || null;
+      else if (origLifestyle.frequencyOfAlcoholConsumption !== undefined) input.frequencyOfAlcoholConsumption = origLifestyle.frequencyOfAlcoholConsumption;
+      
+      if (mb.vapeType !== undefined) input.vapeType = mb.vapeType || null;
+      else if (origLifestyle.vapeType !== undefined) input.vapeType = origLifestyle.vapeType;
+      
+      if (mb.vapeFrequency !== undefined) input.vapeFrequency = mb.vapeFrequency || null;
+      else if (origLifestyle.vapeFrequency !== undefined) input.vapeFrequency = origLifestyle.vapeFrequency;
+      
       if (mb.lifestyleNotes !== undefined) input.notes = mb.lifestyleNotes || null;
+      else if (origLifestyle.notes !== undefined) input.notes = origLifestyle.notes;
 
       mutations.push(
         staffUpdateLifestyle(userId, input)
@@ -1052,23 +1071,25 @@ export const submitStaffEdits = async (userId, editedFields, recordData) => {
       );
     }
 
-    // — Vital Signs (creates a new standalone record via /staff/emr) —
-    const vitalKeys = ['height_cm', 'weight_kg', 'blood_pressure', 'heart_rate', 'temperature'];
-    if (vitalKeys.some((k) => mb[k] !== undefined)) {
-      const orig = recordData?.vitalSigns || {};
-      const input = {
-        height_cm:      parseFloat(mb.height_cm ?? orig.height_cm) || 0,
-        weight_kg:      parseFloat(mb.weight_kg ?? orig.weight_kg) || 0,
-        blood_pressure: mb.blood_pressure ?? orig.blood_pressure ?? '',
-        heart_rate:     parseInt(mb.heart_rate ?? orig.heart_rate, 10) || 0,
-        temperature:    parseFloat(mb.temperature ?? orig.temperature) || 0,
-      };
+    // Vital signs moved to separate section: handled below when present in editedFields.physicalMeasurements
+  }
 
-      mutations.push(
-        staffUpdateVitalSigns(userId, input)
-          .catch((e) => { errors.push(`Vital signs: ${e.message}`); }),
-      );
-    }
+  // ── Physical Measurements (vital signs) ─────────────────────────────────
+  const pm = editedFields.physicalMeasurements;
+  if (pm && Object.keys(pm).length > 0) {
+    const orig = recordData?.vitalSigns || {};
+    const input = {
+      height_cm:      parseFloat(pm.height_cm ?? orig.height_cm) || 0,
+      weight_kg:      parseFloat(pm.weight_kg ?? orig.weight_kg) || 0,
+      blood_pressure: pm.blood_pressure ?? orig.blood_pressure ?? '',
+      heart_rate:     parseInt(pm.heart_rate ?? orig.heart_rate, 10) || 0,
+      temperature:    parseFloat(pm.temperature ?? orig.temperature) || 0,
+    };
+
+    mutations.push(
+      staffUpdateVitalSigns(userId, input)
+        .catch((e) => { errors.push(`Vital signs: ${e.message}`); }),
+    );
   }
 
   // ── OB-GYNE ───────────────────────────────────────────────────────────────

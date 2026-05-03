@@ -84,6 +84,9 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    
+    throwGraphQLError(res).message("This endpoint is deprecated, please use updatePersonalRecordLog instead").status(400).throw();
+
     // record self update is allowed for staff
     await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
     return await Mutation.setPersonalRecordLog(_, { userId: user.id, status: "Approved" }, { user, res });
@@ -101,6 +104,10 @@ const Mutation = {
     }
 
     const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId }, { user, res });
+    if (latest.status !== "InProgress" && latest.status !== "Revision") {
+      throwGraphQLError(res).message("No in-progress log to update").status(400).throw();
+    }
+
     const result = await Wrapper.Mutation._StaffUpdatePersonalRecordLog(_, { userId, id: latest.id, input }, { user, res });
     return result;
    },

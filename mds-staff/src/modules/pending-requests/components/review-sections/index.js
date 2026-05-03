@@ -4,5 +4,6 @@ export { default as PersonalInfoSection } from './PersonalInfoSection';
 export { default as EmergencyContactSection } from './EmergencyContactSection';
 export { default as MedicalHistorySection } from './MedicalHistorySection';
 export { default as MedicalBackgroundSection } from './MedicalBackgroundSection';
+export { default as PhysicalMeasurementsSection } from './PhysicalMeasurementsSection';
 export { default as DentalHistorySection } from './DentalHistorySection';
 export { default as ObGyneSection } from './ObGyneSection';

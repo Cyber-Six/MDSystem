@@ -968,3 +968,14 @@ VALUES
 -- Reset MedicalPersonnel ID sequence to prevent conflicts with pre-seeded data
 ALTER TABLE "MedicalPersonnel"
 ALTER COLUMN id RESTART WITH 2;
+
+INSERT INTO "oralFindingCatalog" (name, description, created_by, created_at)
+VALUES
+  ('Calculus', 'Presence of hardened dental plaque', 1, CURRENT_TIMESTAMP),
+  ('Debris', 'Accumulation of food particles or foreign matter', 1, CURRENT_TIMESTAMP),
+  ('Dental Caries', 'Tooth decay or cavities', 1, CURRENT_TIMESTAMP),
+  ('Dental Deformities', 'Structural abnormalities of teeth', 1, CURRENT_TIMESTAMP),
+  ('Gingivitis', 'Inflammation of the gums', 1, CURRENT_TIMESTAMP),
+  ('Nicotine/Tetracycline Stains', 'Discoloration due to smoking or medication', 1, CURRENT_TIMESTAMP),
+  ('Orthodontic Appliance U/L', 'Presence of orthodontic appliance (upper/lower)', 1, CURRENT_TIMESTAMP),
+  ('Periodontal Pocket', 'Deepened gum pocket indicating periodontal disease', 1, CURRENT_TIMESTAMP);

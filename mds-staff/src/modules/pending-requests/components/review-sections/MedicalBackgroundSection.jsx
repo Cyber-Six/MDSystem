@@ -267,22 +267,26 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
-            <EditableField
-              label="Cigarettes/Day"
-              value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
-              originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('cigarettesPerDay', v)}
-              type="number"
-            />
-            <EditableField
-              label="Years Smoked"
-              value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
-              originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('yearsSmoked', v)}
-              type="number"
-            />
+            {getVal('smoker', lifestyle?.smoker ? 'Yes' : lifestyle ? 'No' : '') === 'Yes' && (
+              <>
+                <EditableField
+                  label="Cigarettes/Day"
+                  value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
+                  originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
+                  isEditing={isEditing}
+                  onChange={(v) => onFieldChange?.('cigarettesPerDay', v)}
+                  type="number"
+                />
+                <EditableField
+                  label="Years Smoked"
+                  value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
+                  originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
+                  isEditing={isEditing}
+                  onChange={(v) => onFieldChange?.('yearsSmoked', v)}
+                  type="number"
+                />
+              </>
+            )}
             <EditableField
               label="Alcohol Consumer"
               value={getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : lifestyle ? 'No' : '')}
@@ -292,15 +296,17 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
-            <EditableField
-              label="Alcohol Frequency"
-              value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
-              originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
-              type="select"
-              options={LIFESTYLE_FREQUENCY_OPTIONS}
-            />
+            {getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : lifestyle ? 'No' : '') === 'Yes' && (
+              <EditableField
+                label="Alcohol Frequency"
+                value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
+                originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
+                isEditing={isEditing}
+                onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
+                type="select"
+                options={LIFESTYLE_FREQUENCY_OPTIONS}
+              />
+            )}
             <EditableField
               label="Vaper"
               value={getVal('vaper', lifestyle?.vapeUser ? 'Yes' : lifestyle ? 'No' : '')}
@@ -310,24 +316,28 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
-            <EditableField
-              label="Vape Type"
-              value={getVal('vapeType', lifestyle?.vapeType ?? '')}
-              originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('vapeType', v)}
-              type="select"
-              options={VAPE_TYPE_OPTIONS}
-            />
-            <EditableField
-              label="Vape Frequency"
-              value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
-              originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('vapeFrequency', v)}
-              type="select"
-              options={LIFESTYLE_FREQUENCY_OPTIONS}
-            />
+            {getVal('vaper', lifestyle?.vapeUser ? 'Yes' : lifestyle ? 'No' : '') === 'Yes' && (
+              <>
+                <EditableField
+                  label="Vape Type"
+                  value={getVal('vapeType', lifestyle?.vapeType ?? '')}
+                  originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')}
+                  isEditing={isEditing}
+                  onChange={(v) => onFieldChange?.('vapeType', v)}
+                  type="select"
+                  options={VAPE_TYPE_OPTIONS}
+                />
+                <EditableField
+                  label="Vape Frequency"
+                  value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
+                  originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
+                  isEditing={isEditing}
+                  onChange={(v) => onFieldChange?.('vapeFrequency', v)}
+                  type="select"
+                  options={LIFESTYLE_FREQUENCY_OPTIONS}
+                />
+              </>
+            )}
             <EditableField
               label="Notes"
               value={getVal('lifestyleNotes', lifestyle?.notes ?? '')}
@@ -380,58 +390,7 @@ const MedicalBackgroundSection = ({
         )}
       </div>
 
-      {/* ── Vital Signs (Height / Weight) ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Physical Measurements
-        </h4>
-        {vitalSigns || isEditing || hasVitalEdits ? (
-          <dl className="space-y-0">
-            <EditableField
-              label="Height (cm)"
-              value={getVal('height_cm', String(vitalSigns?.height_cm ?? ''))}
-              originalValue={getOriginal('height_cm', String(vitalSigns?.height_cm ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('height_cm', v)}
-              type="number"
-            />
-            <EditableField
-              label="Weight (kg)"
-              value={getVal('weight_kg', String(vitalSigns?.weight_kg ?? ''))}
-              originalValue={getOriginal('weight_kg', String(vitalSigns?.weight_kg ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('weight_kg', v)}
-              type="number"
-            />
-            <EditableField
-              label="Blood Pressure"
-              value={getVal('blood_pressure', vitalSigns?.blood_pressure ?? '')}
-              originalValue={getOriginal('blood_pressure', vitalSigns?.blood_pressure ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('blood_pressure', v)}
-              placeholder="e.g. 120/80"
-            />
-            <EditableField
-              label="Heart Rate (bpm)"
-              value={getVal('heart_rate', String(vitalSigns?.heart_rate ?? ''))}
-              originalValue={getOriginal('heart_rate', String(vitalSigns?.heart_rate ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('heart_rate', v)}
-              type="number"
-            />
-            <EditableField
-              label="Temperature (°C)"
-              value={getVal('temperature', String(vitalSigns?.temperature ?? ''))}
-              originalValue={getOriginal('temperature', String(vitalSigns?.temperature ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('temperature', v)}
-              type="number"
-            />
-          </dl>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No physical measurements</p>
-        )}
-      </div>
+      {/* Physical measurements moved to dedicated section */}
     </SectionWrapper>
   );
 };
