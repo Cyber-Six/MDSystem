@@ -978,7 +978,7 @@ const Query = {
         LIMIT 1
       ) latest_chat ON true
       LEFT JOIN LATERAL (
-        SELECT prd.status
+        SELECT prd.status, prd.updated_at
         FROM "patientRawDocument" prd
         WHERE prd."patientId" = up.id
           AND prd.status <> 'Archived'
