@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
 import { fetchPatientRecordForReview, submitStaffEdits } from '../patient-record-service';
 import { formatBranchLabel } from '../../../utils/branch-utils';
+import { axiosRequest } from '../../../packages-core-adapter';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -54,6 +55,10 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
   // Prevent infinite re-fetch for OB-GYNE lazy-load
   const obgynFetchedRef = useRef(false);
 
+  // Whether to show the Personal Information section. We only show it when
+  // the patient's personal-record log status is InProgress or Revision.
+  const [showPersonalInfo, setShowPersonalInfo] = useState(true);
+
   // Derived values (safe to compute before hooks since they come from props/state)
   const scope = ticket?.scope ?? 'Both';
   const includeMedical = scope === 'Medical' || scope === 'Both';
@@ -76,6 +81,21 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
           const { catalogs: cats, ...recordFields } = data;
           setRecordData(recordFields);
           setCatalogs(cats ?? {});
+          // Fetch personal-record log status from profile service and decide
+          // whether to surface the Personal Information section.
+          try {
+            const resp = await axiosRequest.post('/profile/medical', {
+              query: `query GetUserPersonalRecordLogStatus($userId: ID!) { getUserPersonalRecordLogStatus(userId: $userId) }`,
+              variables: { userId: ticket.patientId },
+            });
+            const status = resp?.data?.data?.getUserPersonalRecordLogStatus ?? null;
+            const norm = status ? String(status).replace(/[^a-z0-9]/gi, '').toLowerCase() : '';
+            setShowPersonalInfo(norm === 'pending' || norm === 'revision');
+          } catch (err) {
+            // On error, hide the section to avoid showing stale data
+            console.error('[RecordReviewModal] getUserPersonalRecordLogStatus error:', err?.message ?? err);
+            setShowPersonalInfo(false);
+          }
         }
       } catch (err) {
         if (!cancelled) setFetchError(err.message || 'Failed to load patient record.');
@@ -270,16 +290,18 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
           {/* ── Sections ── */}
           {!loading && recordData && (
             <>
-              {/* Personal Information — always shown */}
-              <PersonalInfoSection
-                basicInfo={recordData.basicInfo}
-                profile={recordData.profile}
-                isEditing={editingSections.personalInfo ?? false}
-                editedFields={editedFields.personalInfo ?? {}}
-                onFieldChange={(f, v) => setFieldValue('personalInfo', f, v)}
-                onToggleEdit={() => toggleEdit('personalInfo')}
-                isPending={isPending}
-              />
+              {/* Personal Information — only shown when personal-record log is InProgress/Revision */}
+              {showPersonalInfo && (
+                <PersonalInfoSection
+                  basicInfo={recordData.basicInfo}
+                  profile={recordData.profile}
+                  isEditing={editingSections.personalInfo ?? false}
+                  editedFields={editedFields.personalInfo ?? {}}
+                  onFieldChange={(f, v) => setFieldValue('personalInfo', f, v)}
+                  onToggleEdit={() => toggleEdit('personalInfo')}
+                  isPending={isPending}
+                />
+              )}
 
               {/* Emergency Contacts */}
               {includeMedical && (

@@ -162,29 +162,34 @@ const PersonalInfoSection = ({
           <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
             Employment Information
           </h4>
-          <dl className="space-y-0">
-            <EditableField
-              label="Department"
-              value={getVal('department', profile?.department)}
-              originalValue={getOriginal('department', profile?.department)}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('department', v)}
-            />
-            <EditableField
-              label="Role"
-              value={getVal('role', profile?.role)}
-              originalValue={getOriginal('role', profile?.role)}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('role', v)}
-            />
-            <EditableField
-              label="Position"
-              value={getVal('position', profile?.position)}
-              originalValue={getOriginal('position', profile?.position)}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('position', v)}
-            />
-          </dl>
+            {(() => {
+              const gridClass = 'space-y-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3';
+              return (
+                <dl className={gridClass}>
+                  <EditableField
+                    label="Department"
+                    value={getVal('department', profile?.department)}
+                    originalValue={getOriginal('department', profile?.department)}
+                    isEditing={isEditing}
+                    onChange={(v) => onFieldChange?.('department', v)}
+                  />
+                  <EditableField
+                    label="Role"
+                    value={getVal('role', profile?.role)}
+                    originalValue={getOriginal('role', profile?.role)}
+                    isEditing={isEditing}
+                    onChange={(v) => onFieldChange?.('role', v)}
+                  />
+                  <EditableField
+                    label="Position"
+                    value={getVal('position', profile?.position)}
+                    originalValue={getOriginal('position', profile?.position)}
+                    isEditing={isEditing}
+                    onChange={(v) => onFieldChange?.('position', v)}
+                  />
+                </dl>
+              );
+            })()}
         </div>
       )}
     </SectionWrapper>

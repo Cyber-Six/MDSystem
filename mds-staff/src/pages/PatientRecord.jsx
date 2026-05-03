@@ -564,26 +564,41 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
               </div>
             </div>
             
-            {/* Academic Information Card */}
+            {/* Academic / Employment Information Card */}
             <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
               <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
-                <h4 className="text-sm font-semibold text-secondary-900 dark:text-white uppercase tracking-wide">Academic Information</h4>
+                <h4 className="text-sm font-semibold text-secondary-900 dark:text-white uppercase tracking-wide">{patient.type === 'Employee' ? 'Employment Information' : 'Academic Information'}</h4>
               </div>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[
+              {(() => {
+                const isEmployee = patient.type === 'Employee';
+                const gridClass = isEmployee ? 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6' : 'p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
+                const items = isEmployee ? [
+                  { label: 'Employee Number', value: patient.personal.employeeNumber },
+                  { label: 'Role', value: patient.personal.role || patient.year },
+                  { label: 'Department', value: patient.department },
+                  { label: 'Position', value: patient.personal.position },
+                  { label: 'Employment Category', value: patient.personal.employmentCategory },
+                  { label: 'Employment Status', value: patient.personal.employmentStatus },
+                ] : [
                   { label: 'Student Number', value: patient.personal.studentNumber },
                   { label: 'Program', value: patient.program },
                   { label: 'Year Level', value: patient.year },
                   { label: 'Student Category', value: patient.personal.studentCategory },
                   { label: 'Last School Attended', value: patient.personal.lastSchoolAttended },
                   { label: 'Drug Test Done', value: patient.personal.drugTestDone },
-                ].map((item, idx) => (
-                  <div key={idx}>
-                    <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5">{item.label}</p>
-                    <p className="text-sm font-semibold text-secondary-900 dark:text-white">{item.value}</p>
+                ];
+
+                return (
+                  <div className={gridClass}>
+                    {items.map((item, idx) => (
+                      <div key={idx}>
+                        <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5">{item.label}</p>
+                        <p className="text-sm font-semibold text-secondary-900 dark:text-white">{item.value}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
             
             {/* Emergency Contacts Card */}

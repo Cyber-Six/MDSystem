@@ -2,7 +2,15 @@ import React from 'react';
 import { Input, Select } from './form-elements';
 import { searchStudentProgram } from '@core/services/emr-service';
 
-const PersonalInfoStep = ({ formData, onChange }) => {
+const PersonalInfoStep = ({ formData, onChange, identity }) => {
+
+  // Ensure identity is always in formData
+  React.useEffect(() => {
+    if (identity && formData.identity !== identity) {
+      onChange({ ...formData, identity });
+    }
+  }, [identity, formData, onChange]);
+
   // Program search state
   const [programInput, setProgramInput] = React.useState(formData.program || '');
   const [programSuggestions, setProgramSuggestions] = React.useState([]);
@@ -83,80 +91,124 @@ const PersonalInfoStep = ({ formData, onChange }) => {
 
   return (
     <div className="space-y-4">
-      {/* School Information Card */}
+      {/* Information Card - Student or Employee */}
       <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
-        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
-          <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-500/20 flex items-center justify-center">
-            <svg className="w-5 h-5 text-primary-600 dark:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white" style={{ margin: 0 }}>
-            School Information
-          </h3>
-        </div>
-
-        <div className="mb-6">
-          <label className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
-            Program <span className="text-error-500 ml-1">*</span>
-          </label>
-          <div ref={programWrapperRef} className="relative">
-            <input
-              type="text"
-              className={`w-full px-3 py-2 text-sm border rounded-lg transition-all duration-200
-                focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                placeholder:text-neutral-400
-                dark:bg-neutral-800 dark:border-neutral-600 dark:text-white dark:placeholder:text-neutral-500
-                ${formData.programId ? 'bg-primary-50 dark:bg-primary-500/10 border-primary-300' : 'bg-white border-neutral-300'}`}
-              placeholder="Type to search for your program..."
-              value={programInput}
-              autoComplete="off"
-              onFocus={() => setProgramFocused(true)}
-              onChange={(e) => handleProgramInputChange(e.target.value)}
-            />
-            {formData.programId && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-primary-600 font-medium pointer-events-none">✓</span>
-            )}
-            {programFocused && programInput.trim() && (
-              <div className="absolute z-10 mt-1 w-full border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-md max-h-60 overflow-y-auto">
-                {programSearching && (
-                  <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
-                )}
-                {!programSearching && programSuggestions.length === 0 && (
-                  <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">No programs found.</div>
-                )}
-                {programSuggestions.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                    onMouseDown={(e) => { e.preventDefault(); selectProgram(item); }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+        {identity === 'Employee' ? (
+          /* Employee Information Section */
+          <>
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-purple-600 dark:text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
               </div>
-            )}
-          </div>
-        </div>
+              <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white" style={{ margin: 0 }}>
+                Employment Information
+              </h3>
+            </div>
 
-        <Select
-          label="Student Category"
-          required
-          options={[
-            { value: 'Grade11', label: 'Grade 11' },
-            { value: 'Grade12', label: 'Grade 12' },
-            { value: 'Freshman', label: 'Freshman' },
-            { value: 'Sophomore', label: 'Sophomore' },
-            { value: 'Junior', label: 'Junior' },
-            { value: 'Senior', label: 'Senior' },
-            { value: 'Masteral', label: 'Masteral' },
-            { value: 'Doctorate', label: 'Doctorate' },
-            { value: 'Returnee', label: 'Returnee' }
-          ]}
-          value={formData.schoolYear || ''}
-          onChange={(e) => handleInputChange('schoolYear', e.target.value)}
-        />
+            <Input
+              label="Department"
+              required
+              placeholder="e.g., Human Resources, Finance"
+              value={formData.department || ''}
+              onChange={(e) => handleInputChange('department', e.target.value)}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <Input
+                label="Position"
+                required
+                placeholder="e.g., Manager, Specialist"
+                value={formData.position || ''}
+                onChange={(e) => handleInputChange('position', e.target.value)}
+              />
+              <Input
+                label="Role"
+                required
+                placeholder="e.g., Full-time, Part-time"
+                value={formData.role || ''}
+                onChange={(e) => handleInputChange('role', e.target.value)}
+              />
+            </div>
+          </>
+        ) : (
+          /* Student Information Section */
+          <>
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary-600 dark:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white" style={{ margin: 0 }}>
+                School Information
+              </h3>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
+                Program <span className="text-error-500 ml-1">*</span>
+              </label>
+              <div ref={programWrapperRef} className="relative">
+                <input
+                  type="text"
+                  className={`w-full px-3 py-2 text-sm border rounded-lg transition-all duration-200
+                    focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                    placeholder:text-neutral-400
+                    dark:bg-neutral-800 dark:border-neutral-600 dark:text-white dark:placeholder:text-neutral-500
+                    ${formData.programId ? 'bg-primary-50 dark:bg-primary-500/10 border-primary-300' : 'bg-white border-neutral-300'}`}
+                  placeholder="Type to search for your program..."
+                  value={programInput}
+                  autoComplete="off"
+                  onFocus={() => setProgramFocused(true)}
+                  onChange={(e) => handleProgramInputChange(e.target.value)}
+                />
+                {formData.programId && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-primary-600 font-medium pointer-events-none">✓</span>
+                )}
+                {programFocused && programInput.trim() && (
+                  <div className="absolute z-10 mt-1 w-full border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-md max-h-60 overflow-y-auto">
+                    {programSearching && (
+                      <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                    )}
+                    {!programSearching && programSuggestions.length === 0 && (
+                      <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">No programs found.</div>
+                    )}
+                    {programSuggestions.map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                        onMouseDown={(e) => { e.preventDefault(); selectProgram(item); }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <Select
+              label="Student Category"
+              required
+              options={[
+                { value: 'Grade11', label: 'Grade 11' },
+                { value: 'Grade12', label: 'Grade 12' },
+                { value: 'Freshman', label: 'Freshman' },
+                { value: 'Sophomore', label: 'Sophomore' },
+                { value: 'Junior', label: 'Junior' },
+                { value: 'Senior', label: 'Senior' },
+                { value: 'Masteral', label: 'Masteral' },
+                { value: 'Doctorate', label: 'Doctorate' },
+                { value: 'Returnee', label: 'Returnee' }
+              ]}
+              value={formData.schoolYear || ''}
+              onChange={(e) => handleInputChange('schoolYear', e.target.value)}
+            />
+          </>
+        )}
       </div>
 
       {/* Emergency Contact Card */}

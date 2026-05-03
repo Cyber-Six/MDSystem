@@ -91,24 +91,29 @@ export default function PatientPersonalInfoTab({ patient }) {
       </PatientSectionCard>
 
       <PatientSectionCard title={patient.type === 'Employee' ? 'Employment Information' : 'Academic Information'}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {patient.type === 'Employee' ? (
-            <>
-              <Field label="Employee Number" value={patient.personal.employeeNumber || patient.id} />
-              <Field label="Department" value={patient.department || patient.program} />
-              <Field label="Position" value={patient.personal.position || patient.year} />
-              <Field label="Employment Category" value={patient.personal.employmentCategory} />
-              <Field label="Employment Status" value={patient.personal.employmentStatus} />
-              <Field label="Campus Branch" value={formatBranchLabel(patient.personal.branch)} />
-            </>
-          ) : (
-            <>
-              <Field label="Student Number" value={patient.personal.studentNumber || patient.id} />
-              <Field label="Program" value={patient.program} />
-              <Field label="Year Level" value={patient.year} />
-            </>
-          )}
-        </div>
+        {(() => {
+          const gridClass = patient.type === 'Employee'
+            ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3'
+            : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3';
+          return (
+            <div className={gridClass}>
+              {patient.type === 'Employee' ? (
+                <>
+                  <Field label="Employee Number" value={patient.personal.employeeNumber || patient.id} />
+                  <Field label="Role" value={patient.year || patient.personal.position} />
+                  <Field label="Department" value={patient.department || patient.program} />
+                  <Field label="Position" value={patient.personal.position || patient.year} />
+                </>
+              ) : (
+                <>
+                  <Field label="Student Number" value={patient.personal.studentNumber || patient.id} />
+                  <Field label="Program" value={patient.program} />
+                  <Field label="Year Level" value={patient.year} />
+                </>
+              )}
+            </div>
+          );
+        })()}
       </PatientSectionCard>
 
       

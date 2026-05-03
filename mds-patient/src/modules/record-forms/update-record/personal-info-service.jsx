@@ -100,6 +100,56 @@ export const updateStudentProfile = async (schoolData) => {
 };
 
 /**
+ * Update Employee Profile with employment information
+ * Uses CREATE mutation for patient self-update (no userId needed)
+ * @param {object} employeeData - Employment information (department, position, role)
+ * @returns {Promise} Response from server
+ */
+export const updateEmployeeProfile = async (employeeData) => {
+  console.log('[Personal Info Service] Creating/updating employee profile:', employeeData);
+  
+  // Validation
+  if (!employeeData.department) {
+    throw new Error('Department is required');
+  }
+  if (!employeeData.position) {
+    throw new Error('Position is required');
+  }
+  if (!employeeData.role) {
+    throw new Error('Role is required');
+  }
+  
+  const mutation = `
+    mutation CreateEmployeeProfile($input: EmployeeProfileInput!) {
+      createEmployeeProfile(input: $input) {
+        id
+        department
+        position
+        role
+        status
+      }
+    }
+  `;
+
+  const variables = {
+    input: {
+      department: employeeData.department,
+      position: employeeData.position,
+      role: employeeData.role
+    }
+  };
+
+  try {
+    const data = await sendGraphQLRequest(mutation, variables);
+    console.log('[Personal Info Service] Employee profile created/updated:', data.createEmployeeProfile);
+    return data.createEmployeeProfile;
+  } catch (error) {
+    console.error('[Personal Info Service] Failed to create/update employee profile:', error.message);
+    throw error;
+  }
+};
+
+/**
  * Update Emergency Contact information
  * Uses CREATE mutation for patient self-update (no userId needed)
  * @param {object} emergencyData - Emergency contact data (emergencyContact1Name, emergencyContact1Relationship, etc.)
@@ -166,23 +216,32 @@ export const updateEmergencyContact = async (emergencyData) => {
 };
 
 /**
- * Update both Student Profile and Emergency Contact together
+ * Update both Student/Employee Profile and Emergency Contact together
  * Uses CREATE mutations for patient self-update (no userId needed)
- * @param {object} formData - Complete form data containing school info and emergency contacts
+ * Branches based on identity field in formData
+ * @param {object} formData - Complete form data containing identity, school/employment info and emergency contacts
  * @returns {Promise} Object with both update results
  * @throws {Error} If validation fails or API request fails
  */
 export const updatePersonalInfo = async (formData) => {
   console.log('[Personal Info Service] Creating/updating personal information');
+  console.log('[Personal Info Service] User identity:', formData.identity);
   
   if (!formData) {
     throw new Error('Form data is required');
   }
   
   try {
-    console.log('[Personal Info Service] Step 1: Creating/updating student profile...');
-    const profileResult = await updateStudentProfile(formData);
-    console.log('[Personal Info Service] ✓ Student profile created/updated successfully');
+    // Branch based on user identity
+    if (formData.identity === 'Employee') {
+      console.log('[Personal Info Service] Step 1: Creating/updating employee profile...');
+      const profileResult = await updateEmployeeProfile(formData);
+      console.log('[Personal Info Service] ✓ Employee profile created/updated successfully');
+    } else {
+      console.log('[Personal Info Service] Step 1: Creating/updating student profile...');
+      const profileResult = await updateStudentProfile(formData);
+      console.log('[Personal Info Service] ✓ Student profile created/updated successfully');
+    }
     
     console.log('[Personal Info Service] Step 2: Creating/updating emergency contact...');
     const contactResult = await updateEmergencyContact(formData);
@@ -191,7 +250,6 @@ export const updatePersonalInfo = async (formData) => {
     console.log('[Personal Info Service] ✓ All personal information updated successfully');
     return {
       success: true,
-      profile: profileResult,
       contact: contactResult
     };
   } catch (error) {

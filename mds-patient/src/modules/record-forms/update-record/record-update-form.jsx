@@ -26,6 +26,8 @@ const RecordUpdateForm = ({
   const { subscribe } = usePatientNotifications();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
+  const [profileIdentity, setProfileIdentity] = useState(null);
+  const [profileIdentityLoaded, setProfileIdentityLoaded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
   const effectiveRecordType = forceRecordType || recordType;
@@ -102,14 +104,22 @@ const RecordUpdateForm = ({
         const response = await axiosRequest({
           method: 'POST',
           url: '/profile/patient',
-          data: { query: '{ getPersonalRecord { sex } }' }
+          data: { query: '{ getPersonalRecord { sex identity } }' }
         });
-        const sex = response.data?.data?.getPersonalRecord?.sex;
+        const personalRecord = response.data?.data?.getPersonalRecord;
+        const sex = personalRecord?.sex;
+        const identity = personalRecord?.identity;
+        if (identity) {
+          setProfileIdentity(identity);
+          setFormData(prev => ({ ...prev, identity }));
+        }
         if (sex) {
           setFormData(prev => ({ ...prev, sex }));
         }
       } catch (error) {
         console.warn('[RecordUpdateForm] Could not fetch user sex:', error.message);
+      } finally {
+        setProfileIdentityLoaded(true);
       }
     };
     fetchUserSex();
@@ -139,12 +149,28 @@ const RecordUpdateForm = ({
     const errors = [];
 
     if (stepName === 'Personal Info') {
-      if (!formData.programId) {
-        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select a program before proceeding.' });
+      // Validate based on user identity (use profileIdentity state, not formData.identity)
+      if (profileIdentity === 'Employee') {
+        if (!formData.department) {
+          errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please enter your department before proceeding.' });
+        }
+        if (!formData.position) {
+          errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please enter your position before proceeding.' });
+        }
+        if (!formData.role) {
+          errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please enter your role before proceeding.' });
+        }
+      } else {
+        // Student validation
+        if (!formData.programId) {
+          errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select a program before proceeding.' });
+        }
+        if (!formData.schoolYear) {
+          errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your student category before proceeding.' });
+        }
       }
-      if (!formData.schoolYear) {
-        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your student category before proceeding.' });
-      }
+      
+      // Emergency contact validation applies to both students and employees
       if (!formData.emergencyContact1Name || !formData.emergencyContact1Relationship || !formData.emergencyContact1Number) {
         errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please complete all required Primary Emergency Contact fields.' });
       }
@@ -401,7 +427,14 @@ const RecordUpdateForm = ({
     
     switch (stepName) {
       case 'Personal Info':
-        return <PersonalInfoStep formData={formData} onChange={setFormData} />;
+        if (!profileIdentityLoaded) {
+          return (
+            <div className="flex items-center justify-center min-h-[30vh]">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+            </div>
+          );
+        }
+        return <PersonalInfoStep formData={formData} onChange={setFormData} identity={profileIdentity} />;
       case 'Medical History':
         return <MedicalHistoryStep formData={formData} onChange={setFormData} />;
       case 'Dental History':

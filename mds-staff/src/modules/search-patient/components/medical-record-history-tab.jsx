@@ -270,16 +270,6 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     lifestyleProfiles, visualAcuityProfiles,
   ].some((arr) => arr.length > 0);
 
-  const vitals = patient?.medical?.vitalSigns || {};
-  const vitalItems = [
-    { label: 'Height',      value: vitals.height ? `${vitals.height} cm` : null },
-    { label: 'Weight',      value: vitals.weight ? `${vitals.weight} kg` : null },
-    { label: 'BMI',         value: vitals.bmi || null },
-    { label: 'Blood Press', value: vitals.bp || null },
-    { label: 'Heart Rate',  value: vitals.heartRate ? `${vitals.heartRate} bpm` : null },
-    { label: 'Temp',        value: vitals.temperature ? `${vitals.temperature} °C` : null },
-  ];
-
   /* ── Medical History content (same as Medical Record tab) ── */
   const renderMedHistoryEntry = (r) => {
     const conditions  = r.conditions || [];
@@ -495,30 +485,6 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
 
   return (
     <div className="space-y-3">
-      <PatientSectionCard
-        title="Vital Signs"
-        right={
-          vitals.lastChecked && (
-            <span className="text-xs text-secondary-400 dark:text-neutral-500">
-              Last checked: {vitals.lastChecked}
-            </span>
-          )
-        }
-      >
-        <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-neutral-200 dark:divide-neutral-700 -mx-3 -mb-3 border-t border-neutral-100 dark:border-neutral-700/60">
-          {vitalItems.map(({ label, value }) => (
-            <div key={label} className="px-3 py-3 text-center">
-              <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none mb-1.5">{label}</p>
-              {value ? (
-                <p className="text-base font-semibold text-secondary-800 dark:text-white leading-none">{value}</p>
-              ) : (
-                <p className="text-sm text-secondary-300 dark:text-neutral-600">—</p>
-              )}
-            </div>
-          ))}
-        </div>
-      </PatientSectionCard>
-
       {!hasAnyData ? (
         <PatientSectionCard title="Medical Record History">
           <p className="text-sm text-secondary-400 dark:text-neutral-500">No medical record history found.</p>

@@ -500,6 +500,11 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [personalSubTab, setPersonalSubTab] = useState('personal-info');
+  const [personalHistorySections, setPersonalHistorySections] = useState({
+    basicInfo: true,
+    employment: true,
+    emergency: true,
+  });
   const [medicalSubTab, setMedicalSubTab] = useState('medical-record');
   const [dentalSubTab, setDentalSubTab] = useState('dental-record');
   const [consultationSubTab, setConsultationSubTab] = useState('consultation-form');
@@ -1109,7 +1114,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       case 'personal':
         return personalSubTab === 'personal-info'
           ? <PatientPersonalInfoTab patient={patient} />
-          : <PatientPersonalRecordHistoryTab patient={patient} />;
+          : <PatientPersonalRecordHistoryTab patient={patient} visibleSections={personalHistorySections} />;
       case 'medical':
         return medicalSubTab === 'medical-record'
           ? <PatientMedicalRecordTab patient={patient} />
@@ -1281,23 +1286,78 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         {/* ── Sub-Tabs (Nested View) ────────────────────────────────────────────── */}
         {activeTab === 'personal' && (
           <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
-            <div className="flex gap-2 flex-wrap">
-              {[
-                { id: 'personal-info', label: 'Personal Record' },
-                { id: 'personal-record-history', label: 'History' },
-              ].map((sub) => (
-                <button
-                  key={sub.id}
-                  onClick={() => setPersonalSubTab(sub.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
-                    personalSubTab === sub.id
-                      ? 'bg-yellow-400 dark:bg-yellow-500 text-white'
-                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
-                  }`}
-                >
-                  {sub.label}
-                </button>
-              ))}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { id: 'personal-info', label: 'Personal Record' },
+                  { id: 'personal-record-history', label: 'History' },
+                ].map((sub) => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setPersonalSubTab(sub.id)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                      personalSubTab === sub.id
+                        ? 'bg-yellow-400 dark:bg-yellow-500 text-white'
+                        : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+
+              {personalSubTab === 'personal-record-history' && (
+                <div className="flex items-center gap-3 lg:pl-4 lg:border-l lg:border-neutral-300 dark:lg:border-neutral-600">
+                  <span className="hidden lg:inline text-[10px] font-semibold uppercase tracking-[0.28em] text-secondary-500 dark:text-neutral-400 whitespace-nowrap">
+                    Filter
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPersonalHistorySections((p) => ({ ...p, basicInfo: !p.basicInfo }))}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all ${
+                        personalHistorySections.basicInfo
+                          ? 'border-primary-300 bg-primary-100/80 text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                          : 'border-neutral-300 bg-white/70 text-secondary-600 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-400'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${personalHistorySections.basicInfo ? 'bg-primary-500' : 'bg-neutral-400'}`} />
+                      Basic Info
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPersonalHistorySections((p) => ({ ...p, employment: !p.employment }))}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all ${
+                        personalHistorySections.employment
+                          ? 'border-emerald-300 bg-emerald-100/80 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                          : 'border-neutral-300 bg-white/70 text-secondary-600 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-400'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${personalHistorySections.employment ? 'bg-emerald-500' : 'bg-neutral-400'}`} />
+                      Student/Employment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPersonalHistorySections((p) => ({ ...p, emergency: !p.emergency }))}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all ${
+                        personalHistorySections.emergency
+                          ? 'border-amber-300 bg-amber-100/80 text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                          : 'border-neutral-300 bg-white/70 text-secondary-600 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-400'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${personalHistorySections.emergency ? 'bg-amber-500' : 'bg-neutral-400'}`} />
+                      Emergency Contacts
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPersonalHistorySections({ basicInfo: true, employment: true, emergency: true })}
+                      className="inline-flex items-center justify-center px-3 py-1.5 rounded-full text-[11px] font-semibold uppercase tracking-wider border border-neutral-300 dark:border-neutral-600 bg-white/80 dark:bg-neutral-800/70 text-secondary-700 dark:text-neutral-200 hover:bg-white dark:hover:bg-neutral-800 transition-colors whitespace-nowrap"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
