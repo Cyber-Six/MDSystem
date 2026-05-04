@@ -44,8 +44,8 @@ const Mutation = {
       }
 
     try {
-      let newStatus = "Pending";
-      if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
+      const newStatus = "Pending";
+      //if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
       const result = await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2 RETURNING *;`,
         [newStatus, record.id]
       );
