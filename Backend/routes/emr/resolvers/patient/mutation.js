@@ -33,7 +33,6 @@ const Mutation = {
 
   submitUpdateTicket: async (_, {}, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    /*
     assertActiveUpdateTicket(record, res);
     
     const missingRecords = await validateUpdateTicket(record.id, record.scope);
@@ -43,7 +42,7 @@ const Mutation = {
         .message(`Cannot submit update ticket. Required records are missing or incomplete: ${missingRecords.join(", ")}`)
         .throw();
       }
-    */
+
     try {
       let newStatus = "Pending";
       if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
@@ -57,7 +56,7 @@ const Mutation = {
           .message(`No ticket found with id ${record.id}`)
           .throw();
       }
-      /*
+      
       const location = await db.getUserBranch(user.id);
       await emitToRole(`${location}::staff`, "updateTicket", {
         ticketId: result.rows[0].id,
@@ -65,7 +64,7 @@ const Mutation = {
         status: result.rows[0].status,
         scope: record.scope,
       });
-      */
+      logger.debug(`Emitted updateTicket event for ticket ${record.id} with status ${result.rows[0].status}`);
       return result.rows[0].status;
     } catch (error) {
       logger.error("Error submitting update ticket:", error);
