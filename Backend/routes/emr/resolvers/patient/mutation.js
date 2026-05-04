@@ -50,6 +50,13 @@ const Mutation = {
       const result = await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2 RETURNING *;`,
         [newStatus, record.id]
       );
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res)
+          .status(404)
+          .message(`No ticket found with id ${record.id}`)
+          .throw();
+      }
       /*
       const location = await db.getUserBranch(user.id);
       await emitToRole(`${location}::staff`, "updateTicket", {
