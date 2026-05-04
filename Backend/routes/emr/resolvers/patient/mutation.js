@@ -32,17 +32,7 @@ const Mutation = {
   },
 
   submitUpdateTicket: async (_, {}, { user, res }) => {
-    const activeTicketResult = await db.query(
-      `SELECT id, status, scope
-       FROM "patientUpdateLog"
-       WHERE "patientId" = $1
-         AND status IN ('InProgress', 'Revision')
-       ORDER BY created_at DESC, updated_at DESC
-       LIMIT 1;`,
-      [user.id]
-    );
-
-    const record = activeTicketResult.rows[0] || null;
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
     assertActiveUpdateTicket(record, res);
     
     const missingRecords = await validateUpdateTicket(record.id, record.scope);
@@ -55,34 +45,19 @@ const Mutation = {
 
     let newStatus = "Pending";
     if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
-    const updateResult = await db.query(
-      `UPDATE "patientUpdateLog"
-       SET status = $1
-       WHERE id = $2
-         AND "patientId" = $3
-         AND status IN ('InProgress', 'Revision')
-       RETURNING id, status, scope;`,
-      [newStatus, record.id, user.id]
+    const { result } = await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2 RETURNING *;`,
+      [newStatus, record.id]
     );
-
-    if (updateResult.rowCount === 0) {
-      throwGraphQLError(res)
-        .status(409)
-        .message("Unable to submit update ticket. Please refresh and try again.")
-        .throw();
-    }
-
-    const updatedRecord = updateResult.rows[0];
 
     const location = await db.getUserBranch(user.id);
     await emitToRole(`${location}::staff`, "updateTicket", {
-      ticketId: record.id,
+      ticketId: result.rows[0].id,
       patientId: user.id,
-      status: updatedRecord.status,
-      scope: updatedRecord.scope,
+      status: result.rows[0].status,
+      scope: record.scope,
     });
 
-    return updatedRecord.status;
+    return newStatus;
   },
 
   cancelUpdateTicket: async (_, {}, { user, res }) => {
@@ -93,7 +68,7 @@ const Mutation = {
         .message("Cannot cancel update ticket that is not in 'InProgress' or 'Pending' status.")
         .throw();
       }
-    let newStatus = "Cancelled";
+    const newStatus = "Cancelled";
     await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
       [newStatus, record.id]
     );
