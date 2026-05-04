@@ -44,7 +44,7 @@ const Mutation = {
       }
 
     try {
-      const newStatus = "Pending";
+      const newStatus = "Cancelled";
       //if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
       const result = await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2 RETURNING *;`,
         [newStatus, record.id]
@@ -58,7 +58,7 @@ const Mutation = {
         scope: record.scope,
       });
 
-      return newStatus;
+      return result.rows[0].status;
     } catch (error) {
       logger.error("Error submitting update ticket:", error);
       throwGraphQLError(res)
