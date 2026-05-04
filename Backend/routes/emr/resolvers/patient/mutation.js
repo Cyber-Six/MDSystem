@@ -4,7 +4,7 @@ const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { emitToRole } = require("../../../../config/sockets");
-
+const logger = require("../../../../utils/logger.js");
 const { validateUpdateTicket } = require("../record-validator.js");
 const Query = require("./query.js");
 
@@ -43,21 +43,29 @@ const Mutation = {
         .throw();
       }
 
-    let newStatus = "Pending";
-    if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
-    const { result } = await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2 RETURNING *;`,
-      [newStatus, record.id]
-    );
+    try {
+      let newStatus = "Pending";
+      if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
+      const result = await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2 RETURNING *;`,
+        [newStatus, record.id]
+      );
 
-    const location = await db.getUserBranch(user.id);
-    await emitToRole(`${location}::staff`, "updateTicket", {
-      ticketId: result.rows[0].id,
-      patientId: user.id,
-      status: result.rows[0].status,
-      scope: record.scope,
-    });
+      const location = await db.getUserBranch(user.id);
+      await emitToRole(`${location}::staff`, "updateTicket", {
+        ticketId: result.rows[0].id,
+        patientId: user.id,
+        status: result.rows[0].status,
+        scope: record.scope,
+      });
 
-    return newStatus;
+      return newStatus;
+    } catch (error) {
+      logger.error("Error submitting update ticket:", error);
+      throwGraphQLError(res)
+        .status(500)
+        .message("An error occurred while submitting the update ticket. Please try again later.")
+        .throw();
+    }
   },
 
   cancelUpdateTicket: async (_, {}, { user, res }) => {
