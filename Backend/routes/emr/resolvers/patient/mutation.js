@@ -49,14 +49,14 @@ const Mutation = {
       const result = await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2 RETURNING *;`,
         [newStatus, record.id]
       );
-
+      logger.debug(`(!)Update ticket ${record.id} set to status ${newStatus} in database.`);
       if (result.rowCount === 0) {
         throwGraphQLError(res)
           .status(404)
           .message(`No ticket found with id ${record.id}`)
           .throw();
       }
-      
+      logger.debug(`(!!)Updated ticket ${record.id} to status ${newStatus}`);
       const location = await db.getUserBranch(user.id);
       await emitToRole(`${location}::staff`, "updateTicket", {
         ticketId: result.rows[0].id,
@@ -64,7 +64,7 @@ const Mutation = {
         status: result.rows[0].status,
         scope: record.scope,
       });
-      logger.debug(`Emitted updateTicket event for ticket ${record.id} with status ${result.rows[0].status}`);
+      logger.debug(`(!!!)Emitted updateTicket event for ticket ${record.id} with status ${result.rows[0].status}`);
       return result.rows[0].status;
     } catch (error) {
       logger.error("Error submitting update ticket:", error);
