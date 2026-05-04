@@ -30,7 +30,7 @@ const Mutation = {
     );
     return result.rows[0].id;
   },
-
+  /*
   submitUpdateTicket: async (_, {}, { user, res }) => {
     logger.debug(`(!)Submitting update ticket for user ${user.id}`);
     const record = await Query.getUpdateTicket(_, {}, { user, res });
@@ -77,7 +77,7 @@ const Mutation = {
         .throw();
     }
   },
-
+  */
   cancelUpdateTicket: async (_, {}, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
     if (record.status !== "InProgress" && record.status !== "Pending") {
