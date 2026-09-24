@@ -1,6 +1,6 @@
 const express = require("express");
 const logger = require("../../../utils/logger.js");
-const { query, queryClient, queryControlled, getUserBranch, connect } = require("../../../config/query.js");
+const { query, queryClient, getUserBranch, connect, setSystemAuditLog } = require("../../../config/query.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
 const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions, getStaffBranch } = require("../../../services/permit.js");
 const { promoteFile, deleteFile } = require("../../../config/multer.js");
@@ -125,27 +125,33 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
 
 // ✅ CREATE announcement (Staff only)
 router.post("/", jwtProtect("medical"), async (req, res) => {
+  const client = await connect();
+  let promotedPubmat = null;
     try {
+    await client.query("BEGIN");
+
         const userId = req.user.id;
         const { label, description, pubmat, isActive, location, viewableUntil } = req.body;
 
-    if (!ValidateLocationDesignation(location)) {
-            return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
-        }
+      if (!ValidateLocationDesignation(location)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
+      }
 
         // Check permission
         const permitted = await isMedicalPermittedLocationBased(userId, permissions.announcement_allow_crud, location);
         if (!permitted) {
+          await client.query("ROLLBACK");
             return res.status(403).json({ error: "FORBIDDEN", message: `Not authorized to create announcements for location: '${location}'.` });
         }
 
         // Promote pubmat file if provided
-        let promotedPubmat = null;
         if (pubmat) {
             try {
                 promotedPubmat = await promoteFile(userId, pubmat, "announcement");
             } catch (err) {
                 logger.warn("Failed to promote pubmat file:", err.message);
+              await client.query("ROLLBACK");
                 return res.status(400).json({ error: "INVALID_FILE", message: "Failed to process pubmat file" });
             }
         }
@@ -165,13 +171,44 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
             viewableUntil || null
         ];
 
-        const result = await queryControlled(sql, params);
+        const result = await client.query(sql, params);
+
+        await setSystemAuditLog({
+          client,
+          eventType: "ANNOUNCEMENT_MANAGEMENT",
+          actorId: userId,
+          actorType: "Staff",
+          targetId: null,
+          action: "CREATE_ANNOUNCEMENT",
+          details: JSON.stringify({
+            announcementId: result.rows[0]?.id,
+            title: label || null,
+            description: description || null,
+            pubmat: promotedPubmat,
+            isActive: isActive !== undefined ? isActive : true,
+            location: location || "Both",
+            viewableUntil: viewableUntil || null,
+          }),
+          changedBy: "Medical",
+        });
+
+        await client.query("COMMIT");
 
         logger.info(`Announcement created by userId=${userId}`, { id: result.rows[0]?.id });
         return res.status(201).json({ success: true, data: result.rows[0] });
     } catch (err) {
+        await client.query("ROLLBACK");
+        if (promotedPubmat) {
+          try {
+            await deleteFile("announcement", promotedPubmat);
+          } catch (cleanupErr) {
+            logger.error("Failed to cleanup promoted pubmat after create error:", cleanupErr);
+          }
+        }
         logger.error("Failed to create announcement:", err);
         return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to create announcement" });
+    } finally {
+        client.release();
     }
 });
 
@@ -189,7 +226,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
     const hasViewableUntil = Object.prototype.hasOwnProperty.call(req.body, "viewableUntil");
 
     // Existence check - need to verify current location for permission checks
-    const existsResult = await client.query(`SELECT id, pubmat, location FROM "Announcement" WHERE id = $1;`, [id]);
+    const existsResult = await client.query(`SELECT id, title, content, pubmat, "isActive", location, "viewableUntil" FROM "Announcement" WHERE id = $1;`, [id]);
     if (existsResult.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "NOT_FOUND", message: "Announcement not found" });
@@ -283,7 +320,28 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         }
         return res.status(500).json({ error: "FILE_DELETE_ERROR", message: "Failed to delete old pubmat file" });
       }
+
     }
+
+    // Build audit details with only updated fields
+    const updatedFields = { announcementId: Number(id) };
+    if (label !== undefined) updatedFields.title = label;
+    if (description !== undefined) updatedFields.description = description;
+    if (pubmat !== undefined) updatedFields.pubmat = promotedPubmat;
+    if (isActive !== undefined) updatedFields.isActive = isActive;
+    if (location !== undefined) updatedFields.location = location;
+    if (hasViewableUntil) updatedFields.viewableUntil = viewableUntil;
+
+    await setSystemAuditLog({
+      client,
+      eventType: "ANNOUNCEMENT_MANAGEMENT",
+      actorId: userId,
+      actorType: "Staff",
+      targetId: null,
+      action: "UPDATE_ANNOUNCEMENT",
+      details: JSON.stringify(updatedFields),
+      changedBy: "Medical",
+    });
 
     await client.query("COMMIT");
     logger.info(`Announcement updated by userId=${userId}`, { id });
@@ -322,6 +380,12 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
         }
         const location = qResult.rows[0].location;
 
+        const existingResult = await client.query(`
+          SELECT id, title, content, pubmat, "isActive", location, "viewableUntil"
+          FROM "Announcement"
+          WHERE id = $1;
+        `, [id]);
+
         // Check permission
         const permitted = await isMedicalPermittedLocationBased(userId, permissions.announcement_allow_crud, location);
         if (!permitted) {
@@ -352,6 +416,25 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
                 return res.status(500).json({ error: "FILE_DELETE_ERROR", message: "Failed to delete associated pubmat file" });
             }
         }
+
+            await setSystemAuditLog({
+              client,
+              eventType: "ANNOUNCEMENT_MANAGEMENT",
+              actorId: userId,
+              actorType: "Staff",
+              targetId: null,
+              action: "DELETE_ANNOUNCEMENT",
+              details: JSON.stringify({
+                announcementId: Number(id),
+                title: existingResult.rows[0]?.title || null,
+                description: existingResult.rows[0]?.content || null,
+                pubmat: existingResult.rows[0]?.pubmat || null,
+                isActive: existingResult.rows[0]?.isActive ?? null,
+                location: existingResult.rows[0]?.location || null,
+                viewableUntil: existingResult.rows[0]?.viewableUntil || null,
+              }),
+              changedBy: "Medical",
+            });
 
         await client.query("COMMIT");
         logger.info(`Announcement deleted by userId=${userId}`, { id });

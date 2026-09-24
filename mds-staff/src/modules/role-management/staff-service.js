@@ -169,7 +169,6 @@ const GQL_LIST_USER_SESSIONS = `
   query ListUserSessions($userId: ID!, $offset: Int!, $limit: Int!) {
     listUserSessions(userId: $userId, offset: $offset, limit: $limit) {
       deviceId
-      refreshToken
       status
       createdAt
       updatedAt
@@ -199,7 +198,6 @@ const GQL_LIST_ALL_SESSIONS = `
         email
         role
         device
-        refreshToken
         ttlSeconds
         numberOfSessions
         status
@@ -298,6 +296,10 @@ const GQL_SEARCH_PATIENT_DELETION_CANDIDATES = `
         updatedAt
         eligibleAfter
         eligible
+        isMedicalPersonnel
+        deletionMode
+        blocked
+        blockedReason
       }
       totalCount
     }

@@ -27,6 +27,7 @@ const {
   scanAllRefreshSessions,
   scanAllRefreshSessionsWithMeta,
   deleteAllUserSessions,
+  setSessionBlacklist,
   getStaffAnchor,
   saveStaffAnchor,
   createAdminTransferSession,
@@ -263,7 +264,7 @@ async function ensureUserIdentityEnumValues() {
     const labelsResult = await db.query(
       `SELECT e.enumlabel
        FROM pg_type t
-       JOIN pg_enum e ON e.enumtypid = t.oid
+       LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
        WHERE t.typname = $1`,
       [enumType]
     );
@@ -275,6 +276,15 @@ async function ensureUserIdentityEnumValues() {
 
       // enumType is sourced from USER_IDENTITY_ENUM_CANDIDATES and pg_type, so this is safe.
       await db.query(`ALTER TYPE "${enumType}" ADD VALUE IF NOT EXISTS '${requiredValue}'`);
+
+    const adminPersonnel = await getMedicalPersonnelRecordById(user.id);
+    const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+    if (!adminPersonnelId) {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
+    }
       existingLabels.add(requiredValue);
     }
   }
@@ -544,7 +554,7 @@ async function getSemestralScopeSummary({ identities, normalizedBranch, normaliz
   const summaryResult = await db.query(
     `WITH scoped_users AS (
        SELECT uc.id
-       FROM "UserCredentials" uc
+       FROM active_user_credentials uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        LEFT JOIN LATERAL (
          SELECT ep.department
@@ -566,7 +576,7 @@ async function getSemestralScopeSummary({ identities, normalizedBranch, normaliz
          WHERE COALESCE(uc.credentials_status::text, '') <> 'Inactive'
        )::int AS will_update_count
      FROM scoped_users su
-     JOIN "UserCredentials" uc ON uc.id = su.id`,
+     JOIN active_user_credentials uc ON uc.id = su.id`,
     [identities, normalizedBranch, normalizedDepartment]
   );
 
@@ -638,17 +648,26 @@ function buildUserInfo(row) {
   };
 }
 
-async function getMedicalPersonnelRecordById(medicalId, queryClient = db) {
-  const normalizedMedicalId = String(medicalId || '').trim();
+async function getAdminPersonnelId(adminUserId, queryClient = db) {
+  const adminPersonnel = await getMedicalPersonnelRecordById(adminUserId, queryClient);
+  const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+  if (!adminPersonnelId) {
+    throw new Error('Admin medical personnel record not found.');
+  }
+  return adminPersonnelId;
+}
+
+async function getMedicalPersonnelRecordById(userId, queryClient = db) {
+  const normalizedMedicalId = String(userId || '').trim();
   if (!normalizedMedicalId) {
     return null;
   }
 
   const result = await queryClient.query(
     `SELECT mp.id::text AS id, uc.email
-     FROM "MedicalPersonnel" mp
-     LEFT JOIN "UserCredentials" uc ON uc.id = mp.id
-     WHERE mp.id::text = $1
+     FROM active_medical_personnel mp
+     LEFT JOIN active_user_credentials uc ON uc.id = mp."userId"
+     WHERE mp."userId"::text = $1
      LIMIT 1`,
     [normalizedMedicalId]
   );
@@ -775,7 +794,7 @@ async function getPatientEmailMap(userIds) {
 
   const result = await db.query(
     `SELECT uc.id::text AS "userId", uc.email
-     FROM "UserCredentials" uc
+     FROM active_user_credentials uc
      JOIN "Patients" p ON p.id = uc.id
      WHERE uc.id::text = ANY($1::text[])`,
     [userIds]
@@ -811,7 +830,7 @@ async function getUserEmailMap(userIds) {
 
   const result = await db.query(
     `SELECT uc.id::text AS "userId", uc.email
-     FROM "UserCredentials" uc
+     FROM active_user_credentials uc
      WHERE uc.id::text = ANY($1::text[])`,
     [userIds]
   );
@@ -941,10 +960,10 @@ const Query = {
          mp.role AS personnel_role,
          COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
          lla.last_login
-       FROM "UserCredentials" uc
+       FROM active_user_credentials uc
        JOIN "UsersPersonal" up ON up.id = uc.id
-       JOIN "MedicalPersonnel" mp ON mp.id = uc.id
-       LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
+      JOIN active_medical_personnel mp ON mp."userId" = uc.id
+      LEFT JOIN "rolesMap" rm ON rm."personnelId" = mp.id
        LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
        LEFT JOIN (
          SELECT user_id, MAX(attempted_at) AS last_login
@@ -1019,10 +1038,10 @@ const Query = {
          mp.role AS personnel_role,
          COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
          lla.last_login
-       FROM "UserCredentials" uc
-       JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       FROM active_user_credentials uc
+      JOIN active_medical_personnel mp ON mp."userId" = uc.id
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-       LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
+      LEFT JOIN "rolesMap" rm ON rm."personnelId" = mp.id
        LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
        LEFT JOIN (
          SELECT user_id, MAX(attempted_at) AS last_login
@@ -1099,9 +1118,9 @@ const Query = {
          up.first_name, up.middle_name, up.last_name,
          up.identifier,
          CASE WHEN mp.id IS NOT NULL THEN true ELSE false END AS is_medical_personnel
-       FROM "UserCredentials" uc
+       FROM active_user_credentials uc
        JOIN "UsersPersonal" up ON up.id = uc.id
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+      LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
        WHERE
          uc.identity = 'Employee'
          AND ($3::boolean IS NOT TRUE OR uc.email LIKE '%.mds@tip.edu.ph')
@@ -1140,9 +1159,9 @@ const Query = {
          mp.id, mp.role, mp.title, mp.designation, mp.is_active,
          uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name
-       FROM "MedicalPersonnel" mp
-       JOIN "UserCredentials" uc ON uc.id = mp.id
-       JOIN "UsersPersonal" up ON up.id = mp.id
+       FROM active_medical_personnel mp
+      JOIN active_user_credentials uc ON uc.id = mp."userId"
+      JOIN "UsersPersonal" up ON up.id = mp."userId"
        WHERE
          ($1::text IS NULL OR mp.role = $1)
          AND ($2::"UserDesignation" IS NULL OR mp.designation = $2::"UserDesignation")
@@ -1169,10 +1188,10 @@ const Query = {
          mp.id, mp.role, mp.title, mp.designation, mp.is_active,
          uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name
-       FROM "MedicalPersonnel" mp
-       JOIN "UserCredentials" uc ON uc.id = mp.id
-       JOIN "UsersPersonal" up ON up.id = mp.id
-       WHERE mp.id = $1`,
+       FROM active_medical_personnel mp
+       JOIN active_user_credentials uc ON uc.id = mp."userId"
+       JOIN "UsersPersonal" up ON up.id = mp."userId"
+       WHERE mp."userId" = $1`,
       [userId]
     );
 
@@ -1469,9 +1488,9 @@ const Query = {
          ) AS name,
          inactive_ticket.expires_at AS inactive_expires_at,
          lla.last_login
-       FROM "UserCredentials" uc
+       FROM active_user_credentials uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+      LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
        LEFT JOIN LATERAL (
          SELECT
            pul.created_at,
@@ -1526,7 +1545,7 @@ const Query = {
 
     const countResult = await db.query(
       `SELECT COUNT(*)::int AS total_count
-       FROM "UserCredentials" uc
+       FROM active_user_credentials uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        WHERE
          ($1::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($1))
@@ -1648,7 +1667,7 @@ const Query = {
            COALESCE(uc.credentials_status::text, 'Unknown') AS status,
            COALESCE(uc.updated_at, NOW()) AS updated_at,
            CASE
-             WHEN uc.credentials_status = 'Inactive'::"CredentialStatus"
+             WHEN uc.credentials_status IN ('Inactive'::"CredentialStatus", 'Unverified'::"CredentialStatus")
                THEN COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year'
              ELSE NULL
            END AS eligible_after,
@@ -1658,7 +1677,7 @@ const Query = {
            END AS is_medical_personnel,
            CASE
              WHEN mp.id IS NOT NULL THEN 'soft'
-             ELSE 'hard'
+             ELSE 'soft'
            END AS deletion_mode,
            CASE
              WHEN $5::text = 'admin' AND uc.id::text = $4::text THEN true
@@ -1669,22 +1688,19 @@ const Query = {
                THEN 'Administrators cannot delete their own accounts.'
              ELSE NULL
            END AS blocked_reason
-         FROM "UserCredentials" uc
+         FROM active_user_credentials uc
          LEFT JOIN "Patients" p ON p.id = uc.id
-         LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+         LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
          LEFT JOIN "UsersPersonal" up ON up.id = uc.id
          WHERE (
            p.id IS NOT NULL
            OR mp.id IS NOT NULL
          )
            AND (
-             (
-               uc.credentials_status = 'Inactive'::"CredentialStatus"
-               AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
-             )
+             uc.credentials_status = 'Locked'::"CredentialStatus"
              OR (
-               $3::text IS NOT NULL
-               AND uc.credentials_status = 'Locked'::"CredentialStatus"
+               uc.credentials_status IN ('Inactive'::"CredentialStatus", 'Unverified'::"CredentialStatus")
+               AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
              )
            )
            AND (
@@ -1724,6 +1740,7 @@ const Query = {
        ORDER BY
          CASE
            WHEN status = 'Inactive' THEN 0
+           WHEN status = 'Unverified' THEN 1
            WHEN status = 'Locked' THEN 1
            ELSE 2
          END,
@@ -1737,20 +1754,20 @@ const Query = {
 
     const countResult = await db.query(
       `SELECT COUNT(*)::int AS total_count
-       FROM "UserCredentials" uc
+       FROM active_user_credentials uc
        LEFT JOIN "Patients" p ON p.id = uc.id
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+      LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        WHERE (
          p.id IS NOT NULL
          OR mp.id IS NOT NULL
        )
          AND (
-           (
-             uc.credentials_status = 'Inactive'::"CredentialStatus"
-             AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
-           )
-           OR ($1::text IS NOT NULL AND uc.credentials_status = 'Locked'::"CredentialStatus")
+             uc.credentials_status = 'Locked'::"CredentialStatus"
+             OR (
+               uc.credentials_status IN ('Inactive'::"CredentialStatus", 'Unverified'::"CredentialStatus")
+               AND COALESCE(uc.updated_at, NOW()) + INTERVAL '1 year' < NOW()
+             )
          )
          AND (
            $1::text IS NULL
@@ -1782,7 +1799,7 @@ const Query = {
         eligibleAfter: row.eligible_after ? new Date(row.eligible_after).toISOString() : null,
         eligible: Boolean(row.eligible),
         isMedicalPersonnel: Boolean(row.is_medical_personnel),
-        deletionMode: row.deletion_mode || 'hard',
+        deletionMode: row.deletion_mode || 'soft',
         blocked: Boolean(row.blocked),
         blockedReason: row.blocked_reason || null,
       })),
@@ -2034,8 +2051,8 @@ const Query = {
       `WITH target_user AS (
          SELECT EXISTS(
            SELECT 1
-           FROM "UserCredentials" uc
-           LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+           FROM active_user_credentials uc
+           LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
            WHERE uc.id = $1
              AND (
                COALESCE(uc.identity::text, '') = 'Medical'
@@ -2132,8 +2149,8 @@ const Mutation = {
 
       // Verify user exists and has Employee identity
       const userResult = await client.query(
-        `SELECT uc.id, md.id AS "medicalId", uc.identity FROM "UserCredentials" uc
-        LEFT JOIN "MedicalPersonnel" md ON md.id = uc.id
+        `SELECT uc.id, md.id AS "medicalId", uc.identity FROM active_user_credentials uc
+        LEFT JOIN active_medical_personnel md ON md."userId" = uc.id
         WHERE uc.id = $1
         LIMIT 1`,
         [userId]
@@ -2160,19 +2177,29 @@ const Mutation = {
 
       // Insert MedicalPersonnel record
       const insertResult = await client.query(
-        `INSERT INTO "MedicalPersonnel" (id, role, title, designation, is_active)
+        `INSERT INTO "MedicalPersonnel" ("userId", role, title, designation, is_active)
          VALUES ($1, $2, $3, $4, true)
          RETURNING *`,
         [userId, role, title, designation]
       );
 
       const personnel = insertResult.rows[0];
+      const personnelId = String(personnel.id);
+      const adminPersonnel = await getMedicalPersonnelRecordById(user.id, client);
+      const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+      if (!adminPersonnelId) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message('Admin medical personnel record not found.')
+          .status(404)
+          .throw();
+      }
 
       // Grant is_staff permission
       await setStaffPermissionsExtended({
-        personnelId: String(userId),
+        personnelId: personnelId,
         permissionsList: [{ key: 'is_staff', enabled: true }],
-        assignedBy: String(user.id),
+        assignedBy: adminPersonnelId,
         defaultBranch: designation,
         client  // Pass client for transaction participation
       });
@@ -2180,9 +2207,9 @@ const Mutation = {
       // If template provided, apply permissions from template
       if (effectiveTemplateId) {
         await applyTemplateToStaff({
-          personnelId: userId,
+          personnelId: personnelId,
           templateId: effectiveTemplateId,
-          assignedBy: user.id,
+          assignedBy: adminPersonnelId,
           staffBranch: designation,  // Staff's branch - all permissions inherit this
           client  // Pass client for transaction participation
         });
@@ -2243,12 +2270,22 @@ const Mutation = {
 
     // Verify MedicalPersonnel record exists
     const existingResult = await db.query(
-      `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
+      `SELECT id FROM active_medical_personnel WHERE "userId" = $1`,
       [userId]
     );
 
     if (existingResult.rows.length === 0) {
       throwGraphQLError(res).message('MedicalPersonnel record not found.').status(404).throw();
+    }
+
+    const personnelId = String(existingResult.rows[0].id);
+    const adminPersonnel = await getMedicalPersonnelRecordById(user.id);
+    const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+    if (!adminPersonnelId) {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
     }
 
     // Build dynamic UPDATE query
@@ -2273,7 +2310,7 @@ const Mutation = {
       params.push(isActive);
     }
 
-    params.push(userId);
+    params.push(personnelId);
 
     const updateQuery = `
       UPDATE "MedicalPersonnel"
@@ -2293,7 +2330,7 @@ const Mutation = {
          SET branch = $1::"UserDesignation"
          WHERE "personnelId" = $2
            AND branch != 'Both'`,
-        [designation, userId]
+        [designation, personnelId]
       );
       logger.info(`Updated branch to "${designation}" for location-specific permissions of userId=${userId} (preserved 'Both' permissions)`);
     }
@@ -2302,9 +2339,9 @@ const Mutation = {
     if (templateId !== undefined) {
       try {
         await applyTemplateToStaff({
-          personnelId: userId,
+          personnelId: personnelId,
           templateId,
-          assignedBy: user.id,
+          assignedBy: adminPersonnelId,
           staffBranch: personnel.designation  // Use the staff's branch - all permissions inherit this
         });
         logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}, staffBranch=${personnel.designation}`);
@@ -2331,13 +2368,13 @@ const Mutation = {
   },
 
   _deleteMedicalPersonnel: async (_, { userId, revertIdentity = true }, { user, res }) => {
-    const client = await db.db().connect();
+    const client = await db.connect();
     try {
       await client.query('BEGIN');
 
       // Verify MedicalPersonnel record exists
       const existingResult = await client.query(
-        `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
+        `SELECT id FROM active_medical_personnel WHERE "userId" = $1`,
         [userId]
       );
 
@@ -2346,84 +2383,99 @@ const Mutation = {
         throwGraphQLError(res).message('MedicalPersonnel record not found.').status(404).throw();
       }
 
-      // Delete all permissions (rolesMap entries) for this staff
-      await clearMedicalPermits(String(userId), client);
+      const personnelId = String(existingResult.rows[0].id);
 
-      // Delete MedicalPersonnel record
+      // Remove role grants to ensure immediate loss of staff permissions.
+      await clearMedicalPermits(personnelId, client);
+
+      // Soft delete MedicalPersonnel record.
       await client.query(
-        `DELETE FROM "MedicalPersonnel" WHERE id = $1`,
-        [userId]
+        `UPDATE "MedicalPersonnel"
+         SET is_active = false,
+             deleted_at = COALESCE(deleted_at, NOW())
+         WHERE id = $1`,
+        [personnelId]
       );
 
-      // Revert identity to Employee
-      if (revertIdentity) {
-        await client.query(
-          `UPDATE "UserCredentials" SET identity = 'Employee' WHERE id = $1`,
-          [userId]
-        );
-      }
+      const identityClause = revertIdentity ? `, identity = 'Employee'` : '';
+      await client.query(
+        `UPDATE "UserCredentials"
+         SET credentials_status = 'Inactive'::"CredentialStatus",
+             locked_until = NULL,
+             deleted_at = COALESCE(deleted_at, NOW()),
+             updated_at = NOW()
+             ${identityClause}
+         WHERE id = $1`,
+        [userId]
+      );
+      await Mutation._updateStaffAccount(_, { userId, status: "Suspended", clientdb: client }, { user, res });
 
       await client.query('COMMIT');
 
-      logger.info(`MedicalPersonnel record deleted: userId=${userId}, identityReverted=${revertIdentity}, by adminId=${user.id}`);
+      logger.info(`MedicalPersonnel record soft deleted: userId=${userId}, identityReverted=${revertIdentity}, by adminId=${user.id}`);
 
       return {
         ok: true,
-        message: 'MedicalPersonnel record deleted successfully.',
+        message: 'MedicalPersonnel record soft deleted successfully.',
         identityReverted: revertIdentity
       };
     } catch (error) {
       await client.query('ROLLBACK');
-      logger.error(`Error deleting MedicalPersonnel: ${error.message}`);
-      throwGraphQLError(res).message(error.message || 'Failed to delete MedicalPersonnel record.').status(500).throw();
+      logger.error(`Error soft deleting MedicalPersonnel: ${error.message}`);
+      throwGraphQLError(res).message(error.message || 'Failed to soft delete MedicalPersonnel record.').status(500).throw();
     } finally {
       client.release();
     }
   },
 
-  _deleteMedicalStaff: async (_, { medicalId }, { user, res }) => {
-    const normalizedMedicalId = String(medicalId || '').trim();
-    if (!normalizedMedicalId) {
+  _deleteMedicalStaff: async (_, { medicalId: userId }, { user, res }) => {
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedUserId) {
       throwGraphQLError(res).message('medicalId is required.').status(400).throw();
     }
 
-    const client = await db.db().connect();
+    const client = await db.connect();
     try {
       await client.query('BEGIN');
 
-      const medicalRecord = await getMedicalPersonnelRecordById(normalizedMedicalId, client);
+      const medicalRecord = await getMedicalPersonnelRecordById(normalizedUserId, client);
       if (!medicalRecord) {
         throwGraphQLError(res)
-          .message(`No medical personnel record exists for medicalId ${normalizedMedicalId}.`)
+          .message(`No medical personnel record exists for medicalId ${normalizedUserId}.`)
           .status(404)
           .throw();
       }
 
-      await clearMedicalPermits(normalizedMedicalId, client);
+      const personnelId = String(medicalRecord.id);
+      await clearMedicalPermits(personnelId, client);
 
-      const deleteResult = await client.query(
-        `DELETE FROM "MedicalPersonnel"
+      const softDeleteResult = await client.query(
+        `UPDATE "MedicalPersonnel"
+         SET is_active = false,
+             deleted_at = COALESCE(deleted_at, NOW())
          WHERE id::text = $1
          RETURNING id::text AS id`,
-        [normalizedMedicalId]
+        [personnelId]
       );
 
-      if (!deleteResult.rowCount) {
+      if (!softDeleteResult.rowCount) {
         throwGraphQLError(res)
-          .message(`No medical personnel record exists for medicalId ${normalizedMedicalId}.`)
+          .message(`No medical personnel record exists for medicalId ${normalizedUserId}.`)
           .status(404)
           .throw();
       }
+
+      await Mutation._updateStaffAccount(_, { userId: normalizedUserId, status: "Suspended", clientdb: client }, { user, res });
 
       await db.setSystemAuditLog({
         client,
-        eventType: 'DELETE_MEDICAL_STAFF',
-        actorId: normalizedMedicalId,
+        eventType: 'SOFT_DELETE_MEDICAL_STAFF',
+        actorId: user?.id ? String(user.id) : null,
         actorType: 'Staff',
-        targetId: normalizedMedicalId,
-        action: 'DELETE_MEDICAL_STAFF',
+        targetId: normalizedUserId,
+        action: 'SOFT_DELETE_MEDICAL_STAFF',
         details: JSON.stringify({
-          medicalId: normalizedMedicalId,
+          medicalId: normalizedUserId,
           deletedBy: String(user?.id || ''),
           timestamp: new Date().toISOString(),
         }),
@@ -2432,14 +2484,14 @@ const Mutation = {
 
       await client.query('COMMIT');
 
-      logger.info('Medical staff record deleted', {
-        medicalId: normalizedMedicalId,
+      logger.info('Medical staff record soft deleted', {
+        medicalId: normalizedUserId,
         deletedBy: String(user?.id || ''),
       });
 
       return {
         ok: true,
-        message: 'Medical staff record deleted successfully.',
+        message: 'Medical staff record soft deleted successfully.',
         identityReverted: false,
       };
     } catch (error) {
@@ -2449,14 +2501,14 @@ const Mutation = {
         throw error;
       }
 
-      logger.error('Failed to delete medical staff record', {
-        medicalId: normalizedMedicalId,
+      logger.error('Failed to soft delete medical staff record', {
+        medicalId: normalizedUserId,
         deletedBy: String(user?.id || ''),
         error: error.message,
       });
 
       throwGraphQLError(res)
-        .message(error.message || 'Failed to delete medical staff record.')
+        .message(error.message || 'Failed to soft delete medical staff record.')
         .status(500)
         .throw();
     } finally {
@@ -2481,10 +2533,28 @@ const Mutation = {
       }
     }
 
+    const targetPersonnel = await getMedicalPersonnelRecordById(userId);
+    const targetPersonnelId = targetPersonnel?.id ? String(targetPersonnel.id) : null;
+    if (!targetPersonnelId) {
+      throwGraphQLError(res)
+        .message('MedicalPersonnel record not found.')
+        .status(404)
+        .throw();
+    }
+
+    const adminPersonnel = await getMedicalPersonnelRecordById(user.id);
+    const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+    if (!adminPersonnelId) {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
+    }
+
     await setStaffPermissionsStandard({
-      personnelId: String(userId),
+      personnelId: targetPersonnelId,
       permissionsList,
-      assignedBy: String(user.id),
+      assignedBy: adminPersonnelId,
       branch,
     });
 
@@ -2521,10 +2591,28 @@ const Mutation = {
       }
     }
 
+    const targetPersonnel = await getMedicalPersonnelRecordById(userId);
+    const targetPersonnelId = targetPersonnel?.id ? String(targetPersonnel.id) : null;
+    if (!targetPersonnelId) {
+      throwGraphQLError(res)
+        .message('MedicalPersonnel record not found.')
+        .status(404)
+        .throw();
+    }
+
+    const adminPersonnel = await getMedicalPersonnelRecordById(user.id);
+    const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+    if (!adminPersonnelId) {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
+    }
+
     await setStaffPermissionsExtended({
-      personnelId: String(userId),
+      personnelId: targetPersonnelId,
       permissionsList,
-      assignedBy: String(user.id),
+      assignedBy: adminPersonnelId,
       defaultBranch,
     });
 
@@ -2562,11 +2650,29 @@ const Mutation = {
         .throw();
     }
 
+    const targetPersonnel = await getMedicalPersonnelRecordById(userId);
+    const targetPersonnelId = targetPersonnel?.id ? String(targetPersonnel.id) : null;
+    if (!targetPersonnelId) {
+      throwGraphQLError(res)
+        .message('MedicalPersonnel record not found.')
+        .status(404)
+        .throw();
+    }
+
+    const adminPersonnel = await getMedicalPersonnelRecordById(user.id);
+    const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+    if (!adminPersonnelId) {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
+    }
+
     try {
       await setStaffModulePermissions({
-        personnelId: String(userId),
+        personnelId: targetPersonnelId,
         modules,
-        assignedBy: String(user.id),
+        assignedBy: adminPersonnelId,
         branch,
       });
 
@@ -2591,7 +2697,7 @@ const Mutation = {
    * - status: optional Active/Suspended toggle
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
-  _updateStaffAccount: async (_, { userId, status, role, templateId, designation }, { user, res }) => {
+  _updateStaffAccount: async (_, { userId, status, role, templateId, designation, clientdb=null }, { user, res }) => {
     if (!status && !role && !designation) {
       throwGraphQLError(res)
         .message('At least one of status, role, or designation must be provided.')
@@ -2601,9 +2707,9 @@ const Mutation = {
 
     // Verify target user exists and is medical staff
     const userResult = await db.query(
-      `SELECT uc.id, mp.designation, mp.is_active, mp.role
-       FROM "UserCredentials" uc
-       JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+      `SELECT uc.id, mp.id AS "personnelId", mp.designation, mp.is_active, mp.role
+       FROM active_user_credentials uc
+       JOIN active_medical_personnel mp ON mp."userId" = uc.id
        WHERE uc.id = $1`,
       [userId]
     );
@@ -2613,6 +2719,15 @@ const Mutation = {
     }
 
     const targetUser = userResult.rows[0];
+    const targetPersonnelId = String(targetUser.personnelId);
+    const adminPersonnel = await getMedicalPersonnelRecordById(user.id);
+    const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+    if (!adminPersonnelId) {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
+    }
     const branch = targetUser.designation || 'Both';
     const previousRole = targetUser.role || null;
     const previousBranch = branch;
@@ -2680,29 +2795,35 @@ const Mutation = {
       }
     }
 
+    let client;
     // START TRANSACTION FOR ALL DATABASE UPDATES
-    const client = await db.db().connect();
+    if (!clientdb) {
+      client = await db.connect();
+    } else {
+      client = clientdb;
+    }
+
     try {
-      await client.query('BEGIN');
+      if (!clientdb) await client.query('BEGIN');
 
       // Handle role change
       if (role) {
         // Update MedicalPersonnel.role
         await client.query(
           `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
-          [role, userId]
+          [role, targetPersonnelId]
         );
 
         // Clear existing permissions (clean slate for new role)
-        await clearMedicalPermits(String(userId), client);
+        await clearMedicalPermits(targetPersonnelId, client);
 
         // Apply template permissions
         const effectiveTemplateId = templateId || (await listPermissionTemplates()).templates.find(t => t.label === role)?.id;
         if (effectiveTemplateId) {
           await applyTemplateToStaff({
-            personnelId: userId,
+            personnelId: targetPersonnelId,
             templateId: effectiveTemplateId,
-            assignedBy: user.id,
+            assignedBy: adminPersonnelId,
             staffBranch: branch,  // Use staff's current branch - all permissions inherit this
             client  // Pass client for transaction participation
           });
@@ -2710,9 +2831,9 @@ const Mutation = {
 
         // Always ensure is_staff permission is set
         await setStaffPermissionsExtended({
-          personnelId: String(userId),
+          personnelId: targetPersonnelId,
           permissionsList: [{ key: 'is_staff', enabled: true }],
-          assignedBy: String(user.id),
+          assignedBy: adminPersonnelId,
           defaultBranch: branch,
           client  // Pass client for transaction participation
         });
@@ -2725,13 +2846,13 @@ const Mutation = {
         if (status === 'Active' && !targetUser.is_active) {
           await client.query(
             `UPDATE "MedicalPersonnel" SET is_active = true WHERE id = $1`,
-            [userId]
+            [targetPersonnelId]
           );
           logger.info(`Staff account activated: userId=${userId} by adminId=${user.id}`);
         } else if (status === 'Suspended' && targetUser.is_active) {
           await client.query(
             `UPDATE "MedicalPersonnel" SET is_active = false WHERE id = $1`,
-            [userId]
+            [targetPersonnelId]
           );
 
           // Save new anchor in Redis AFTER transaction commits (non-critical)
@@ -2744,7 +2865,7 @@ const Mutation = {
       if (designation) {
         await client.query(
           `UPDATE "MedicalPersonnel" SET designation = $1 WHERE id = $2`,
-          [designation, userId]
+          [designation, targetPersonnelId]
         );
 
         // Update branch in location-specific permissions only (preserve 'Both')
@@ -2752,13 +2873,11 @@ const Mutation = {
           `UPDATE "rolesMap"
            SET branch = $1::"UserDesignation"
            WHERE "personnelId" = $2`,
-          [designation, userId]
+          [designation, targetPersonnelId]
         );
 
         logger.info(`Staff branch changed to "${designation}" for userId=${userId} by adminId=${user.id}`);
       }
-
-      await client.query('COMMIT');
 
       // If status was Suspended, save new anchor AFTER successful transaction
       if (status === 'Suspended' && targetUser.is_active) {
@@ -2766,6 +2885,8 @@ const Mutation = {
       }
 
       logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);
+
+      if (!clientdb) await client.query('COMMIT');
 
       // Fetch and return the updated staff account to avoid a round-trip on the frontend
       const updatedStaff = await Query._getStaffAccount(_, { userId }, { user, res });
@@ -2810,20 +2931,20 @@ const Mutation = {
         staff: updatedStaff,
       };
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (!clientdb) await client.query('ROLLBACK');
       logger.error(`Error updating staff account: ${error.message}`);
       throwGraphQLError(res).message(error.message || 'Failed to update staff account.').status(500).throw();
     } finally {
-      client.release();
+      if (!clientdb) client.release();
     }
   },
 
   _rotateStaffAnchor: async (_, { userId }, { user, res }) => {
     // Verify target user exists and is Medical staff
-    const targetResult = await db.query(
+    const targetResult = await pool.query(
       `SELECT uc.id, uc.identity, uc.credentials_status, mp.id AS "medicalId"
-       FROM "UserCredentials" uc
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       FROM active_user_credentials uc
+      LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
        WHERE uc.id = $1`,
       [userId]
     );
@@ -2845,7 +2966,7 @@ const Mutation = {
     const sessions = await listUserSessions(userId);
     const sessionCount = sessions.length;
 
-    const client = await db.db().connect();
+    const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
@@ -2886,6 +3007,14 @@ const Mutation = {
       throwGraphQLError(res).message('deviceId is required').status(400).throw();
     }
 
+    if (!shouldRevoke) {
+      return {
+        ok: false,
+        message: 'Unrevoking sessions is not allowed.',
+        results: [],
+      };
+    }
+
     const sessionRecords = await listUserSessionsWithMeta(normalizedUserId);
     const mutableRecords = sessionRecords
       .map((record) => normalizeMutableUserSessionRecord(record, normalizedUserId))
@@ -2897,24 +3026,31 @@ const Mutation = {
       return {
         ok: true,
         message: 'Session not found or already expired.',
+        results: [],
       };
     }
 
     const sessionKey = matchedRecord.sessionKey;
     const currentSession = matchedRecord.session;
     const currentStatus = matchedRecord.status;
-    const nextStatus = shouldRevoke ? 'revoked' : 'active';
+    const tokenId = typeof currentSession.tokenId === 'string'
+      ? currentSession.tokenId.trim()
+      : '';
+    const blacklistEntries = tokenId
+      ? await setSessionBlacklist([tokenId], true, matchedRecord.ttlSeconds)
+      : [];
 
-    if (currentStatus === nextStatus) {
+    if (currentStatus === 'revoked') {
       return {
         ok: true,
-        message: shouldRevoke ? 'Session already revoked.' : 'Session already active.',
+        message: 'Session already revoked.',
+        results: blacklistEntries,
       };
     }
 
     const updatedPayload = {
       ...currentSession,
-      status: nextStatus,
+      status: 'revoked',
       updatedAt: Date.now(),
     };
 
@@ -2929,17 +3065,25 @@ const Mutation = {
 
     return {
       ok: true,
-      message: shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.',
+      message: 'Session revoked successfully.',
+      results: blacklistEntries,
     };
   },
 
   _setAllUserSessionsRevoked: async (_, { userId, revoked }, { user, res }) => {
     const normalizedUserId = String(userId || '').trim();
     const shouldRevoke = Boolean(revoked);
-    const nextStatus = shouldRevoke ? 'revoked' : 'active';
 
     if (!normalizedUserId) {
       throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    if (!shouldRevoke) {
+      return {
+        ok: false,
+        message: 'Unrevoking sessions is not allowed.',
+        results: [],
+      };
     }
 
     const sessionRecords = await listUserSessionsWithMeta(normalizedUserId);
@@ -2951,23 +3095,34 @@ const Mutation = {
       return {
         ok: true,
         message: 'No active sessions found for this user.',
+        results: [],
       };
     }
 
-    const recordsToUpdate = mutableRecords.filter((record) => record.status !== nextStatus);
+    const tokenIds = [...new Set(
+      mutableRecords
+        .map((record) => String(record.session?.tokenId || '').trim())
+        .filter(Boolean)
+    )];
 
-    if (recordsToUpdate.length === 0) {
-      return {
-        ok: true,
-        message: shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.',
-      };
-    }
+    const ttlCandidates = mutableRecords
+      .map((record) => Number(record.ttlSeconds) || 0)
+      .filter((ttl) => Number.isFinite(ttl) && ttl > 0);
+    const maxTtlSeconds = ttlCandidates.length > 0
+      ? Math.max(...ttlCandidates)
+      : null;
+
+    const blacklistResults = tokenIds.length > 0
+      ? await setSessionBlacklist(tokenIds, true, maxTtlSeconds)
+      : [];
+
+    const recordsToUpdate = mutableRecords.filter((record) => record.status !== 'revoked');
 
     const updatedAt = Date.now();
     for (const record of recordsToUpdate) {
       const updatedPayload = {
         ...record.session,
-        status: nextStatus,
+        status: 'revoked',
         updatedAt,
       };
 
@@ -2982,11 +3137,14 @@ const Mutation = {
       updatedSessions: recordsToUpdate.length,
     });
 
+    const message = recordsToUpdate.length === 0
+      ? 'All sessions are already revoked.'
+      : `${recordsToUpdate.length} session(s) revoked successfully.`;
+
     return {
       ok: true,
-      message: shouldRevoke
-        ? `${recordsToUpdate.length} session(s) revoked successfully.`
-        : `${recordsToUpdate.length} session(s) unrevoked successfully.`,
+      message,
+      results: blacklistResults,
     };
   },
 
@@ -3003,8 +3161,8 @@ const Mutation = {
     }
 
     const existingResult = await db.query(
-      `SELECT id
-       FROM "UserCredentials"
+      `SELECT id, credentials_status
+       FROM active_user_credentials
        WHERE id = $1
        LIMIT 1`,
       [normalizedUserId]
@@ -3014,11 +3172,21 @@ const Mutation = {
       throwGraphQLError(res).message('User not found').status(404).throw();
     }
 
+    const allowedStatuses = ['Active', 'Locked'];
+    if (!allowedStatuses.includes(existingResult.rows[0].credentials_status)) {
+      throwGraphQLError(res)
+        .message(`User account with status "${existingResult.rows[0].credentials_status}" cannot be locked or unlocked.`)
+        .status(400)
+        .throw();
+    }
+
     const nextStatus = shouldLock ? 'Locked' : 'Active';
     await db.query(
       `UPDATE "UserCredentials"
-       SET credentials_status = $1::"CredentialStatus"
-       WHERE id = $2`,
+       SET credentials_status = $1::"CredentialStatus",
+           updated_at = NOW()
+       WHERE id = $2
+         AND deleted_at IS NULL`,
       [nextStatus, normalizedUserId]
     );
 
@@ -3063,6 +3231,7 @@ const Mutation = {
         `SELECT id, identity
          FROM "UserCredentials"
          WHERE id = $1
+           AND deleted_at IS NULL
          FOR UPDATE`,
         [normalizedUserId]
       );
@@ -3140,7 +3309,7 @@ const Mutation = {
     const summaryResult = await db.query(
       `WITH scoped_users AS (
          SELECT uc.id
-         FROM "UserCredentials" uc
+         FROM active_user_credentials uc
          LEFT JOIN "UsersPersonal" up ON up.id = uc.id
          LEFT JOIN LATERAL (
            SELECT ep.department
@@ -3224,11 +3393,12 @@ const Mutation = {
            ) AS is_patient,
            EXISTS (
              SELECT 1
-             FROM "MedicalPersonnel" mp
-             WHERE mp.id = uc.id
+             FROM active_medical_personnel mp
+             WHERE mp."userId" = uc.id
            ) AS is_medical
          FROM "UserCredentials" uc
          WHERE uc.id::text = ANY($1::text[])
+           AND uc.deleted_at IS NULL
          FOR UPDATE OF uc`,
         [normalizedIds]
       );
@@ -3238,9 +3408,8 @@ const Mutation = {
       const missingIds = normalizedIds.filter((id) => !foundIds.has(id));
       const failures = [];
       const softDeleteIds = [];
-      const hardDeleteIds = [];
+      const medicalSoftDeleteIds = [];
       const softDeleteRows = [];
-      const hardDeleteRows = [];
 
       if (missingIds.length > 0) {
         failures.push(`Missing ids: ${missingIds.join(', ')}`);
@@ -3256,16 +3425,16 @@ const Mutation = {
         const eligibleAfterMs = row.inactive_eligible_after ? new Date(row.inactive_eligible_after).getTime() : Number.NaN;
         const intervalElapsed = Number.isFinite(eligibleAfterMs) && eligibleAfterMs < nowMs;
         const isLocked = normalizedStatus === 'locked';
-        const isInactiveAndOld = normalizedStatus === 'inactive' && intervalElapsed;
+        const isInactiveOrUnverifiedAndOld = ['inactive', 'unverified'].includes(normalizedStatus) && intervalElapsed;
 
         if (isAdminSelfDeleteAttempt(row.id, currentUserId, currentUserRoleForGuard)) {
           rowReasons.push('administrators cannot delete their own accounts');
         }
 
-        if (!isLocked && !isInactiveAndOld) {
-          if (normalizedStatus === 'inactive' && !intervalElapsed) {
-            rowReasons.push('inactive account is not older than 1 year');
-          } else if (!['inactive', 'locked'].includes(normalizedStatus)) {
+        if (!isLocked && !isInactiveOrUnverifiedAndOld) {
+          if (['inactive', 'unverified'].includes(normalizedStatus) && !intervalElapsed) {
+            rowReasons.push(`${normalizedStatus} account is not older than 1 year`);
+          } else if (!['inactive', 'unverified', 'locked'].includes(normalizedStatus)) {
             rowReasons.push(`status is ${status}`);
           } else {
             rowReasons.push('account does not satisfy deletion rules');
@@ -3277,12 +3446,10 @@ const Mutation = {
         }
 
         if (rowReasons.length === 0) {
+          softDeleteIds.push(String(row.id));
+          softDeleteRows.push(row);
           if (isMedicalPersonnel) {
-            softDeleteIds.push(String(row.id));
-            softDeleteRows.push(row);
-          } else {
-            hardDeleteIds.push(String(row.id));
-            hardDeleteRows.push(row);
+            medicalSoftDeleteIds.push(String(row.id));
           }
         }
 
@@ -3298,210 +3465,50 @@ const Mutation = {
           .throw();
       }
 
-      let deletedRelatedRows = 0;
-      let deletedPatientRows = 0;
-      let deletedPersonalRows = 0;
-      let deletedCredentialCount = 0;
+      let softDeletedMedicalCount = 0;
       let softDeletedCredentialCount = 0;
 
       if (softDeleteIds.length > 0) {
-        const softDeletePersonnelResult = await client.query(
-          `UPDATE "MedicalPersonnel"
-           SET is_active = false,
-               deleted_at = COALESCE(deleted_at, NOW())
-           WHERE id::text = ANY($1::text[])`,
-          [softDeleteIds]
-        );
-
         const softDeleteCredentialsResult = await client.query(
           `UPDATE "UserCredentials"
-           SET credentials_status = 'Inactive'::"CredentialStatus",
+           SET credentials_status = CASE
+                 WHEN credentials_status = 'Locked'::"CredentialStatus"
+                   THEN credentials_status
+                 ELSE 'Inactive'::"CredentialStatus"
+               END,
                locked_until = NULL,
+               deleted_at = COALESCE(deleted_at, NOW()),
                updated_at = NOW()
-           WHERE id::text = ANY($1::text[])`,
+           WHERE id::text = ANY($1::text[])
+             AND deleted_at IS NULL`,
           [softDeleteIds]
         );
 
-        const softDeletedPersonnelCount = Number(softDeletePersonnelResult.rowCount) || 0;
         softDeletedCredentialCount = Number(softDeleteCredentialsResult.rowCount) || 0;
 
-        if (softDeletedPersonnelCount !== softDeleteIds.length || softDeletedCredentialCount !== softDeleteIds.length) {
+        if (softDeletedCredentialCount !== softDeleteIds.length) {
           throwGraphQLError(res)
-            .message('Failed to soft delete all selected medical personnel accounts. Transaction rolled back.')
+            .message('Failed to soft delete all selected user accounts. Transaction rolled back.')
             .status(409)
             .throw();
         }
       }
 
-      if (hardDeleteIds.length > 0) {
-        const hardDeletionIds = hardDeleteIds;
-
-        const patientUpdateLogIds = await selectColumnValuesByFilter(client, {
-          tableName: 'patientUpdateLog',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const consultationIds = await selectColumnValuesByFilter(client, {
-          tableName: 'Consultation',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const consultationOutcomeIds = await selectColumnValuesByFilter(client, {
-          tableName: 'ConsultationOutcome',
-          selectColumn: 'id',
-          filterColumn: 'consultationId',
-          filterValues: consultationIds,
-        });
-
-        const healthChatIds = await selectColumnValuesByFilter(client, {
-          tableName: 'HealthChat',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const medicineRequestLogIds = await selectColumnValuesByFilter(client, {
-          tableName: 'MedicineRequestLog',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const medicineTransactionLogIds = await selectColumnValuesByFilter(client, {
-          tableName: 'MedicineTransactionLog',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const supplyTransactionLogIds = await selectColumnValuesByFilter(client, {
-          tableName: 'SupplyTransactionLog',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const patientDocumentIds = await selectColumnValuesByFilter(client, {
-          tableName: 'PatientDocuments',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const patientSlotIds = await selectColumnValuesByFilter(client, {
-          tableName: 'patientSlot',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const dentalRecordIds = await selectColumnValuesByFilter(client, {
-          tableName: 'DentalRecord',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const vitalSignsIds = await selectColumnValuesByFilter(client, {
-          tableName: 'VitalSigns',
-          selectColumn: 'id',
-          filterColumn: 'patientId',
-          filterValues: hardDeletionIds,
-        });
-
-        const patientUpdateNestedParents = [
-          'profileRecord',
-          'MedicalHistory',
-          'Hospitalization',
-          'Operation',
-          'Immunization',
-          'Allergy',
-          'OralAppliance',
-          'DentalProcedure',
-          'VisualAcuity',
-        ];
-
-        for (const tableName of patientUpdateNestedParents) {
-          deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, [tableName], patientUpdateLogIds);
-        }
-
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['ConsultationOutcome'], consultationOutcomeIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineRequestLog'], medicineRequestLogIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['MedicineTransactionLog'], medicineTransactionLogIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['SupplyTransactionLog'], supplyTransactionLogIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['HealthChat'], healthChatIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['PatientDocuments'], patientDocumentIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientSlot'], patientSlotIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['DentalRecord'], dentalRecordIds);
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(client, ['patientUpdateLog'], patientUpdateLogIds);
-
-        const targetedIdDeletes = [
-          { table: 'ConsultationOutcome', ids: consultationOutcomeIds },
-          { table: 'Consultation', ids: consultationIds },
-          { table: 'HealthChat', ids: healthChatIds },
-          { table: 'MedicineRequestLog', ids: medicineRequestLogIds },
-          { table: 'MedicineTransactionLog', ids: medicineTransactionLogIds },
-          { table: 'SupplyTransactionLog', ids: supplyTransactionLogIds },
-          { table: 'PatientDocuments', ids: patientDocumentIds },
-          { table: 'patientSlot', ids: patientSlotIds },
-          { table: 'patientUpdateLog', ids: patientUpdateLogIds },
-          { table: 'VitalSigns', ids: vitalSignsIds },
-          { table: 'DentalRecord', ids: dentalRecordIds },
-        ];
-
-        for (const target of targetedIdDeletes) {
-          deletedRelatedRows += await deleteRowsByIdColumnIfExists(client, target.table, 'id', target.ids);
-        }
-
-        const preCleanupTargets = [
-          { table: 'UsersPreferences', column: 'id' },
-          { table: 'UsersPersonalLog', column: 'user_id' },
-          { table: 'UserLoginAttempt', column: 'user_id' },
-          { table: 'patientRawDocument', column: 'patientId' },
-          { table: 'schedulerWhitelist', column: 'patientId' },
-        ];
-
-        for (const target of preCleanupTargets) {
-          deletedRelatedRows += await deleteRowsByIdColumnIfExists(
-            client,
-            target.table,
-            target.column,
-            hardDeletionIds
-          );
-        }
-
-        deletedRelatedRows += await deleteNonCascadeChildrenByRootIds(
-          client,
-          ['UserCredentials', 'UsersPersonal', 'Patients'],
-          hardDeletionIds
+      if (medicalSoftDeleteIds.length > 0) {
+        const softDeletePersonnelResult = await client.query(
+          `UPDATE "MedicalPersonnel"
+           SET is_active = false,
+               deleted_at = COALESCE(deleted_at, NOW())
+           WHERE id::text = ANY($1::text[])
+             AND deleted_at IS NULL`,
+          [medicalSoftDeleteIds]
         );
 
-        const deletedPatients = await client.query(
-          `DELETE FROM "Patients" WHERE id::text = ANY($1::text[])`,
-          [hardDeletionIds]
-        );
+        softDeletedMedicalCount = Number(softDeletePersonnelResult.rowCount) || 0;
 
-        const deletedPersonal = await client.query(
-          `DELETE FROM "UsersPersonal" WHERE id::text = ANY($1::text[])`,
-          [hardDeletionIds]
-        );
-
-        const deletedCredentials = await client.query(
-          `DELETE FROM "UserCredentials" WHERE id::text = ANY($1::text[])`,
-          [hardDeletionIds]
-        );
-
-        deletedPatientRows = Number(deletedPatients.rowCount) || 0;
-        deletedPersonalRows = Number(deletedPersonal.rowCount) || 0;
-        deletedCredentialCount = Number(deletedCredentials.rowCount) || 0;
-
-        if (deletedCredentialCount !== hardDeletionIds.length) {
+        if (softDeletedMedicalCount !== medicalSoftDeleteIds.length) {
           throwGraphQLError(res)
-            .message('Failed to delete all selected patient accounts. Transaction rolled back.')
+            .message('Failed to soft delete all selected medical personnel records. Transaction rolled back.')
             .status(409)
             .throw();
         }
@@ -3520,41 +3527,25 @@ const Mutation = {
         });
       }
 
-      for (const row of hardDeleteRows) {
-        await appendAccountDeleteAuditLog({
-          client,
-          actorId: currentUserId,
-          actorRole: currentUserRoleForGuard,
-          targetUserId: String(row.id),
-          targetIdentity: row.identity,
-          previousStatus: row.status,
-          deleteMode: 'hard',
-          actionType: 'HARD_DELETE',
-        });
-      }
-
       await client.query('COMMIT');
 
       logger.info('Patient account deletion completed by admin', {
         adminId: currentUserId,
         requestedIds: normalizedIds,
-        hardDeletedIds: hardDeleteIds,
         softDeletedIds: softDeleteIds,
-        deletedCredentialCount,
+        softDeletedMedicalIds: medicalSoftDeleteIds,
         softDeletedCredentialCount,
-        deletedPatientRows,
-        deletedPersonalRows,
-        deletedRelatedRows,
+        softDeletedMedicalCount,
       });
 
       const messageParts = [];
-      if (deletedCredentialCount > 0) {
-        messageParts.push(`Hard deleted ${deletedCredentialCount} patient account(s)`);
-      }
       if (softDeletedCredentialCount > 0) {
-        messageParts.push(`Soft deleted ${softDeletedCredentialCount} medical personnel account(s)`);
+        messageParts.push(`Soft deleted ${softDeletedCredentialCount} account(s)`);
       }
-      messageParts.push(`Removed ${deletedRelatedRows} related record(s)`);
+      if (softDeletedMedicalCount > 0) {
+        messageParts.push(`Soft deleted ${softDeletedMedicalCount} medical personnel record(s)`);
+      }
+      messageParts.push('No patient or medical records were hard deleted');
 
       return {
         ok: true,
@@ -3668,6 +3659,15 @@ const Mutation = {
         .throw();
     }
 
+    const adminPersonnel = await getMedicalPersonnelRecordById(user.id);
+    const adminPersonnelId = adminPersonnel?.id ? String(adminPersonnel.id) : null;
+    if (!adminPersonnelId) {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
+    }
+
     try {
       // Reuse shared template tiering normalization (flat + grouped input).
       const normalizedPermissionsList = hasPermissionPayload
@@ -3711,7 +3711,7 @@ const Mutation = {
           const propagation = await propagateTemplatePermissions({
             templateId,
             roleLabel: finalRoleLabel,
-            assignedBy: user.id,
+            assignedBy: adminPersonnelId,
             client  // Pass client for transaction participation
           });
           affectedStaffCount = propagation.affectedCount;
@@ -3721,14 +3721,14 @@ const Mutation = {
         } else if (labelChanged) {
           // Label-only updates still change the staff-visible role and must trigger reloads.
           const affectedStaffResult = await client.query(
-            `SELECT id, designation AS branch, is_active
-               FROM "MedicalPersonnel"
+            `SELECT id, "userId", designation AS branch, is_active
+               FROM active_medical_personnel
               WHERE role = $1`,
             [finalRoleLabel]
           );
 
           affectedStaffForReload = affectedStaffResult.rows.map((row) => ({
-            userId: String(row.id),
+            userId: String(row.userId),
             branch: row.branch || 'Both',
             status: row.is_active ? 'Active' : 'Suspended',
           }));
@@ -3829,8 +3829,8 @@ const Mutation = {
     // Verify user exists and is Medical staff - also get their branch designation
     const userResult = await db.query(
       `SELECT uc.id, uc.identity, mp.id AS "medicalId", mp.designation AS branch, mp.role, mp.is_active
-       FROM "UserCredentials" uc
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       FROM active_user_credentials uc
+      LEFT JOIN active_medical_personnel mp ON mp."userId" = uc.id
        WHERE uc.id = $1
        `,
       [userId]
@@ -3857,11 +3857,21 @@ const Mutation = {
         .throw();
     }
 
+    let adminPersonnelId;
+    try {
+      adminPersonnelId = await getAdminPersonnelId(user.id);
+    } catch {
+      throwGraphQLError(res)
+        .message('Admin medical personnel record not found.')
+        .status(404)
+        .throw();
+    }
+
     try {
       const result = await applyTemplateToStaff({
-        personnelId: userId,
+        personnelId: String(targetUser.medicalId),
         templateId,
-        assignedBy: user.id,
+        assignedBy: adminPersonnelId,
         staffBranch: targetUser.branch  // Use the staff's branch - all permissions inherit this
       });
 
@@ -4324,7 +4334,7 @@ const Mutation = {
 
   _confirmAdminTransfer: async (_, { verificationToken }, { user, res }) => {
     const currentUserId = user.id;
-    const pool = require('../../../../config/db.js');
+    const pool = require('../../../../../config/db.js');
     const client = await pool.connect();
 
     const isBootstrapMode = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
@@ -4498,6 +4508,17 @@ const Mutation = {
       }
 
       const oldAdminEmail = await db.findEmailByUserId(oldAdminId);
+      const oldAdminPersonnel = await getMedicalPersonnelRecordById(oldAdminId);
+      const newAdminPersonnel = await getMedicalPersonnelRecordById(newAdminId);
+      const oldAdminPersonnelId = oldAdminPersonnel?.id ? String(oldAdminPersonnel.id) : null;
+      const newAdminPersonnelId = newAdminPersonnel?.id ? String(newAdminPersonnel.id) : null;
+      if (!oldAdminPersonnelId || !newAdminPersonnelId) {
+        await deleteAdminTransferSession(verificationToken);
+        throwGraphQLError(res)
+          .message('Admin personnel records could not be resolved.')
+          .status(404)
+          .throw();
+      }
 
       // Perform atomic transfer using database transaction with raw SQL
       await client.query('BEGIN');
@@ -4511,7 +4532,7 @@ const Mutation = {
          ON CONFLICT ("personnelId", "rolesId") DO UPDATE
            SET branch = EXCLUDED.branch,
                "assignedBy" = EXCLUDED."assignedBy"`,
-        [newAdminId, oldAdminId, permissions.is_admin]
+        [newAdminPersonnelId, oldAdminPersonnelId, permissions.is_admin]
       );
 
       // Remove admin from old user - raw SQL
@@ -4519,23 +4540,23 @@ const Mutation = {
         `DELETE FROM "rolesMap"
          WHERE "personnelId" = $1
          AND "rolesId" = (SELECT id FROM "rolesTable" WHERE label = $2)`,
-        [oldAdminId, permissions.is_admin]
+        [oldAdminPersonnelId, permissions.is_admin]
       );
 
       // Update designations: new admin gets Both, old admin defaults to Manila
       await client.query(
         `UPDATE "MedicalPersonnel" SET designation = 'Both'::"UserDesignation" WHERE id = $1`,
-        [newAdminId]
+        [newAdminPersonnelId]
       );
       await client.query(
         `UPDATE "MedicalPersonnel" SET designation = NULL WHERE id = $1`,
-        [oldAdminId]
+        [oldAdminPersonnelId]
       );
 
       // Update roles: new admin gets Admin role, old admin reverts to their previous role (or Staff)
       await client.query(
         `UPDATE "MedicalPersonnel" SET role = 'Admin' WHERE id = $1`,
-        [newAdminId]
+        [newAdminPersonnelId]
       );
       // Old admin keeps their role (don't change it) - they may have been a Doctor, Nurse, etc.
       // Only change designation, not role
@@ -4574,21 +4595,21 @@ const Mutation = {
           // Update old admin's role to match the default template
           await client.query(
             `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
-            [defaultTemplate.label, oldAdminId]
+            [defaultTemplate.label, oldAdminPersonnelId]
           );
 
           await applyTemplateToStaff({
-            personnelId: oldAdminId,
+            personnelId: oldAdminPersonnelId,
             templateId: defaultTemplate.id,
-            assignedBy: newAdminId,
+            assignedBy: newAdminPersonnelId,
           });
           logger.info(`Default template "${defaultTemplate.label}" applied to past admin: userId=${oldAdminId}`);
         }
         // Always ensure is_staff is set regardless of template availability
         await setStaffPermissionsExtended({
-          personnelId: String(oldAdminId),
+          personnelId: oldAdminPersonnelId,
           permissionsList: [{ key: 'is_staff', enabled: true }],
-          assignedBy: String(newAdminId),
+          assignedBy: newAdminPersonnelId,
           defaultBranch: 'Both',
         });
         logger.info(`is_staff permission ensured for past admin: userId=${oldAdminId}`);

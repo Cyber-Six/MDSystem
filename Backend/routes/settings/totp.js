@@ -21,7 +21,7 @@ router.get("/status", jwtProtect("all"), async (req, res) => {
 
   try {
     const result = await query.query(
-      `SELECT totp_enabled, allow_email_2fa FROM "UserCredentials" WHERE id = $1`,
+      `SELECT totp_enabled, allow_email_2fa FROM active_user_credentials WHERE id = $1`,
       [userId]
     );
 
@@ -53,7 +53,7 @@ router.post("/setup", jwtProtect("all"), async (req, res) => {
   try {
     // Check if TOTP is already enabled
     const existing = await query.query(
-      `SELECT totp_enabled, email FROM "UserCredentials" WHERE id = $1`,
+      `SELECT totp_enabled, email FROM active_user_credentials WHERE id = $1`,
       [userId]
     );
 
@@ -124,7 +124,7 @@ router.post("/verify", jwtProtect("all"), ipRateLimiter("strictLimiter"), async 
 
   try {
     const result = await query.query(
-      `SELECT totp_secret, totp_enabled FROM "UserCredentials" WHERE id = $1`,
+      `SELECT totp_secret, totp_enabled FROM active_user_credentials WHERE id = $1`,
       [userId]
     );
 
@@ -196,7 +196,7 @@ router.post("/disable", jwtProtect("all"), ipRateLimiter("strictLimiter"), async
 
   try {
     const result = await query.query(
-      `SELECT totp_enabled, totp_secret FROM "UserCredentials" WHERE id = $1`,
+      `SELECT totp_enabled, totp_secret FROM active_user_credentials WHERE id = $1`,
       [userId]
     );
 
@@ -298,7 +298,7 @@ router.post("/validate", ipRateLimiter("strictLimiter"), async (req, res) => {
 
     // Get user's TOTP secret
     const result = await query.query(
-      `SELECT totp_secret, totp_enabled FROM "UserCredentials" WHERE email = $1`,
+      `SELECT totp_secret, totp_enabled FROM active_user_credentials WHERE email = $1`,
       [email]
     );
 

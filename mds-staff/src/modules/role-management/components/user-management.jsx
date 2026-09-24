@@ -28,6 +28,7 @@ const USER_INITIAL_PAGE_SIZE = 10;
 const LOGIN_HISTORY_INITIAL_LIMIT = 10;
 const SESSION_INITIAL_LIMIT = 10;
 const PATIENT_DELETION_INITIAL_PAGE_SIZE = 10;
+const PATIENT_DELETION_SEARCH_DEBOUNCE_MS = 400;
 const ACTIVE_USERS_DEFAULT_HOURS = 24;
 const ADMIN_REFETCH_MIN_WAIT_MS = 15000;
 
@@ -128,6 +129,15 @@ function normalizeBranchLabel(branch) {
 function normalizeTypeLabel(type) {
   const normalized = String(type || '').trim();
   return normalized || 'Unknown';
+}
+
+function normalizeDeletionMode(mode) {
+  const normalized = String(mode || '').trim().toLowerCase();
+  return normalized === 'soft' ? 'soft' : 'hard';
+}
+
+function isDeletionRowSelectable(row) {
+  return row?.eligible === true && row?.blocked !== true;
 }
 
 function getStatusKey(rawStatus) {
@@ -238,6 +248,7 @@ const UserManagement = () => {
   const [semestralReviewModal, setSemestralReviewModal] = useState(null);
 
   const [deletionSearch, setDeletionSearch] = useState('');
+  const [debouncedDeletionSearch, setDebouncedDeletionSearch] = useState('');
   const [deletionRows, setDeletionRows] = useState([]);
   const [deletionTotal, setDeletionTotal] = useState(0);
   const [deletionLoading, setDeletionLoading] = useState(false);
@@ -373,7 +384,6 @@ const UserManagement = () => {
           return {
             rowId: `${userId}:${session.deviceId || 'unknown'}:${nextOffset + index}`,
             deviceId: session.deviceId || '--',
-            refreshToken: session.refreshToken || '--',
             status: session.status || 'unknown',
             createdAt: session.createdAt || null,
             updatedAt: session.updatedAt || null,
@@ -571,6 +581,10 @@ const UserManagement = () => {
           updatedAt: row.updatedAt || null,
           eligibleAfter: row.eligibleAfter || null,
           eligible: Boolean(row.eligible),
+          isMedicalPersonnel: Boolean(row.isMedicalPersonnel),
+          deletionMode: normalizeDeletionMode(row.deletionMode),
+          blocked: Boolean(row.blocked),
+          blockedReason: row.blockedReason || null,
         }))
         .filter((row) => normalizeText(row.status) === 'inactive');
 
@@ -599,7 +613,7 @@ const UserManagement = () => {
     }
   }, [markNetworkError, markRateLimited]);
 
-  const loadDeletionCandidates = useCallback(async () => {
+  const loadDeletionCandidates = useCallback(async ({ searchOverride } = {}) => {
     if (rateLimitedRef.current) return;
 
     setDeletionLoading(true);
@@ -609,8 +623,12 @@ const UserManagement = () => {
       setBanner(null);
 
       const offset = Math.max(0, (deletionPage - 1) * deletionPageSize);
+      const effectiveSearch = typeof searchOverride === 'string'
+        ? searchOverride.trim()
+        : debouncedDeletionSearch;
+
       const page = await searchPatientDeletionCandidates({
-        search: deletionSearch,
+        search: effectiveSearch,
         offset,
         limit: deletionPageSize,
       });
@@ -626,6 +644,10 @@ const UserManagement = () => {
         updatedAt: row.updatedAt || null,
         eligibleAfter: row.eligibleAfter || null,
         eligible: Boolean(row.eligible),
+        isMedicalPersonnel: Boolean(row.isMedicalPersonnel),
+        deletionMode: normalizeDeletionMode(row.deletionMode),
+        blocked: Boolean(row.blocked),
+        blockedReason: row.blockedReason || null,
       }));
 
       setDeletionRows(normalizedRows);
@@ -653,7 +675,7 @@ const UserManagement = () => {
     } finally {
       setDeletionLoading(false);
     }
-  }, [deletionPage, deletionPageSize, deletionSearch, markNetworkError, markRateLimited]);
+  }, [debouncedDeletionSearch, deletionPage, deletionPageSize, markNetworkError, markRateLimited]);
 
   useEffect(() => {
     const switchedTabs = patientsTabRef.current !== activeTab;
@@ -728,12 +750,14 @@ const UserManagement = () => {
         return;
       }
       markTabRefetch('account-actions');
+      void Promise.allSettled([
+        loadEligibleDropdownCandidates(),
+        loadDeletionCandidates(),
+      ]);
+      return;
     }
 
-    void Promise.allSettled([
-      loadEligibleDropdownCandidates(),
-      loadDeletionCandidates(),
-    ]);
+    void loadDeletionCandidates();
   }, [
     activeTab,
     getTabRefetchRemainingMs,
@@ -762,6 +786,14 @@ const UserManagement = () => {
 
     return () => clearTimeout(timeoutId);
   }, [semestralNotice]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedDeletionSearch(deletionSearch);
+    }, PATIENT_DELETION_SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timeoutId);
+  }, [deletionSearch]);
 
   useEffect(() => {
     if (!deletionToast) return;
@@ -808,7 +840,7 @@ const UserManagement = () => {
 
   useEffect(() => {
     setDeletionPage(1);
-  }, [deletionSearch, deletionPageSize]);
+  }, [debouncedDeletionSearch, deletionPageSize]);
 
   const branchOptions = USER_BRANCH_FILTER_OPTIONS;
   const statusOptions = USER_STATUS_FILTER_OPTIONS;
@@ -917,7 +949,7 @@ const UserManagement = () => {
   );
 
   const visibleEligibleIds = useMemo(
-    () => deletionRows.filter((row) => row.eligible).map((row) => row.id),
+    () => deletionRows.filter((row) => isDeletionRowSelectable(row)).map((row) => row.id),
     [deletionRows]
   );
 
@@ -931,8 +963,23 @@ const UserManagement = () => {
     [deletionSelectionMeta, selectedDeletionIds]
   );
 
-  const selectedEligibleDeletionCount = useMemo(
-    () => selectedDeletionRows.filter((row) => row.eligible).length,
+  const selectedActionableDeletionCount = useMemo(
+    () => selectedDeletionRows.filter((row) => isDeletionRowSelectable(row)).length,
+    [selectedDeletionRows]
+  );
+
+  const selectedHardDeletionCount = useMemo(
+    () => selectedDeletionRows.filter((row) => isDeletionRowSelectable(row) && normalizeDeletionMode(row.deletionMode) === 'hard').length,
+    [selectedDeletionRows]
+  );
+
+  const selectedSoftDeletionCount = useMemo(
+    () => selectedDeletionRows.filter((row) => isDeletionRowSelectable(row) && normalizeDeletionMode(row.deletionMode) === 'soft').length,
+    [selectedDeletionRows]
+  );
+
+  const selectedBlockedDeletionCount = useMemo(
+    () => selectedDeletionRows.filter((row) => Boolean(row?.blocked)).length,
     [selectedDeletionRows]
   );
 
@@ -947,8 +994,8 @@ const UserManagement = () => {
     });
   }, [eligibleDropdownIdSet]);
 
-  const handleToggleDeletionSelection = useCallback((id, eligible) => {
-    if (!eligible) return;
+  const handleToggleDeletionSelection = useCallback((id, selectable) => {
+    if (!selectable) return;
 
     const normalizedId = String(id || '').trim();
     if (!normalizedId) return;
@@ -980,32 +1027,56 @@ const UserManagement = () => {
 
   const openDeletionConfirmModal = useCallback(() => {
     if (selectedDeletionIds.length === 0) {
-      setDeletionToast({ type: 'error', message: 'Select at least one eligible patient account first.' });
+      setDeletionToast({ type: 'error', message: 'Select at least one eligible account first.' });
       return;
     }
 
-    if (selectedEligibleDeletionCount !== selectedDeletionIds.length) {
+    if (selectedActionableDeletionCount !== selectedDeletionIds.length) {
+      const blockedSuffix = selectedBlockedDeletionCount > 0
+        ? ` ${selectedBlockedDeletionCount} selection(s) are blocked (for example, admin self-delete protection).`
+        : '';
+
       setDeletionToast({
         type: 'error',
-        message: 'Some selected accounts are no longer eligible. Refresh the list and select eligible rows only.',
+        message: `Some selected accounts are no longer eligible for deletion.${blockedSuffix} Refresh the list and select eligible rows only.`,
       });
       return;
     }
 
     setDeletionConfirmCountdown(5);
     setDeletionConfirmModalOpen(true);
-  }, [selectedDeletionIds.length, selectedEligibleDeletionCount]);
+  }, [selectedActionableDeletionCount, selectedBlockedDeletionCount, selectedDeletionIds.length]);
 
   const handleConfirmDeletePatients = useCallback(async () => {
     if (rateLimitedRef.current) return;
     if (selectedDeletionIds.length === 0) return;
 
+    const actionableIds = selectedDeletionRows
+      .filter((row) => isDeletionRowSelectable(row))
+      .map((row) => String(row.id || '').trim())
+      .filter(Boolean);
+
+    if (actionableIds.length === 0) {
+      setDeletionToast({ type: 'error', message: 'No eligible accounts are selected for deletion.' });
+      setDeletionConfirmModalOpen(false);
+      return;
+    }
+
+    if (actionableIds.length !== selectedDeletionIds.length) {
+      setDeletionToast({
+        type: 'error',
+        message: 'Some selected accounts are no longer eligible for deletion. Refresh and reselect before confirming.',
+      });
+      setDeletionConfirmModalOpen(false);
+      return;
+    }
+
     setDeletionSubmitting(true);
     try {
-      const result = await deletePatients(selectedDeletionIds);
+      const result = await deletePatients(actionableIds);
       setDeletionToast({
         type: 'success',
-        message: result?.message || 'Selected patient accounts deleted successfully.',
+        message: result?.message || 'Selected account deletion actions were applied successfully.',
       });
       setSelectedDeletionIds([]);
       setDeletionSelectionMeta({});
@@ -1041,6 +1112,7 @@ const UserManagement = () => {
     markNetworkError,
     markRateLimited,
     selectedDeletionIds,
+    selectedDeletionRows,
   ]);
 
   const refreshActiveTab = useCallback(() => {
@@ -1252,24 +1324,24 @@ const UserManagement = () => {
   const handleRevokeSession = useCallback(async (row) => {
     if (rateLimitedRef.current) return;
     if (!selectedSessionUser?.id || !row?.deviceId) return;
+    if (getStatusKey(row.status) === 'revoked') return;
 
     setRevokingSessionRowId(row.rowId);
     setUserSessionsError(null);
 
     try {
-      const shouldRevoke = getStatusKey(row.status) !== 'revoked';
-      await setUserSessionRevoked(String(selectedSessionUser.id), String(row.deviceId), shouldRevoke);
+      await setUserSessionRevoked(String(selectedSessionUser.id), String(row.deviceId), true);
 
       setUserSessionRows((currentRows) => currentRows.map((currentRow) => {
         if (currentRow.rowId !== row.rowId) return currentRow;
         return {
           ...currentRow,
-          status: shouldRevoke ? 'revoked' : 'active',
+          status: 'revoked',
           updatedAt: new Date().toISOString(),
         };
       }));
 
-      setSessionToastMessage(shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.');
+      setSessionToastMessage('Session revoked successfully.');
     } catch (error) {
       if (isRateLimitedError(error)) {
         markRateLimited();
@@ -1280,7 +1352,7 @@ const UserManagement = () => {
         markNetworkError();
       }
 
-      setUserSessionsError(error?.message || 'Failed to update this session ticket.');
+      setUserSessionsError(error?.message || 'Failed to revoke this session ticket.');
     } finally {
       setRevokingSessionRowId(null);
     }
@@ -1290,24 +1362,22 @@ const UserManagement = () => {
     selectedSessionUser,
   ]);
 
-  const handleBulkSessionAction = useCallback(async (revoked) => {
+  const handleBulkSessionAction = useCallback(async () => {
     if (rateLimitedRef.current) return;
     if (!selectedSessionUser?.id) return;
 
-    const shouldRevoke = Boolean(revoked);
-    const targetStatus = shouldRevoke ? 'revoked' : 'active';
-    const hasRowsToChange = userSessionRows.some((row) => getStatusKey(row.status) !== targetStatus);
+    const hasActiveRows = userSessionRows.some((row) => getStatusKey(row.status) !== 'revoked');
 
-    if (!hasRowsToChange) {
-      setSessionToastMessage(shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.');
+    if (!hasActiveRows) {
+      setSessionToastMessage('All sessions are already revoked.');
       return;
     }
 
-    setBulkSessionAction(shouldRevoke ? 'revoke' : 'unrevoke');
+    setBulkSessionAction('revoke');
     setUserSessionsError(null);
 
     try {
-      const result = await setAllUserSessionsRevoked(String(selectedSessionUser.id), shouldRevoke);
+      const result = await setAllUserSessionsRevoked(String(selectedSessionUser.id), true);
 
       setUserSessionRows((currentRows) => currentRows.map((currentRow) => {
         const currentStatus = getStatusKey(currentRow.status);
@@ -1315,14 +1385,12 @@ const UserManagement = () => {
 
         return {
           ...currentRow,
-          status: targetStatus,
+          status: 'revoked',
           updatedAt: new Date().toISOString(),
         };
       }));
 
-      setSessionToastMessage(result?.message || (shouldRevoke
-        ? 'All sessions revoked successfully.'
-        : 'All sessions unrevoked successfully.'));
+      setSessionToastMessage(result?.message || 'All sessions revoked successfully.');
     } catch (error) {
       if (isRateLimitedError(error)) {
         markRateLimited();
@@ -1333,7 +1401,7 @@ const UserManagement = () => {
         markNetworkError();
       }
 
-      setUserSessionsError(error?.message || 'Failed to update all session tickets.');
+      setUserSessionsError(error?.message || 'Failed to revoke all session tickets.');
     } finally {
       setBulkSessionAction(null);
     }
@@ -2044,7 +2112,7 @@ const UserManagement = () => {
                 <div>
                   <p className="text-xs font-semibold text-secondary-900 dark:text-white">Account Delete Action</p>
                   <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                    Inactive patient accounts older than 1 year are auto-listed below. Locked accounts must be searched manually using the search bar.
+                    Inactive accounts older than 1 year are auto-listed below. Locked accounts must be searched manually. Medical personnel accounts are always soft deleted.
                   </p>
                 </div>
 
@@ -2054,14 +2122,14 @@ const UserManagement = () => {
                     value={deletionSearch}
                     onChange={(event) => setDeletionSearch(event.target.value)}
                     placeholder="Search locked/inactive by name, email, or user ID"
-                    disabled={deletionLoading || deletionSubmitting || isRateLimited}
+                    disabled={deletionSubmitting || isRateLimited}
                     className="flex-1 min-w-[240px] px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 placeholder:text-secondary-400 dark:placeholder:text-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                   />
 
                   <button
                     type="button"
                     onClick={() => {
-                      void loadDeletionCandidates();
+                      void loadDeletionCandidates({ searchOverride: deletionSearch });
                     }}
                     disabled={deletionLoading || deletionSubmitting || isRateLimited}
                     className="px-3 py-2 text-xs font-medium whitespace-nowrap rounded border border-neutral-300 dark:border-neutral-600 text-secondary-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2081,12 +2149,16 @@ const UserManagement = () => {
                   <button
                     type="button"
                     onClick={openDeletionConfirmModal}
-                    disabled={deletionSubmitting || selectedEligibleDeletionCount === 0 || isRateLimited}
-                    className="px-3 py-2 text-xs font-medium whitespace-nowrap rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={deletionSubmitting || selectedActionableDeletionCount === 0 || isRateLimited}
+                    className={`px-3 py-2 text-xs font-medium whitespace-nowrap rounded border disabled:opacity-50 disabled:cursor-not-allowed ${
+                      selectedHardDeletionCount > 0
+                        ? 'border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20'
+                        : 'border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20'
+                    }`}
                   >
                     {deletionSubmitting
-                      ? 'Deleting...'
-                      : `Delete Selected Accounts (${selectedEligibleDeletionCount})`}
+                      ? 'Processing...'
+                      : `Apply Deletion Actions (${selectedActionableDeletionCount})`}
                   </button>
                 </div>
 
@@ -2103,8 +2175,8 @@ const UserManagement = () => {
                     className="w-full min-h-[112px] max-h-48 px-2 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {eligibleDropdownRows.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {`${row.name} (${row.email}) - ${formatDateTime(row.updatedAt)}`}
+                      <option key={row.id} value={row.id} disabled={!isDeletionRowSelectable(row)}>
+                        {`${row.name} (${row.email}) - ${formatDateTime(row.updatedAt)} - ${normalizeDeletionMode(row.deletionMode) === 'soft' ? 'soft delete' : 'hard delete'}${row.blocked ? ' [blocked]' : ''}`}
                       </option>
                     ))}
                   </select>
@@ -2114,7 +2186,7 @@ const UserManagement = () => {
                 </div>
 
                 <p className="text-xs text-secondary-500 dark:text-neutral-400">
-                  Deletion rules: Inactive accounts are eligible when updated_at + 1 year &lt; now. Locked accounts can be deleted once manually searched and selected.
+                  Deletion rules: Inactive accounts are eligible when updated_at + 1 year &lt; now. Locked accounts can be deleted once manually searched and selected. Medical personnel accounts are soft deleted (set inactive + deleted_at) and are never hard deleted.
                 </p>
               </div>
 
@@ -2154,6 +2226,23 @@ const UserManagement = () => {
                           {deletionRows.map((row) => {
                             const statusKey = getStatusKey(row.status);
                             const isLocked = statusKey === 'locked';
+                            const isSoftDelete = normalizeDeletionMode(row.deletionMode) === 'soft';
+                            const isBlocked = Boolean(row.blocked);
+                            const isSelectable = isDeletionRowSelectable(row);
+
+                            const eligibilityLabel = isBlocked
+                              ? (row.blockedReason || 'Deletion blocked')
+                              : (isSoftDelete
+                                ? 'Soft delete only (medical personnel)'
+                                : (isLocked ? 'Locked (manual search)' : 'Inactive > 1 year'));
+
+                            const eligibilityClass = isBlocked
+                              ? 'border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 bg-error-50 dark:bg-error-900/20'
+                              : (isSoftDelete
+                                ? 'border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/20'
+                                : (isLocked
+                                  ? 'border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 bg-warning-50 dark:bg-warning-900/20'
+                                  : 'border border-success-300 dark:border-success-700 text-success-700 dark:text-success-300 bg-success-50 dark:bg-success-900/20'));
 
                             return (
                               <tr
@@ -2164,10 +2253,10 @@ const UserManagement = () => {
                                   <input
                                     type="checkbox"
                                     checked={selectedDeletionIdSet.has(row.id)}
-                                    disabled={!row.eligible || deletionSubmitting || isRateLimited}
-                                    onChange={() => handleToggleDeletionSelection(row.id, row.eligible)}
+                                    disabled={!isSelectable || deletionSubmitting || isRateLimited}
+                                    onChange={() => handleToggleDeletionSelection(row.id, isSelectable)}
                                     className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
-                                    aria-label={`Select patient ${row.name}`}
+                                    aria-label={`Select account ${row.name}`}
                                   />
                                 </td>
                                 <td className="py-2.5 px-3 text-xs font-medium text-secondary-900 dark:text-white">{row.name}</td>
@@ -2182,13 +2271,8 @@ const UserManagement = () => {
                                 </td>
                                 <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.updatedAt)}</td>
                                 <td className="py-2.5 px-3">
-                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                                    isLocked
-                                      ? 'border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 bg-warning-50 dark:bg-warning-900/20'
-                                      : 'border border-success-300 dark:border-success-700 text-success-700 dark:text-success-300 bg-success-50 dark:bg-success-900/20'
-                                  }`}
-                                  >
-                                    {isLocked ? 'Locked (manual search)' : 'Inactive > 1 year'}
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${eligibilityClass}`}>
+                                    {eligibilityLabel}
                                   </span>
                                 </td>
                               </tr>
@@ -2313,25 +2397,47 @@ const UserManagement = () => {
 
           <div className="relative w-full max-w-lg rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
             <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
-              <h3 id="patient-delete-confirm-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Confirm Patient Account Deletion</h3>
+              <h3 id="patient-delete-confirm-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Confirm Account Deletion Action</h3>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                This action permanently deletes selected patient accounts and all related records.
+                {selectedHardDeletionCount > 0
+                  ? 'This action includes permanent account deletion for selected patient records.'
+                  : 'This action will apply soft deletion to selected medical personnel accounts.'}
               </p>
             </div>
 
             <div className="px-4 py-3 space-y-2">
               <p className="text-xs text-secondary-700 dark:text-neutral-200">
-                <span className="font-medium">Selected accounts:</span> {selectedDeletionIds.length}
+                <span className="font-medium">Selected accounts:</span> {selectedActionableDeletionCount}
               </p>
               <p className="text-xs text-secondary-700 dark:text-neutral-200">
                 <span className="font-medium">Eligibility rule:</span> status = Locked OR (status = Inactive and updated_at + 1 year &lt; now)
               </p>
+              {selectedHardDeletionCount > 0 && (
+                <p className="text-xs text-secondary-700 dark:text-neutral-200">
+                  <span className="font-medium">Hard delete targets:</span> {selectedHardDeletionCount} patient account(s)
+                </p>
+              )}
+              {selectedSoftDeletionCount > 0 && (
+                <p className="text-xs text-secondary-700 dark:text-neutral-200">
+                  <span className="font-medium">Soft delete targets:</span> {selectedSoftDeletionCount} medical personnel account(s)
+                </p>
+              )}
               <p className="text-xs text-warning-700 dark:text-warning-300">
                 Safety timer: confirm button unlocks in {deletionConfirmCountdown}s.
               </p>
-              <div className="rounded border border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20 px-3 py-2">
-                <p className="text-xs text-error-700 dark:text-error-300">
-                  If any selected account fails validation, the transaction is rolled back and no account will be deleted.
+              <div className={`rounded border px-3 py-2 ${
+                selectedHardDeletionCount > 0
+                  ? 'border-error-300 dark:border-error-700 bg-error-50 dark:bg-error-900/20'
+                  : 'border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20'
+              }`}>
+                <p className={`text-xs ${
+                  selectedHardDeletionCount > 0
+                    ? 'text-error-700 dark:text-error-300'
+                    : 'text-warning-700 dark:text-warning-300'
+                }`}>
+                  {selectedHardDeletionCount > 0
+                    ? 'If any selected account fails validation, the transaction is rolled back and no account will be deleted.'
+                    : 'Soft delete keeps the account record and marks credentials inactive with deleted_at metadata.'}
                 </p>
               </div>
             </div>
@@ -2351,13 +2457,19 @@ const UserManagement = () => {
                   void handleConfirmDeletePatients();
                 }}
                 disabled={deletionSubmitting || deletionConfirmCountdown > 0}
-                className="px-3 py-1.5 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`px-3 py-1.5 text-xs rounded border disabled:opacity-50 disabled:cursor-not-allowed ${
+                  selectedHardDeletionCount > 0
+                    ? 'border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20'
+                    : 'border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-50 dark:hover:bg-warning-900/20'
+                }`}
               >
                 {deletionSubmitting
-                  ? 'Deleting...'
+                  ? 'Processing...'
                   : deletionConfirmCountdown > 0
                     ? `Confirm in ${deletionConfirmCountdown}s`
-                    : 'Delete Selected Accounts'}
+                    : selectedHardDeletionCount > 0
+                      ? (selectedSoftDeletionCount > 0 ? 'Confirm Deletion Actions' : 'Confirm Hard Delete')
+                      : 'Confirm Soft Delete'}
               </button>
             </div>
           </div>
@@ -2603,7 +2715,7 @@ const UserManagement = () => {
           <div className="relative w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
               <div>
-                <h3 id="user-session-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Active Tickets (Devices and Refresh Tokens)</h3>
+                <h3 id="user-session-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Active Tickets (Devices)</h3>
                 <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{selectedSessionUser.name} ({selectedSessionUser.email})</p>
               </div>
 
@@ -2622,7 +2734,7 @@ const UserManagement = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    void handleBulkSessionAction(true);
+                    void handleBulkSessionAction();
                   }}
                   disabled={userSessionsLoading || bulkSessionAction !== null || revokingSessionRowId !== null || isRateLimited}
                   className="px-2.5 py-1 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2630,16 +2742,7 @@ const UserManagement = () => {
                   {bulkSessionAction === 'revoke' ? 'Revoking...' : 'Revoke All'}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleBulkSessionAction(false);
-                  }}
-                  disabled={userSessionsLoading || bulkSessionAction !== null || revokingSessionRowId !== null || isRateLimited}
-                  className="px-2.5 py-1 text-xs rounded border border-success-300 dark:border-success-700 text-success-700 dark:text-success-300 hover:bg-success-50 dark:hover:bg-success-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {bulkSessionAction === 'unrevoke' ? 'Updating...' : 'Unrevoke All'}
-                </button>
+
 
                 <button
                   type="button"
@@ -2691,7 +2794,6 @@ const UserManagement = () => {
                         <thead>
                           <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Device ID</th>
-                            <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Refresh Token</th>
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
                             <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Action</th>
@@ -2704,7 +2806,6 @@ const UserManagement = () => {
                             return (
                               <tr key={row.rowId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
                                 <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">{row.deviceId}</td>
-                                <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300 max-w-[360px] truncate" title={row.refreshToken}>{row.refreshToken}</td>
                                 <td className="py-2.5 px-3">
                                   <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
                                     <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
@@ -2718,11 +2819,11 @@ const UserManagement = () => {
                                     onClick={() => {
                                       void handleRevokeSession(row);
                                     }}
-                                    disabled={isRevoking || bulkSessionAction !== null || isRateLimited}
+                                    disabled={isRevoking || bulkSessionAction !== null || isRateLimited || getStatusKey(row.status) === 'revoked'}
                                     className="px-2.5 py-1 text-xs rounded border border-error-300 dark:border-error-700 text-error-700 dark:text-error-300 hover:bg-error-50 dark:hover:bg-error-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    aria-label={`${getStatusKey(row.status) === 'revoked' ? 'Unrevoke' : 'Revoke'} session for device ${row.deviceId}`}
+                                    aria-label={`Revoke session for device ${row.deviceId}`}
                                   >
-                                    {isRevoking ? 'Updating...' : (getStatusKey(row.status) === 'revoked' ? 'Unrevoke' : 'Revoke')}
+                                    {isRevoking ? 'Revoking...' : 'Revoke'}
                                   </button>
                                 </td>
                               </tr>

@@ -106,7 +106,7 @@ router.post(
     try {
       // ── Fetch user credentials ──
       const credResult = await query.query(
-        `SELECT password_hash, totp_enabled, totp_secret FROM "UserCredentials" WHERE id = $1`,
+        `SELECT password_hash, totp_enabled, totp_secret FROM active_user_credentials WHERE id = $1`,
         [userId]
       );
 
@@ -237,7 +237,7 @@ router.post(
     try {
       // ── Fetch user credentials ──
       const credResult = await query.query(
-        `SELECT password_hash, totp_enabled, totp_secret FROM "UserCredentials" WHERE id = $1`,
+        `SELECT password_hash, totp_enabled, totp_secret FROM active_user_credentials WHERE id = $1`,
         [userId]
       );
 

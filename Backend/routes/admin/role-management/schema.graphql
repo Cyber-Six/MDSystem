@@ -195,6 +195,25 @@ type RotateAnchorResult {
   sessionsInvalidated: Int!
 }
 
+type SessionBlacklistEntry {
+  tokenId: String!
+  blacklisted: Boolean!
+}
+
+type SessionBlacklistResult {
+  ok: Boolean!
+  message: String!
+  tokenId: String
+  blacklisted: Boolean
+  results: [SessionBlacklistEntry!]!
+}
+
+type SessionBlacklistListResult {
+  ok: Boolean!
+  message: String!
+  results: [SessionBlacklistEntry!]!
+}
+
 # Admin transfer result type
 type InitiateAdminTransferResult {
   ok: Boolean!
@@ -252,12 +271,12 @@ type PatientDeletionCandidatePage {
 # Linked user sessions (detail view when clicking a user row)
 type LinkedUserSession {
   deviceId: String!
-  refreshToken: String!
   status: String!
   createdAt: String
   updatedAt: String
   ttlSeconds: Int!
   expiresAt: String
+  accessTokenExpired: Boolean!
 }
 
 type UserLoginAttempt {
@@ -279,12 +298,12 @@ type UserSession {
   email: String!
   role: String!
   device: String!
-  refreshToken: String!
   ttlSeconds: Int!
   numberOfSessions: Int!
   status: String!
   lastActive: Float
   exp: Float!
+  accessTokenExpired: Boolean!
 }
 
 # Paginated user sessions response
@@ -457,8 +476,8 @@ type Mutation {
   # Session Management
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!
   revokeUserSession(userId: ID!, deviceId: String!): MutationResult!
-  setUserSessionRevoked(userId: ID!, deviceId: String!, revoked: Boolean!): MutationResult!
-  setAllUserSessionsRevoked(userId: ID!, revoked: Boolean!): MutationResult!
+  setUserSessionRevoked(userId: ID!, deviceId: String!, revoked: Boolean!): SessionBlacklistResult!
+  setAllUserSessionsRevoked(userId: ID!, revoked: Boolean!): SessionBlacklistListResult!
 
   # Patient/User Account Controls
   setUserAccountLocked(userId: ID!, locked: Boolean!): MutationResult!

@@ -149,7 +149,7 @@ function initPatientDashboardGraphQL(app) {
       ] = await Promise.all([
         db.query(
           `SELECT credentials_status
-           FROM "UserCredentials"
+           FROM active_user_credentials
            WHERE id = $1
            LIMIT 1`,
           [req.user.id]

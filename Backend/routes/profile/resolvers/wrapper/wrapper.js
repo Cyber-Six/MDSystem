@@ -16,7 +16,7 @@ const Query = {
     }
     const sql = `
       SELECT credentials_status AS status
-      FROM "UserCredentials"
+      FROM active_user_credentials
       WHERE id = $1
       LIMIT 1;
     `;
@@ -33,7 +33,7 @@ const Query = {
     const result = await db.query(
        `SELECT up.*, uc.email
         FROM "UsersPersonal" AS up
-        JOIN "UserCredentials" AS uc
+        JOIN active_user_credentials AS uc
           ON up.id = uc.id
         WHERE up."id" = $1
         ORDER BY uc.created_at DESC
@@ -110,7 +110,7 @@ const Query = {
     const result = await db.query(
        `SELECT up.identifier, up.branch
         FROM "UsersPersonal" AS up
-        JOIN "UserCredentials" AS uc
+        JOIN active_user_credentials AS uc
           ON up.id = uc.id
         WHERE up.id = $1
         ORDER BY uc.created_at DESC
@@ -127,7 +127,7 @@ const Query = {
     }
     const sql = `
       SELECT credentials_status AS status
-      FROM "UserCredentials"
+      FROM active_user_credentials
       WHERE id = $1
       LIMIT 1;
     `;
@@ -144,7 +144,7 @@ const Query = {
         email,
         credentials_status,
         NULL::timestamp AS locked_until
-      FROM "UserCredentials" uc
+      FROM active_user_credentials uc
       WHERE uc.id = $1
       LIMIT 1;
     `;

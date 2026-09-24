@@ -40,9 +40,9 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
   try {
     // Get staff member's branch scope from MedicalPersonnel
     const staffQuery = `
-      SELECT mp.id, mp.designation AS branch
-      FROM "MedicalPersonnel" mp
-      WHERE mp.id = $1 AND mp.is_active = true
+      SELECT mp."userId", mp.designation AS branch
+      FROM active_medical_personnel mp
+      WHERE mp."userId" = $1 AND mp.is_active = true
     `;
 
     const staffResult = await db.query(staffQuery, [staffUserId]);
@@ -62,7 +62,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
       // Notify specific patients — validate they exist in the Patients table
       const filteredQuery = `
         SELECT DISTINCT uc.id as "userId", up.branch
-        FROM "UserCredentials" uc
+        FROM active_user_credentials uc
         INNER JOIN "Patients" p ON uc.id = p.id
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
         WHERE uc.id::text = ANY($1)
@@ -77,7 +77,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
       // Get all patients, then filter by branch in JS via ValidateUserBranchbyUserBranch
       const patientQuery = `
         SELECT DISTINCT uc.id as "userId", up.branch
-        FROM "UserCredentials" uc
+        FROM active_user_credentials uc
         INNER JOIN "Patients" p ON uc.id = p.id
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
         ORDER BY uc.id

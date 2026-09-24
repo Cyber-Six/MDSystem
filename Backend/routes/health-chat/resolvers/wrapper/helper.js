@@ -48,7 +48,7 @@ async function getParticipantInfo(userId) {
       up.branch,
       up.date_of_birth,
       up.sex
-     FROM "UserCredentials" uc
+     FROM active_user_credentials uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      LEFT JOIN "Patients" p ON p.id = uc.id
      WHERE uc.id = $1`,
@@ -261,7 +261,7 @@ async function getParticipantInfoBatch(userIds) {
       up.branch,
       up.date_of_birth,
       up.sex
-     FROM "UserCredentials" uc
+     FROM active_user_credentials uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      LEFT JOIN "Patients" p ON p.id = uc.id
      WHERE uc.id = ANY($1)`,
@@ -478,7 +478,7 @@ async function autoExpireTickets(patientId = null) {
     SET status = 'Expired',
         session_end = NOW(),
         closed_by_type = 'System'
-    FROM "UserCredentials" uc
+    FROM active_user_credentials uc
     WHERE hc."patientId" = uc.id
     AND hc.status = 'Open'
     AND uc.credentials_status = 'Inactive'
