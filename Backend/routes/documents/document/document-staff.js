@@ -27,7 +27,7 @@ const {
 } = require('../../../services/doc-generate-module/medical-certificate-normalized.js');
 const { formatMessage } = require('../../health-chat/resolvers/wrapper/helper.js');
 const { emitToRoom, notifyUser } = require('../../../config/sockets');
-const { permissions, isMedicalPermittedPatientBased, isMedicalPermitted } = require('../../../services/permit.js');
+const { permissions, isMedicalPermittedPatientBased, isMedicalPermitted } = require('../../../services/authorization/permit.js');
 
 const router = express.Router();
 

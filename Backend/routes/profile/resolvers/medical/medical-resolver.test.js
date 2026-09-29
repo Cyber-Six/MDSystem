@@ -2,12 +2,12 @@ jest.mock('../wrapper/wrapper.js', () => ({
   Query: { _getUserCredentialStatus: jest.fn(), _getUserPersonalRecord: jest.fn(), _getUserPersonalRecordLogStatus: jest.fn(), _getUserPersonalRecordLog: jest.fn(), _getUserLoginCredentials: jest.fn() },
   Mutation: { _PersonalRecordLog: jest.fn(), _StaffUpdatePersonalRecordLog: jest.fn(), _setPersonalRecordLog: jest.fn(), _reloadCredentialStatus: jest.fn(), _UserBranchIdentifier: jest.fn() }
 }));
-jest.mock('../../../../services/permit.js', () => ({ permissions: { profile_allow_view: 'VIEW', profile_allow_edit: 'EDIT', profile_allow_approval: 'APPROVE' }, isMedicalPermittedPatientBased: jest.fn() }));
+jest.mock('../../../../services/authorization/permit.js', () => ({ permissions: { profile_allow_view: 'VIEW', profile_allow_edit: 'EDIT', profile_allow_approval: 'APPROVE' }, isMedicalPermittedPatientBased: jest.fn() }));
 jest.mock('../../../../utils/logger.js', () => ({ warn: jest.fn() }));
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
 const Wrapper = require('../wrapper/wrapper.js');
-const permit = require('../../../../services/permit.js');
+const permit = require('../../../../services/authorization/permit.js');
 const logger = require('../../../../utils/logger.js');
 const { Query, Mutation } = require('./medical-resolver.js');
 const ctx = (user = { id: 5 }) => ({ user, res: { status: jest.fn().mockReturnThis() } });

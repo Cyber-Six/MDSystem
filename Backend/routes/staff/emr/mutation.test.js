@@ -1,17 +1,17 @@
 jest.mock('../../../config/query.js', () => ({ query: jest.fn(), queryClient: jest.fn(), queryControlledClient: jest.fn(), connect: jest.fn(), findEmailByUserId: jest.fn() }));
 jest.mock('../../../utils/graphql-helper.js', () => ({ throwGraphQLError: jest.fn(() => { const c = { message: jest.fn(), status: jest.fn(), throw: jest.fn() }; c.message.mockReturnValue(c); c.status.mockReturnValue(c); c.throw.mockImplementation(() => { throw new Error(`${c.status.mock.lastCall[0]}:${c.message.mock.lastCall[0]}`); }); return c; }) }));
 jest.mock('../../../utils/logger.js', () => ({ warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() }));
-jest.mock('../../../services/permit.js', () => ({ permissions: { emr_allow_set_vital_sign: 'vital', emr_allow_set_dental_record: 'dental', emr_allow_edit_catalogs: 'catalog' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermitted: jest.fn() }));
+jest.mock('../../../services/authorization/permit.js', () => ({ permissions: { emr_allow_set_vital_sign: 'vital', emr_allow_set_dental_record: 'dental', emr_allow_edit_catalogs: 'catalog' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermitted: jest.fn() }));
 jest.mock('../../../config/sockets', () => ({ isConnectedAnywhere: jest.fn(), emitToUser: jest.fn() }));
-jest.mock('../../../services/emailservice', () => ({ enqueueNotificationEmail: jest.fn() }));
+jest.mock('../../../services/email/emailservice', () => ({ enqueueNotificationEmail: jest.fn() }));
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'uuid') }));
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
 const db = require('../../../config/query.js');
-const permit = require('../../../services/permit.js');
+const permit = require('../../../services/authorization/permit.js');
 const logger = require('../../../utils/logger.js');
 const sockets = require('../../../config/sockets');
-const { enqueueNotificationEmail } = require('../../../services/emailservice');
+const { enqueueNotificationEmail } = require('../../../services/email/emailservice');
 const Mutation = require('./mutation.js');
 const ctx = { user: { id: 4 }, res: {} };
 const rows = (...values) => ({ rows: values });

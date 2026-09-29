@@ -18,7 +18,7 @@ jest.mock('../../utils/logger.js', () => ({
   error: jest.fn(),
 }));
 
-const analytics = require('../analytics-query.js');
+const analytics = require('../analytics/analytics-query.js');
 
 describe('analytics-query chartContext and oral findings prevalence', () => {
   beforeEach(() => {

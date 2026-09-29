@@ -10,7 +10,7 @@ const { rateLimitEmailCooldown, rateLimitEmailAttempts, rateLimitEmailCooldownTT
   recordResetPwFailure, clearResetPwFailures, isResetPwLocked } = require('../../../config/redis.js');
 const { rateLimitMatrix } = require('../../../config/data/matrix.js');
 const query = require('../../../config/query.js');
-const { enqueueResetPassword } = require('../../../services/emailservice.js');
+const { enqueueResetPassword } = require('../../../services/email/emailservice.js');
 const { delayRandom } = require('../../../utils/security.js');
 
 router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res) => {
@@ -49,7 +49,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
     }
 
     // ✅ 3. Verify reCAPTCHA
-    const { verifyRecaptcha } = require('../../../services/recaptcha.js');
+    const { verifyRecaptcha } = require('../../../services/auth/recaptcha.js');
     const recaptchaValid = await verifyRecaptcha(recaptchaToken);
     if (!recaptchaValid) {
       await delayRandom(200, 500);

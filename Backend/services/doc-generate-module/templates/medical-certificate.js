@@ -1,6 +1,6 @@
 const BaseTemplate = require('../base-template.js');
 const fs = require('fs');
-const pdf = require('../../pdfkit.js');
+const pdf = require('../../rendering/pdfkit.js');
 
 /**
  * Medical Certificate Template

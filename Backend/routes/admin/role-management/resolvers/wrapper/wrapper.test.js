@@ -1,9 +1,9 @@
 jest.mock('../../../../../config/query.js', () => ({ query: jest.fn() }));
-jest.mock('../../../../../services/permit.js', () => ({
+jest.mock('../../../../../services/authorization/permit.js', () => ({
   permissions: { is_admin: 'ADMIN' }, MODULE_PERMISSION_MAP: {}, MODULE_LABELS: {}, PERMISSION_GROUP_DEFINITIONS: {},
 }));
 jest.mock('../../../../../config/redis.js', () => ({}));
-jest.mock('../../../../../services/emailservice.js', () => ({}));
+jest.mock('../../../../../services/email/emailservice.js', () => ({}));
 jest.mock('../../../../../config/sockets', () => ({}));
 jest.mock('../../../../../utils/security.js', () => ({}));
 jest.mock('../../../../../utils/logger.js', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));

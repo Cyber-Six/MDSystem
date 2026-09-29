@@ -350,7 +350,7 @@ Secure handoff of admin privileges with multi-factor verification and audit logg
 - **Schema:** `Backend/routes/role-management/schema.graphql`
 - **Authorization:** `Backend/routes/role-management/resolvers/admin/admin-resolver.js`
 - **Business Logic:** `Backend/routes/role-management/resolvers/wrapper/wrapper.js`
-- **Permission Service:** `Backend/services/permit.js`
+- **Permission Service:** `Backend/services/authorization/permit.js`
 - **Redis Functions:** `Backend/config/redis.js` (session & admin transfer management)
 - **Frontend Page:** `mds-staff/src/modules/role-management/role-management-page.jsx`
 - **Frontend Service:** `mds-staff/src/modules/role-management/staff-service.js`

@@ -1,0 +1,17 @@
+.git
+.vscode
+.kiro
+.agents
+.codex
+node_modules
+**/node_modules
+**/dist
+coverage
+logs
+**/.env
+**/.env.*
+*.psql
+*.sql
+/media/
+mds-mobile
+*.log

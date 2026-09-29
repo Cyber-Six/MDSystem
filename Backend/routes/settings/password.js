@@ -10,7 +10,7 @@ const { verifyOTP, getOTPFailureCount, getOTPLockoutTTL,
         rateLimitEmailCooldown, rateLimitEmailAttempts,
         deleteEmailCooldown, deleteEmailAttempts } = require("../../config/redis.js");
 const { detectPortalFromSubdomain } = require("../../utils/portal.js");
-const { enqueueSettingsOTP } = require("../../services/emailservice.js");
+const { enqueueSettingsOTP } = require("../../services/email/emailservice.js");
 const query = require("../../config/query.js");
 const logger = require("../../utils/logger.js");
 

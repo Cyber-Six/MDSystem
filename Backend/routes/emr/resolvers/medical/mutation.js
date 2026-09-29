@@ -5,7 +5,7 @@ const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const logger = require("../../../../utils/logger.js");
-const permit = require("../../../../services/permit.js");
+const permit = require("../../../../services/authorization/permit.js");
 
 const Query = require("./query.js");
 

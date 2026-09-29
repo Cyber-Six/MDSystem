@@ -2,10 +2,10 @@ const mockQueryDelegates = {};
 const mockMutationDelegates = {};
 const delegateProxy = delegates => new Proxy({}, { get(_target, name) { return delegates[name] ||= jest.fn(); } });
 jest.mock('../wrapper/wrapper.js', () => ({ Query: delegateProxy(mockQueryDelegates), Mutation: delegateProxy(mockMutationDelegates) }));
-jest.mock('../../../../../services/permit.js', () => ({ permissions: { is_admin: 'IS_ADMIN' }, isMedicalPermitted: jest.fn() }));
+jest.mock('../../../../../services/authorization/permit.js', () => ({ permissions: { is_admin: 'IS_ADMIN' }, isMedicalPermitted: jest.fn() }));
 
 const Wrapper = require('../wrapper/wrapper.js');
-const permit = require('../../../../../services/permit.js');
+const permit = require('../../../../../services/authorization/permit.js');
 const { Query, Mutation } = require('./admin-resolver.js');
 const context = (user = { id: 5 }) => ({ user, res: { status: jest.fn().mockReturnThis() } });
 beforeEach(() => { jest.clearAllMocks(); permit.isMedicalPermitted.mockResolvedValue({ permitted: true }); });

@@ -1,13 +1,13 @@
 jest.mock('../wrapper/wrapper.js', () => ({ Query: { _getAvailableMedicine: jest.fn(), _getMedicineRequestById: jest.fn(), _getMedicineRequests: jest.fn(), _getAllMedicineRequests: jest.fn() }, Mutation: { _setStatusMedicineRequest: jest.fn() } }));
-jest.mock('../../../../../services/permit.js', () => ({ permissions: { inventory_allow_manage_requests: 'MANAGE_REQUESTS' }, getStaffBranch: jest.fn(), isMedicalPermittedBranchBased: jest.fn(), isMedicalPermittedPatientBased: jest.fn() }));
+jest.mock('../../../../../services/authorization/permit.js', () => ({ permissions: { inventory_allow_manage_requests: 'MANAGE_REQUESTS' }, getStaffBranch: jest.fn(), isMedicalPermittedBranchBased: jest.fn(), isMedicalPermittedPatientBased: jest.fn() }));
 jest.mock('../../../../../utils/logger.js', () => ({ warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../../../../config/sockets', () => ({ isConnectedAnywhere: jest.fn(), emitToUserWithAck: jest.fn(), notifyUser: jest.fn() }));
-jest.mock('../../../../../services/emailservice.js', () => ({ enqueueNotificationEmail: jest.fn() }));
+jest.mock('../../../../../services/email/emailservice.js', () => ({ enqueueNotificationEmail: jest.fn() }));
 jest.mock('../../../../../config/query.js', () => ({ findEmailByUserId: jest.fn() }));
 jest.mock('../wrapper/helper.js', () => ({ getPatientIdByRequestId: jest.fn() }));
 
 const Wrapper = require('../wrapper/wrapper.js');
-const permit = require('../../../../../services/permit.js');
+const permit = require('../../../../../services/authorization/permit.js');
 const logger = require('../../../../../utils/logger.js');
 const sockets = require('../../../../../config/sockets');
 const helper = require('../wrapper/helper.js');

@@ -4,9 +4,9 @@ mockDoc = new Proxy({ y: 100, page: { width: 420, height: 595, margins: { top: 3
   get(target, key) { if (key in target) return target[key]; if (key === 'heightOfString') return jest.fn(() => 12); if (key === 'text') return mockText; return jest.fn(() => mockDoc); },
 });
 jest.mock('fs', () => ({ existsSync: jest.fn(), readFileSync: jest.fn(() => { throw new Error('file missing'); }) }));
-jest.mock('../../pdfkit', () => ({ DEFAULT_MARGINS: {}, createDocument: jest.fn(() => mockDoc), toBuffer: jest.fn().mockResolvedValue(Buffer.from('pdf')), streamToResponse: jest.fn(), downloadToResponse: jest.fn() }));
+jest.mock('../../rendering/pdfkit', () => ({ DEFAULT_MARGINS: {}, createDocument: jest.fn(() => mockDoc), toBuffer: jest.fn().mockResolvedValue(Buffer.from('pdf')), streamToResponse: jest.fn(), downloadToResponse: jest.fn() }));
 
-const pdf = require('../../pdfkit');
+const pdf = require('../../rendering/pdfkit');
 const fs = require('fs');
 const Prescription = require('./prescription');
 

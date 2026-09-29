@@ -2045,7 +2045,7 @@ Mobile native apps bypass reCAPTCHA via a shared server-side secret (`RECAPTCHA_
 | `RECAPTCHA_MOBILE_SECRET` | — | Shared secret for mobile bypass |
 | `RECAPTCHA_TEST_MODE` | `false` | Skip verification in development |
 
-> Full details: [RECAPTCHA_AND_GOOGLE_OAUTH.md](RECAPTCHA_AND_GOOGLE_OAUTH.md)
+> Full details: [Google OAuth and reCAPTCHA](authentication-integrations.md)
 
 ---
 
@@ -2070,10 +2070,10 @@ After Google OAuth verification, the user follows the same 2FA → Login Complet
 
 | File | Purpose |
 |---|---|
-| `Backend/services/google-oauth.js` | Google ID token verification (`google-auth-library`) |
+| `Backend/services/auth/google-oauth.js` | Google ID token verification (`google-auth-library`) |
 | `Backend/routes/auth/oauth/google.js` | OAuth login route |
 
-> Full details: [RECAPTCHA_AND_GOOGLE_OAUTH.md](RECAPTCHA_AND_GOOGLE_OAUTH.md)
+> Full details: [Google OAuth and reCAPTCHA](authentication-integrations.md)
 
 ---
 

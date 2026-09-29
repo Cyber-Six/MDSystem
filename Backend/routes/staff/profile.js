@@ -4,7 +4,7 @@ const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 const logger = require('../../utils/logger.js');
 const notificationsRouter = require('./notifications.js');
-const { getStaffBranch, isMedicalPermitted, permissions } = require('../../services/permit.js');
+const { getStaffBranch, isMedicalPermitted, permissions } = require('../../services/authorization/permit.js');
 
 const ALLOWED_SEARCH_BRANCHES = new Set(['Manila', 'QuezonCity', 'Both']);
 const MAX_SEARCH_INPUT_LENGTH = 120;
@@ -228,7 +228,7 @@ router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
             isMedicalPermitted,
             permissions: permKeys,
             getStaffBranch: getStaffDesignation,
-        } = require('../../services/permit.js');
+        } = require('../../services/authorization/permit.js');
         const modulePerms = await getStaffModulePermissions(req.user.id);
         const granularPerms = await getStaffPermissions(req.user.id);
         const {permitted: isAdmin} = await isMedicalPermitted(req.user.id, permKeys.is_admin);

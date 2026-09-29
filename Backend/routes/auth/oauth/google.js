@@ -1,7 +1,7 @@
 const express = require("express");
 const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
-const { verifyGoogleToken } = require("../../../services/google-oauth.js");
+const { verifyGoogleToken } = require("../../../services/auth/google-oauth.js");
 const { createVerificationSession, isLoginLocked } = require("../../../config/redis.js");
 const query = require("../../../config/query.js");
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");

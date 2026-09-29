@@ -1,8 +1,8 @@
 jest.mock('../../config/middleware/jwtProtect', () => ({ jwtProtect: jest.fn(() => jest.fn()) }));
 jest.mock('../../utils/logger', () => ({ warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() }));
-jest.mock('../../services/notifyStaffs', () => ({ notifyStaffs: jest.fn() }));
-jest.mock('../../services/notifyPatients', () => ({ notifyPatients: jest.fn() }));
-jest.mock('../../services/permit', () => ({
+jest.mock('../../services/notifications/notifyStaffs', () => ({ notifyStaffs: jest.fn() }));
+jest.mock('../../services/notifications/notifyPatients', () => ({ notifyPatients: jest.fn() }));
+jest.mock('../../services/authorization/permit', () => ({
   permissions: { is_admin: 'is_admin', notification_allow_send_to_patients: 'notification_allow_send_to_patients' },
   isMedicalPermitted: jest.fn(), isMedicalPermittedLocationBased: jest.fn(), getStaffBranch: jest.fn(),
 }));
@@ -10,10 +10,10 @@ jest.mock('../../config/query', () => ({ verifyUserIdentities: jest.fn(), getUse
 jest.mock('../../config/sockets/notification-acknowledgement', () => ({ acknowledgeNotification: jest.fn(), getNotificationStatus: jest.fn(), getSentNotifications: jest.fn(), getReceivedNotifications: jest.fn() }));
 
 const router = require('./notifications');
-const permit = require('../../services/permit');
+const permit = require('../../services/authorization/permit');
 const queries = require('../../config/query');
-const { notifyStaffs } = require('../../services/notifyStaffs');
-const { notifyPatients } = require('../../services/notifyPatients');
+const { notifyStaffs } = require('../../services/notifications/notifyStaffs');
+const { notifyPatients } = require('../../services/notifications/notifyPatients');
 const acknowledgements = require('../../config/sockets/notification-acknowledgement');
 
 function handler(method, path) {

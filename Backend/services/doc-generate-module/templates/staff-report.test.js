@@ -1,9 +1,9 @@
 const mockDoc = { y: 100, page: { width: 612, height: 792, margins: { bottom: 72 } }, moveDown: jest.fn(), addPage: jest.fn(), fontSize: jest.fn().mockReturnThis(), font: jest.fn().mockReturnThis(), fillColor: jest.fn().mockReturnThis(), text: jest.fn().mockReturnThis() };
-jest.mock('../../pdfkit', () => ({ DEFAULT_MARGINS: {}, FONT_SIZES: { body: 10, small: 8 }, COLORS: { text: '#111', secondary: '#555' }, createDocument: jest.fn(() => mockDoc), addHeader: jest.fn(), addSectionHeading: jest.fn(), addField: jest.fn(), addTable: jest.fn(), embedImage: jest.fn(), addSignatureLine: jest.fn() }));
-jest.mock('../../chart', () => ({ generatePieChart: jest.fn().mockResolvedValue(Buffer.from('chart')), generateLineChart: jest.fn().mockResolvedValue(Buffer.from('chart')), generateBarChart: jest.fn().mockResolvedValue(Buffer.from('chart')), generateDoughnutChart: jest.fn().mockResolvedValue(Buffer.from('chart')) }));
+jest.mock('../../rendering/pdfkit', () => ({ DEFAULT_MARGINS: {}, FONT_SIZES: { body: 10, small: 8 }, COLORS: { text: '#111', secondary: '#555' }, createDocument: jest.fn(() => mockDoc), addHeader: jest.fn(), addSectionHeading: jest.fn(), addField: jest.fn(), addTable: jest.fn(), embedImage: jest.fn(), addSignatureLine: jest.fn() }));
+jest.mock('../../rendering/chart', () => ({ generatePieChart: jest.fn().mockResolvedValue(Buffer.from('chart')), generateLineChart: jest.fn().mockResolvedValue(Buffer.from('chart')), generateBarChart: jest.fn().mockResolvedValue(Buffer.from('chart')), generateDoughnutChart: jest.fn().mockResolvedValue(Buffer.from('chart')) }));
 
-const pdf = require('../../pdfkit');
-const chart = require('../../chart');
+const pdf = require('../../rendering/pdfkit');
+const chart = require('../../rendering/chart');
 const StaffReport = require('./staff-report');
 
 beforeEach(() => { jest.clearAllMocks(); mockDoc.y = 100; });

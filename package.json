@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "dompurify": "^3.3.3",
+    "package-name": "^0.1.0",
     "recharts": "^3.8.1",
     "tailwindcss": "^4.2.2"
   },

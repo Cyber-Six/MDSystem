@@ -1,7 +1,7 @@
 const db = require("../../../config/query.js");
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
-const { permissions, isMedicalPermittedPatientBased, isMedicalPermittedPatientBasedMulti } = require("../../../services/permit.js");
+const { permissions, isMedicalPermittedPatientBased, isMedicalPermittedPatientBasedMulti } = require("../../../services/authorization/permit.js");
 const { getPatientIdFromvitalSignsId, getPatientIdFromDentalRecordId } = require("./helper.js");
 
 const Query = {

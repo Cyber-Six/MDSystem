@@ -2,7 +2,7 @@ const db = require("../../../../../config/query.js");
 const { throwGraphQLError, GraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 const { isConnectedAnywhere, emitToUserWithAck, emitToRole, notifyUser } = require("../../../../../config/sockets");
-const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
+const { enqueueNotificationEmail } = require("../../../../../services/email/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
 
 const Query = {

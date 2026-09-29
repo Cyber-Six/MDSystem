@@ -1,6 +1,6 @@
 jest.mock('fs', () => ({ existsSync: jest.fn(), readFileSync: jest.fn() }));
-jest.mock('../../pdfkit.js', () => ({ DEFAULT_MARGINS: {}, FONT_SIZES: { body: 10 }, COLORS: { text: '#111', secondary: '#555' }, createDocument: jest.fn(() => ({ y: 100, page: { margins: { left: 72 } }, moveDown: jest.fn(), font: jest.fn().mockReturnThis(), fontSize: jest.fn().mockReturnThis(), fillColor: jest.fn().mockReturnThis(), text: jest.fn().mockReturnThis(), image: jest.fn() })), addHeader: jest.fn(), addSectionHeading: jest.fn(), addField: jest.fn(), addSignatureLine: jest.fn() }));
-const fs = require('fs'); const pdf = require('../../pdfkit.js'); const Template = require('./medical-certificate');
+jest.mock('../../rendering/pdfkit.js', () => ({ DEFAULT_MARGINS: {}, FONT_SIZES: { body: 10 }, COLORS: { text: '#111', secondary: '#555' }, createDocument: jest.fn(() => ({ y: 100, page: { margins: { left: 72 } }, moveDown: jest.fn(), font: jest.fn().mockReturnThis(), fontSize: jest.fn().mockReturnThis(), fillColor: jest.fn().mockReturnThis(), text: jest.fn().mockReturnThis(), image: jest.fn() })), addHeader: jest.fn(), addSectionHeading: jest.fn(), addField: jest.fn(), addSignatureLine: jest.fn() }));
+const fs = require('fs'); const pdf = require('../../rendering/pdfkit.js'); const Template = require('./medical-certificate');
 beforeEach(() => jest.clearAllMocks());
 
 test('builds certificate sections and includes validity, restrictions, remarks, and clinician details', async () => {

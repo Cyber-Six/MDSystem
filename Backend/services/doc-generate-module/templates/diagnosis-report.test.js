@@ -1,10 +1,10 @@
-jest.mock('../../pdfkit.js', () => ({
+jest.mock('../../rendering/pdfkit.js', () => ({
   DEFAULT_MARGINS: {}, FONT_SIZES: { body: 10, small: 8 }, COLORS: { text: '#111', secondary: '#555' },
   createDocument: jest.fn(() => ({ y: 100, page: { width: 612 }, addPage: jest.fn(), moveDown: jest.fn(), fontSize: jest.fn().mockReturnThis(), font: jest.fn().mockReturnThis(), fillColor: jest.fn().mockReturnThis(), text: jest.fn().mockReturnThis() })),
   addHeader: jest.fn(), addSectionHeading: jest.fn(), addField: jest.fn(), addTable: jest.fn(), embedImage: jest.fn(), addSignatureLine: jest.fn(),
 }));
-jest.mock('../../chart.js', () => ({ generatePieChart: jest.fn() }));
-const pdf = require('../../pdfkit.js'); const chart = require('../../chart.js'); const Template = require('./diagnosis-report');
+jest.mock('../../rendering/chart.js', () => ({ generatePieChart: jest.fn() }));
+const pdf = require('../../rendering/pdfkit.js'); const chart = require('../../rendering/chart.js'); const Template = require('./diagnosis-report');
 beforeEach(() => { jest.clearAllMocks(); });
 
 test('exposes template metadata and builds a populated diagnosis report including generated chart', async () => {

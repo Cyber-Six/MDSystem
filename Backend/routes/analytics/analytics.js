@@ -3,11 +3,11 @@ const logger = require('../../utils/logger.js');
 const archiver = require('archiver');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 const query = require('../../config/query.js');
-const analytics = require('../../services/analytics-query.js');
+const analytics = require('../../services/analytics/analytics-query.js');
 const docGen = require('../../services/doc-generate-module/index.js');
-const analyticsExport = require('../../services/analytics-export.js');
-const analyticsMatrixExport = require('../../services/analytics-matrix-export.js');
-const { getStaffBranch, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
+const analyticsExport = require('../../services/analytics/analytics-export.js');
+const analyticsMatrixExport = require('../../services/analytics/analytics-matrix-export.js');
+const { getStaffBranch, isMedicalPermitted, permissions: permKeys } = require('../../services/authorization/permit.js');
 
 const router = express.Router();
 

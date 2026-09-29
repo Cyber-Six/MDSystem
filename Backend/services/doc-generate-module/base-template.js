@@ -1,4 +1,4 @@
-const pdf = require('../pdfkit.js');
+const pdf = require('../rendering/pdfkit.js');
 
 /**
  * Base template class for document generation

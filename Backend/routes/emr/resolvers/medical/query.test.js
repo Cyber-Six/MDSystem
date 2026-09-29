@@ -6,7 +6,7 @@ jest.mock('../../wrapper/query.js', () => new Proxy({}, {
 }));
 jest.mock('../../../../utils/graphql-helper.js', () => ({ throwGraphQLError: jest.fn(() => { const c = { message: jest.fn(), status: jest.fn(), throw: jest.fn() }; c.message.mockReturnValue(c); c.status.mockReturnValue(c); c.throw.mockImplementation(() => { throw new Error(`${c.status.mock.lastCall[0]}:${c.message.mock.lastCall[0]}`); }); return c; }) }));
 jest.mock('../../../../utils/logger.js', () => ({ warn: jest.fn(), info: jest.fn(), error: jest.fn() }));
-jest.mock('../../../../services/permit.js', () => ({
+jest.mock('../../../../services/authorization/permit.js', () => ({
   permissions: {
     emr_allow_view: 'emr_allow_view', emr_allow_approval: 'emr_allow_approval',
     appointment_allow_view_records: 'appointment_allow_view_records', profile_allow_view: 'profile_allow_view',
@@ -20,7 +20,7 @@ jest.mock('../../../../services/permit.js', () => ({
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
 const Wrapper = require('../../wrapper/query.js');
-const permit = require('../../../../services/permit.js');
+const permit = require('../../../../services/authorization/permit.js');
 const Query = require('./query.js');
 
 beforeEach(() => jest.clearAllMocks());

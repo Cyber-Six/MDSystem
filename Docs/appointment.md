@@ -148,6 +148,10 @@ Handles appointment scheduling between patients and medical staff. Exposes **two
         |──> CancelledByMedical
 ```
 
+## Notifications
+
+Appointment changes also notify the relevant user through the shared notification service. Patient submissions emit `appointment:submitted` to the authorized staff branch room. Staff responses and attendance updates use `appointment:responded` and `appointment:attendance-recorded`; these user-targeted events respect notification preferences and may be queued for offline delivery. See [Notifications](notifications.md) for delivery channels and acknowledgement behavior.
+
 **Patient can cancel**: `Pending`, `Scheduled`, `InProgress` --> `CancelledByPatient`
 
 **Medical transitions**:

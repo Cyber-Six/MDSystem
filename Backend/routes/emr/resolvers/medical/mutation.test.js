@@ -4,10 +4,10 @@ jest.mock('./helper.js', () => ({ assertActiveUpdateTicket: jest.fn() }));
 jest.mock('../../wrapper/mutation.js', () => ({ _StaffUpdateTicket: jest.fn() }));
 jest.mock('../../../../utils/graphql-helper.js', () => ({ throwGraphQLError: jest.fn(() => { const c = { message: jest.fn(), status: jest.fn(), throw: jest.fn() }; c.message.mockReturnValue(c); c.status.mockReturnValue(c); c.throw.mockImplementation(() => { throw new Error(`${c.status.mock.lastCall[0]}:${c.message.mock.lastCall[0]}`); }); return c; }) }));
 jest.mock('../../../../utils/logger.js', () => ({ warn: jest.fn(), info: jest.fn(), error: jest.fn() }));
-jest.mock('../../../../services/permit.js', () => ({ permissions: { emr_allow_approval: 'approval', emr_allow_edit: 'edit', emr_allow_edit_catalogs: 'catalogs' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermitted: jest.fn() }));
+jest.mock('../../../../services/authorization/permit.js', () => ({ permissions: { emr_allow_approval: 'approval', emr_allow_edit: 'edit', emr_allow_edit_catalogs: 'catalogs' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermitted: jest.fn() }));
 jest.mock('../record-validator.js', () => ({ validateUpdateTicket: jest.fn() }));
 
-const permit = require('../../../../services/permit.js');
+const permit = require('../../../../services/authorization/permit.js');
 const Query = require('./query.js');
 const Mutation = require('./mutation.js');
 const Wrapper = require('../../wrapper/mutation.js');

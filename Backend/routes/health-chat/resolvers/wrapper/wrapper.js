@@ -6,7 +6,7 @@ const {
   isMedicalAdmin,
   isMedicalPermittedPatientBased,
   permissions,
-} = require("../../../../services/permit.js");
+} = require("../../../../services/authorization/permit.js");
 const logger = require("../../../../utils/logger.js");
 const {
   calculateExpiryDate,

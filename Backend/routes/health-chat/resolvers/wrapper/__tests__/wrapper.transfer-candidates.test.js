@@ -14,7 +14,7 @@ jest.mock('../../../../../config/query.js', () => ({
   query: (...args) => mockDbQuery(...args),
 }));
 
-jest.mock('../../../../../services/permit.js', () => ({
+jest.mock('../../../../../services/authorization/permit.js', () => ({
   isMedicalAdmin: (...args) => mockIsMedicalAdmin(...args),
   isMedicalPermittedPatientBased: jest.fn(),
   permissions: {

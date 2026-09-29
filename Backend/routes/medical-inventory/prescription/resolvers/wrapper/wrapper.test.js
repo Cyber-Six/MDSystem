@@ -1,7 +1,7 @@
 jest.mock('../../../../../config/query.js', () => ({ query: jest.fn(), connect: jest.fn(), findEmailByUserId: jest.fn() }));
 jest.mock('../../../../../utils/logger.js', () => ({ warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../../../../config/sockets', () => ({ isConnectedAnywhere: jest.fn(), emitToUserWithAck: jest.fn(), emitToRole: jest.fn(), notifyUser: jest.fn() }));
-jest.mock('../../../../../services/emailservice.js', () => ({ enqueueNotificationEmail: jest.fn() }));
+jest.mock('../../../../../services/email/emailservice.js', () => ({ enqueueNotificationEmail: jest.fn() }));
 
 const db = require('../../../../../config/query.js'); const logger = require('../../../../../utils/logger.js'); const sockets = require('../../../../../config/sockets');
 const { Query, Mutation } = require('./wrapper.js');

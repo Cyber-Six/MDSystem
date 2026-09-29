@@ -3,12 +3,12 @@ jest.mock('express', () => ({ Router: () => Object.fromEntries(Object.keys(handl
 jest.mock('../../../utils/logger.js', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../../config/query.js', () => ({ query: jest.fn(), queryClient: jest.fn(), queryControlled: jest.fn(), getUserBranch: jest.fn(), connect: jest.fn() }));
 jest.mock('../../../config/middleware/jwtProtect.js', () => ({ jwtProtect: jest.fn(() => (_req, _res, next) => next()) }));
-jest.mock('../../../services/permit.js', () => ({ isMedicalPermitted: jest.fn(), isMedicalPermittedLocationBased: jest.fn(), permissions: { announcement_allow_crud: 'ANNOUNCE' }, getStaffBranch: jest.fn() }));
+jest.mock('../../../services/authorization/permit.js', () => ({ isMedicalPermitted: jest.fn(), isMedicalPermittedLocationBased: jest.fn(), permissions: { announcement_allow_crud: 'ANNOUNCE' }, getStaffBranch: jest.fn() }));
 jest.mock('../../../config/multer.js', () => ({ promoteFile: jest.fn(), deleteFile: jest.fn() }));
 jest.mock('../../../utils/validator.js', () => ({ ValidateBranchbyUserBranch: jest.fn(), ValidateLocationDesignation: jest.fn(location => ['Manila', 'QuezonCity', 'Both'].includes(location)) }));
 
 const db = require('../../../config/query.js');
-const permit = require('../../../services/permit.js');
+const permit = require('../../../services/authorization/permit.js');
 const files = require('../../../config/multer.js');
 require('./announcement.js');
 const route = (method, path) => handlers[method].find(([candidate]) => candidate === path).at(-1);

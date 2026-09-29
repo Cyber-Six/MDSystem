@@ -2,12 +2,12 @@ const mockQueryDelegates = {};
 const mockMutationDelegates = {};
 const proxy = delegates => new Proxy({}, { get(_target, name) { return delegates[name] ||= jest.fn(); } });
 jest.mock('../wrapper/wrapper.js', () => ({ Query: proxy(mockQueryDelegates), Mutation: proxy(mockMutationDelegates) }));
-jest.mock('../../../../../services/permit.js', () => ({ permissions: { inventory_allow_view: 'VIEW', inventory_allow_configure: 'CONFIGURE', inventory_allow_edit: 'EDIT' }, isMedicalPermitted: jest.fn(), isMedicalPermittedBranchBased: jest.fn(), getStaffBranch: jest.fn() }));
+jest.mock('../../../../../services/authorization/permit.js', () => ({ permissions: { inventory_allow_view: 'VIEW', inventory_allow_configure: 'CONFIGURE', inventory_allow_edit: 'EDIT' }, isMedicalPermitted: jest.fn(), isMedicalPermittedBranchBased: jest.fn(), getStaffBranch: jest.fn() }));
 jest.mock('../../../../../utils/logger.js', () => ({ warn: jest.fn(), error: jest.fn() }));
 jest.mock('../wrapper/helper.js', () => ({ batchIdToBranch: jest.fn() }));
 
 const Wrapper = require('../wrapper/wrapper.js');
-const permit = require('../../../../../services/permit.js');
+const permit = require('../../../../../services/authorization/permit.js');
 const helper = require('../wrapper/helper.js');
 const logger = require('../../../../../utils/logger.js');
 const { Query, Mutation } = require('./medical-resolver.js');

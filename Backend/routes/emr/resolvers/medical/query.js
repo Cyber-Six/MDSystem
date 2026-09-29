@@ -2,7 +2,7 @@ const Wrapper = require("../../wrapper/query.js");
 
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const logger = require("../../../../utils/logger.js");
-const permit = require("../../../../services/permit.js");
+const permit = require("../../../../services/authorization/permit.js");
 
 const path = require("path");
 const dotenv = require("dotenv");

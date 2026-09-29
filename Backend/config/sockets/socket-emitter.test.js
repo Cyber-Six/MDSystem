@@ -1,7 +1,7 @@
 jest.mock('../../utils/logger', () => require('../../test-support/fixtures.cjs').loggerMock());
 jest.mock('./socket-store', () => ({ isConnectedAnywhere: jest.fn() }));
 jest.mock('./notification-store', () => ({ pushPending: jest.fn(), getPushToken: jest.fn() }));
-jest.mock('../../services/emailservice', () => ({ enqueueNotificationEmail: jest.fn() }));
+jest.mock('../../services/email/emailservice', () => ({ enqueueNotificationEmail: jest.fn() }));
 jest.mock('./push-notification', () => ({ sendExpoPushNotification: jest.fn(), eventToPushContent: jest.fn() }));
 jest.mock('./notification-preferences', () => ({ resolveChannelsForEvent: jest.fn() }));
 jest.mock('../query', () => ({ findEmailByUserId: jest.fn() }));
@@ -10,7 +10,7 @@ const emitter = require('./socket-emitter');
 const { getIO } = require('./socket-server');
 const { isConnectedAnywhere } = require('./socket-store');
 const { pushPending, getPushToken } = require('./notification-store');
-const { enqueueNotificationEmail } = require('../../services/emailservice');
+const { enqueueNotificationEmail } = require('../../services/email/emailservice');
 const push = require('./push-notification');
 const { resolveChannelsForEvent } = require('./notification-preferences');
 const { findEmailByUserId } = require('../query');

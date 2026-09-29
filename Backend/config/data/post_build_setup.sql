@@ -1,4 +1,4 @@
-
+﻿
 -- Set triggers for updated_at columns to auto-update on modification
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
@@ -37,9 +37,6 @@ EXECUTE FUNCTION set_updated_at();
 -- Medicine request rejection reason column (added post-initial build)
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
--- Appointment purpose column (added post-initial build)
-ALTER TABLE "patientSlot" ADD COLUMN IF NOT EXISTS "purpose" text;
-
 -- Role management: insert new permission labels (idempotent)
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
@@ -64,11 +61,6 @@ CREATE INDEX IF NOT EXISTS idx_supply_batch_updated_at ON "SupplyBatch"("updated
 ALTER TABLE "ScheduleDateEntity"
 ADD CONSTRAINT schedule_unique_slot_date
 UNIQUE ("slotId", "scheduledDate");
-
--- TOTP 2FA columns (v0.8.1-dev)
-ALTER TABLE "UserCredentials"
-  ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(255) DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
 
 ALTER TABLE "DomainTypeCatalog"
 ADD CONSTRAINT uniq_domain_name UNIQUE (domain, name);
@@ -102,14 +94,11 @@ BEGIN
 END$$;
 
 -- Step 2: Add created_at column if missing (straightforward, no type conversion needed)
-ALTER TABLE "SlotCustomDate"
-  ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-
--- Step 3: Handle the "type" column — four cases covered:
---   a) column does not exist            → add it as the enum type directly
---   b) column exists as TEXT/VARCHAR    → convert it to the enum type
---   c) column exists as a wrong enum    → migrate via temp column (avoids cast error)
---   d) column already is SlotCustomType → nothing to do
+-- Step 3: Handle the "type" column â€” four cases covered:
+--   a) column does not exist            â†’ add it as the enum type directly
+--   b) column exists as TEXT/VARCHAR    â†’ convert it to the enum type
+--   c) column exists as a wrong enum    â†’ migrate via temp column (avoids cast error)
+--   d) column already is SlotCustomType â†’ nothing to do
 DO $$
 DECLARE
   col_type TEXT;
@@ -119,12 +108,12 @@ BEGIN
   WHERE table_name = 'SlotCustomDate' AND column_name = 'type';
 
   IF col_type IS NULL THEN
-    -- Case (a): column missing — add as enum
+    -- Case (a): column missing â€” add as enum
     ALTER TABLE "SlotCustomDate"
       ADD COLUMN "type" "SlotCustomType" NOT NULL DEFAULT 'Include'::"SlotCustomType";
 
   ELSIF col_type IN ('text', 'character varying') THEN
-    -- Case (b): column is text/varchar — cast existing values and change type
+    -- Case (b): column is text/varchar â€” cast existing values and change type
     ALTER TABLE "SlotCustomDate"
       ALTER COLUMN "type" TYPE "SlotCustomType"
         USING "type"::"SlotCustomType",
@@ -132,14 +121,14 @@ BEGIN
       ALTER COLUMN "type" SET DEFAULT 'Include'::"SlotCustomType";
 
   ELSIF col_type = 'USER-DEFINED' THEN
-    -- Case (c): column is an old/wrong enum type — migrate via temp column
+    -- Case (c): column is an old/wrong enum type â€” migrate via temp column
     -- (Direct enum-to-enum cast fails; dropping CASCADE removes the column too,
     --  so we copy data out, drop the column, then recreate with the correct type.)
     ALTER TABLE "SlotCustomDate" ADD COLUMN "type_temp" TEXT;
     UPDATE "SlotCustomDate" SET "type_temp" = "type"::TEXT;
     ALTER TABLE "SlotCustomDate" DROP COLUMN "type";
     BEGIN
-      DROP TYPE IF EXISTS slotcustomtype;
+      DROP TYPE slotcustomtype;
     EXCEPTION WHEN OTHERS THEN
       NULL; -- old enum already gone, continue
     END;
@@ -150,13 +139,14 @@ BEGIN
       WHERE "type_temp" IS NOT NULL;
     ALTER TABLE "SlotCustomDate" DROP COLUMN "type_temp";
 
-  -- Case (d): already correct enum — skip
+  -- Case (d): already correct enum â€” skip
   END IF;
 END$$;
 
 -- Normalized generated-document setup for Prescription
 INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
-SELECT 'Prescription', 'Prescription document template', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), 1
+SELECT 'Prescription', 'Prescription document template', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), mp.id
+FROM (SELECT id FROM "MedicalPersonnel" ORDER BY id LIMIT 1) AS mp
 WHERE NOT EXISTS (
   SELECT 1 FROM "documentTemplate" WHERE LOWER(template) = LOWER('Prescription')
 );
@@ -204,7 +194,8 @@ WHERE LOWER(dt.template) = LOWER('Prescription')
 
   -- Normalized generated-document setup for Medical Certificate
   INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
-  SELECT 'medical-certificate', 'Medical certificate document template', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), 1
+  SELECT 'medical-certificate', 'Medical certificate document template', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), mp.id
+  FROM (SELECT id FROM "MedicalPersonnel" ORDER BY id LIMIT 1) AS mp
   WHERE NOT EXISTS (
     SELECT 1
     FROM "documentTemplate"
@@ -374,158 +365,158 @@ END$$;
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
 -- Infectious Diseases
-('Hospitalization', 'COVID19', 'COVID-19', 'History of COVID-19 infection', true, 1),
-('Hospitalization', 'AMOEBIASIS', 'Amoebiasis', 'History of amoebic infection', true, 1),
-('Hospitalization', 'DENGUE', 'Dengue Fever', 'Hospitalization due to dengue infection', true, 1),
-('Hospitalization', 'TYPHOID', 'Typhoid Fever', 'Hospitalization due to typhoid infection', true, 1),
-('Hospitalization', 'PNEUMONIA', 'Pneumonia', 'Hospitalization due to pneumonia', true, 1),
-('Hospitalization', 'TB', 'Tuberculosis', 'Pulmonary infection', true, 1),
-('Hospitalization', 'HEPATITIS', 'Hepatitis', 'Hospitalization due to viral hepatitis', true, 1),
-('Hospitalization', 'MALARIA', 'Malaria', 'Parasitic infection', true, 1),
+('Hospitalization', 'COVID19', 'COVID-19', 'History of COVID-19 infection', true, NULL),
+('Hospitalization', 'AMOEBIASIS', 'Amoebiasis', 'History of amoebic infection', true, NULL),
+('Hospitalization', 'DENGUE', 'Dengue Fever', 'Hospitalization due to dengue infection', true, NULL),
+('Hospitalization', 'TYPHOID', 'Typhoid Fever', 'Hospitalization due to typhoid infection', true, NULL),
+('Hospitalization', 'PNEUMONIA', 'Pneumonia', 'Hospitalization due to pneumonia', true, NULL),
+('Hospitalization', 'TB', 'Tuberculosis', 'Pulmonary infection', true, NULL),
+('Hospitalization', 'HEPATITIS', 'Hepatitis', 'Hospitalization due to viral hepatitis', true, NULL),
+('Hospitalization', 'MALARIA', 'Malaria', 'Parasitic infection', true, NULL),
 -- Chronic / Systemic Conditions
-('Hospitalization', 'ASTHMA', 'Bronchial Asthma', 'Chronic respiratory condition', true, 1),
-('Hospitalization', 'DIABETES', 'Diabetes', 'Chronic metabolic disorder', true, 1),
-('Hospitalization', 'HYPERTENSION', 'Hypertension', 'High blood pressure', true, 1),
-('Hospitalization', 'THYROID', 'Thyroid Problems', 'Endocrine disorder', true, 1),
-('Hospitalization', 'HEART', 'Heart Disease', 'Cardiac condition', true, 1),
-('Hospitalization', 'EPILEPSY', 'Epilepsy, Convulsion', 'Neurological disorder', true, 1),
-('Hospitalization', 'G6PD', 'G6PD Deficiency', 'Genetic enzyme deficiency', true, 1),
+('Hospitalization', 'ASTHMA', 'Bronchial Asthma', 'Chronic respiratory condition', true, NULL),
+('Hospitalization', 'DIABETES', 'Diabetes', 'Chronic metabolic disorder', true, NULL),
+('Hospitalization', 'HYPERTENSION', 'Hypertension', 'High blood pressure', true, NULL),
+('Hospitalization', 'THYROID', 'Thyroid Problems', 'Endocrine disorder', true, NULL),
+('Hospitalization', 'HEART', 'Heart Disease', 'Cardiac condition', true, NULL),
+('Hospitalization', 'EPILEPSY', 'Epilepsy, Convulsion', 'Neurological disorder', true, NULL),
+('Hospitalization', 'G6PD', 'G6PD Deficiency', 'Genetic enzyme deficiency', true, NULL),
 -- Surgical / Emergency
-('Hospitalization', 'APPENDICITIS', 'Appendicitis', 'Hospitalization for appendectomy', true, 1),
-('Hospitalization', 'SURGERY', 'Minor Surgery', 'Hospitalization for minor surgical procedures', true, 1),
-('Hospitalization', 'FRACTURE', 'Bone Fracture', 'Hospitalization due to fracture management', true, 1),
+('Hospitalization', 'APPENDICITIS', 'Appendicitis', 'Hospitalization for appendectomy', true, NULL),
+('Hospitalization', 'SURGERY', 'Minor Surgery', 'Hospitalization for minor surgical procedures', true, NULL),
+('Hospitalization', 'FRACTURE', 'Bone Fracture', 'Hospitalization due to fracture management', true, NULL),
 -- Accidents / Trauma
-('Hospitalization', 'ACCIDENT', 'Accident/Injury', 'Hospitalization due to vehicular or physical accident', true, 1),
-('Hospitalization', 'HANDICAP', 'Congenital Deformities', 'Congenital physical deformities', true, 1),
+('Hospitalization', 'ACCIDENT', 'Accident/Injury', 'Hospitalization due to vehicular or physical accident', true, NULL),
+('Hospitalization', 'HANDICAP', 'Congenital Deformities', 'Congenital physical deformities', true, NULL),
 -- Mental Health / Other
-('Hospitalization', 'PSYCH', 'Psychiatric Illness', 'Mental health condition', true, 1),
-('Hospitalization', 'SYNCOPE', 'Syncope (Fainting)', 'History of fainting episodes', true, 1),
-('Hospitalization', 'UTI', 'Urinary Tract Infection', 'Hospitalization due to severe UTI', true, 1);
+('Hospitalization', 'PSYCH', 'Psychiatric Illness', 'Mental health condition', true, NULL),
+('Hospitalization', 'SYNCOPE', 'Syncope (Fainting)', 'History of fainting episodes', true, NULL),
+('Hospitalization', 'UTI', 'Urinary Tract Infection', 'Hospitalization due to severe UTI', true, NULL);
 
 
 INSERT INTO "AllergenCatalog" (type, allergen, "isValid", created_by)
 VALUES
 -- Food Allergies
-('Food', 'Seafood', true, 1),
-('Food', 'Peanuts', true, 1),
-('Food', 'Tree Nuts', true, 1),
-('Food', 'Eggs', true, 1),
-('Food', 'Milk/Dairy', true, 1),
+('Food', 'Seafood', true, NULL),
+('Food', 'Peanuts', true, NULL),
+('Food', 'Tree Nuts', true, NULL),
+('Food', 'Eggs', true, NULL),
+('Food', 'Milk/Dairy', true, NULL),
 -- Drug Allergies
-('Drug', 'Antibiotics (Penicillin)', true, 1),
-('Drug', 'Sulfa Drugs', true, 1),
-('Drug', 'NSAIDs (Aspirin, Ibuprofen)', true, 1),
+('Drug', 'Antibiotics (Penicillin)', true, NULL),
+('Drug', 'Sulfa Drugs', true, NULL),
+('Drug', 'NSAIDs (Aspirin, Ibuprofen)', true, NULL),
 -- Environmental Allergies
-('Environmental', 'Dust Mites', true, 1),
-('Environmental', 'Mold', true, 1),
-('Environmental', 'Pollen', true, 1),
-('Environmental', 'Animal Fur/Dander', true, 1),
+('Environmental', 'Dust Mites', true, NULL),
+('Environmental', 'Mold', true, NULL),
+('Environmental', 'Pollen', true, NULL),
+('Environmental', 'Animal Fur/Dander', true, NULL),
 -- Insect Allergies
-('Insect', 'Mosquito Bites', true, 1),
-('Insect', 'Bee Stings', true, 1),
-('Insect', 'Ant Bites', true, 1),
+('Insect', 'Mosquito Bites', true, NULL),
+('Insect', 'Bee Stings', true, NULL),
+('Insect', 'Ant Bites', true, NULL),
 -- Chemical Allergies
-('Chemical', 'Latex', true, 1),
-('Chemical', 'Nickel/Metal', true, 1),
-('Chemical', 'Cleaning Agents', true, 1),
-('Chemical', 'Fabric Conditioner', true, 1),
+('Chemical', 'Latex', true, NULL),
+('Chemical', 'Nickel/Metal', true, NULL),
+('Chemical', 'Cleaning Agents', true, NULL),
+('Chemical', 'Fabric Conditioner', true, NULL),
 -- Other / Irritant-type
-('Other', 'Smoke', true, 1),
-('Other', 'Perfume/Cologne', true, 1),
-('Other', 'Soaps/Lotions', true, 1);
+('Other', 'Smoke', true, NULL),
+('Other', 'Perfume/Cologne', true, NULL),
+('Other', 'Soaps/Lotions', true, NULL);
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
 -- Medical Conditions
-('MedicalCondition', 'HEART', 'Heart Condition', 'History of heart-related conditions', true, 1),
-('MedicalCondition', 'HBP', 'High Blood Pressure', 'History of hypertension', true, 1),
-('MedicalCondition', 'EPILEPSY', 'Epilepsy/Seizure', 'History of epilepsy or seizure disorder', true, 1),
-('MedicalCondition', 'PSYCH', 'Psychiatric Illness', 'History of psychiatric condition', true, 1),
-('MedicalCondition', 'ASTHMA', 'Bronchial Asthma', 'Chronic respiratory condition', true, 1),
-('MedicalCondition', 'DIABETES_I', 'Diabetes Type I', 'Insulin-dependent diabetes mellitus', true, 1),
-('MedicalCondition', 'DIABETES_II', 'Diabetes Type II', 'Non-insulin-dependent diabetes mellitus', true, 1),
-('MedicalCondition', 'HEPA', 'Hepatitis A', 'History of Hepatitis A infection', true, 1),
-('MedicalCondition', 'HEPB', 'Hepatitis B', 'History of Hepatitis B infection', true, 1),
-('MedicalCondition', 'HEPC', 'Hepatitis C', 'History of Hepatitis C infection', true, 1),
-('MedicalCondition', 'HEPD', 'Hepatitis D', 'History of Hepatitis D infection', true, 1),
-('MedicalCondition', 'HEPE', 'Hepatitis E', 'History of Hepatitis E infection', true, 1),
-('MedicalCondition', 'AMOEBIASIS', 'Amoebiasis', 'History of amoebic infection', true, 1),
-('MedicalCondition', 'TB', 'Tuberculosis', 'History of pulmonary tuberculosis', true, 1),
-('MedicalCondition', 'TYPHOID', 'Typhoid Fever', 'History of typhoid infection', true, 1);
+('MedicalCondition', 'HEART', 'Heart Condition', 'History of heart-related conditions', true, NULL),
+('MedicalCondition', 'HBP', 'High Blood Pressure', 'History of hypertension', true, NULL),
+('MedicalCondition', 'EPILEPSY', 'Epilepsy/Seizure', 'History of epilepsy or seizure disorder', true, NULL),
+('MedicalCondition', 'PSYCH', 'Psychiatric Illness', 'History of psychiatric condition', true, NULL),
+('MedicalCondition', 'ASTHMA', 'Bronchial Asthma', 'Chronic respiratory condition', true, NULL),
+('MedicalCondition', 'DIABETES_I', 'Diabetes Type I', 'Insulin-dependent diabetes mellitus', true, NULL),
+('MedicalCondition', 'DIABETES_II', 'Diabetes Type II', 'Non-insulin-dependent diabetes mellitus', true, NULL),
+('MedicalCondition', 'HEPA', 'Hepatitis A', 'History of Hepatitis A infection', true, NULL),
+('MedicalCondition', 'HEPB', 'Hepatitis B', 'History of Hepatitis B infection', true, NULL),
+('MedicalCondition', 'HEPC', 'Hepatitis C', 'History of Hepatitis C infection', true, NULL),
+('MedicalCondition', 'HEPD', 'Hepatitis D', 'History of Hepatitis D infection', true, NULL),
+('MedicalCondition', 'HEPE', 'Hepatitis E', 'History of Hepatitis E infection', true, NULL),
+('MedicalCondition', 'AMOEBIASIS', 'Amoebiasis', 'History of amoebic infection', true, NULL),
+('MedicalCondition', 'TB', 'Tuberculosis', 'History of pulmonary tuberculosis', true, NULL),
+('MedicalCondition', 'TYPHOID', 'Typhoid Fever', 'History of typhoid infection', true, NULL);
 
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
-('VisualAcuity', 'CONTACTS', 'With Contact Lenses', 'Visual acuity measured while wearing contact lenses', true, 1),
-('VisualAcuity', 'GLASSES', 'With Eye Glasses', 'Visual acuity measured while wearing eyeglasses', true, 1),
-('VisualAcuity', 'UNAIDED', 'Without Correction', 'Visual acuity measured without corrective lenses', true, 1),
-('VisualAcuity', 'PINHOLE', 'With Pinhole', 'Visual acuity measured using pinhole occluder', true, 1),
-('VisualAcuity', 'OTHER', 'Other', 'Other visual acuity measurement method (please specify)', true, 1);
+('VisualAcuity', 'CONTACTS', 'With Contact Lenses', 'Visual acuity measured while wearing contact lenses', true, NULL),
+('VisualAcuity', 'GLASSES', 'With Eye Glasses', 'Visual acuity measured while wearing eyeglasses', true, NULL),
+('VisualAcuity', 'UNAIDED', 'Without Correction', 'Visual acuity measured without corrective lenses', true, NULL),
+('VisualAcuity', 'PINHOLE', 'With Pinhole', 'Visual acuity measured using pinhole occluder', true, NULL),
+('VisualAcuity', 'OTHER', 'Other', 'Other visual acuity measurement method (please specify)', true, NULL);
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
-('Immunization', 'TETANUS', 'Anti-Tetanus', 'Recent tetanus vaccination', true, 1),
-('Immunization', 'RABIES', 'Anti-Rabies Vaccine', 'Recent rabies vaccination', true, 1),
-('Immunization', 'VARICELLA', 'Chicken Pox', 'Varicella vaccination', true, 1),
+('Immunization', 'TETANUS', 'Anti-Tetanus', 'Recent tetanus vaccination', true, NULL),
+('Immunization', 'RABIES', 'Anti-Rabies Vaccine', 'Recent rabies vaccination', true, NULL),
+('Immunization', 'VARICELLA', 'Chicken Pox', 'Varicella vaccination', true, NULL),
 -- COVID Vaccines (explicit doses and boosters)
-('Immunization', 'COVID_DOSE1', 'COVID Vaccine (1st Dose)', 'First dose of COVID-19 vaccine', true, 1),
-('Immunization', 'COVID_DOSE2', 'COVID Vaccine (2nd Dose)', 'Second dose of COVID-19 vaccine', true, 1),
-('Immunization', 'COVID_BOOSTER1', 'COVID Vaccine Booster (1st)', 'First booster dose of COVID-19 vaccine', true, 1),
-('Immunization', 'COVID_BOOSTER2', 'COVID Vaccine Booster (2nd)', 'Second booster dose of COVID-19 vaccine', true, 1),
-('Immunization', 'COVID_BOOSTER3', 'COVID Vaccine Booster (3rd)', 'Third booster dose of COVID-19 vaccine', true, 1),
+('Immunization', 'COVID_DOSE1', 'COVID Vaccine (1st Dose)', 'First dose of COVID-19 vaccine', true, NULL),
+('Immunization', 'COVID_DOSE2', 'COVID Vaccine (2nd Dose)', 'Second dose of COVID-19 vaccine', true, NULL),
+('Immunization', 'COVID_BOOSTER1', 'COVID Vaccine Booster (1st)', 'First booster dose of COVID-19 vaccine', true, NULL),
+('Immunization', 'COVID_BOOSTER2', 'COVID Vaccine Booster (2nd)', 'Second booster dose of COVID-19 vaccine', true, NULL),
+('Immunization', 'COVID_BOOSTER3', 'COVID Vaccine Booster (3rd)', 'Third booster dose of COVID-19 vaccine', true, NULL),
 -- Other Common Vaccines in PH
-('Immunization', 'FLU', 'Flu Vaccine', 'Influenza vaccination', true, 1),
-('Immunization', 'HEPA', 'Hepatitis A', 'Hepatitis A vaccination', true, 1),
-('Immunization', 'HEPB', 'Hepatitis B', 'Hepatitis B vaccination', true, 1),
-('Immunization', 'HPV', 'HPV Vaccine', 'Human papillomavirus vaccination', true, 1),
-('Immunization', 'MMR', 'MMR (Measles, Mumps, Rubella)', 'MMR vaccination', true, 1),
-('Immunization', 'PNEUMO', 'Pneumonia Vaccine', 'Pneumococcal vaccination', true, 1),
-('Immunization', 'POLIO', 'Polio Vaccine', 'Poliomyelitis vaccination', true, 1),
-('Immunization', 'DPT', 'DPT (Diphtheria, Pertussis, Tetanus)', 'DPT vaccination', true, 1),
-('Immunization', 'BCG', 'BCG (Tuberculosis)', 'Bacillus Calmette–Guérin vaccination', true, 1);
+('Immunization', 'FLU', 'Flu Vaccine', 'Influenza vaccination', true, NULL),
+('Immunization', 'HEPA', 'Hepatitis A', 'Hepatitis A vaccination', true, NULL),
+('Immunization', 'HEPB', 'Hepatitis B', 'Hepatitis B vaccination', true, NULL),
+('Immunization', 'HPV', 'HPV Vaccine', 'Human papillomavirus vaccination', true, NULL),
+('Immunization', 'MMR', 'MMR (Measles, Mumps, Rubella)', 'MMR vaccination', true, NULL),
+('Immunization', 'PNEUMO', 'Pneumonia Vaccine', 'Pneumococcal vaccination', true, NULL),
+('Immunization', 'POLIO', 'Polio Vaccine', 'Poliomyelitis vaccination', true, NULL),
+('Immunization', 'DPT', 'DPT (Diphtheria, Pertussis, Tetanus)', 'DPT vaccination', true, NULL),
+('Immunization', 'BCG', 'BCG (Tuberculosis)', 'Bacillus Calmetteâ€“GuÃ©rin vaccination', true, NULL);
 
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
-('Operation', 'APPENDECTOMY', 'Appendectomy', 'Surgical removal of the appendix', true, 1),
-('Operation', 'TONSILLECTOMY', 'Tonsillectomy', 'Surgical removal of tonsils', true, 1),
-('Operation', 'CHOLECYSTECTOMY', 'Cholecystectomy', 'Surgical removal of the gallbladder', true, 1),
-('Operation', 'CESAREAN', 'Cesarean Section', 'Surgical delivery of a baby', true, 1),
-('Operation', 'HERNIA', 'Hernia Repair', 'Surgical correction of hernia', true, 1),
-('Operation', 'FRACTURE_FIX', 'Fracture Fixation', 'Surgical management of bone fracture', true, 1),
-('Operation', 'ORIF', 'Open Reduction Internal Fixation', 'Bone fracture repair with plates/screws', true, 1),
-('Operation', 'BIOPSY', 'Biopsy', 'Surgical removal of tissue sample for diagnosis', true, 1),
-('Operation', 'CYST_REMOVAL', 'Cyst Removal', 'Excision of cysts', true, 1),
-('Operation', 'LAPAROTOMY', 'Exploratory Laparotomy', 'Abdominal exploratory surgery', true, 1),
-('Operation', 'DENTAL_SURGERY', 'Dental Surgery', 'Surgical extraction or correction of teeth', true, 1),
-('Operation', 'EYE_SURGERY', 'Eye Surgery', 'Surgical correction of eye conditions', true, 1),
-('Operation', 'EAR_SURGERY', 'Ear Surgery', 'Surgical correction of ear conditions', true, 1),
-('Operation', 'SKIN_GRAFT', 'Skin Graft', 'Surgical procedure for skin repair', true, 1),
-('Operation', 'MINOR_SURGERY', 'Minor Surgery', 'Small surgical procedures (e.g., excision of lumps)', true, 1);
+('Operation', 'APPENDECTOMY', 'Appendectomy', 'Surgical removal of the appendix', true, NULL),
+('Operation', 'TONSILLECTOMY', 'Tonsillectomy', 'Surgical removal of tonsils', true, NULL),
+('Operation', 'CHOLECYSTECTOMY', 'Cholecystectomy', 'Surgical removal of the gallbladder', true, NULL),
+('Operation', 'CESAREAN', 'Cesarean Section', 'Surgical delivery of a baby', true, NULL),
+('Operation', 'HERNIA', 'Hernia Repair', 'Surgical correction of hernia', true, NULL),
+('Operation', 'FRACTURE_FIX', 'Fracture Fixation', 'Surgical management of bone fracture', true, NULL),
+('Operation', 'ORIF', 'Open Reduction Internal Fixation', 'Bone fracture repair with plates/screws', true, NULL),
+('Operation', 'BIOPSY', 'Biopsy', 'Surgical removal of tissue sample for diagnosis', true, NULL),
+('Operation', 'CYST_REMOVAL', 'Cyst Removal', 'Excision of cysts', true, NULL),
+('Operation', 'LAPAROTOMY', 'Exploratory Laparotomy', 'Abdominal exploratory surgery', true, NULL),
+('Operation', 'DENTAL_SURGERY', 'Dental Surgery', 'Surgical extraction or correction of teeth', true, NULL),
+('Operation', 'EYE_SURGERY', 'Eye Surgery', 'Surgical correction of eye conditions', true, NULL),
+('Operation', 'EAR_SURGERY', 'Ear Surgery', 'Surgical correction of ear conditions', true, NULL),
+('Operation', 'SKIN_GRAFT', 'Skin Graft', 'Surgical procedure for skin repair', true, NULL),
+('Operation', 'MINOR_SURGERY', 'Minor Surgery', 'Small surgical procedures (e.g., excision of lumps)', true, NULL);
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
 -- Antibiotics
-('Medication', 'AMOXICILLIN', 'Amoxicillin', 'Common antibiotic for bacterial infections', true, 1),
-('Medication', 'AZITHROMYCIN', 'Azithromycin', 'Antibiotic often used for respiratory infections', true, 1),
-('Medication', 'CIPROFLOXACIN', 'Ciprofloxacin', 'Antibiotic for urinary tract and gastrointestinal infections', true, 1),
+('Medication', 'AMOXICILLIN', 'Amoxicillin', 'Common antibiotic for bacterial infections', true, NULL),
+('Medication', 'AZITHROMYCIN', 'Azithromycin', 'Antibiotic often used for respiratory infections', true, NULL),
+('Medication', 'CIPROFLOXACIN', 'Ciprofloxacin', 'Antibiotic for urinary tract and gastrointestinal infections', true, NULL),
 -- Pain / Fever
-('Medication', 'PARACETAMOL', 'Paracetamol', 'Analgesic and antipyretic for pain and fever', true, 1),
-('Medication', 'IBUPROFEN', 'Ibuprofen', 'NSAID for pain, inflammation, and fever', true, 1),
-('Medication', 'NAPROXEN', 'Naproxen', 'NSAID for musculoskeletal pain', true, 1),
+('Medication', 'PARACETAMOL', 'Paracetamol', 'Analgesic and antipyretic for pain and fever', true, NULL),
+('Medication', 'IBUPROFEN', 'Ibuprofen', 'NSAID for pain, inflammation, and fever', true, NULL),
+('Medication', 'NAPROXEN', 'Naproxen', 'NSAID for musculoskeletal pain', true, NULL),
 -- Respiratory / Asthma
-('Medication', 'SALBUTAMOL', 'Salbutamol', 'Bronchodilator for asthma attacks', true, 1),
-('Medication', 'MONTELUKAST', 'Montelukast', 'Anti-asthma maintenance medication', true, 1),
-('Medication', 'BUDESONIDE', 'Budesonide Inhaler', 'Steroid inhaler for asthma control', true, 1),
+('Medication', 'SALBUTAMOL', 'Salbutamol', 'Bronchodilator for asthma attacks', true, NULL),
+('Medication', 'MONTELUKAST', 'Montelukast', 'Anti-asthma maintenance medication', true, NULL),
+('Medication', 'BUDESONIDE', 'Budesonide Inhaler', 'Steroid inhaler for asthma control', true, NULL),
 -- Gastrointestinal
-('Medication', 'OMEPRAZOLE', 'Omeprazole', 'Proton pump inhibitor for acid reflux', true, 1),
-('Medication', 'LOPERAMIDE', 'Loperamide', 'Antidiarrheal medication', true, 1),
+('Medication', 'OMEPRAZOLE', 'Omeprazole', 'Proton pump inhibitor for acid reflux', true, NULL),
+('Medication', 'LOPERAMIDE', 'Loperamide', 'Antidiarrheal medication', true, NULL),
 -- Chronic Conditions
-('Medication', 'METFORMIN', 'Metformin', 'Oral hypoglycemic for diabetes', true, 1),
-('Medication', 'LOSARTAN', 'Losartan', 'Antihypertensive medication', true, 1),
+('Medication', 'METFORMIN', 'Metformin', 'Oral hypoglycemic for diabetes', true, NULL),
+('Medication', 'LOSARTAN', 'Losartan', 'Antihypertensive medication', true, NULL),
 -- Mental Health
-('Medication', 'SERTRALINE', 'Sertraline', 'Antidepressant (SSRI)', true, 1),
-('Medication', 'DIAZEPAM', 'Diazepam', 'Anxiolytic and muscle relaxant', true, 1);
+('Medication', 'SERTRALINE', 'Sertraline', 'Antidepressant (SSRI)', true, NULL),
+('Medication', 'DIAZEPAM', 'Diazepam', 'Anxiolytic and muscle relaxant', true, NULL);
 
 INSERT INTO "oralApplianceCatalog" (name, description, archable, "isActive")
 VALUES
@@ -547,21 +538,21 @@ VALUES
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
-('DentalProcedure', 'CLEANING', 'Dental Cleaning (Prophylaxis)', 'Routine cleaning and scaling', true, 1),
-('DentalProcedure', 'FILLING', 'Dental Filling', 'Restoration of decayed tooth', true, 1),
-('DentalProcedure', 'EXTRACTION', 'Tooth Extraction', 'Removal of tooth due to decay or damage', true, 1),
-('DentalProcedure', 'ROOTCANAL', 'Root Canal Treatment', 'Endodontic procedure to save infected tooth', true, 1),
-('DentalProcedure', 'BRACES', 'Dental Braces', 'Orthodontic appliance for teeth alignment', true, 1),
-('DentalProcedure', 'RETAINER', 'Retainers', 'Appliance to maintain teeth position after braces', true, 1),
-('DentalProcedure', 'BRIDGE', 'Dental Bridge', 'Fixed restoration replacing missing teeth', true, 1),
-('DentalProcedure', 'CROWN', 'Jacket Crown', 'Full coverage crown for damaged tooth', true, 1),
-('DentalProcedure', 'DENTURE', 'Dentures', 'Removable replacement for missing teeth', true, 1),
-('DentalProcedure', 'IMPLANT', 'Dental Implant', 'Surgical placement of artificial tooth root', true, 1),
-('DentalProcedure', 'SCALING', 'Deep Scaling', 'Treatment for gum disease', true, 1),
-('DentalProcedure', 'WHITENING', 'Teeth Whitening', 'Cosmetic procedure to lighten teeth color', true, 1),
-('DentalProcedure', 'BITEPLANE', 'Bite Plane', 'Appliance to correct bite or relieve TMJ stress', true, 1),
-('DentalProcedure', 'EXPANDER', 'Palatal Expander', 'Orthodontic device to widen upper jaw', true, 1),
-('DentalProcedure', 'NIGHTGUARD', 'Night Guard', 'Protective appliance worn during sleep to prevent grinding', true, 1);
+('DentalProcedure', 'CLEANING', 'Dental Cleaning (Prophylaxis)', 'Routine cleaning and scaling', true, NULL),
+('DentalProcedure', 'FILLING', 'Dental Filling', 'Restoration of decayed tooth', true, NULL),
+('DentalProcedure', 'EXTRACTION', 'Tooth Extraction', 'Removal of tooth due to decay or damage', true, NULL),
+('DentalProcedure', 'ROOTCANAL', 'Root Canal Treatment', 'Endodontic procedure to save infected tooth', true, NULL),
+('DentalProcedure', 'BRACES', 'Dental Braces', 'Orthodontic appliance for teeth alignment', true, NULL),
+('DentalProcedure', 'RETAINER', 'Retainers', 'Appliance to maintain teeth position after braces', true, NULL),
+('DentalProcedure', 'BRIDGE', 'Dental Bridge', 'Fixed restoration replacing missing teeth', true, NULL),
+('DentalProcedure', 'CROWN', 'Jacket Crown', 'Full coverage crown for damaged tooth', true, NULL),
+('DentalProcedure', 'DENTURE', 'Dentures', 'Removable replacement for missing teeth', true, NULL),
+('DentalProcedure', 'IMPLANT', 'Dental Implant', 'Surgical placement of artificial tooth root', true, NULL),
+('DentalProcedure', 'SCALING', 'Deep Scaling', 'Treatment for gum disease', true, NULL),
+('DentalProcedure', 'WHITENING', 'Teeth Whitening', 'Cosmetic procedure to lighten teeth color', true, NULL),
+('DentalProcedure', 'BITEPLANE', 'Bite Plane', 'Appliance to correct bite or relieve TMJ stress', true, NULL),
+('DentalProcedure', 'EXPANDER', 'Palatal Expander', 'Orthodontic device to widen upper jaw', true, NULL),
+('DentalProcedure', 'NIGHTGUARD', 'Night Guard', 'Protective appliance worn during sleep to prevent grinding', true, NULL);
 
 
 INSERT INTO "slotScheduler" (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", notes, "isActive", "containsCustomDates", "whitelistOnly")
@@ -627,17 +618,9 @@ VALUES
 ('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates')
 ON CONFLICT (label) DO NOTHING;
 
--- User preferences table (stores portal settings per user)
-CREATE TABLE IF NOT EXISTS "UsersPreferences" (
-  id           INTEGER PRIMARY KEY REFERENCES "UserCredentials"(id) ON DELETE CASCADE,
-  appearance   JSONB NOT NULL DEFAULT '{}'::jsonb,
-  notification JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
-);
 CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id);
 
--- Missing rolesTable entries (idempotent — safe to re-run)
+-- Missing rolesTable entries (idempotent â€” safe to re-run)
 -- Uses NOT EXISTS instead of ON CONFLICT because some environments do not
 -- enforce a unique constraint on rolesTable.label.
 INSERT INTO "rolesTable" (label, data)
@@ -658,7 +641,8 @@ WHERE NOT EXISTS (
 
 -- Student programs (added post-initial build)
 INSERT INTO student_programs (label)
-VALUES
+SELECT seed.label
+FROM (VALUES
   ('BS Architecture'),
   ('BS Chemical Engineering'),
   ('BS Civil Engineering'),
@@ -685,7 +669,13 @@ VALUES
   ('Bachelor of Secondary Education Major in Mathematics'),
   ('Bachelor of Secondary Education Major in Sciences'),
   ('Bachelor of Special Needs Education'),
-  ('Teaching Certificate Program');
+  ('Teaching Certificate Program')
+) AS seed(label)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM student_programs existing
+  WHERE LOWER(existing.label) = LOWER(seed.label)
+);
 
 
 CREATE INDEX ON "UsersPersonal"(identifier);

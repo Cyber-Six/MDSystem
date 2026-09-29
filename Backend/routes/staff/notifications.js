@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
 const logger = require('../../utils/logger');
-const { notifyStaffs } = require('../../services/notifyStaffs');
-const { notifyPatients } = require('../../services/notifyPatients');
-const permit = require('../../services/permit');
+const { notifyStaffs } = require('../../services/notifications/notifyStaffs');
+const { notifyPatients } = require('../../services/notifications/notifyPatients');
+const permit = require('../../services/authorization/permit');
 const { verifyUserIdentities, getUserIdentitiesDetailed, getPatientBranches, resolveUnionBranch } = require('../../config/query');
 const {
   acknowledgeNotification,

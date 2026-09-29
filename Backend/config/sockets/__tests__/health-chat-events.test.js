@@ -12,7 +12,7 @@ jest.mock('../../../routes/health-chat/resolvers/wrapper/helper.js', () => ({
   verifyMedicalAssignedToChat: (...args) => mockVerifyMedicalAssignedToChat(...args),
 }));
 
-jest.mock('../../../services/permit.js', () => ({
+jest.mock('../../../services/authorization/permit.js', () => ({
   isMedicalAdmin: (...args) => mockIsMedicalAdmin(...args),
 }));
 

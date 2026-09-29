@@ -4,15 +4,15 @@ jest.mock('../../../utils/validator.js', () => ({ isValidEmail: jest.fn(value =>
 jest.mock('../../../config/middleware/ratelimiter.js', () => ({ portalBasedIpRateLimiter: jest.fn(() => 'limiter') }));
 jest.mock('../../../config/redis.js', () => ({ verifyOTP: jest.fn(), getOTPFailureCount: jest.fn(), getOTPLockoutTTL: jest.fn(), createVerificationSession: jest.fn(), rateLimitEmailCooldown: jest.fn(), rateLimitEmailAttempts: jest.fn(), deleteEmailCooldown: jest.fn(), deleteEmailAttempts: jest.fn(), update2FAInSession: jest.fn() }));
 jest.mock('../../../config/data/matrix.js', () => ({ rateLimitMatrix: { PatientAuthentication: { emailCooldown_2fa: 1, emailCooldown_emailv: 2, emailAttemptMax_2fa: 3, emailAttemptMax_emailv: 4, penaltyCooldown_resetpw: 5 }, staffAuthentication: { emailCooldown_2fa: 6, emailCooldown_emailv: 7, emailAttemptMax_2fa: 8, emailAttemptMax_emailv: 9, penaltyCooldown_resetpw: 10 } } }));
-jest.mock('../../../services/recaptcha.js', () => ({ verifyRecaptcha: jest.fn() }));
-jest.mock('../../../services/emailservice.js', () => ({ enqueueEmailVerification: jest.fn(), enqueueEmail2FA: jest.fn() }));
+jest.mock('../../../services/auth/recaptcha.js', () => ({ verifyRecaptcha: jest.fn() }));
+jest.mock('../../../services/email/emailservice.js', () => ({ enqueueEmailVerification: jest.fn(), enqueueEmail2FA: jest.fn() }));
 jest.mock('../../../utils/portal.js', () => ({ detectPortalFromSubdomain: jest.fn(() => 'patient') }));
 const initialRecaptchaTestMode = process.env.RECAPTCHA_TEST_MODE;
 process.env.RECAPTCHA_TEST_MODE = 'true';
 require('./emailauth');
 if (initialRecaptchaTestMode === undefined) delete process.env.RECAPTCHA_TEST_MODE;
 else process.env.RECAPTCHA_TEST_MODE = initialRecaptchaTestMode;
-const redis = require('../../../config/redis.js'); const emails = require('../../../services/emailservice.js'); const captcha = require('../../../services/recaptcha.js'); const portal = require('../../../utils/portal.js');
+const redis = require('../../../config/redis.js'); const emails = require('../../../services/email/emailservice.js'); const captcha = require('../../../services/auth/recaptcha.js'); const portal = require('../../../utils/portal.js');
 const [send, verify] = mockRouter.post.mock.calls.map(call => call[2]);
 const response = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn() });
 beforeEach(() => { jest.clearAllMocks(); portal.detectPortalFromSubdomain.mockReturnValue('patient'); redis.rateLimitEmailCooldown.mockResolvedValue(false); redis.rateLimitEmailAttempts.mockResolvedValue(false); redis.verifyOTP.mockResolvedValue(true); });
@@ -41,7 +41,7 @@ test('uses staff rate limits and sends staff 2FA through the staff portal', asyn
 
 test('enforces CAPTCHA in production mode and blocks cooldown or excessive attempts', async () => {
   const prev = process.env.RECAPTCHA_TEST_MODE; process.env.RECAPTCHA_TEST_MODE = 'false'; jest.resetModules();
-  const freshRedis = require('../../../config/redis.js'); const freshCaptcha = require('../../../services/recaptcha.js');
+  const freshRedis = require('../../../config/redis.js'); const freshCaptcha = require('../../../services/auth/recaptcha.js');
   freshCaptcha.verifyRecaptcha.mockResolvedValue(false);
   require('./emailauth'); const sendHandler = mockRouter.post.mock.calls.at(-2)[2];
   let res = response(); await sendHandler({ body: { email: 'user@tip.edu.ph' }, params: { purpose: 'verification' } }, res);

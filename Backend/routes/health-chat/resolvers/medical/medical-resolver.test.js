@@ -3,10 +3,10 @@ const mockMutationDelegates = {};
 const proxy = delegates => new Proxy({}, { get(_target, name) { return delegates[name] ||= jest.fn(); } });
 jest.mock('../wrapper/wrapper.js', () => ({ Query: proxy(mockQueryDelegates), Mutation: proxy(mockMutationDelegates) }));
 jest.mock('../../../../config/query.js', () => ({ query: jest.fn() }));
-jest.mock('../../../../services/permit.js', () => ({ permissions: { health_chat_allow_access: 'CHAT' }, isMedicalPermitted: jest.fn(), isMedicalPermittedPatientBased: jest.fn(), isMedicalAdmin: jest.fn(), getStaffBranch: jest.fn() }));
+jest.mock('../../../../services/authorization/permit.js', () => ({ permissions: { health_chat_allow_access: 'CHAT' }, isMedicalPermitted: jest.fn(), isMedicalPermittedPatientBased: jest.fn(), isMedicalAdmin: jest.fn(), getStaffBranch: jest.fn() }));
 jest.mock('../wrapper/helper.js', () => ({ getPatientIdFromChatId: jest.fn() }));
 
-const Wrapper = require('../wrapper/wrapper.js'); const db = require('../../../../config/query.js'); const permit = require('../../../../services/permit.js');
+const Wrapper = require('../wrapper/wrapper.js'); const db = require('../../../../config/query.js'); const permit = require('../../../../services/authorization/permit.js');
 const helper = require('../wrapper/helper.js'); const { Query, Mutation } = require('./medical-resolver.js');
 const ctx = () => ({ user: { id: 5 }, res: { status: jest.fn().mockReturnThis() } });
 const args = { chatId: 3, input: { chatId: 3 }, patientId: 9, location: 'Manila', statuses: ['Open'], status: 'Open', searchTerm: 'A', offset: 1, limit: 2, toMedicalId: 6 };

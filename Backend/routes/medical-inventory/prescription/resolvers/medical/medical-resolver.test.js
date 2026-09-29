@@ -1,9 +1,9 @@
 jest.mock('../wrapper/wrapper', () => ({ Query: { _getAvailableMedicine: jest.fn(), _getPatientPrescriptions: jest.fn() }, Mutation: { _issuePrescription: jest.fn() } }));
 jest.mock('../wrapper/helper', () => ({ validateBatchesWithQuantity: jest.fn() }));
-jest.mock('../../../../../services/permit', () => ({ permissions: { inventory_allow_prescribe: 'prescribe' }, isMedicalPermitted: jest.fn(), isMedicalPermittedPatientBased: jest.fn() }));
+jest.mock('../../../../../services/authorization/permit', () => ({ permissions: { inventory_allow_prescribe: 'prescribe' }, isMedicalPermitted: jest.fn(), isMedicalPermittedPatientBased: jest.fn() }));
 jest.mock('../../../../../utils/logger', () => ({ warn: jest.fn() }));
 const wrapper = require('../wrapper/wrapper');
-const permit = require('../../../../../services/permit');
+const permit = require('../../../../../services/authorization/permit');
 const helper = require('../wrapper/helper');
 const { Query, Mutation } = require('./medical-resolver');
 let context;

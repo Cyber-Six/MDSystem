@@ -4,13 +4,13 @@ jest.mock('../doc-generate-module/index.js', () => ({
   generateDocument: (...args) => mockGenerateDocument(...args),
 }));
 
-jest.mock('../chart.js', () => ({}));
-jest.mock('../pdfkit.js', () => ({}));
-jest.mock('../analytics-query.js', () => ({
+jest.mock('../rendering/chart.js', () => ({}));
+jest.mock('../rendering/pdfkit.js', () => ({}));
+jest.mock('../analytics/analytics-query.js', () => ({
   executeBatchQueries: jest.fn(),
 }));
 
-const analyticsExport = require('../analytics-export.js');
+const analyticsExport = require('../analytics/analytics-export.js');
 
 describe('analytics-export metadata and oral findings integration', () => {
   beforeEach(() => {

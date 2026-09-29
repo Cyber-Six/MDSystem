@@ -1967,7 +1967,7 @@ All list queries support:
 
 ## Related Documentation
 
-- [NOTIFICATIONS_SYSTEM.md](./NOTIFICATIONS_SYSTEM.md) - Socket notification architecture
+- [Notifications](./notifications.md) - Socket notification architecture
 - [sockets.md](./sockets.md) - WebSocket implementation details
 - [SECURITY.md](./SECURITY.md) - Security best practices
 - [role-management.md](./role-management.md) - Permission system
