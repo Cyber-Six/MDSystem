@@ -1,0 +1,130 @@
+Backend	
+100%	218/218	100%	36/36	100%	21/21	100%	212/212
+Backend/config	
+99.29%	1132/1140	99.17%	724/730	99.36%	157/158	99.5%	1010/1015
+Backend/config/data	
+92.3%	12/13	100%	49/49	100%	1/1	92.3%	12/13
+Backend/config/icdapi	
+90.34%	159/176	80%	44/55	100%	18/18	91.12%	154/169
+Backend/config/middleware	
+94.11%	176/187	86.23%	94/109	94.44%	17/18	94.02%	173/184
+Backend/config/sockets	
+96.24%	744/773	93.58%	467/499	98.82%	84/85	96.58%	707/732
+Backend/routes/admin/patient-management	
+100%	12/12	100%	0/0	100%	2/2	100%	12/12
+Backend/routes/admin/patient-management/resolvers/admin	
+100%	41/41	100%	16/16	100%	10/10	100%	36/36
+Backend/routes/admin/patient-management/resolvers/wrapper	
+100%	3/3	100%	0/0	100%	0/0	100%	3/3
+Backend/routes/admin/role-management	
+100%	15/15	100%	6/6	100%	2/2	100%	15/15
+Backend/routes/admin/role-management/resolvers/admin	
+100%	99/99	100%	4/4	100%	45/45	100%	99/99
+Backend/routes/admin/role-management/resolvers/wrapper	
+0%	0/1337	0%	0/1279	0%	0/128	0%	0/1290
+Backend/routes/analytics	
+0%	0/266	0%	0/240	0%	0/25	0%	0/257
+Backend/routes/appointment	
+100%	21/21	100%	10/10	100%	4/4	100%	21/21
+Backend/routes/appointment/resolvers/medical	
+100%	183/183	100%	108/108	100%	31/31	100%	180/180
+Backend/routes/appointment/resolvers/patient	
+100%	44/44	100%	17/17	100%	9/9	100%	44/44
+Backend/routes/appointment/resolvers/wrapper	
+15.97%	115/720	9.12%	44/482	31.81%	21/66	15.71%	110/700
+Backend/routes/auth	
+100%	23/23	100%	4/4	100%	2/2	100%	23/23
+Backend/routes/auth/email	
+100%	169/169	96.55%	84/87	100%	6/6	100%	167/167
+Backend/routes/auth/jwt	
+97.7%	85/87	89.47%	51/57	100%	3/3	100%	83/83
+Backend/routes/auth/oauth	
+100%	69/69	97.87%	46/47	100%	4/4	100%	68/68
+Backend/routes/auth/user	
+100%	257/257	100%	193/193	100%	15/15	100%	254/254
+Backend/routes/consultation/consult	
+100%	14/14	100%	6/6	100%	2/2	100%	14/14
+Backend/routes/consultation/consult/resolvers/medical	
+100%	136/136	100%	74/74	100%	20/20	100%	136/136
+Backend/routes/consultation/consult/resolvers/wrapper	
+8.91%	27/303	6.94%	10/144	20%	5/25	9.09%	27/297
+Backend/routes/dashboard	
+100%	89/89	84.94%	79/93	100%	11/11	100%	87/87
+Backend/routes/dashboard/resolvers	
+100%	137/137	100%	147/147	100%	9/9	100%	134/134
+Backend/routes/documents/document	
+11.97%	133/1111	7.52%	61/811	15.78%	15/95	11.85%	128/1080
+Backend/routes/emr	
+3.84%	21/546	3.33%	10/300	11.11%	4/36	3.94%	21/532
+Backend/routes/emr/query	
+100%	50/50	100%	12/12	100%	22/22	100%	50/50
+Backend/routes/emr/resolvers	
+100%	28/28	100%	11/11	100%	7/7	100%	22/22
+Backend/routes/emr/resolvers/medical	
+5.36%	27/503	9.85%	21/213	3.17%	2/63	5.21%	25/479
+Backend/routes/emr/resolvers/patient	
+11.07%	31/280	16.54%	23/139	4%	2/50	11.83%	29/245
+Backend/routes/emr/wrapper	
+0%	0/587	0%	0/446	0%	0/70	0%	0/561
+Backend/routes/health-chat	
+100%	21/21	100%	8/8	100%	4/4	100%	21/21
+Backend/routes/health-chat/resolvers/medical	
+100%	144/144	100%	88/88	100%	24/24	100%	139/139
+Backend/routes/health-chat/resolvers/patient	
+100%	11/11	100%	0/0	100%	7/7	100%	11/11
+Backend/routes/health-chat/resolvers/wrapper	
+27.19%	180/662	22.11%	113/511	36.11%	26/72	26.52%	170/641
+Backend/routes/info/announcement	
+70.73%	116/164	58.82%	50/85	100%	6/6	70.73%	116/164
+Backend/routes/info/compliance	
+100%	32/32	100%	20/20	100%	4/4	100%	32/32
+Backend/routes/media	
+100%	54/54	100%	14/14	100%	4/4	100%	54/54
+Backend/routes/medical-inventory/inventory	
+100%	11/11	100%	0/0	100%	2/2	100%	11/11
+Backend/routes/medical-inventory/inventory/resolvers/medical	
+100%	142/142	100%	72/72	100%	14/14	100%	127/127
+Backend/routes/medical-inventory/inventory/resolvers/patient	
+100%	3/3	100%	0/0	100%	0/0	100%	3/3
+Backend/routes/medical-inventory/inventory/resolvers/wrapper	
+5.92%	17/287	5.22%	8/153	16.66%	3/18	6%	17/283
+Backend/routes/medical-inventory/medicine-request	
+100%	16/16	100%	0/0	100%	4/4	100%	16/16
+Backend/routes/medical-inventory/medicine-request/resolvers/medical	
+100%	77/77	100%	48/48	100%	6/6	100%	70/70
+Backend/routes/medical-inventory/medicine-request/resolvers/patient	
+100%	75/75	100%	43/43	100%	11/11	100%	69/69
+Backend/routes/medical-inventory/medicine-request/resolvers/wrapper	
+100%	191/191	100%	80/80	100%	22/22	100%	178/178
+Backend/routes/medical-inventory/prescription	
+100%	16/16	100%	0/0	100%	3/3	100%	16/16
+Backend/routes/medical-inventory/prescription/resolvers/medical	
+100%	36/36	100%	20/20	100%	5/5	100%	33/33
+Backend/routes/medical-inventory/prescription/resolvers/patient	
+100%	8/8	100%	2/2	100%	1/1	100%	7/7
+Backend/routes/medical-inventory/prescription/resolvers/wrapper	
+100%	118/118	100%	66/66	100%	13/13	100%	108/108
+Backend/routes/profile	
+100%	21/21	100%	10/10	100%	4/4	100%	21/21
+Backend/routes/profile/resolvers/medical	
+100%	81/81	100%	38/38	100%	10/10	100%	81/81
+Backend/routes/profile/resolvers/patient	
+100%	96/96	100%	66/66	100%	10/10	100%	95/95
+Backend/routes/profile/resolvers/wrapper	
+0%	0/196	0%	0/103	0%	0/20	0%	0/193
+Backend/routes/settings	
+99.71%	356/357	98.78%	163/165	100%	20/20	100%	353/353
+Backend/routes/staff	
+19.34%	59/305	16.47%	28/170	24.24%	8/33	19.86%	57/287
+Backend/routes/staff/emr	
+28.61%	99/346	28.74%	48/167	34.61%	9/26	28.36%	97/342
+Backend/services	
+22.16%	647/2919	19.62%	357/1819	21.6%	113/523	23.1%	611/2644
+Backend/services/doc-generate-module	
+99.37%	318/320	91.17%	279/306	100%	61/61	100%	295/295
+Backend/services/doc-generate-module/templates	
+27.56%	145/526	25.96%	74/285	34.32%	23/67	27.32%	135/494
+Backend/test-support	
+99.16%	238/240	100%	41/41	97.36%	74/76	99.4%	167/168
+Backend/utils	
+94.53%	242/256	82.75%	96/116	100%	50/50	97%	227/234

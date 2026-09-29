@@ -1,0 +1,22 @@
+jest.mock('express-graphql', () => ({ graphqlHTTP: jest.fn(options => options) }));
+jest.mock('@graphql-tools/schema', () => ({ makeExecutableSchema: jest.fn(input => input) }));
+jest.mock('./query', () => ({ testQuery: jest.fn() }));
+jest.mock('./mutation', () => ({ testMutation: jest.fn() }));
+jest.mock('../../../utils/logger', () => require('../../../test-support/fixtures.cjs').loggerMock());
+jest.mock('../../../config/middleware/jwtProtect', () => ({ jwtProtect: jest.fn(role => role) }));
+const { initStaffEMRGraphQL } = require('./graphql');
+test('protects staff EMR, passes identity and response, and rejects empty GraphQL requests', () => {
+  const app = { use: jest.fn() };
+  initStaffEMRGraphQL(app);
+  const [route, guard, options] = app.use.mock.calls[0];
+  expect(route).toBe('/staff/emr');
+  expect(guard).toBe('medical');
+  const user = { id: 12 }, res = {};
+  const settings = options({ body: { query: '{ __typename }' }, user, res });
+  expect(settings.context).toEqual({ user, res });
+  expect(settings.schema.resolvers).toEqual({ Query: require('./query'), Mutation: require('./mutation') });
+  expect(settings.schema.typeDefs).toMatch(/type\s+Query/);
+  expect(options({ body: { query: 'query' } }).context.user).toBeNull();
+  expect(() => options({})).toThrow('Empty GraphQL request');
+  expect(() => options({ body: {} })).toThrow('Empty GraphQL request');
+});
