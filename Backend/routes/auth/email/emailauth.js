@@ -109,7 +109,7 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     }
     
     if (purpose === "verification") await enqueueEmailVerification(email);
-    else if (purpose === "2fa") await enqueueEmail2FA(email, portal); 
+    else await enqueueEmail2FA(email, portal); // purpose validation above limits this path to 2FA
         
 
     return res.status(200).json({
@@ -194,7 +194,7 @@ router.post('/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => 
       const account_type = portal;
       finalVerificationKey = await createVerificationSession(email, purpose, account_type);
       }
-    else if (purpose === "2fa"){
+    else { // purpose validation above limits this path to 2FA
       await update2FAInSession(verificationKey, email, purpose);
       finalVerificationKey = verificationKey;
     }

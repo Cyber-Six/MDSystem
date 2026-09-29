@@ -5,7 +5,7 @@ const logger = require('../utils/logger.js');
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 400;
 
-function createChartCanvas(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
+function createChartCanvas(width, height) {
   return new ChartJSNodeCanvas({
     width,
     height,

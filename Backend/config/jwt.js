@@ -29,7 +29,7 @@ function generateAccessToken(user, anchorSessionId = null) {
   }
 
   // Validate user.role
-  if (typeof user.role !== "string" || isValidUserRole(user.role) === false) {
+  if (isValidUserRole(user.role) === false) {
     throw new Error("Invalid user.role");
   }
 

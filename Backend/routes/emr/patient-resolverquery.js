@@ -9,8 +9,8 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 const UPDATE_TICKET_EXPIRY_SEC = parseInt(process.env.UPDATE_TICKET_EXPIRY_SEC, 10) || 604800; // default 7 days
 
 const Query = {
-  getProfile: async (_, args, {user, logId}) => {
-    if (!user.id) {
+  getProfile: async (_, args, { user, logId, res }) => {
+    if (!user || !user.id) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 

@@ -39,10 +39,6 @@ function tryParseBroadcastMessage(rawMessage) {
 
   try {
     const parsed = JSON.parse(trimmed);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return null;
-    }
-
     const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
     const body = typeof parsed.body === 'string' ? parsed.body.trim() : '';
 
@@ -57,7 +53,7 @@ function tryParseBroadcastMessage(rawMessage) {
 }
 
 function sanitizeEmailSubject(value) {
-  return String(value || '')
+  return String(value)
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -94,8 +90,8 @@ function resolveEmailContent(eventName, data, emailNotif, userId) {
   }
 
   return {
-    title: sanitizeEmailSubject(resolvedTitle) || 'Notification',
-    message: resolvedMessage || `You have a new notification: ${eventName}`,
+    title: sanitizeEmailSubject(resolvedTitle),
+    message: resolvedMessage,
     notes: emailNotif?.notes ?? null,
     ctaText: emailNotif?.ctaText ?? null,
     ctaLink: emailNotif?.ctaLink ?? null,

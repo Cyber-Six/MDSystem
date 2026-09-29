@@ -11,7 +11,7 @@ const { get } = require("http");
 // In-progress do expire after nth time
 // Unless if the user is unverified where the first ticket never expires
 
-Query = {
+const Query = {
 
   getCredentialStatus: async (_, __, { user, res }) => { // getting the credential status of the logged in user
     if (!user) {
@@ -54,7 +54,7 @@ Query = {
   },
 };
 
-Mutation = {
+const Mutation = {
   createInitialPersonalRecord: async (_, { input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

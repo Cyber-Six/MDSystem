@@ -156,12 +156,13 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
             RETURNING id, title as label, content as description, pubmat, "isActive", created_at, location, "viewableUntil";
         `;
 
+        // `location` has already passed required designation validation above.
         const params = [
             label || null,
             description || null,
             promotedPubmat,
             isActive !== undefined ? isActive : true,
-            location || 'Both',
+            location,
             viewableUntil || null
         ];
 
@@ -278,9 +279,8 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         await client.query("ROLLBACK");
         logger.error("Failed to delete old pubmat file:", err);
         // cleanup new pubmat too
-        if (promotedPubmat && promotedPubmat !== oldPubmat) {
-          await deleteFile("announcement", promotedPubmat);
-        }
+        // The outer old-pubmat condition guarantees a distinct promoted file.
+        await deleteFile("announcement", promotedPubmat);
         return res.status(500).json({ error: "FILE_DELETE_ERROR", message: "Failed to delete old pubmat file" });
       }
     }

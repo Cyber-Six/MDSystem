@@ -117,7 +117,7 @@ const Query = {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
 
-    const patientId = getPatientIdFromDentalRecordId(id);
+    const patientId = await getPatientIdFromDentalRecordId(id);
     const isPermitted = await isMedicalPermittedPatientBasedMulti(user.id, 
       [permissions.emr_allow_set_dental_record, permissions.emr_allow_view], 
       patientId

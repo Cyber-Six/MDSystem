@@ -19,7 +19,7 @@ async function getLatestOutcome(consultationId) {
   return result.rows[0] || null;  
 }
 
-async function getOutcomeData(table, outcomeId, offset = 0, limit = 10) {
+async function getOutcomeData(table, outcomeId, offset = 0, limit = 10, res) {
   try {
     const result = await db.query(`
       SELECT *

@@ -4,9 +4,10 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "test": "jest --runInBand",
-    "test:documents": "jest --runInBand routes/documents/document/__tests__/document-*.integration.test.js",
-    "test:dashboard": "jest --runInBand routes/dashboard/__tests__/dashboard-patient.integration.test.js",
+    "test": "node ../node_modules/jest/bin/jest.js --config jest.config.js --runInBand",
+    "test:coverage": "node ../node_modules/jest/bin/jest.js --config jest.config.js --runInBand --coverage",
+    "test:documents": "node ../node_modules/jest/bin/jest.js --config jest.config.js --runInBand routes/documents/document/__tests__/document-*.integration.test.js",
+    "test:dashboard": "node ../node_modules/jest/bin/jest.js --config jest.config.js --runInBand routes/dashboard/__tests__/dashboard-patient.integration.test.js",
     "start": "node server.js",
     "setup:totp-key": "node -e \"const fs=require('fs'),crypto=require('crypto'),path=require('path');const envPath=path.resolve(__dirname,'.env');const key=crypto.randomBytes(32).toString('hex');const line='\\nTOTP_ENCRYPTION_KEY='+key+'\\n';if(fs.existsSync(envPath)){const contents=fs.readFileSync(envPath,'utf8');if(contents.includes('TOTP_ENCRYPTION_KEY=')){console.log('TOTP_ENCRYPTION_KEY already set in .env — skipping.\\nTo rotate, manually delete the old line and re-run.');process.exit(0);}fs.appendFileSync(envPath,line);}else{fs.writeFileSync(envPath,line);}console.log('✅ TOTP_ENCRYPTION_KEY written to .env');console.log('⚠  Back up this key — losing it means all TOTP secrets will be unreadable.');\""
   },
@@ -52,7 +53,7 @@
   "devDependencies": {
     "@ljharb/tsconfig": "^0.3.2",
     "@tsconfig/recommended": "^1.0.13",
-    "jest": "^30.3.0",
+    "jest": "^30.5.2",
     "supertest": "^7.1.1"
   }
 }

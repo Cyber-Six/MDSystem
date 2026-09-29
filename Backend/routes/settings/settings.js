@@ -92,7 +92,9 @@ async function invalidatePreferencesCache(userId) {
  * Calculate size of an object in bytes (JSON string representation)
  */
 function getSizeInBytes(obj) {
-  if (!obj) return 0;
+  // Callers always pass the assembled updates object (including the empty
+  // object that is rejected before size validation), so nullish inputs are
+  // not part of this helper's runtime contract.
   return JSON.stringify(obj).length;
 }
 

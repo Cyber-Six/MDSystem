@@ -12,7 +12,7 @@
     "./validation/*": "./src/validation/*.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest --config jest.config.cjs"
   },
   "keywords": [
     "mdsystem",

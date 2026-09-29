@@ -77,22 +77,22 @@ const Query = {
 
   _getComplaints: (_, { outcomeId, offset, limit }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return getOutcomeData("ConsultationComplaints", outcomeId, offset, limit);
+    return getOutcomeData("ConsultationComplaints", outcomeId, offset, limit, res);
   },
 
   _getPEFindings: (_, { outcomeId, offset, limit }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return getOutcomeData("ConsultationPEFindings", outcomeId, offset, limit);
+    return getOutcomeData("ConsultationPEFindings", outcomeId, offset, limit, res);
   },
 
   _getTreatments: (_, { outcomeId, offset, limit }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return getOutcomeData("ConsultationTreatment", outcomeId, offset, limit);
+    return getOutcomeData("ConsultationTreatment", outcomeId, offset, limit, res);
   },
 
   _getDiagnoses: (_, { outcomeId, offset, limit }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return getOutcomeData("ConsultationDiagnosis", outcomeId, offset, limit);
+    return getOutcomeData("ConsultationDiagnosis", outcomeId, offset, limit, res);
   },
 
   _getIcdViaCode: async (_, { code }, { user, res }) => {

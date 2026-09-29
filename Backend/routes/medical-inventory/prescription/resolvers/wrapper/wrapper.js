@@ -1,5 +1,5 @@
 const db = require("../../../../../config/query.js");
-const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
+const { throwGraphQLError, GraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 const { isConnectedAnywhere, emitToUserWithAck, emitToRole, notifyUser } = require("../../../../../config/sockets");
 const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
@@ -236,7 +236,7 @@ const Mutation = {
     } catch (err) {
       await client.query('ROLLBACK');
       logger.error("Error in _issuePrescription:", err);
-      if (err?.extensions?.http?.status) {
+      if (err instanceof GraphQLError || err?.extensions?.http?.status) {
         throw err;
       }
       throwGraphQLError(res).message("Database error").status(500).throw();

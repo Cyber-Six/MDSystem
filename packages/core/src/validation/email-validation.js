@@ -73,8 +73,8 @@ export const isMedicalEmail = (email) => {
  */
 export const detectRoleFromEmail = (email) => {
   if (isStudentEmail(email)) return 'Student';
-  if (isEmployeeEmail(email)) return 'Employee';
   if (isMedicalEmail(email)) return 'Medical';
+  if (isEmployeeEmail(email)) return 'Employee';
   return null;
 };
 

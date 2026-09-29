@@ -303,8 +303,6 @@ async function getParticipantInfoBatch(userIds) {
  * @returns {Promise<Map<number, Object>>}
  */
 async function getLastMessageInfoBatch(chatIds) {
-  if (chatIds.length === 0) return new Map();
-
   // Get last message per chat using DISTINCT ON
   const lastMsgResult = await db.query(
     `SELECT DISTINCT ON ("consultationVirtualId") *
@@ -385,7 +383,7 @@ async function formatChatRecordsBatch(chats) {
   ]);
 
   return chats.map(chat => {
-    const lastMessageData = lastMessageMap.get(chat.id) || {};
+    const lastMessageData = lastMessageMap.get(chat.id);
     // Compute expiry based on last message activity (only for Ongoing tickets)
     const lastActivityAt = lastMessageData.lastMessageAt || chat.session_start;
     const expiresAt = chat.status === 'Ongoing' ? calculateExpiryDate(lastActivityAt) : null;

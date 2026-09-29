@@ -20,7 +20,7 @@ const BRANCH_TO_LOCATIONS = {
   Both: ['Arlegui', 'Casal', 'QuezonCity'],
 };
 
-const branchToSet = (branch = 'Both') => {
+const branchToSet = (branch) => {
   if (branch === 'Manila') return new Set(['Manila']);
   if (branch === 'QuezonCity') return new Set(['QuezonCity']);
   return new Set(['Manila', 'QuezonCity']);
@@ -37,10 +37,8 @@ const setToBranch = (branchSet) => {
 };
 
 const intersectBranches = (...branches) => {
-  if (!branches.length) return null;
-
   const [first, ...rest] = branches;
-  let intersection = branchToSet(first || 'Both');
+  let intersection = branchToSet(first);
 
   for (const branch of rest) {
     const branchSet = branchToSet(branch || 'Both');

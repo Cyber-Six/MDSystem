@@ -1,4 +1,4 @@
-const db = require('../../../../config/db');
+const db = require('../../../../../config/db');
 
 const getPatientById = async (id) => {
     const result = await db.query(

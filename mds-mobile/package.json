@@ -14,20 +14,6 @@
     "test:watch": "jest --watch --passWithNoTests",
     "test:coverage": "jest --coverage --passWithNoTests"
   },
-  "jest": {
-    "preset": "jest-expo",
-    "setupFilesAfterEnv": [
-      "<rootDir>/jest.setup.ts"
-    ],
-    "moduleNameMapper": {
-      "^expo/src/winter(.*)$": "<rootDir>/__mocks__/expo-winter.js",
-      "^@mdsystem/core(.*)$": "<rootDir>/../packages/core/src$1"
-    },
-    "collectCoverageFrom": [
-      "src/**/*.{ts,tsx}",
-      "!src/**/*.d.ts"
-    ]
-  },
   "dependencies": {
     "@mdsystem/core": "file:../packages/core",
     "@react-native-async-storage/async-storage": "^2.2.0",

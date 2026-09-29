@@ -24,6 +24,11 @@ function getAuthorizedChats(socket) {
   return socket.data.authorizedHealthChats;
 }
 
+function acknowledge(ack, payload) {
+  if (typeof ack !== 'function') return;
+  ack(payload);
+}
+
 async function canAccessChat(socket, chatId) {
   const userId = Number(socket.userId);
   if (!Number.isSafeInteger(userId) || userId <= 0) return false;
@@ -67,18 +72,14 @@ const healthChatHandlers = {
     const parsedChatId = parseChatId(chatId);
     if (!parsedChatId) {
       logger.warn(`[HEALTHCHAT] Invalid join-room: no chatId from user:${socket.userId}`);
-      if (typeof ack === 'function') {
-        ack({ error: 'INVALID_PARAMS', message: 'chatId is required' });
-      }
+      acknowledge(ack, { error: 'INVALID_PARAMS', message: 'chatId is required' });
       return;
     }
 
     const canAccess = await canAccessChat(socket, parsedChatId);
     if (!canAccess) {
       logger.warn(`[HEALTHCHAT] Access denied join-room chatId=${parsedChatId} user:${socket.userId} role:${socket.userRole}`);
-      if (typeof ack === 'function') {
-        ack({ error: 'ACCESS_DENIED', message: 'You are not authorized to access this chat.' });
-      }
+      acknowledge(ack, { error: 'ACCESS_DENIED', message: 'You are not authorized to access this chat.' });
       return;
     }
 
@@ -87,9 +88,7 @@ const healthChatHandlers = {
     getAuthorizedChats(socket).add(parsedChatId);
     logger.debug(`[HEALTHCHAT] user:${socket.userId} joined room ${room}`);
 
-    if (typeof ack === 'function') {
-      ack({ success: true, room });
-    }
+    acknowledge(ack, { success: true, room });
   },
 
   /**
@@ -100,9 +99,7 @@ const healthChatHandlers = {
     const parsedChatId = parseChatId(chatId);
     if (!parsedChatId) {
       logger.warn(`[HEALTHCHAT] Invalid leave-room: no chatId from user:${socket.userId}`);
-      if (typeof ack === 'function') {
-        ack({ error: 'INVALID_PARAMS', message: 'chatId is required' });
-      }
+      acknowledge(ack, { error: 'INVALID_PARAMS', message: 'chatId is required' });
       return;
     }
 
@@ -111,9 +108,7 @@ const healthChatHandlers = {
     getAuthorizedChats(socket).delete(parsedChatId);
     logger.debug(`[HEALTHCHAT] user:${socket.userId} left room ${room}`);
 
-    if (typeof ack === 'function') {
-      ack({ success: true });
-    }
+    acknowledge(ack, { success: true });
   },
 
   /**
@@ -123,9 +118,7 @@ const healthChatHandlers = {
     const parsedChatId = parseChatId(chatId);
     if (!parsedChatId) {
       logger.warn(`[HEALTHCHAT] Invalid typing: no chatId from user:${socket.userId}`);
-      if (typeof ack === 'function') {
-        ack({ error: 'INVALID_PARAMS', message: 'chatId is required' });
-      }
+      acknowledge(ack, { error: 'INVALID_PARAMS', message: 'chatId is required' });
       return;
     }
 
@@ -140,9 +133,7 @@ const healthChatHandlers = {
 
     if (!canAccess) {
       logger.warn(`[HEALTHCHAT] Access denied typing chatId=${parsedChatId} user:${socket.userId} role:${socket.userRole}`);
-      if (typeof ack === 'function') {
-        ack({ error: 'ACCESS_DENIED', message: 'You are not authorized to access this chat.' });
-      }
+      acknowledge(ack, { error: 'ACCESS_DENIED', message: 'You are not authorized to access this chat.' });
       return;
     }
 
@@ -159,9 +150,7 @@ const healthChatHandlers = {
 
     logger.debug(`[HEALTHCHAT] user:${socket.userId} typing=${isTyping} in room ${room}`);
 
-    if (typeof ack === 'function') {
-      ack({ success: true });
-    }
+    acknowledge(ack, { success: true });
   }
 };
 

@@ -9,7 +9,9 @@ function isStudentEmail(email) {
 
 // not yet verified
 function isEmployeeEmail(email) {
-  const regex = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+@tip\.edu\.ph$/;
+  // A one-part suffix is a role marker; employee addresses require at least
+  // two ordinary name components (for example, jane.doe).
+  const regex = /^(?![a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)*\.(?:mds|superior)@tip\.edu\.ph$)[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+@tip\.edu\.ph$/;
   return regex.test(email);
 }
 
@@ -74,11 +76,10 @@ function getStudentBranchFromEmail(email) {
 
   if (firstChar === "m") {
     return "Manila";
-  } else if (firstChar === "q") {
-    return "QuezonCity";
   }
-
-  return null; // fallback
+  // isStudentEmail only accepts addresses beginning with m or q. Reaching
+  // this point therefore means the branch is Quezon City.
+  return "QuezonCity";
 }
 
 function normalizeName(name) {
@@ -98,10 +99,8 @@ function normalizeNumber(number) {
   if (digits.startsWith("0")) {
     return "+63" + digits.slice(1);
   }
-  if (!digits.startsWith("+")) {
-    return "+" + digits;
-  }
-  return digits;
+  // `digits` has had every non-digit removed, so it cannot start
+  return "+" + digits;
 }
 
 function generateDomainCodes(names, domain) {

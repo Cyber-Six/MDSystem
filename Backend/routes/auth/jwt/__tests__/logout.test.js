@@ -68,6 +68,22 @@ describe('POST /auth/logout', () => {
     expect(mockSaveRefreshSession).not.toHaveBeenCalled();
   });
 
+  test.each([
+    [null, 'non-string token'],
+    ['101::token', 'empty device identifier'],
+    ['101:device:', 'empty token'],
+    ['101:   :token', 'whitespace-only device identifier'],
+    ['101:device:   ', 'whitespace-only token'],
+    ['abc:device:token', 'non-numeric user identifier'],
+    ['9007199254740992:device:token', 'unsafe user identifier'],
+    ['0:device:token', 'non-positive user identifier'],
+  ])('rejects %s (%s)', async refreshToken => {
+    const response = await request(app).post('/auth/logout').send({ refreshToken });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('MISSING_OR_INVALID_REFRESH_TOKEN');
+    expect(mockGetRefreshSession).not.toHaveBeenCalled();
+  });
+
   test('returns idempotent success when session is not found', async () => {
     mockGetRefreshSession.mockResolvedValueOnce(null);
 
@@ -123,6 +139,14 @@ describe('POST /auth/logout', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
     expect(mockSaveRefreshSession).toHaveBeenCalledTimes(1);
+  });
+
+  test('treats non-string stored tokens as absent without attempting revocation', async () => {
+    mockGetRefreshSession.mockResolvedValueOnce({ status: 'active', refreshToken: 42, prevToken: null });
+    const response = await request(app).post('/auth/logout').send({ refreshToken: '101:device-1:token-current' });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
   });
 
   test('revokes active session when provided token matches current refresh token', async () => {

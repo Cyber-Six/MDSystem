@@ -35,8 +35,7 @@ function pickFirstNonEmpty(...values) {
   return '';
 }
 
-function parseJsonSafe(raw, fallback = null) {
-  if (raw === undefined || raw === null) return fallback;
+function parseJsonSafe(raw, fallback) {
   const text = String(raw).trim();
   if (!text) return fallback;
 
@@ -47,7 +46,7 @@ function parseJsonSafe(raw, fallback = null) {
   }
 }
 
-function hashString(value = '') {
+function hashString(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
@@ -61,14 +60,14 @@ function toOptionalField(value) {
   return text.toLowerCase() === 'not specified' ? undefined : text;
 }
 
-function toDataUrl(base64Value, mimeType = 'image/png') {
+function toDataUrl(base64Value, mimeType) {
   const text = pickFirstNonEmpty(base64Value);
   if (!text) return '';
   if (text.startsWith('data:')) return text;
   return `data:${mimeType};base64,${text}`;
 }
 
-function normalizeDoctorSignature(physician = {}) {
+function normalizeDoctorSignature(physician) {
   const signature = physician?.signature || physician?.doctorSignature || {};
   const base64Source = pickFirstNonEmpty(
     signature.base64,
@@ -207,18 +206,6 @@ function buildMedicalCertificateRequirementValues(documentPayload = {}) {
     ptr_number: ptrNumber,
     license_number: licenseNumber,
   };
-
-  const missingTags = MEDICAL_CERTIFICATE_REQUIRED_TAGS.filter(
-    (tag) => !Object.prototype.hasOwnProperty.call(requirementValues, tag)
-  );
-
-  if (missingTags.length > 0) {
-    const err = new Error(`Missing normalized values for tags: ${missingTags.join(', ')}`);
-    err.statusCode = 500;
-    err.errorCode = 'MEDICAL_CERTIFICATE_VALUES_INCOMPLETE';
-    err.details = { missingTags };
-    throw err;
-  }
 
   return {
     requirementValues,

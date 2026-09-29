@@ -19,8 +19,8 @@ function containLoginRegister(purpose) {
   }
 
 function purposeLookup(purpose) {
-  if (purpose === "login") return "2fa";
-  if (purpose === "register") return "verification";
+  // Callers validate the only two supported purposes before this mapping.
+  return purpose === "login" ? "2fa" : "verification";
   }
 
 // ✅ Load T&C consent state

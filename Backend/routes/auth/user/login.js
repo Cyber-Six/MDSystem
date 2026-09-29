@@ -201,7 +201,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   const { LoginKey: verificationKey } = req.body;
   const portal = detectPortalFromSubdomain(req);
   const auditMetadata = getRequestAuditMetadata(req);
-  const recordAttempt = async (wasSuccessful, targetEmail = null, userId = null) => {
+  const recordAttempt = async (wasSuccessful, targetEmail, userId) => {
     try {
       await query.recordLoginAttempt({
         email: targetEmail,

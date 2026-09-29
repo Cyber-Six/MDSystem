@@ -51,7 +51,7 @@ function normalizeQuantity(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function hashString(value = '') {
+function hashString(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
@@ -59,14 +59,14 @@ function hashBuffer(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
-function toDataUrl(base64Value, mimeType = 'image/png') {
+function toDataUrl(base64Value, mimeType) {
   const text = pickFirstNonEmpty(base64Value);
   if (!text) return '';
   if (text.startsWith('data:')) return text;
   return `data:${mimeType};base64,${text}`;
 }
 
-function normalizeDoctorSignature(physician = {}) {
+function normalizeDoctorSignature(physician) {
   const signature = physician?.signature || physician?.doctorSignature || {};
   const base64Source = pickFirstNonEmpty(
     signature.base64,
@@ -237,18 +237,6 @@ function buildPrescriptionRequirementValues(documentPayload = {}) {
     ptr_number: ptrNumber,
     license_number: licenseNumber,
   };
-
-  const missingTags = PRESCRIPTION_REQUIRED_TAGS.filter(
-    (tag) => !Object.prototype.hasOwnProperty.call(requirementValues, tag)
-  );
-
-  if (missingTags.length > 0) {
-    const err = new Error(`Missing normalized values for tags: ${missingTags.join(', ')}`);
-    err.statusCode = 500;
-    err.errorCode = 'PRESCRIPTION_VALUES_INCOMPLETE';
-    err.details = { missingTags };
-    throw err;
-  }
 
   return {
     requirementValues,

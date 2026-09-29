@@ -7,6 +7,13 @@
   ],
   "scripts": {
     "postinstall": "cd Backend && npm install",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
+    "test:backend": "jest --runInBand --selectProjects backend",
+    "test:backend:coverage": "jest --runInBand --config Backend/jest.config.js --coverage",
+    "test:patient": "jest --runInBand --selectProjects patient",
+    "test:staff": "jest --runInBand --selectProjects staff",
+    "test:mobile": "jest --runInBand --selectProjects mobile",
     "build": "npm run build:patient && npm run build:staff",
     "build:patient": "npm run build --workspace=mds-patient",
     "build:staff": "npm run build --workspace=mds-staff",
@@ -30,6 +37,13 @@
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
-    "jest": "^30.3.0"
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-typescript": "^7.28.5",
+    "babel-jest": "^29.7.0",
+    "babel-plugin-transform-vite-meta-env": "^1.0.3",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
   }
 }

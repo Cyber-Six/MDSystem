@@ -7,7 +7,7 @@ const { getPatientIdFromChatId } = require("../wrapper/helper.js");
 
 const HEALTH_CHAT_BRANCHES = Object.freeze(['Manila', 'QuezonCity']);
 
-const branchToSet = (branch = 'Both') => {
+const branchToSet = (branch) => {
   if (branch === 'Manila') return new Set(['Manila']);
   if (branch === 'QuezonCity') return new Set(['QuezonCity']);
   return new Set(HEALTH_CHAT_BRANCHES);
@@ -38,7 +38,7 @@ async function getPatientBranch(patientId) {
   return result.rows[0]?.branch || null;
 }
 
-async function resolveEffectiveLocationScope({ userId, requestedLocation = 'Both', permissionBranch = 'Both' }) {
+async function resolveEffectiveLocationScope({ userId, requestedLocation, permissionBranch = 'Both' }) {
   const isAdminUser = await isMedicalAdmin(userId);
   if (isAdminUser) {
     return requestedLocation || 'Both';

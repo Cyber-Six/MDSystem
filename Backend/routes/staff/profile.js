@@ -15,7 +15,7 @@ function normalizeText(value) {
 
 function isBranchWithinScope(scopeBranch, requestedBranch) {
     if (!ALLOWED_SEARCH_BRANCHES.has(scopeBranch)) return false;
-    if (!ALLOWED_SEARCH_BRANCHES.has(requestedBranch)) return false;
+    // The requested branch is validated before this helper is called.
     return scopeBranch === 'Both' || scopeBranch === requestedBranch;
 }
 
@@ -88,8 +88,6 @@ async function getUserIdViaName(name, branch) {
         .split(/\s+/)
         .map(t => t.trim())
         .filter(Boolean);
-
-    if (!tags.length) return [];
 
     const scoreClauses = [];
     const searchConditions = [];

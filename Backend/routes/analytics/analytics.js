@@ -36,7 +36,6 @@ const DATA_TYPE_ALIASES = Object.freeze({
 });
 
 function normalizeDataTypeKey(value) {
-  if (typeof value !== 'string') return '';
   const normalized = value
     .trim()
     .toLowerCase()
@@ -75,7 +74,7 @@ function pickFilterValue(sources, keys) {
   return undefined;
 }
 
-function resolveAnalyticsFilters(primary = {}, secondary = {}) {
+function resolveAnalyticsFilters(primary, secondary = {}) {
   const nestedPrimary = primary && typeof primary.filters === 'object' ? primary.filters : {};
   const nestedSecondary = secondary && typeof secondary.filters === 'object' ? secondary.filters : {};
   const sources = [primary, nestedPrimary, secondary, nestedSecondary];
@@ -175,7 +174,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
     if (!normalizedDataType || !analytics.hasQuery(normalizedDataType)) {
       return res.status(404).json({
         error: 'QUERY_NOT_FOUND',
-        dataType: requestedDataType || dataType,
+      dataType: requestedDataType || dataType,
       });
     }
 
@@ -201,12 +200,12 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
 
     const response = {
       success: true,
-      dataType: requestedDataType || normalizedDataType,
+      dataType: requestedDataType,
       branch,
       dateRange: { startDate, endDate },
       data,
     };
-    if ((requestedDataType || normalizedDataType) !== normalizedDataType) {
+    if (requestedDataType !== normalizedDataType) {
       response.canonicalDataType = normalizedDataType;
     }
 
@@ -568,7 +567,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     }
 
     // ── PDF ──────────────────────────────────────────────────
-    if (format === 'pdf') {
+    {
       // Fetch physician info for PDF signature
       const physicianResult = await require('../../config/db.js').query(
         `SELECT up.first_name, up.last_name, mp.title

@@ -223,4 +223,4 @@ function initPatientDashboardGraphQL(app) {
   app.use('/dashboard/patient', patientDashboardRouter);
 }
 
-module.exports = { initDashboardGraphQL, initPatientDashboardGraphQL };
+module.exports = { initDashboardGraphQL, initPatientDashboardGraphQL, buildPatientDashboardRestPayload };

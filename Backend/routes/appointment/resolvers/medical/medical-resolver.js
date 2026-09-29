@@ -219,13 +219,6 @@ const Mutation = {
 
     if (!targetSlotId) {
       // Fall back to finding the latest slot by userId when slotId is not provided
-      if (!resolvedUserId) {
-        throwGraphQLError(res)
-          .message("Either userId or patientIdentifier is required when slotId is not provided")
-          .status(400)
-          .throw();
-      }
-
       const record = await Wrapper.Query._getUserAppointmentRecords(_, { userId: resolvedUserId, offset: 0, limit: 1 }, { user, res });
       if (!record || record.length === 0) {
         throwGraphQLError(res).message("No appointment record found for the user").status(404).throw();

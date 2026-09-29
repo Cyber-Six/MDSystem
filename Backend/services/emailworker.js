@@ -82,7 +82,7 @@ function sleep(ms) {
       // ✅ Store OTP only after successful send (for OTP jobs)
       if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA' || job.name === 'sendSettingsOTP') {
         try {
-          codeMap = {
+          const codeMap = {
             'sendEmailVerification': 'emailVerification',
             'sendEmail2FA': 'email2FA',
             'sendSettingsOTP': 'settingsAction',

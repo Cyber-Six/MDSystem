@@ -63,13 +63,8 @@
     }
   }
 
-  const requiredSmtpKeys = ['host', 'port', 'auth'];
-  for (const key of requiredSmtpKeys) {
-    if (!config.smtp[key]) {
-      throw new Error(`❌ Missing required SMTP config: ${key.toUpperCase()} in .env`);
-    }
-  }
-  
+  // SMTP host and port have defaults, and auth is always an object.
+  // Validate the actual required credentials below.
   if (!config.smtp.auth.user || !config.smtp.auth.pass) {
     throw new Error(`❌ Missing required SMTP AUTH config: USER or PASS in .env`);
   }

@@ -18,9 +18,8 @@ function getRequestAuditMetadata(req) {
     ? forwardedFor[0]
     : String(forwardedFor || '').split(',')[0];
 
-  const ipAddress = String(
-    forwardedIp || req.ip || req.socket?.remoteAddress || ''
-  ).trim() || null;
+  const ipSource = forwardedIp || req.ip || req.socket?.remoteAddress;
+  const ipAddress = ipSource ? String(ipSource).trim() || null : null;
   const userAgent = String(req.headers['user-agent'] || '').trim() || null;
 
   return { ipAddress, userAgent };
@@ -65,7 +64,7 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
   const { credential } = req.body;
   let account_type = detectPortalFromSubdomain(req);
   const auditMetadata = getRequestAuditMetadata(req);
-  const recordAttempt = async (wasSuccessful, targetEmail = null, userId = null) => {
+  const recordAttempt = async (wasSuccessful, targetEmail, userId) => {
     try {
       await query.recordLoginAttempt({
         email: targetEmail,

@@ -29,14 +29,15 @@ async function verifyRecaptcha(token) {
 
         const secret = process.env.RECAPTCHA_SECRET_KEY;
 
-        // `node-fetch` is an ES module in recent versions. Dynamically import it
-        // so this CommonJS file can use it without ERR_REQUIRE_ESM.
-        const { default: fetch } = await import('node-fetch');
-
         if (!secret) {
             logger.error("Missing RECAPTCHA_SECRET_KEY in environment");
             return false;
         }
+
+        // The backend pins node-fetch 2.x, which is CommonJS-compatible and
+        // keeps this service usable under Jest and the production Node runner.
+        const fetchModule = require('node-fetch');
+        const fetch = fetchModule.default || fetchModule;
 
         const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
             method: "POST",

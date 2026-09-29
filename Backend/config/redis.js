@@ -757,8 +757,8 @@ async function scanAllRefreshSessionsWithMeta() {
   };
 
   const parseRefreshSessionKey = (key) => {
-    if (typeof key !== "string" || !key.startsWith("rt:")) return null;
-    if (key.startsWith("rt:fail:") || key.startsWith("rt:lock:")) return null;
+    // The caller filters keys to the rt: refresh-session namespace and skips
+    // limiter keys before adding them to the batch.
 
     const parts = key.split(":");
     if (parts.length !== 3) return null;
@@ -1343,18 +1343,6 @@ async function resetLoginFailures(email, portal) {
   if (!LoginFailureMatrix[portal]) return; // unknown portal — no-op
   const prefix = LoginFailureMatrix[portal].prefix;
   await client.del(`${prefix}:fail:${email}`);
-}
-
-async function triggerExpiredMedical(supply, batchId) {
-  if (!client) throw new Error("Redis client not initialized");
-
-  const key = `medical:exp:${supply}:${batchId}`;
-
-  // Try to set the key only if it doesn't exist, with 60s expiration
-  const result = await client.set(key, "1", { NX: true, EX: 60 });
-
-  // Redis returns "OK" if the key was set, null if it already existed
-  return result === "OK"; // true if set, false if existed
 }
 
 // ------------------------------------------------

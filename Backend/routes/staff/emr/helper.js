@@ -16,7 +16,7 @@ async function getPatientIdFromvitalSignsId(vitalSignsId) {
     WHERE id = $1
   `;
 
-  const result = await db.query(query, [ConsultationId]);
+  const result = await db.query(query, [vitalSignsId]);
   return result.rows[0]?.patientId || null;
 }
 

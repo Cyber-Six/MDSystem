@@ -15,6 +15,8 @@ Database/setup.psql
 
 ### Backend specific ###
 Backend/node_modules/
+Backend/coverage/
+coverage/
 Backend/Patients/node_modules/
 Backend/.env
 Backend/commands/
@@ -132,6 +134,7 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+coverage/
 
 # Editor directories and files
 .vscode/*

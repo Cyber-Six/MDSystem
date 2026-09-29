@@ -10,21 +10,6 @@ const UPDATE_TICKET_EXPIRY_SEC = parseInt(process.env.UPDATE_TICKET_EXPIRY_SEC, 
 const DEFAULT_DATE_STRING = '1970-01-01T00:00:00Z';
 
 const Query = {
-  _getUserCredentialStatus: async (_, { userId }, { user, res }) => {
-    if (!userId) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const sql = `
-      SELECT credentials_status AS status
-      FROM "UserCredentials"
-      WHERE id = $1
-      LIMIT 1;
-    `;
-    const status = await db.query(sql, [userId]);
-    return status.rows[0]?.status || null;
-  },
-
-
   _getUserPersonalRecord: async (_, { userId }, { user, res }) => {
     if (!userId) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -259,10 +244,12 @@ const Mutation = {
       RETURNING *;
     `;
 
+    // Both values are validated as required above; the former `|| null`
+    // fallbacks were unreachable and obscured that contract.
     const values = [
       userId,
-      input.identifier || null,
-      input.branch || null
+      input.identifier,
+      input.branch
     ];
 
     try {
@@ -445,7 +432,7 @@ const Mutation = {
 
 };
 
-const applyUpdatePersonalRecord = async (_, { userId, input, client=db }, { user, res }) => {
+const applyUpdatePersonalRecord = async (_, { userId, input, client }, { user, res }) => {
 
   // Whitelist of allowed fields
   const allowedFields = [

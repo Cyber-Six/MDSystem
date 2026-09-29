@@ -29,7 +29,7 @@ const DENTAL_LEGEND_TO_RECOMMENDATION = {
 
 const MAX_RECOMMENDATIONS_IN_MESSAGE = 8;
 
-function toRecommendationLabel(legend = "") {
+function toRecommendationLabel(legend) {
   if (DENTAL_LEGEND_TO_RECOMMENDATION[legend]) {
     return DENTAL_LEGEND_TO_RECOMMENDATION[legend];
   }
@@ -42,7 +42,7 @@ function toRecommendationLabel(legend = "") {
     .join(" ");
 }
 
-function buildRecommendationDetails(toothPlacements = []) {
+function buildRecommendationDetails(toothPlacements) {
   return toothPlacements
     .filter((tooth) =>
       tooth?.legend &&
@@ -53,7 +53,7 @@ function buildRecommendationDetails(toothPlacements = []) {
     .map((tooth) => `${toRecommendationLabel(tooth.legend)} - Tooth ${tooth.toothIndex}`);
 }
 
-function summarizeRecommendations(recommendationDetails = []) {
+function summarizeRecommendations(recommendationDetails) {
   if (recommendationDetails.length === 0) {
     return "No tooth-specific procedure recommendations were marked.";
   }
@@ -459,7 +459,7 @@ const Mutation = {
       if (input.oralFindings !== undefined) {
         await db.queryClient(client, `DELETE FROM "oralFindingRecord" WHERE "dentalRecordId" = $1;`, [id]);
 
-        for (const finding of input.oralFindings || []) {
+        for (const finding of input.oralFindings) {
           await db.queryControlledClient(
             client,
             `INSERT INTO "oralFindingRecord"
