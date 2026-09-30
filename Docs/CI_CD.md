@@ -10,6 +10,8 @@ This repository uses GitHub Actions for continuous integration and for a control
 4. Confirm that GitHub Actions can reach each SSH host. GitHub-hosted runners need a reachable host; for a private host, arrange a protected self-hosted runner or approved VPN connection.
 5. Enable GitHub Actions for the repository. The repository workflow permissions can remain read-only because this workflow declares its own `contents: read` and `packages: write` permissions.
 
+The `CI` workflow runs on the repository's self-hosted Linux ARM64 runner using the labels `self-hosted`, `Linux`, and `ARM64`. In **Settings → Actions → Runners**, confirm the MDSystem Pi runner is registered to this repository, online, and has all three labels. The runner service account must be able to run `docker info` and `docker compose version` without `sudo`; CI builds `mdsystem:ci` in that runner's local Docker engine. A job waiting indefinitely usually means the runner is offline or one of its labels does not match. The separate publish-and-deploy workflow continues to use GitHub-hosted runners for multi-architecture release images.
+
 ## Run a release
 
 1. In the repository on GitHub, select **Actions → Publish and deploy MDSystem → Run workflow**.
@@ -25,7 +27,7 @@ If a job fails, open the run in **Actions**, select the failed job, and expand t
 
 ## How releases work
 
-The `CI` workflow runs on pull requests and pushes to `development`, `docker-testing`, and `deployment`. It installs dependencies, runs the existing backend, patient, staff, and mobile test commands, builds the web portals, validates Compose configuration, and builds the runtime Docker image.
+The `CI` workflow runs on pull requests and pushes to `development`, `docker-testing`, and `deployment`. It runs on the self-hosted Raspberry Pi Linux ARM64 runner, installs dependencies, runs the existing backend, patient, staff, and mobile test commands, builds the web portals, validates Compose configuration, and builds the runtime Docker image locally as `mdsystem:ci`. This CI image is not pushed or deployed; release images are built and deployed by the separate publish-and-deploy workflow.
 
 To start a release, open **Actions → Publish and deploy MDSystem → Run workflow**. GitHub's **Use workflow from** selector chooses the source branch; enter a unique version such as `v0.9.6-beta.1`. The release checks that exact revision, publishes a staging image tagged `v0.9.6-beta.1-staging`, then deploys it to the staging host. After use-case testing is approved, the production job builds from the same source commit, using production frontend URLs, publishes `v0.9.6-beta.1`, and deploys it. Staging and production use separate Docker build arguments because the frontend API URLs are baked into the image.
 
