@@ -89,7 +89,7 @@ services:
       - path: .env
         required: false
     environment: &app-environment
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       HOST: 0.0.0.0
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -98,7 +98,7 @@ services:
       MEDIA_PATH: /app/media
       LOGGER_DIR: /tmp/mdsystem-logs
     ports:
-      - "127.0.0.1:${PATIENT_PORT:-3000}:3000"
+      - "${PATIENT_BIND_ADDRESS:-127.0.0.1}:${PATIENT_PORT:-3000}:3000"
     volumes:
       - media-data:/app/media
     depends_on:
@@ -128,7 +128,7 @@ services:
         required: false
     environment: *app-environment
     ports:
-      - "127.0.0.1:${MEDICAL_PORT:-3001}:3001"
+      - "${STAFF_BIND_ADDRESS:-${PATIENT_BIND_ADDRESS:-127.0.0.1}}:${MEDICAL_PORT:-3001}:3001"
     volumes:
       - media-data:/app/media
     depends_on:

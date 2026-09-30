@@ -52,10 +52,12 @@ const app = express();
 
 // Middleware
 const corsOrigins = process.env.CORS_ALLOWED_ORIGINS
-  ? process.env.CORS_ALLOWED_ORIGINS.split(',')
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
   : [];
 app.use(cors({
-  origin: corsOrigins.length > 0 ? corsOrigins : false,
+  // In test mode, reflect each request origin so credentialed browser tests
+  // work from changing local-network hosts. Production stays allow-list only.
+  origin: process.env.NODE_ENV === 'test' ? true : (corsOrigins.length > 0 ? corsOrigins : false),
   credentials: true,
 }));
 app.use(helmet({

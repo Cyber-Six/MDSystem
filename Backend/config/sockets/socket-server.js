@@ -25,7 +25,9 @@ async function initSocket(server, options = {}) {
   }
 
   const configuredCorsOrigins = process.env.SOCKET_CORS_ORIGIN;
-  const corsOrigin = configuredCorsOrigins
+  const corsOrigin = process.env.NODE_ENV === 'test'
+    ? true
+    : configuredCorsOrigins
     ? configuredCorsOrigins.split(',').map(origin => origin.trim()).filter(Boolean)
     : '*';
   const allowedSocketOrigins = Array.isArray(corsOrigin) && corsOrigin.length === 1
