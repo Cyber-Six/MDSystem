@@ -49,12 +49,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       SCHEMA_SQL_PATH: ${SCHEMA_SQL_PATH:?Set SCHEMA_SQL_PATH to your schema.psql path in .env}
+      STARTUP_SQL_PATH: ${STARTUP_SQL_PATH:-./startup.sql}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
     volumes:
       - ${SCHEMA_SQL_PATH:?Set SCHEMA_SQL_PATH to your schema.psql path in .env}:/schema/schema.psql:ro
       - ./Backend/config/data/post_build_setup.sql:/schema/post_build_setup.sql:ro
-      - ./startup.sql:/schema/startup.sql:ro
+      - ${STARTUP_SQL_PATH:-./startup.sql}:/schema/startup.sql:ro
       - schema-state:/state
     entrypoint: ["sh", "-ec"]
     command:
@@ -74,6 +75,7 @@ services:
     networks: [backend]
 
   patient:
+    image: ${MD_SYSTEM_IMAGE:-mdsystem}:${IMAGE_TAG:-local}
     build:
       context: .
       target: runtime
@@ -111,6 +113,7 @@ services:
     networks: [backend]
 
   staff:
+    image: ${MD_SYSTEM_IMAGE:-mdsystem}:${IMAGE_TAG:-local}
     build:
       context: .
       target: runtime
@@ -140,6 +143,7 @@ services:
     networks: [backend]
 
   email-worker:
+    image: ${MD_SYSTEM_IMAGE:-mdsystem}:${IMAGE_TAG:-local}
     build:
       context: .
       target: runtime

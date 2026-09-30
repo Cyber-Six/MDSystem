@@ -9,7 +9,7 @@ The Compose stack runs the patient API and portal, staff API and portal, email w
 - SMTP credentials and the application's existing required secrets. Preserve `JWT_SECRET` and `TOTP_ENCRYPTION_KEY` when continuing to use existing application data.
 - On Windows, use Docker Desktop with Linux containers enabled.
 
-Copy `.env.example` to `.env`, fill in private values, then set `SCHEMA_SQL_PATH` to the absolute path of the schema file. Use forward slashes in Windows paths (for example `D:/secure/mdsystem/schema.psql`). Never commit `.env` or the database schema.
+Copy `.env.example` to `.env`, fill in private values, then set `SCHEMA_SQL_PATH` to the absolute path of the schema file. Set `STARTUP_SQL_PATH` to the bootstrap SQL file to run after `post_build_setup.sql`; it defaults to `./startup.sql` in the project directory. Use forward slashes in Windows paths (for example `D:/secure/mdsystem/schema.psql`). Never commit `.env` or the database schema.
 
 Generate a 64-character hex TOTP key with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Set distinct, long random values for PostgreSQL, Redis, and JWT credentials. Set `VITE_GOOGLE_CLIENT_ID` and `VITE_RECAPTCHA_SITE_KEY` before building if those browser features are enabled. These two Vite values are embedded in the public browser bundle; do not put secrets there.
 
@@ -36,7 +36,7 @@ Wait until both services show `healthy`, then initialize the database:
 docker compose --profile setup run --rm schema-init
 ```
 
-The one-shot schema initializer waits for PostgreSQL, executes the mounted schema, then executes `Backend/config/data/post_build_setup.sql`, and finally runs the root `startup.sql` first-admin bootstrap. The default bootstrap account is `mdsystem@tip.edu.ph` with initial password `mdsystem`; only its bcrypt hash is stored. Change this password immediately after first login and complete the normal admin transfer process for the real administrator. Override `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` in `.env` when deploying elsewhere. All configured steps must finish successfully before initialization is marked complete.
+The one-shot schema initializer waits for PostgreSQL, executes the mounted schema, then executes `Backend/config/data/post_build_setup.sql`, and finally runs the SQL file selected by `STARTUP_SQL_PATH` as the first-admin bootstrap. The default is the root `startup.sql`. The default bootstrap account is `mdsystem@tip.edu.ph` with initial password `mdsystem`; only its bcrypt hash is stored. Change this password immediately after first login and complete the normal admin transfer process for the real administrator. Override `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` in `.env` when deploying elsewhere. All configured steps must finish successfully before initialization is marked complete.
 
 Start the application services:
 

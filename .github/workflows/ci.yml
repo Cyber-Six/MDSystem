@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [development, docker-testing, deployment]
+  push:
+    branches: [development, docker-testing, deployment]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci
+
+      - name: Install mobile dependencies
+        run: npm ci --prefix mds-mobile
+
+      - name: Run backend tests
+        run: npm run test:backend
+
+      - name: Run patient portal tests
+        run: npm run test:patient
+
+      - name: Run staff portal tests
+        run: npm run test:staff
+
+      - name: Run mobile tests
+        run: npm run test:mobile
+
+      - name: Build patient and staff portals
+        run: npm run build
+
+      - name: Validate Compose configuration
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: mdsystem_ci
+          REDIS_PASSWORD: ci-only-password
+          SCHEMA_SQL_PATH: /tmp/ci-schema.psql
+        run: docker compose config --quiet
+
+      - name: Build Docker image
+        run: docker build --target runtime --tag mdsystem:ci .
