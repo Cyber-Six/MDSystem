@@ -42,9 +42,69 @@ function discoverLanAddress() {
   return candidates[0];
 }
 
-const fileEnv = readEnvFile(path.resolve(process.cwd(), '.env'));
+const projectDir = process.cwd();
+const envFilePath = path.join(projectDir, '.env');
+const fileEnv = readEnvFile(envFilePath);
+const args = process.argv.slice(2);
 const nodeEnv = process.env.NODE_ENV || fileEnv.NODE_ENV || 'production';
 const env = { ...process.env, NODE_ENV: nodeEnv };
+
+function value(name) {
+  return process.env[name] ?? fileEnv[name] ?? '';
+}
+
+function fail(message) {
+  console.error(`Docker setup validation failed: ${message}`);
+  process.exit(1);
+}
+
+function validateEnv(required) {
+  if (!fs.existsSync(envFilePath)) fail(`.env file not found at ${envFilePath}. Copy .env.example to .env and configure it.`);
+  const missing = required.filter(name => !value(name).trim());
+  if (missing.length) fail(`set required values in .env: ${missing.join(', ')}`);
+}
+
+function validateRuntimeEnv() {
+  const required = [
+    'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'REDIS_PASSWORD',
+    'JWT_SECRET', 'SMTP_USER', 'SMTP_PASS', 'TOTP_ENCRYPTION_KEY',
+  ];
+  if (nodeEnv !== 'test') required.push('CORS_ALLOWED_ORIGINS', 'SOCKET_CORS_ORIGIN');
+  validateEnv(required);
+  const totpKey = value('TOTP_ENCRYPTION_KEY').trim();
+  if (!/^[a-fA-F0-9]{64}$/.test(totpKey)) fail('TOTP_ENCRYPTION_KEY must be exactly 64 hexadecimal characters.');
+}
+
+function resolveSqlPath(name, configured) {
+  const absolutePath = path.resolve(projectDir, configured);
+  let isFile = false;
+  try {
+    isFile = fs.statSync(absolutePath).isFile();
+  } catch {}
+  if (!isFile) {
+    fail(`${name} points to a missing SQL file: ${absolutePath}`);
+  }
+  return absolutePath;
+}
+
+const startsServices = args.some(arg => ['up', 'start', 'restart', 'run'].includes(arg));
+const hasSetupProfile = args.some((arg, index) => arg === 'setup' && args[index - 1] === '--profile' || arg === '--profile=setup');
+const command = args.find(arg => ['up', 'start', 'restart', 'run'].includes(arg));
+const composeServices = new Set(['postgres', 'redis', 'schema-init', 'patient', 'staff', 'email-worker']);
+const hasExplicitService = args.some(arg => composeServices.has(arg));
+const initializesSchema = ['up', 'start', 'run'].includes(command)
+  && (args.includes('schema-init') || (hasSetupProfile && command === 'up' && !hasExplicitService));
+const appServices = new Set(['patient', 'staff', 'email-worker']);
+const hasExplicitAppService = args.some(arg => appServices.has(arg));
+if (startsServices && command !== 'run' && (hasExplicitAppService || !args.some(arg => ['postgres', 'redis', 'schema-init'].includes(arg)))) {
+  validateRuntimeEnv();
+}
+if (initializesSchema) {
+  validateEnv(['POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'SCHEMA_SQL_PATH', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH']);
+  resolveSqlPath('SCHEMA_SQL_PATH', value('SCHEMA_SQL_PATH').trim());
+  resolveSqlPath('STARTUP_SQL_PATH', value('STARTUP_SQL_PATH').trim() || './startup.sql');
+  resolveSqlPath('POST_BUILD_SETUP_SQL_PATH', './Backend/config/data/post_build_setup.sql');
+}
 
 if (nodeEnv === 'test') {
   env.PATIENT_BIND_ADDRESS = '0.0.0.0';
@@ -64,8 +124,8 @@ if (nodeEnv === 'test') {
   env.STAFF_BIND_ADDRESS ??= fileEnv.STAFF_BIND_ADDRESS || env.PATIENT_BIND_ADDRESS;
 }
 
-const result = spawnSync('docker', ['compose', ...process.argv.slice(2)], {
-  cwd: process.cwd(),
+const result = spawnSync('docker', ['compose', ...args], {
+  cwd: projectDir,
   env,
   stdio: 'inherit',
 });
