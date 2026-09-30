@@ -49,13 +49,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       SCHEMA_SQL_PATH: ${SCHEMA_SQL_PATH:?Set SCHEMA_SQL_PATH to your schema.psql path in .env}
-      STARTUP_SQL_PATH: ${STARTUP_SQL_PATH:-./startup.sql}
+      STARTUP_SQL_PATH: ${STARTUP_SQL_PATH:-./schemas/startup.sql}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
     volumes:
       - ${SCHEMA_SQL_PATH:?Set SCHEMA_SQL_PATH to your schema.psql path in .env}:/schema/schema.psql:ro
       - ${POST_BUILD_SETUP_SQL_PATH:-./Backend/config/data/post_build_setup.sql}:/schema/post_build_setup.sql:ro
-      - ${STARTUP_SQL_PATH:-./startup.sql}:/schema/startup.sql:ro
+      - ${STARTUP_SQL_PATH:-./schemas/startup.sql}:/schema/startup.sql:ro
       - schema-state:/state
     entrypoint: ["sh", "-ec"]
     command:
