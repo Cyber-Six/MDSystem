@@ -96,8 +96,19 @@ export const createApiBaseUrlProvider = ({ getHostname, getEnv }) => {
       return hostname.replace('www2.', 'www.');
     }
     
-    // For www. or staff., return as-is
-    return hostname;
+    // Preserve recognized portal hostnames. This also handles LAN testing
+    // where the frontend is opened through an IP address: the patient/staff
+    // app supplies its portal through DEV_PORTAL, so the backend can still
+    // distinguish the portal using X-Forwarded-Host.
+    if (hostname.startsWith('staff.') || hostname.startsWith('www.')) {
+      return hostname;
+    }
+
+    const devPortal = getEnv('DEV_PORTAL') || 'www';
+    const normalizedPortal = devPortal.replace(/2$/, '');
+    return normalizedPortal === 'staff'
+      ? 'staff.mdsystemtip.space'
+      : 'www.mdsystemtip.space';
   };
 
   return {
