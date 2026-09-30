@@ -96,8 +96,14 @@ jobs:
           docker image tag mdsystem:ci mdsystem:local
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3000/ >/dev/null
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3001/ >/dev/null
+          patient_ok=1
+          staff_ok=1
+          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3000/ >/dev/null || patient_ok=0
+          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3001/ >/dev/null || staff_ok=0
+          if [ "$patient_ok" -eq 0 ] || [ "$staff_ok" -eq 0 ]; then
+            node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
+            exit 1
+          fi
 
       - name: Manually restart the Pi use-case services
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'restart'
@@ -106,8 +112,14 @@ jobs:
           docker image tag mdsystem:ci mdsystem:local
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3000/ >/dev/null
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3001/ >/dev/null
+          patient_ok=1
+          staff_ok=1
+          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3000/ >/dev/null || patient_ok=0
+          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3001/ >/dev/null || staff_ok=0
+          if [ "$patient_ok" -eq 0 ] || [ "$staff_ok" -eq 0 ]; then
+            node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
+            exit 1
+          fi
 
       - name: Manually reset database, rerun SQL, and start services
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database'
@@ -124,5 +136,11 @@ jobs:
           node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3000/ >/dev/null
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3001/ >/dev/null
+          patient_ok=1
+          staff_ok=1
+          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3000/ >/dev/null || patient_ok=0
+          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3001/ >/dev/null || staff_ok=0
+          if [ "$patient_ok" -eq 0 ] || [ "$staff_ok" -eq 0 ]; then
+            node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
+            exit 1
+          fi
