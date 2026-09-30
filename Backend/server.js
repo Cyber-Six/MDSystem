@@ -72,6 +72,9 @@ app.use(helmet({
       baseUri:        ["'self'"],
       formAction:     ["'self'"],
       frameAncestors: ["'none'"],
+      // Keep local/test runs over plain HTTP from upgrading asset/API requests
+      // to HTTPS; enforce HTTPS upgrades in production only.
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
     },
   },
   crossOriginEmbedderPolicy: false, // Required for Google Sign-In button
