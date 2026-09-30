@@ -33,7 +33,7 @@ Use-case testing is a human approval gate, not an automated browser test suite. 
 
 The workflow file must exist on the repository's default branch for `workflow_dispatch` to be available. The manual run's branch selector can then choose another branch. A production environment can restrict deployable branches to `deployment` (or whichever branch is your release branch).
 
-`NODE_ENV` is read from each host's `.env` by Compose and defaults to `production`. The staging deployment also runs the app in production mode so it exercises production behavior; use-case testing refers to testing the deployed staging environment, not changing Node's runtime mode. For local isolated browser tests, `NODE_ENV=test` enables reflected CORS origins (including credentialed requests). Do not set that on a production host. `HOST=0.0.0.0` is the app's container bind address; set `PATIENT_BIND_ADDRESS=0.0.0.0` and optionally `STAFF_BIND_ADDRESS=0.0.0.0` only if you need direct LAN access. The default published address is `127.0.0.1`, suitable for a reverse proxy or tunnel.
+The staging deployment runs the app in production mode so it exercises production behavior; use-case testing refers to testing that deployment, not changing Node's runtime mode. For local isolated browser tests, `NODE_ENV=test` enables reflected CORS origins. Use `node scripts/compose.js ...` for those Compose commands: the launcher sets both published bind addresses to `0.0.0.0` in test mode; in other modes it reads the configured addresses from `.env` (default `127.0.0.1`). Do not use test mode on a production host. `HOST=0.0.0.0` is the app's container bind address, separate from the host's published bind addresses.
 
 ## GitHub configuration
 
