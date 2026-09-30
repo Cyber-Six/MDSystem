@@ -5,6 +5,20 @@ on:
     branches: [development, docker-testing, deployment]
   push:
     branches: [development, docker-testing, deployment]
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Action to perform on the Pi use-case environment
+        required: true
+        type: choice
+        options:
+          - restart
+          - reset-database
+        default: restart
+      confirm_database_reset:
+        description: Type DELETE_DATABASE to authorize permanent database deletion
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -59,3 +73,56 @@ jobs:
 
       - name: Build Docker image
         run: docker build --target runtime --tag mdsystem:ci .
+
+      - name: Validate manual operation selection
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          OPERATION: ${{ inputs.operation }}
+          RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/docker-testing" ]; then
+            echo "Manual Pi operations must be run from the docker-testing branch." >&2
+            exit 1
+          fi
+          if [ "$OPERATION" = "reset-database" ] && [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
+            echo "Database reset not authorized. Enter DELETE_DATABASE in the confirmation field." >&2
+            exit 1
+          fi
+
+      - name: Deploy tested image to the Pi use-case stack
+        if: github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+        working-directory: /srv/projects/MDSystem
+        run: |
+          docker image tag mdsystem:ci mdsystem:local
+          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
+          node "$GITHUB_WORKSPACE/scripts/compose.js" ps
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3000/ >/dev/null
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3001/ >/dev/null
+
+      - name: Manually restart the Pi use-case services
+        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'restart'
+        working-directory: /srv/projects/MDSystem
+        run: |
+          docker image tag mdsystem:ci mdsystem:local
+          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
+          node "$GITHUB_WORKSPACE/scripts/compose.js" ps
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3000/ >/dev/null
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3001/ >/dev/null
+
+      - name: Manually reset database, rerun SQL, and start services
+        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database'
+        working-directory: /srv/projects/MDSystem
+        run: |
+          node "$GITHUB_WORKSPACE/scripts/compose.js" stop patient staff email-worker postgres
+          for volume in mdsystem_postgres-data mdsystem_schema-state; do
+            if docker volume inspect "$volume" >/dev/null 2>&1; then
+              docker volume rm "$volume"
+            fi
+          done
+          docker image tag mdsystem:ci mdsystem:local
+          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
+          node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
+          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
+          node "$GITHUB_WORKSPACE/scripts/compose.js" ps
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3000/ >/dev/null
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 http://127.0.0.1:3001/ >/dev/null
