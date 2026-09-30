@@ -102,8 +102,8 @@ if (startsServices && command !== 'run' && (hasExplicitAppService || !args.some(
 if (initializesSchema) {
   validateEnv(['POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'SCHEMA_SQL_PATH', 'ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH']);
   resolveSqlPath('SCHEMA_SQL_PATH', value('SCHEMA_SQL_PATH').trim());
+  resolveSqlPath('POST_BUILD_SETUP_SQL_PATH', value('POST_BUILD_SETUP_SQL_PATH').trim() || './Backend/config/data/post_build_setup.sql');
   resolveSqlPath('STARTUP_SQL_PATH', value('STARTUP_SQL_PATH').trim() || './startup.sql');
-  resolveSqlPath('POST_BUILD_SETUP_SQL_PATH', './Backend/config/data/post_build_setup.sql');
 }
 
 if (nodeEnv === 'test') {
