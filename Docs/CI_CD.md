@@ -10,7 +10,7 @@ This repository uses GitHub Actions for continuous integration and for a control
 4. Confirm that GitHub Actions can reach each SSH host. GitHub-hosted runners need a reachable host; for a private host, arrange a protected self-hosted runner or approved VPN connection.
 5. Enable GitHub Actions for the repository. The repository workflow permissions can remain read-only because this workflow declares its own `contents: read` and `packages: write` permissions.
 
-The `CI` workflow runs on the repository's self-hosted Linux ARM64 runner using the labels `self-hosted`, `Linux`, and `ARM64`. In **Settings → Actions → Runners**, confirm the MDSystem Pi runner is registered to this repository, online, and has all three labels. The runner service account must be able to run `docker info` and `docker compose version` without `sudo`; CI builds `mdsystem:ci` in that runner's local Docker engine. For successful pushes to `docker-testing`, it also needs access to `/srv/projects/MDSystem`, including that directory's `.env` and Compose file. A job waiting indefinitely usually means the runner is offline or one of its labels does not match. The separate publish-and-deploy workflow continues to use GitHub-hosted runners for multi-architecture release images.
+The `CI` workflow first runs patient and staff GUI smoke tests on a GitHub-hosted Linux runner, then runs the backend, patient, staff, and mobile test suites and Docker build on the repository's self-hosted Linux ARM64 runner using the labels `self-hosted`, `Linux`, and `ARM64`. The GUI tests launch the built portals in Chromium and mock the login API response, so they need no credentials, do not contact real users, and do not access the Pi database. In **Settings → Actions → Runners**, confirm the MDSystem Pi runner is registered to this repository, online, and has all three labels. The runner service account must be able to run `docker info` and `docker compose version` without `sudo`; CI builds `mdsystem:ci` in that runner's local Docker engine. For successful pushes to `docker-testing`, it also needs access to `/srv/projects/MDSystem`, including that directory's `.env` and Compose file. A job waiting indefinitely usually means the runner is offline or one of its labels does not match. The separate publish-and-deploy workflow continues to use GitHub-hosted runners for multi-architecture release images and runs the same GUI checks before deployment.
 
 ## Run a release
 
@@ -35,7 +35,16 @@ Choose `docker-testing` under **Use workflow from**, then select the `restart` o
 
 To start a release, open **Actions → Publish and deploy MDSystem → Run workflow**. GitHub's **Use workflow from** selector chooses the source branch; enter a unique version such as `v0.9.6-beta.1`. The release checks that exact revision, publishes a staging image tagged `v0.9.6-beta.1-staging`, then deploys it to the staging host. After use-case testing is approved, the production job builds from the same source commit, using production frontend URLs, publishes `v0.9.6-beta.1`, and deploys it. Staging and production use separate Docker build arguments because the frontend API URLs are baked into the image.
 
-Use-case testing is a human approval gate, not an automated browser test suite. Add required reviewers to the `use-case-testing` GitHub environment; approving that job allows production promotion. Add required reviewers to `production` as a second deployment safeguard. Do not approve the use-case gate until the selected release has passed your expected workflows against staging.
+The automated GUI smoke suite checks that both portals render their login screen, accept form input, submit a login request, and show the expected invalid-credentials message. It mocks the login API and is a quick regression check; it does not replace testing successful authentication, role permissions, appointments, or other use cases against staging. The `use-case-testing` environment remains a human approval gate. Add required reviewers there; approving that job allows production promotion. Add required reviewers to `production` as a second deployment safeguard. Do not approve the use-case gate until the selected release has passed your expected workflows against staging.
+
+To run the GUI smoke suite locally after installing dependencies and building the portals:
+
+```sh
+npx playwright install chromium
+npm run test:gui
+```
+
+The Playwright configuration starts both built portals with Vite Preview on ports `4173` and `4174`, then shuts them down after the tests. Test reports, screenshots, and traces are written under ignored local output directories; CI retains failure traces in its job artifacts.
 
 The workflow file must exist on the repository's default branch for `workflow_dispatch` to be available. The manual run's branch selector can then choose another branch. A production environment can restrict deployable branches to `deployment` (or whichever branch is your release branch).
 

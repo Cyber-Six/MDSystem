@@ -64,6 +64,21 @@ jobs:
       - name: Build patient and staff portals
         run: npm run build
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run patient and staff GUI smoke tests
+        run: npm run test:gui
+
+      - name: Upload GUI failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-smoke-traces
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Set image name
         id: image
         env:

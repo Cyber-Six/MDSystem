@@ -17,6 +17,8 @@ Database/setup.psql
 Backend/node_modules/
 Backend/coverage/
 coverage/
+playwright-report/
+test-results/
 Backend/Patients/node_modules/
 Backend/.env
 Backend/commands/
@@ -117,6 +119,8 @@ mds-mobile/.dev/
 .env
 .env.local
 .env.*.local
+e2e.private.env
+/e2e/.run-*
 
 # Logs
 logs/

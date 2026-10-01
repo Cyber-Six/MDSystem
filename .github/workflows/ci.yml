@@ -28,7 +28,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gui-smoke:
+    name: Patient and staff GUI smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci
+
+      - name: Build patient and staff portals
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run GUI smoke tests
+        run: npm run test:gui
+
+      - name: Upload GUI failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-smoke-traces
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   test-and-build:
+    needs: gui-smoke
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 45
     steps:
