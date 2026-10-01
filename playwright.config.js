@@ -1,26 +1,35 @@
 const { defineConfig } = require('@playwright/test');
 
 const coreMode = process.env.E2E_CORE === '1';
+const recordE2EVideo = process.env.E2E_VISUAL_RECORDING === '1';
 
 module.exports = defineConfig({
   testDir: './e2e',
   fullyParallel: !coreMode,
   workers: coreMode ? 1 : undefined,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  retries: coreMode ? 0 : process.env.CI ? 1 : 0,
+  reporter: coreMode
+    ? [['html', { outputFolder: 'e2e-results/playwright-report', open: 'never' }], ['list']]
+    : process.env.CI ? 'github' : 'list',
+  outputDir: coreMode ? 'e2e-results/test-results' : 'test-results',
   use: {
     browserName: 'chromium',
     headless: true,
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace: 'off',
+    screenshot: 'off',
   },
   projects: [
     { name: 'smoke', testMatch: 'login-smoke.spec.js' },
     {
       name: 'core',
       testMatch: 'core/**/*.spec.js',
-      use: { trace: 'off', screenshot: 'off', video: 'off' },
+      use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
+    },
+    {
+      name: 'full',
+      testMatch: ['core/**/*.spec.js', 'flows/**/*.spec.js'],
+      use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
     },
   ],
   webServer: coreMode ? undefined : [

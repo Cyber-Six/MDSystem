@@ -1,5 +1,61 @@
 name: mdsystem-e2e
 
+x-app-base: &app-base
+  image: ${E2E_APP_IMAGE:?generated for this run}
+  build:
+    context: ..
+    dockerfile: Dockerfile
+    target: runtime
+    args:
+      VITE_PATIENT_BACKEND_URL: http://patient:3000
+      VITE_STAFF_BACKEND_URL: http://staff:3001
+      VITE_PATIENT_DEV_PORTAL: www
+      VITE_STAFF_DEV_PORTAL: staff
+    labels:
+      com.mdsystem.e2e.project: ${E2E_RUN_PROJECT:?generated for this run}
+      com.mdsystem.resource: e2e
+  environment: &app-env
+    NODE_ENV: test
+    HOST: 0.0.0.0
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: 5432
+    POSTGRES_DB: mdsystem_e2e
+    PATIENT_PORT: 3000
+    MEDICAL_PORT: 3001
+    POSTGRES_USER: ${E2E_POSTGRES_USER}
+    POSTGRES_PASSWORD: ${E2E_POSTGRES_PASSWORD}
+    POSTGRES_MAX_CONN: 5
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    REDIS_DB: 0
+    REDIS_USERNAME: e2e
+    REDIS_PASSWORD: ${E2E_REDIS_PASSWORD}
+    SMTP_HOST: smtp
+    SMTP_PORT: 1025
+    SMTP_SECURE: "false"
+    SMTP_USER: e2e
+    SMTP_PASS: e2e
+    JWT_SECRET: ${E2E_JWT_SECRET}
+    JWT_ALGORITHM: HS256
+    JWT_EXPIRES_IN: 1h
+    JWT_ISSUER: mdsystem-e2e
+    TOTP_ENCRYPTION_KEY: ${E2E_TOTP_ENCRYPTION_KEY}
+    DATA_CONSENT_VERSION: v1.0
+    RECAPTCHA_TEST_MODE: "true"
+    GOOGLE_OAUTH_ENABLED: "false"
+    DEBUG_BYPASS_OTP: "false"
+    ALLOW_BOOTSTRAP_ADMIN: "false"
+    MEDIA_PATH: /app/media
+    LOGGER_DIR: /tmp/mdsystem-logs
+    EMAIL_DELAY: 0
+  volumes:
+    - e2e-media:/app/media
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    schema-init: { condition: service_completed_successfully }
+  labels: { com.mdsystem.resource: e2e }
+
 services:
   postgres:
     image: postgres:17-bookworm
@@ -62,48 +118,6 @@ services:
         psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -v ADMIN_EMAIL="$$ADMIN_EMAIL" -v ADMIN_PASSWORD_HASH="$$ADMIN_PASSWORD_HASH" -f /schema/startup.sql
     labels: { com.mdsystem.resource: e2e }
 
-x-app-base: &app-base
-    image: ${MD_SYSTEM_IMAGE:-mdsystem:ci}
-    environment: &app-env
-      NODE_ENV: test
-      HOST: 0.0.0.0
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: mdsystem_e2e
-      POSTGRES_USER: ${E2E_POSTGRES_USER}
-      POSTGRES_PASSWORD: ${E2E_POSTGRES_PASSWORD}
-      POSTGRES_MAX_CONN: 5
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 0
-      REDIS_USERNAME: e2e
-      REDIS_PASSWORD: ${E2E_REDIS_PASSWORD}
-      SMTP_HOST: smtp
-      SMTP_PORT: 1025
-      SMTP_SECURE: "false"
-      SMTP_USER: e2e
-      SMTP_PASS: e2e
-      JWT_SECRET: ${E2E_JWT_SECRET}
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRES_IN: 1h
-      JWT_ISSUER: mdsystem-e2e
-      TOTP_ENCRYPTION_KEY: ${E2E_TOTP_ENCRYPTION_KEY}
-      DATA_CONSENT_VERSION: v1.0
-      RECAPTCHA_TEST_MODE: "true"
-      GOOGLE_OAUTH_ENABLED: "false"
-      DEBUG_BYPASS_OTP: "false"
-      ALLOW_BOOTSTRAP_ADMIN: "false"
-      MEDIA_PATH: /app/media
-      LOGGER_DIR: /tmp/mdsystem-logs
-      EMAIL_DELAY: 0
-    volumes:
-      - e2e-media:/app/media
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      schema-init: { condition: service_completed_successfully }
-    labels: { com.mdsystem.resource: e2e }
-
   patient:
     <<: *app-base
     command: ["node", "Backend/server.js"]
@@ -137,6 +151,7 @@ x-app-base: &app-base
       <<: *app-env
       E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
       E2E_PATIENT_EMAIL: ${E2E_PATIENT_EMAIL}
+      E2E_ALT_PATIENT_EMAIL: ${E2E_ALT_PATIENT_EMAIL}
       E2E_STAFF_EMAIL: ${E2E_STAFF_EMAIL}
       E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
@@ -147,11 +162,16 @@ x-app-base: &app-base
       schema-init: { condition: service_completed_successfully }
 
   test-runner:
+    image: ${E2E_RUNNER_IMAGE:?generated for this run}
     build:
       context: ..
       dockerfile: Dockerfile.e2e
+      labels:
+        com.mdsystem.e2e.project: ${E2E_RUN_PROJECT:?generated for this run}
+        com.mdsystem.resource: e2e
     environment:
       E2E_CORE: "1"
+      E2E_VISUAL_RECORDING: ${E2E_VISUAL_RECORDING:-0}
       E2E_PATIENT_URL: http://patient:3000
       E2E_STAFF_URL: http://staff:3001
       E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
@@ -161,12 +181,20 @@ x-app-base: &app-base
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
       MAILPIT_URL: http://smtp:8025
     depends_on:
-      patient: { condition: service_started }
-      staff: { condition: service_started }
+      patient: { condition: service_healthy }
+      staff: { condition: service_healthy }
       email-worker: { condition: service_started }
       smtp: { condition: service_started }
+    init: true
+    shm_size: 1gb
+    volumes:
+      - ${E2E_ARTIFACT_DIR:?run via scripts/e2e.js}:/tests/e2e-results
 
 volumes:
   e2e-postgres:
   e2e-redis:
   e2e-media:
+
+networks:
+  default:
+    internal: true

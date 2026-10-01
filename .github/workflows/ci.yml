@@ -65,6 +65,7 @@ jobs:
 
   test-and-build:
     needs: gui-smoke
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 45
     steps:
@@ -109,6 +110,27 @@ jobs:
 
       - name: Build Docker image
         run: docker build --target runtime --tag mdsystem:ci .
+
+      - name: Run disposable database-backed Playwright core suite
+        if: github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+        env:
+          E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
+        run: npm run test:e2e:core
+
+      - name: Upload disposable Playwright core report
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-core-${{ github.sha }}
+          path: e2e-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Remove registered interrupted E2E projects
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+        env:
+          E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
+        run: node scripts/e2e-cleanup.js --registered
 
       - name: Validate manual operation selection
         if: github.event_name == 'workflow_dispatch'

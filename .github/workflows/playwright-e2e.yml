@@ -1,0 +1,63 @@
+name: Playwright E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Disposable database-backed suite
+        required: true
+        type: choice
+        options: [core, full]
+        default: core
+      record_video:
+        description: Save a browser video for each test; videos show synthetic OTP activity
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playwright-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  disposable-e2e:
+    name: Run ${{ inputs.suite }} E2E suite on the Pi
+    if: github.ref == 'refs/heads/docker-testing'
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 60
+    steps:
+      - name: Check out selected branch
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci
+
+      - name: Build isolated application and browser images, run selected suite
+        env:
+          E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
+          E2E_VISUAL_RECORDING: ${{ inputs.record_video && '1' || '0' }}
+        run: node scripts/e2e.js "${{ inputs.suite }}"
+
+      - name: Upload sanitized Playwright report and service logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ inputs.suite }}-${{ github.sha }}
+          path: e2e-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Remove registered interrupted E2E projects
+        if: always()
+        env:
+          E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
+        run: node scripts/e2e-cleanup.js --registered

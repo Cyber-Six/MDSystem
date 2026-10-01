@@ -26,6 +26,10 @@ manual `test-patient-management.js` diagnostic are excluded.
 Coverage thresholds are 100% for statements, branches, functions, and lines
 for each eligible source file. Reports are written under `Backend/coverage/`.
 
+## Playwright
+
+The mocked hosted GUI checks and disposable database-backed Pi suites are separate. See [Playwright GUI and E2E testing](PLAYWRIGHT_E2E.md) for local SQL path configuration and the `test:e2e:smoke`, `test:e2e:core`, and `test:e2e:full` commands.
+
 ## Other workspaces
 
 The root package exposes focused tests for each workspace:
