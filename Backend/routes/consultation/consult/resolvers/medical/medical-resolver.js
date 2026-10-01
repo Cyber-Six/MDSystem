@@ -2,7 +2,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
-const permit = require("../../../../../services/permit.js");
+const permit = require("../../../../../services/authorization/permit.js");
 const { getPatientIdFromConsultationId, getPatientIdFromOutcomeId } = require("../wrapper/helper.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 

@@ -68,7 +68,7 @@ function serverContract(filename, { portal, defaultPort, portVariable, requiredR
     test.each([false, true])('starts guarded routes and handles requests (configured=%s)', async configured => {
       if (configured) Object.assign(process.env, { CORS_ALLOWED_ORIGINS: 'https://one.invalid,https://two.invalid', CHATBOT_URL: 'http://chatbot.invalid', [portVariable]: '4000' });
       await load();
-      expect(cors).toHaveBeenCalledWith({ origin: configured ? ['https://one.invalid', 'https://two.invalid'] : false, credentials: true });
+      expect(cors).toHaveBeenCalledWith({ origin: 'test' === process.env.NODE_ENV ? true : (configured ? ['https://one.invalid', 'https://two.invalid'] : false), credentials: true });
       expect(app.listen).toHaveBeenCalledWith(configured ? '4000' : defaultPort, '127.0.0.1', expect.any(Function));
       expect(redis.initRedis).toHaveBeenCalledTimes(1);
       expect(sockets.initSocket).toHaveBeenCalledWith(server);

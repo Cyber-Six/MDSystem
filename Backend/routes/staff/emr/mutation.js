@@ -1,7 +1,7 @@
 const db = require("../../../config/query.js");
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
-const permit = require("../../../services/permit.js");
+const permit = require("../../../services/authorization/permit.js");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -86,7 +86,7 @@ async function notifyDentalGradingCompletion({ patientId, staffUserId, dentalRec
 
   try {
     const { isConnectedAnywhere, emitToUser } = require("../../../config/sockets");
-    const { enqueueNotificationEmail } = require("../../../services/emailservice");
+    const { enqueueNotificationEmail } = require("../../../services/email/emailservice");
 
     const recommendationDetails = buildRecommendationDetails(toothPlacements);
     const recommendationSummary = summarizeRecommendations(recommendationDetails);

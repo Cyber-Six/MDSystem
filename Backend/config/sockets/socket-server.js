@@ -24,7 +24,15 @@ async function initSocket(server, options = {}) {
     return io;
   }
 
-  const corsOrigin = process.env.SOCKET_CORS_ORIGIN || '*';
+  const configuredCorsOrigins = process.env.SOCKET_CORS_ORIGIN;
+  const corsOrigin = process.env.NODE_ENV === 'test'
+    ? true
+    : configuredCorsOrigins
+    ? configuredCorsOrigins.split(',').map(origin => origin.trim()).filter(Boolean)
+    : '*';
+  const allowedSocketOrigins = Array.isArray(corsOrigin) && corsOrigin.length === 1
+    ? corsOrigin[0]
+    : corsOrigin;
   const corsMethods = (
     process.env.SOCKET_CORS_METHODS || 'GET,HEAD,PUT,PATCH,POST,DELETE'
   ).split(',');
@@ -38,7 +46,7 @@ async function initSocket(server, options = {}) {
     path,
     serveClient: serveClientOption,
     cors: {
-      origin: corsOrigin,
+      origin: allowedSocketOrigins,
       methods: corsMethods,
       credentials: true,
     },

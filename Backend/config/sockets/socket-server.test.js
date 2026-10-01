@@ -30,7 +30,7 @@ test.each([false, true])('initializes socket lifecycle and offline delivery (pro
   }
   expect(server.getIO()).toBeNull();
   await expect(server.initSocket('http-server')).resolves.toBe(io);
-  expect(Server).toHaveBeenCalledWith('http-server', expect.objectContaining({ serveClient: !production, path: production ? '/ws' : '/socket.io', cors: expect.objectContaining({ origin: production ? 'https://test.invalid' : '*' }) }));
+  expect(Server).toHaveBeenCalledWith('http-server', expect.objectContaining({ serveClient: !production, path: production ? '/ws' : '/socket.io', cors: expect.objectContaining({ origin: production ? 'https://test.invalid' : true }) }));
   expect(io.use).toHaveBeenCalledWith('auth');
   await expect(server.initSocket('another-server')).resolves.toBe(io);
   expect(Server).toHaveBeenCalledTimes(1);

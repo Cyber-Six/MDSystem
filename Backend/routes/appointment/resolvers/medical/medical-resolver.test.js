@@ -2,13 +2,13 @@ const mockQueryDelegates = {};
 const mockMutationDelegates = {};
 const proxy = delegates => new Proxy({}, { get(_target, name) { return delegates[name] ||= jest.fn(); } });
 jest.mock('../wrapper/wrapper.js', () => ({ Query: proxy(mockQueryDelegates), Mutation: proxy(mockMutationDelegates) }));
-jest.mock('../../../../services/permit.js', () => ({ permissions: { appointment_allow_view_records: 'VIEW_RECORDS', appointment_allow_view_configuration: 'VIEW_CONFIG', appointment_allow_approval: 'APPROVE', appointment_allow_edit_configuration: 'EDIT_CONFIG' }, isMedicalPermitted: jest.fn(), isMedicalPermittedPatientBased: jest.fn(), isMedicalPermittedBranchBased: jest.fn(), getStaffBranch: jest.fn() }));
+jest.mock('../../../../services/authorization/permit.js', () => ({ permissions: { appointment_allow_view_records: 'VIEW_RECORDS', appointment_allow_view_configuration: 'VIEW_CONFIG', appointment_allow_approval: 'APPROVE', appointment_allow_edit_configuration: 'EDIT_CONFIG' }, isMedicalPermitted: jest.fn(), isMedicalPermittedPatientBased: jest.fn(), isMedicalPermittedBranchBased: jest.fn(), getStaffBranch: jest.fn() }));
 jest.mock('../../../../config/sockets/socket-emitter', () => ({ notifyUser: jest.fn() }));
 jest.mock('../wrapper/helper.js', () => ({ getBranchFromShedulerId: jest.fn(), getPatientIdFromSlotId: jest.fn(), getUserIDViaIdentifier: jest.fn() }));
 jest.mock('../../../../config/query.js', () => ({ findEmailByUserId: jest.fn() }));
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
-const Wrapper = require('../wrapper/wrapper.js'); const permit = require('../../../../services/permit.js'); const helper = require('../wrapper/helper.js');
+const Wrapper = require('../wrapper/wrapper.js'); const permit = require('../../../../services/authorization/permit.js'); const helper = require('../wrapper/helper.js');
 const db = require('../../../../config/query.js'); const sockets = require('../../../../config/sockets/socket-emitter');
 const { Query, Mutation } = require('./medical-resolver.js');
 const ctx = () => ({ user: { id: 5 }, res: { status: jest.fn().mockReturnThis() } });

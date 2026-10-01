@@ -1,6 +1,6 @@
 const logger = require('../../utils/logger');
 const { registerHandlers } = require('./socket-events');
-const { isMedicalPermitted, getStaffBranch, permissions: permKeys } = require('../../services/permit');
+const { isMedicalPermitted, getStaffBranch, permissions: permKeys } = require('../../services/authorization/permit');
 
 /**
  * Maps a MedicalPersonnel.designation value to the slotScheduler.location

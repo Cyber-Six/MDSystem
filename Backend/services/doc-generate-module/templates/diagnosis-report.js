@@ -1,6 +1,6 @@
 const BaseTemplate = require('../base-template.js');
-const pdf = require('../../pdfkit.js');
-const chart = require('../../chart.js');
+const pdf = require('../../rendering/pdfkit.js');
+const chart = require('../../rendering/chart.js');
 
 /**
  * Diagnosis Report Template

@@ -5,14 +5,14 @@ jest.mock('../../../config/middleware/ratelimiter.js', () => ({ portalBasedIpRat
 jest.mock('../../../config/redis.js', () => ({ createVerificationSession: jest.fn(), getVerificationSession: jest.fn(), deleteVerificationSession: jest.fn(), incrementLoginFailure: jest.fn(), isLoginLocked: jest.fn(), shouldRequireRecaptcha: jest.fn(), resetLoginFailures: jest.fn() }));
 jest.mock('../../../config/query.js', () => ({ findUserByEmail: jest.fn(), recordLoginAttempt: jest.fn(), isActiveMedicalPersonnel: jest.fn(), getMedicalPersonnelStatus: jest.fn(), getCredentialLockStateByUserId: jest.fn() }));
 jest.mock('../../../utils/security.js', () => ({ verifyPassword: jest.fn(), generateRandomKey: jest.fn() }));
-jest.mock('../../../services/recaptcha.js', () => ({ verifyRecaptcha: jest.fn() }));
+jest.mock('../../../services/auth/recaptcha.js', () => ({ verifyRecaptcha: jest.fn() }));
 jest.mock('../../../utils/portal.js', () => ({ detectPortalFromSubdomain: jest.fn() }));
 jest.mock('../../../utils/authSession.js', () => ({ create: jest.fn() }));
 jest.mock('../../../utils/consent.js', () => ({ DATA_CONSENT_REQUIRED: 'DATA_CONSENT_REQUIRED', OUTDATED_CONSENT: 'OUTDATED_CONSENT', getConsentGateError: jest.fn() }));
 jest.mock('../../../utils/logger.js', () => ({ warn: jest.fn(), error: jest.fn() }));
 
 const validator = require('../../../utils/validator.js'); const redis = require('../../../config/redis.js'); const db = require('../../../config/query.js');
-const security = require('../../../utils/security.js'); const captcha = require('../../../services/recaptcha.js'); const portal = require('../../../utils/portal.js');
+const security = require('../../../utils/security.js'); const captcha = require('../../../services/auth/recaptcha.js'); const portal = require('../../../utils/portal.js');
 const AuthSession = require('../../../utils/authSession.js'); const consent = require('../../../utils/consent.js'); const logger = require('../../../utils/logger.js');
 require('./login.js');
 const start = mockRouter.post.mock.calls.find(args => args[0] === '/').at(-1);

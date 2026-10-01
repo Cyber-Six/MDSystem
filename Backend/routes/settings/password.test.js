@@ -7,12 +7,12 @@ jest.mock('../../utils/security.js', () => ({ verifyPassword: jest.fn() }));
 jest.mock('../../utils/totp.js', () => ({ totpVerify: jest.fn(), decryptTotpSecret: jest.fn() }));
 jest.mock('../../config/redis.js', () => ({ verifyOTP: jest.fn(), getOTPFailureCount: jest.fn(), getOTPLockoutTTL: jest.fn(), rateLimitEmailCooldown: jest.fn(), rateLimitEmailAttempts: jest.fn(), deleteEmailCooldown: jest.fn(), deleteEmailAttempts: jest.fn() }));
 jest.mock('../../utils/portal.js', () => ({ detectPortalFromSubdomain: jest.fn() }));
-jest.mock('../../services/emailservice.js', () => ({ enqueueSettingsOTP: jest.fn() }));
+jest.mock('../../services/email/emailservice.js', () => ({ enqueueSettingsOTP: jest.fn() }));
 jest.mock('../../utils/logger.js', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../config/data/matrix.js', () => ({ rateLimitMatrix: { PatientAuthentication: { emailCooldown_2fa: 30, emailAttemptMax_2fa: 3, penaltyCooldown_resetpw: 600 }, staffAuthentication: {} } }));
 
 const db = require('../../config/query.js'); const security = require('../../utils/security.js'); const totp = require('../../utils/totp.js');
-const redis = require('../../config/redis.js'); const portal = require('../../utils/portal.js'); const email = require('../../services/emailservice.js');
+const redis = require('../../config/redis.js'); const portal = require('../../utils/portal.js'); const email = require('../../services/email/emailservice.js');
 require('./password.js');
 const [sendOtp, changePatient, changeStaff] = mockRouter.post.mock.calls.map(args => args.at(-1));
 const response = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn() });

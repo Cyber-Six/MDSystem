@@ -1,7 +1,7 @@
 const logger = require('../../utils/logger');
 const { isConnectedAnywhere } = require('./socket-store');
 const { pushPending, getPushToken } = require('./notification-store');
-const { enqueueNotificationEmail } = require('../../services/emailservice');
+const { enqueueNotificationEmail } = require('../../services/email/emailservice');
 const { sendExpoPushNotification, eventToPushContent } = require('./push-notification');
 const { resolveChannelsForEvent } = require('./notification-preferences');
 const query = require('../query');

@@ -81,6 +81,8 @@ The platform supports both transactional workflows (for example, record updates 
 MDSystem/
 |-- Backend/
 |-- Docs/
+|   |-- README.md                 # Documentation index
+|   `-- archive/                  # Historical implementation reports
 |-- mds-mobile/
 |-- mds-patient/
 |-- mds-staff/
@@ -88,6 +90,8 @@ MDSystem/
 |   `-- core/
 `-- README.md
 ```
+
+For setup, deployment, testing, and feature references, start at the [documentation index](Docs/README.md).
 
 ## License
 

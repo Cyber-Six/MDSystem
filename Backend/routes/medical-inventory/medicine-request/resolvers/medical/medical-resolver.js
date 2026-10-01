@@ -1,10 +1,10 @@
 const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
-const permit = require("../../../../../services/permit.js");
+const permit = require("../../../../../services/authorization/permit.js");
 const logger = require("../../../../../utils/logger.js");
 
 const { isConnectedAnywhere, emitToUserWithAck, notifyUser } = require("../../../../../config/sockets");
-const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
+const { enqueueNotificationEmail } = require("../../../../../services/email/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
 const { getPatientIdByRequestId } = require("../wrapper/helper.js");
 

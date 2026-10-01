@@ -1,5 +1,5 @@
 const db = require('../../../config/query.js');
-const { isMedicalPermitted } = require('../../../services/permit.js');
+const { isMedicalPermitted } = require('../../../services/authorization/permit.js');
 const logger = require('../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../utils/graphql-helper.js');
 const emrWrapperQuery = require('../../emr/wrapper/query.js');

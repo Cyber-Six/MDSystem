@@ -1,6 +1,6 @@
 const logger = require('../../utils/logger');
 const { registerHandlers } = require('./socket-events');
-const { isMedicalAdmin } = require('../../services/permit');
+const { isMedicalAdmin } = require('../../services/authorization/permit');
 const {
   verifyPatientOwnsChat,
   verifyMedicalAssignedToChat,

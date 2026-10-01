@@ -1,0 +1,172 @@
+name: mdsystem-e2e
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: ${E2E_POSTGRES_USER:?generated for this run}
+      POSTGRES_PASSWORD: ${E2E_POSTGRES_PASSWORD:?generated for this run}
+      POSTGRES_DB: mdsystem_e2e
+    volumes:
+      - e2e-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    labels: { com.mdsystem.resource: e2e }
+
+  redis:
+    image: redis:7.4-bookworm
+    command: ["sh", "-ec", "printf 'user default off\\nuser e2e on >%s ~* &* +@all\\n' \"$$REDIS_PASSWORD\" > /tmp/redis-users.acl; exec redis-server --appendonly yes --aclfile /tmp/redis-users.acl"]
+    environment:
+      REDIS_PASSWORD: ${E2E_REDIS_PASSWORD:?generated for this run}
+    volumes:
+      - e2e-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --user e2e -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    labels: { com.mdsystem.resource: e2e }
+
+  smtp:
+    image: axllent/mailpit:v1.27.8
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    labels: { com.mdsystem.resource: e2e }
+
+  schema-init:
+    image: postgres:17-bookworm
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGPASSWORD: ${E2E_POSTGRES_PASSWORD}
+      POSTGRES_USER: ${E2E_POSTGRES_USER}
+      SCHEMA_FILE: ${E2E_SCHEMA_SQL:?set E2E_SCHEMA_SQL in the Pi-local config}
+      POST_BUILD_FILE: ${E2E_POST_BUILD_SQL:?set E2E_POST_BUILD_SQL in the Pi-local config}
+      STARTUP_FILE: ${E2E_STARTUP_SQL:?set E2E_STARTUP_SQL in the Pi-local config}
+      ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
+      ADMIN_PASSWORD_HASH: ${E2E_ADMIN_PASSWORD_HASH}
+    volumes:
+      - ${E2E_SCHEMA_SQL:?set E2E_SCHEMA_SQL}:/schema/schema.psql:ro
+      - ${E2E_POST_BUILD_SQL:?set E2E_POST_BUILD_SQL}:/schema/post_build_setup.sql:ro
+      - ${E2E_STARTUP_SQL:?set E2E_STARTUP_SQL}:/schema/startup.sql:ro
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        test -s /schema/schema.psql && test -s /schema/post_build_setup.sql && test -s /schema/startup.sql
+        psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/schema.psql
+        psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/post_build_setup.sql
+        psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -v ADMIN_EMAIL="$$ADMIN_EMAIL" -v ADMIN_PASSWORD_HASH="$$ADMIN_PASSWORD_HASH" -f /schema/startup.sql
+    labels: { com.mdsystem.resource: e2e }
+
+x-app-base: &app-base
+    image: ${MD_SYSTEM_IMAGE:-mdsystem:ci}
+    environment: &app-env
+      NODE_ENV: test
+      HOST: 0.0.0.0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: mdsystem_e2e
+      POSTGRES_USER: ${E2E_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${E2E_POSTGRES_PASSWORD}
+      POSTGRES_MAX_CONN: 5
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_USERNAME: e2e
+      REDIS_PASSWORD: ${E2E_REDIS_PASSWORD}
+      SMTP_HOST: smtp
+      SMTP_PORT: 1025
+      SMTP_SECURE: "false"
+      SMTP_USER: e2e
+      SMTP_PASS: e2e
+      JWT_SECRET: ${E2E_JWT_SECRET}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRES_IN: 1h
+      JWT_ISSUER: mdsystem-e2e
+      TOTP_ENCRYPTION_KEY: ${E2E_TOTP_ENCRYPTION_KEY}
+      DATA_CONSENT_VERSION: v1.0
+      RECAPTCHA_TEST_MODE: "true"
+      GOOGLE_OAUTH_ENABLED: "false"
+      DEBUG_BYPASS_OTP: "false"
+      ALLOW_BOOTSTRAP_ADMIN: "false"
+      MEDIA_PATH: /app/media
+      LOGGER_DIR: /tmp/mdsystem-logs
+      EMAIL_DELAY: 0
+    volumes:
+      - e2e-media:/app/media
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      schema-init: { condition: service_completed_successfully }
+    labels: { com.mdsystem.resource: e2e }
+
+  patient:
+    <<: *app-base
+    command: ["node", "Backend/server.js"]
+    expose: [3000]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  staff:
+    <<: *app-base
+    command: ["node", "Backend/staff.js"]
+    expose: [3001]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  email-worker:
+    <<: *app-base
+    command: ["node", "Backend/services/email/emailworker.js"]
+    depends_on:
+      redis: { condition: service_healthy }
+
+  seed:
+    <<: *app-base
+    entrypoint: ["node", "/e2e/seed.js"]
+    environment:
+      <<: *app-env
+      E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
+      E2E_PATIENT_EMAIL: ${E2E_PATIENT_EMAIL}
+      E2E_STAFF_EMAIL: ${E2E_STAFF_EMAIL}
+      E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
+      E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
+    volumes:
+      - ./seed.js:/e2e/seed.js:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      schema-init: { condition: service_completed_successfully }
+
+  test-runner:
+    build:
+      context: ..
+      dockerfile: Dockerfile.e2e
+    environment:
+      E2E_CORE: "1"
+      E2E_PATIENT_URL: http://patient:3000
+      E2E_STAFF_URL: http://staff:3001
+      E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
+      E2E_PATIENT_EMAIL: ${E2E_PATIENT_EMAIL}
+      E2E_STAFF_EMAIL: ${E2E_STAFF_EMAIL}
+      E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
+      E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
+      MAILPIT_URL: http://smtp:8025
+    depends_on:
+      patient: { condition: service_started }
+      staff: { condition: service_started }
+      email-worker: { condition: service_started }
+      smtp: { condition: service_started }
+
+volumes:
+  e2e-postgres:
+  e2e-redis:
+  e2e-media:

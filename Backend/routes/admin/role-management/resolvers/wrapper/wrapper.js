@@ -19,7 +19,7 @@ const {
   clearMedicalPermits,
   PERMISSION_GROUP_DEFINITIONS,
   normalizeTemplatePermissionsInput,
-} = require('../../../../../services/permit.js');
+} = require('../../../../../services/authorization/permit.js');
 const {
   setKey,
   listUserSessions,
@@ -38,7 +38,7 @@ const {
   isAdminTransferPasswordLocked,
   clearAdminTransferPasswordFailures,
 } = require('../../../../../config/redis.js');
-const { enqueueAdminTransferEmail } = require('../../../../../services/emailservice.js');
+const { enqueueAdminTransferEmail } = require('../../../../../services/email/emailservice.js');
 const { emitToUser } = require('../../../../../config/sockets');
 const { generateOTP, verifyPassword, 
   delayRandom, generateUUID } = require('../../../../../utils/security.js');

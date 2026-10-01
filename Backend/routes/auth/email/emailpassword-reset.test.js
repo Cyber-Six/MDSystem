@@ -7,12 +7,12 @@ jest.mock('../../../utils/portal.js', () => ({ detectPortalFromSubdomain: jest.f
 jest.mock('../../../config/redis.js', () => ({ rateLimitEmailCooldown: jest.fn(), rateLimitEmailAttempts: jest.fn(), rateLimitEmailCooldownTTL: jest.fn(), deleteVerificationSession: jest.fn(), getVerificationSession: jest.fn(), recordResetPwFailure: jest.fn(), clearResetPwFailures: jest.fn(), isResetPwLocked: jest.fn() }));
 jest.mock('../../../config/data/matrix.js', () => ({ rateLimitMatrix: { PatientAuthentication: { emailCooldown_resetpw: 30, emailAttemptMax_resetpw: 3, penaltyCooldown_resetpw: 600 }, staffAuthentication: { emailCooldown_resetpw: 40, emailAttemptMax_resetpw: 4, penaltyCooldown_resetpw: 700 } } }));
 jest.mock('../../../config/query.js', () => ({ findUserByEmail: jest.fn(), updateUserPasswordById: jest.fn() }));
-jest.mock('../../../services/emailservice.js', () => ({ enqueueResetPassword: jest.fn() }));
-jest.mock('../../../services/recaptcha.js', () => ({ verifyRecaptcha: jest.fn() }));
+jest.mock('../../../services/email/emailservice.js', () => ({ enqueueResetPassword: jest.fn() }));
+jest.mock('../../../services/auth/recaptcha.js', () => ({ verifyRecaptcha: jest.fn() }));
 jest.mock('../../../utils/security.js', () => ({ delayRandom: jest.fn() }));
 
 const redis = require('../../../config/redis.js'); const validator = require('../../../utils/validator.js'); const portal = require('../../../utils/portal.js');
-const db = require('../../../config/query.js'); const captcha = require('../../../services/recaptcha.js'); const emailService = require('../../../services/emailservice.js');
+const db = require('../../../config/query.js'); const captcha = require('../../../services/auth/recaptcha.js'); const emailService = require('../../../services/email/emailservice.js');
 const logger = require('../../../utils/logger.js'); const security = require('../../../utils/security.js');
 require('./emailpassword-reset.js');
 const forget = mockRouter.post.mock.calls.find(args => args[0] === '/forget-password').at(-1);

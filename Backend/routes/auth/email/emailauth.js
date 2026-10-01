@@ -8,9 +8,9 @@ const { verifyOTP, getOTPFailureCount, getOTPLockoutTTL,
         deleteEmailCooldown, deleteEmailAttempts,
         update2FAInSession} = require('../../../config/redis.js');
 const { rateLimitMatrix } = require('../../../config/data/matrix.js');
-const { verifyRecaptcha } = require('../../../services/recaptcha.js');
+const { verifyRecaptcha } = require('../../../services/auth/recaptcha.js');
 
-const { enqueueEmailVerification, enqueueEmail2FA } = require('../../../services/emailservice.js');
+const { enqueueEmailVerification, enqueueEmail2FA } = require('../../../services/email/emailservice.js');
 const { detectPortalFromSubdomain } = require('../../../utils/portal.js');
 
 const path = require("path");

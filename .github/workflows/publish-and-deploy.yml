@@ -1,0 +1,205 @@
+name: Publish and deploy MDSystem
+run-name: ${{ inputs.version }} from ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Unique release version, for example v0.9.6-beta.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify selected branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      image: ${{ steps.image.outputs.name }}
+    steps:
+      - name: Check out selected branch
+        uses: actions/checkout@v7
+
+      - name: Record source revision
+        id: source
+        run: echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ${#VERSION} -gt 120 || ! "$VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Version must use a SemVer-style value such as v0.9.6-beta.1" >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci
+
+      - name: Install mobile dependencies
+        run: npm ci --prefix mds-mobile
+
+      - name: Run all application tests
+        run: |
+          npm run test:backend
+          npm run test:patient
+          npm run test:staff
+          npm run test:mobile
+
+      - name: Build patient and staff portals
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run patient and staff GUI smoke tests
+        run: npm run test:gui
+
+      - name: Upload GUI failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-smoke-traces
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Set image name
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+  deploy-staging:
+    name: Build and deploy staging image
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 45
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.source_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish staging image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          push: true
+          platforms: linux/arm64,linux/amd64
+          tags: |
+            ${{ needs.verify.outputs.image }}:${{ inputs.version }}-staging
+            ${{ needs.verify.outputs.image }}:sha-${{ needs.verify.outputs.source_sha }}-staging
+          build-args: |
+            VITE_PATIENT_BACKEND_URL=${{ vars.VITE_PATIENT_BACKEND_URL }}
+            VITE_STAFF_BACKEND_URL=${{ vars.VITE_STAFF_BACKEND_URL }}
+            VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }}
+            VITE_RECAPTCHA_SITE_KEY=${{ vars.VITE_RECAPTCHA_SITE_KEY }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.verify.outputs.source_sha }}
+            org.opencontainers.image.version=${{ inputs.version }}-staging
+          cache-from: type=gha,scope=mdsystem
+          cache-to: type=gha,mode=max,scope=mdsystem
+
+      - name: Deploy staging image
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          IMAGE_NAME: ${{ needs.verify.outputs.image }}
+          IMAGE_TAG: ${{ inputs.version }}-staging
+        run: bash .github/scripts/deploy-compose.sh
+
+  use-case-testing:
+    name: Use-case testing approval
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: use-case-testing
+    steps:
+      - name: Record use-case test approval
+        run: echo 'Staging use-case testing approved; production promotion may proceed.'
+
+  deploy-production:
+    name: Build and deploy production image
+    needs: [verify, use-case-testing]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.source_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          push: true
+          platforms: linux/arm64,linux/amd64
+          tags: |
+            ${{ needs.verify.outputs.image }}:${{ inputs.version }}
+            ${{ needs.verify.outputs.image }}:sha-${{ needs.verify.outputs.source_sha }}
+          build-args: |
+            VITE_PATIENT_BACKEND_URL=${{ vars.VITE_PATIENT_BACKEND_URL }}
+            VITE_STAFF_BACKEND_URL=${{ vars.VITE_STAFF_BACKEND_URL }}
+            VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }}
+            VITE_RECAPTCHA_SITE_KEY=${{ vars.VITE_RECAPTCHA_SITE_KEY }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.verify.outputs.source_sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+          cache-from: type=gha,scope=mdsystem
+          cache-to: type=gha,mode=max,scope=mdsystem
+
+      - name: Deploy production image
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          IMAGE_NAME: ${{ needs.verify.outputs.image }}
+          IMAGE_TAG: ${{ inputs.version }}
+        run: bash .github/scripts/deploy-compose.sh

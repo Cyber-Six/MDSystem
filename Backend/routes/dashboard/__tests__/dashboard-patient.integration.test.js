@@ -20,7 +20,7 @@ jest.mock('../../../config/middleware/jwtProtect.js', () => ({
   },
 }));
 
-jest.mock('../../../services/permit.js', () => ({
+jest.mock('../../../services/authorization/permit.js', () => ({
   isMedicalPermitted: jest.fn(async () => ({ permitted: true })),
 }));
 

@@ -1,12 +1,12 @@
 jest.mock('../../utils/logger', () => require('../../test-support/fixtures.cjs').loggerMock());
 jest.mock('./socket-events', () => ({ registerHandlers: jest.fn() }));
-jest.mock('../../services/permit', () => ({
+jest.mock('../../services/authorization/permit', () => ({
   getStaffBranch: jest.fn(), isMedicalPermitted: jest.fn(),
   permissions: Object.fromEntries(['appointment_allow_view_records', 'inventory_allow_view', 'health_chat_allow_access', 'emr_allow_approval', 'is_admin'].map(key => [key, key])),
 }));
 const { socketMock } = require('../../test-support/fixtures.cjs');
 const { registerHandlers } = require('./socket-events');
-const permit = require('../../services/permit');
+const permit = require('../../services/authorization/permit');
 require('./notification-events');
 const handlers = registerHandlers.mock.calls[0][0];
 beforeEach(() => { permit.getStaffBranch.mockReset(); permit.isMedicalPermitted.mockReset(); });

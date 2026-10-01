@@ -1,10 +1,10 @@
 jest.mock('../../../config/query.js', () => ({ query: jest.fn() }));
-jest.mock('../../../services/permit.js', () => ({ isMedicalPermitted: jest.fn() }));
+jest.mock('../../../services/authorization/permit.js', () => ({ isMedicalPermitted: jest.fn() }));
 jest.mock('../../../utils/logger.js', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../emr/wrapper/query.js', () => ({ _getUserUpdateTicket: jest.fn() }));
 jest.mock('../../health-chat/resolvers/wrapper/helper.js', () => ({ autoExpireTickets: jest.fn() }));
 
-const db = require('../../../config/query.js'); const permit = require('../../../services/permit.js'); const logger = require('../../../utils/logger.js');
+const db = require('../../../config/query.js'); const permit = require('../../../services/authorization/permit.js'); const logger = require('../../../utils/logger.js');
 const emr = require('../../emr/wrapper/query.js'); const chat = require('../../health-chat/resolvers/wrapper/helper.js');
 const { Query } = require('./wrapper.js');
 const ctx = (user = { id: 7 }) => ({ user, res: { status: jest.fn().mockReturnThis() } });

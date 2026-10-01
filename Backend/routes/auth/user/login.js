@@ -8,7 +8,7 @@ const {createVerificationSession, getVerificationSession, deleteVerificationSess
 
 const query = require("../../../config/query.js");
 const { verifyPassword, generateRandomKey } = require("../../../utils/security.js");
-const { verifyRecaptcha } = require('../../../services/recaptcha.js');
+const { verifyRecaptcha } = require('../../../services/auth/recaptcha.js');
 
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
 const AuthSession = require("../../../utils/authSession.js");

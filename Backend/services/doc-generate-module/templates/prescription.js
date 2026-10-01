@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const BaseTemplate = require('../base-template.js');
-const pdf = require('../../pdfkit.js');
+const pdf = require('../../rendering/pdfkit.js');
 
 // A5 dimensions in points (1 mm = 2.8346 pt)
 const A5_WIDTH  = 419.53;

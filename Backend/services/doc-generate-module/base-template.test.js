@@ -1,9 +1,9 @@
-jest.mock('../pdfkit.js', () => ({
+jest.mock('../rendering/pdfkit.js', () => ({
   DEFAULT_MARGINS: { top: 1 }, createDocument: jest.fn(() => ({ marker: 'pdf', moveDown: jest.fn() })),
   addHeader: jest.fn(), addSectionHeading: jest.fn(), addField: jest.fn(), addSignatureLine: jest.fn(),
   addFooter: jest.fn(), streamToResponse: jest.fn(), downloadToResponse: jest.fn(), toBuffer: jest.fn().mockResolvedValue(Buffer.from('%PDF')),
 }));
-const pdf = require('../pdfkit.js');
+const pdf = require('../rendering/pdfkit.js');
 const BaseTemplate = require('./base-template');
 class ConcreteTemplate extends BaseTemplate { static get type() { return 'test'; } static get displayName() { return 'Test'; } async build() { return this; } }
 

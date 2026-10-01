@@ -1,7 +1,7 @@
 const Wrapper = require("../wrapper/wrapper.js");
 const { validateBatchesWithQuantity } = require("../wrapper/helper.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
-const permit = require("../../../../../services/permit.js");
+const permit = require("../../../../../services/authorization/permit.js");
 const logger = require("../../../../../utils/logger.js");
 
 const Query = {

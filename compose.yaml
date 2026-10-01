@@ -1,0 +1,170 @@
+name: mdsystem
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks: [backend]
+
+  redis:
+    image: redis:7.4-bookworm
+    command:
+      - sh
+      - -ec
+      - |
+        printf 'user default off\nuser %s on >%s ~* &* +@all\n' "$$REDIS_USERNAME" "$$REDIS_PASSWORD" > /tmp/redis-users.acl
+        exec redis-server --appendonly yes --maxmemory-policy noeviction --aclfile /tmp/redis-users.acl
+    environment:
+      REDIS_USERNAME: ${REDIS_USERNAME:-mdsadmin}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --user \"$${REDIS_USERNAME}\" -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks: [backend]
+
+  schema-init:
+    image: postgres:17-bookworm
+    profiles: ["setup"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      SCHEMA_SQL_PATH: ${SCHEMA_SQL_PATH:?Set SCHEMA_SQL_PATH to your schema.psql path in .env}
+      STARTUP_SQL_PATH: ${STARTUP_SQL_PATH:-./schemas/startup.sql}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+    volumes:
+      - ${SCHEMA_SQL_PATH:?Set SCHEMA_SQL_PATH to your schema.psql path in .env}:/schema/schema.psql:ro
+      - ${POST_BUILD_SETUP_SQL_PATH:-./Backend/config/data/post_build_setup.sql}:/schema/post_build_setup.sql:ro
+      - ${STARTUP_SQL_PATH:-./schemas/startup.sql}:/schema/startup.sql:ro
+      - schema-state:/state
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        if [ -f /state/initialized ]; then echo 'Schema already initialized'; exit 0; fi
+        if [ ! -s /schema/schema.psql ]; then echo 'Schema path is missing or empty'; exit 1; fi
+        existing_tables=$$(psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Atqc "SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%')")
+        if [ "$$existing_tables" = t ]; then echo 'Database already contains tables but the schema marker is missing; refusing to apply schema'; exit 1; fi
+        psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /schema/schema.psql
+        psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /schema/post_build_setup.sql
+        if [ -n "$$ADMIN_EMAIL" ] && [ -n "$$ADMIN_PASSWORD_HASH" ]; then
+          psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -v ADMIN_EMAIL="$$ADMIN_EMAIL" -v ADMIN_PASSWORD_HASH="$$ADMIN_PASSWORD_HASH" -f /schema/startup.sql
+        else
+          echo 'ADMIN_EMAIL or ADMIN_PASSWORD_HASH is empty; skipping first admin bootstrap'
+        fi
+        touch /state/initialized
+    networks: [backend]
+
+  patient:
+    image: ${MD_SYSTEM_IMAGE:-mdsystem}:${IMAGE_TAG:-local}
+    build:
+      context: .
+      target: runtime
+      args:
+        VITE_PATIENT_BACKEND_URL: ${VITE_PATIENT_BACKEND_URL:-https://www.mdsystemtip.space}
+        VITE_STAFF_BACKEND_URL: ${VITE_STAFF_BACKEND_URL:-https://staff.mdsystemtip.space}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_RECAPTCHA_SITE_KEY: ${VITE_RECAPTCHA_SITE_KEY:-}
+    command: ["node", "Backend/server.js"]
+    env_file:
+      - path: .env
+        required: false
+    environment: &app-environment
+      NODE_ENV: ${NODE_ENV:-production}
+      HOST: 0.0.0.0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MEDIA_PATH: /app/media
+      LOGGER_DIR: /tmp/mdsystem-logs
+    ports:
+      - "${PATIENT_BIND_ADDRESS:-127.0.0.1}:${PATIENT_PORT:-3000}:3000"
+    volumes:
+      - media-data:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      schema-init:
+        condition: service_completed_successfully
+        required: false
+    restart: unless-stopped
+    networks: [backend]
+
+  staff:
+    image: ${MD_SYSTEM_IMAGE:-mdsystem}:${IMAGE_TAG:-local}
+    build:
+      context: .
+      target: runtime
+      args:
+        VITE_PATIENT_BACKEND_URL: ${VITE_PATIENT_BACKEND_URL:-https://www.mdsystemtip.space}
+        VITE_STAFF_BACKEND_URL: ${VITE_STAFF_BACKEND_URL:-https://staff.mdsystemtip.space}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_RECAPTCHA_SITE_KEY: ${VITE_RECAPTCHA_SITE_KEY:-}
+    command: ["node", "Backend/staff.js"]
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-environment
+    ports:
+      - "${STAFF_BIND_ADDRESS:-${PATIENT_BIND_ADDRESS:-127.0.0.1}}:${MEDICAL_PORT:-3001}:3001"
+    volumes:
+      - media-data:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      schema-init:
+        condition: service_completed_successfully
+        required: false
+    restart: unless-stopped
+    networks: [backend]
+
+  email-worker:
+    image: ${MD_SYSTEM_IMAGE:-mdsystem}:${IMAGE_TAG:-local}
+    build:
+      context: .
+      target: runtime
+    command: ["node", "Backend/services/email/emailworker.js"]
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-environment
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [backend]
+
+volumes:
+  postgres-data:
+  redis-data:
+  media-data:
+  schema-state:
+
+networks:
+  backend:
+    # Containers need outbound access for SMTP and the external chatbot.
+    # PostgreSQL and Redis remain private because they have no host ports.

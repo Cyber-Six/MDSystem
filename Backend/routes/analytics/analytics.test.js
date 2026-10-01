@@ -2,21 +2,21 @@ jest.mock('../../utils/logger.js', () => ({ info: jest.fn(), warn: jest.fn(), er
 jest.mock('../../config/middleware/jwtProtect.js', () => ({ jwtProtect: jest.fn(() => (_req, _res, next) => next?.()) }));
 jest.mock('../../config/query.js', () => ({}));
 jest.mock('../../config/db.js', () => ({ query: jest.fn() }));
-jest.mock('../../services/analytics-query.js', () => ({
+jest.mock('../../services/analytics/analytics-query.js', () => ({
   getAvailableQueries: jest.fn(() => ['patients']), getFilterOptions: jest.fn(), getAvailableReports: jest.fn(() => ['summary']),
   hasQuery: jest.fn(), executeQuery: jest.fn(), executeBatchQueries: jest.fn(), hasReport: jest.fn(), getReportData: jest.fn(),
 }));
 jest.mock('../../services/doc-generate-module/index.js', () => ({ downloadDocument: jest.fn() }));
-jest.mock('../../services/analytics-export.js', () => ({ EXPORT_PRESETS: { monthly: { label: 'Monthly' } }, EXPORT_META: { patients: { label: 'Patients' } }, resolveDataTypes: jest.fn(), buildFilename: jest.fn(), fetchExportData: jest.fn(), generatePDF: jest.fn(), generateSingleMetricPDF: jest.fn() }));
-jest.mock('../../services/analytics-matrix-export.js', () => ({ generateMatrixCsvFiles: jest.fn(), generateMatrixExcelWorkbook: jest.fn() }));
-jest.mock('../../services/permit.js', () => ({ getStaffBranch: jest.fn(), isMedicalPermitted: jest.fn(), permissions: {} }));
+jest.mock('../../services/analytics/analytics-export.js', () => ({ EXPORT_PRESETS: { monthly: { label: 'Monthly' } }, EXPORT_META: { patients: { label: 'Patients' } }, resolveDataTypes: jest.fn(), buildFilename: jest.fn(), fetchExportData: jest.fn(), generatePDF: jest.fn(), generateSingleMetricPDF: jest.fn() }));
+jest.mock('../../services/analytics/analytics-matrix-export.js', () => ({ generateMatrixCsvFiles: jest.fn(), generateMatrixExcelWorkbook: jest.fn() }));
+jest.mock('../../services/authorization/permit.js', () => ({ getStaffBranch: jest.fn(), isMedicalPermitted: jest.fn(), permissions: {} }));
 jest.mock('archiver', () => jest.fn());
 
 const router = require('./analytics.js');
-const analytics = require('../../services/analytics-query.js');
-const permit = require('../../services/permit.js');
-const exportService = require('../../services/analytics-export.js');
-const matrixExport = require('../../services/analytics-matrix-export.js');
+const analytics = require('../../services/analytics/analytics-query.js');
+const permit = require('../../services/authorization/permit.js');
+const exportService = require('../../services/analytics/analytics-export.js');
+const matrixExport = require('../../services/analytics/analytics-matrix-export.js');
 const db = require('../../config/db.js');
 
 function handler(method, path) {

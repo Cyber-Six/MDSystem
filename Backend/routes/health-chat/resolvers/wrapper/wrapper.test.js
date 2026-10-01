@@ -8,7 +8,7 @@ jest.mock('../../../../config/query', () => ({ query: (...args) => mockQuery(...
 jest.mock('../../../../utils/graphql-helper', () => ({ throwGraphQLError: jest.fn(() => ({ message(value) { this.errorMessage = value; return this; }, status(value) { this.statusCode = value; return this; }, throw() { throw mockError(this.errorMessage, this.statusCode); } })) }));
 jest.mock('../../../../config/multer', () => ({ promoteFile: jest.fn() }));
 jest.mock('../../../../config/sockets', () => ({ emitToRoom: jest.fn(), notifyUser: jest.fn() }));
-jest.mock('../../../../services/permit', () => ({ isMedicalAdmin: jest.fn(), isMedicalPermittedPatientBased: jest.fn(), permissions: {} }));
+jest.mock('../../../../services/authorization/permit', () => ({ isMedicalAdmin: jest.fn(), isMedicalPermittedPatientBased: jest.fn(), permissions: {} }));
 jest.mock('../../../../utils/logger', () => ({ error: jest.fn(), info: jest.fn() }));
 jest.mock('./helper', () => ({
   calculateExpiryDate: jest.fn(), isChatExpired: jest.fn(), verifyPatientOwnsChat: jest.fn(), verifyMedicalAssignedToChat: jest.fn(), checkChatStatus: jest.fn(),

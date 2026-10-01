@@ -8,7 +8,7 @@ const mockLogger = { info: jest.fn(), error: jest.fn() };
 jest.mock('../../config/query', () => ({ query: (...args) => mockQuery(...args) }));
 jest.mock('../../config/middleware/jwtProtect', () => ({ jwtProtect: () => (req, _res, next) => { req.user = { id: 12 }; next(); } }));
 jest.mock('../../utils/logger', () => mockLogger);
-jest.mock('../../services/permit', () => ({
+jest.mock('../../services/authorization/permit', () => ({
   permissions: { profile_allow_view: 'PROFILE_VIEW', is_admin: 'IS_ADMIN' },
   getStaffBranch: (...args) => mockGetStaffBranch(...args),
   isMedicalPermitted: (...args) => mockIsMedicalPermitted(...args),

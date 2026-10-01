@@ -1,10 +1,10 @@
 jest.mock('../../../config/query.js', () => ({ query: jest.fn() }));
 jest.mock('../../../utils/logger.js', () => ({ debug: jest.fn() }));
-jest.mock('../../../services/permit.js', () => ({ permissions: { emr_allow_set_vital_sign: 'VITAL', emr_allow_set_dental_record: 'DENTAL', emr_allow_view: 'VIEW' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermittedPatientBasedMulti: jest.fn() }));
+jest.mock('../../../services/authorization/permit.js', () => ({ permissions: { emr_allow_set_vital_sign: 'VITAL', emr_allow_set_dental_record: 'DENTAL', emr_allow_view: 'VIEW' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermittedPatientBasedMulti: jest.fn() }));
 jest.mock('./helper.js', () => ({ getPatientIdFromvitalSignsId: jest.fn(), getPatientIdFromDentalRecordId: jest.fn() }));
 
 const db = require('../../../config/query.js');
-const permit = require('../../../services/permit.js');
+const permit = require('../../../services/authorization/permit.js');
 const helper = require('./helper.js');
 const Query = require('./query.js');
 const ctx = (user = { id: 3 }) => ({ user, res: { status: jest.fn().mockReturnThis() } });

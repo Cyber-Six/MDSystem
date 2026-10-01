@@ -2,7 +2,7 @@ const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const db = require("../../../../config/query.js");
 const { isMedicalPermitted, permissions,
-  isMedicalPermittedPatientBased, isMedicalAdmin, getStaffBranch } = require("../../../../services/permit.js");
+  isMedicalPermittedPatientBased, isMedicalAdmin, getStaffBranch } = require("../../../../services/authorization/permit.js");
 const { getPatientIdFromChatId } = require("../wrapper/helper.js");
 
 const HEALTH_CHAT_BRANCHES = Object.freeze(['Manila', 'QuezonCity']);

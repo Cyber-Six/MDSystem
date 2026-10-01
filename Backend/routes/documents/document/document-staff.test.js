@@ -8,10 +8,10 @@ jest.mock('../../../services/doc-generate-module/prescription-normalized.js', ()
 jest.mock('../../../services/doc-generate-module/medical-certificate-normalized.js', () => ({}));
 jest.mock('../../health-chat/resolvers/wrapper/helper.js', () => ({ formatMessage: jest.fn() }));
 jest.mock('../../../config/sockets', () => ({ emitToRoom: jest.fn(), notifyUser: jest.fn() }));
-jest.mock('../../../services/permit.js', () => ({ permissions: { document_allow_view: 'document_allow_view' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermitted: jest.fn() }));
+jest.mock('../../../services/authorization/permit.js', () => ({ permissions: { document_allow_view: 'document_allow_view' }, isMedicalPermittedPatientBased: jest.fn(), isMedicalPermitted: jest.fn() }));
 
 const db = require('../../../config/db.js');
-const permit = require('../../../services/permit.js');
+const permit = require('../../../services/authorization/permit.js');
 const router = require('./document-staff.js');
 const route = router.stack.find(layer => layer.route?.path === '/required').route;
 const handler = route.stack.at(-1).handle;

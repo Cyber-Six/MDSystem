@@ -1,3 +1,4 @@
+const path = require('path');
 const mockRouter = { post: jest.fn(), delete: jest.fn(), get: jest.fn() };
 const mockUpload = { single: jest.fn(() => 'upload-file') };
 jest.mock('express', () => ({ Router: () => mockRouter }));
@@ -49,7 +50,7 @@ test('validates category, missing records, safe file paths, and send errors', as
   media.checkFileByUuid.mockResolvedValueOnce('../../secret'); res = response(); await record({ params: { category: 'staging', fileId: 'x' } }, res);
   expect(res.status).toHaveBeenCalledWith(400); expect(res.json).toHaveBeenCalledWith({ error: 'INVALID_FILE_PATH' });
   media.checkFileByUuid.mockResolvedValueOnce('file.png'); res = response(); await record({ params: { category: 'documents', fileId: 'x' } }, res);
-  expect(res.sendFile).toHaveBeenCalledWith('C:\\media\\documents\\file.png', expect.any(Function));
+  expect(res.sendFile).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.documents, 'file.png'), expect.any(Function));
   res.sendFile.mock.calls[0][1](err('gone'));
   expect(res.status).toHaveBeenCalledWith(404);
   media.checkFileByUuid.mockResolvedValueOnce('ready.png'); res = response(); await record({ params: { category: 'documents', fileId: 'x' } }, res);
