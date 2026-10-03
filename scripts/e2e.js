@@ -129,16 +129,18 @@ async function main() {
   try {
     process.stdout.write(`Starting disposable Playwright ${suite} stack (${project}).\n`);
     await compose(['up', '-d', '--wait', 'postgres', 'redis', 'smtp']);
-    await compose(['run', '--rm', 'schema-init']);
-    await compose(['run', '--rm', 'seed']);
-    await compose(['up', '-d', '--wait', 'patient', 'staff', 'email-worker']);
-    await compose(['run', '--rm', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`]);
+    // Keep the initializer container for diagnostics. Prerequisites are started
+    // explicitly here; --no-deps prevents later commands from rerunning SQL.
+    await compose(['up', '--no-deps', '--exit-code-from', 'schema-init', 'schema-init']);
+    await compose(['run', '--rm', '--no-deps', 'seed']);
+    await compose(['up', '-d', '--wait', '--no-deps', 'patient', 'staff', 'email-worker']);
+    await compose(['run', '--rm', '--no-deps', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`]);
     passed = true;
   } catch (error) {
     process.stderr.write(`${receivedSignal ? `Interrupted by ${receivedSignal}. ` : ''}${error.message}\n`);
     try {
       const result = await new Promise(resolve => {
-        const child = spawn('docker', composeArgs(project, envFiles, ['logs', '--no-color', '--tail=250', 'patient', 'staff', 'email-worker', 'postgres', 'redis', 'smtp']), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+        const child = spawn('docker', composeArgs(project, envFiles, ['logs', '--no-color', '--tail=250', 'schema-init', 'patient', 'staff', 'email-worker', 'postgres', 'redis', 'smtp']), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
         let output = '';
         child.stdout.on('data', data => output += data);
         child.stderr.on('data', data => output += data);
