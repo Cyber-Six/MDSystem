@@ -108,6 +108,10 @@ async function main() {
     E2E_STAFF_EMAIL: staffEmail,
     E2E_RESTRICTED_STAFF_EMAIL: restrictedEmail,
     E2E_ARTIFACT_DIR: artifactDir,
+    // Match the host runner so files in the bind-mounted report directory stay
+    // removable by actions/checkout on the next job.
+    E2E_RUNNER_UID: process.getuid?.() ?? 0,
+    E2E_RUNNER_GID: process.getgid?.() ?? 0,
     E2E_RUN_ID: runId,
     E2E_RUN_PROJECT: project,
     E2E_VISUAL_RECORDING: process.env.E2E_VISUAL_RECORDING === '1' ? '1' : '0',

@@ -164,6 +164,7 @@ services:
 
   test-runner:
     image: ${E2E_RUNNER_IMAGE:?generated for this run}
+    user: "${E2E_RUNNER_UID:-0}:${E2E_RUNNER_GID:-0}"
     build:
       context: ..
       dockerfile: Dockerfile.e2e
@@ -181,6 +182,7 @@ services:
       E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
       MAILPIT_URL: http://smtp:8025
+      HOME: /tmp
     depends_on:
       patient: { condition: service_healthy }
       staff: { condition: service_healthy }
