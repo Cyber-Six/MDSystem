@@ -4,6 +4,8 @@ This folder contains the current technical guides and a preserved archive of imp
 
 ## Start here
 
+- [Playwright GUI and E2E testing](PLAYWRIGHT_E2E.md) — hosted smoke tests and isolated Pi database-backed workflows.
+
 - [Repository overview](../README.md) — applications, backend, and workspace layout.
 - [Docker deployment](DOCKER.md) — prerequisites, first database initialization, routine start/stop, backups, and troubleshooting.
 - [CI and deployment](CI_CD.md) — GitHub Actions, selecting a release branch and version, staging use-case testing, and production promotion.

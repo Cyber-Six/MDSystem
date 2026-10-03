@@ -121,6 +121,8 @@ mds-mobile/.dev/
 .env.*.local
 e2e.private.env
 /e2e/.run-*
+/e2e-results/
+e2e-state/
 
 # Logs
 logs/

@@ -14,6 +14,7 @@ async function main() {
     const passwordHash = await bcrypt.hash(process.env.E2E_ACCOUNT_PASSWORD, 12);
     const accounts = [
       { email: process.env.E2E_PATIENT_EMAIL, identity: 'Student', patient: true },
+      { email: process.env.E2E_ALT_PATIENT_EMAIL, identity: 'Student', patient: true },
       { email: process.env.E2E_STAFF_EMAIL, identity: 'Employee', staff: true, role: 'Nurse', branch: 'Manila' },
       { email: process.env.E2E_RESTRICTED_STAFF_EMAIL, identity: 'Employee', staff: true, role: 'Nurse', branch: 'QuezonCity' },
     ];
@@ -47,22 +48,34 @@ async function main() {
            VALUES ($1, $2, 'E2E staff', $3::"UserDesignation", true)`,
           [id, account.role, account.branch],
         );
-        if (!account.restricted) {
-          const { rows: adminRows } = await client.query(
-            `SELECT mp.id FROM "UserCredentials" uc
-             JOIN "MedicalPersonnel" mp ON mp.id=uc.id WHERE uc.email=$1`,
-            [process.env.E2E_ADMIN_EMAIL],
-          );
-          if (!adminRows[0]) throw new Error('Bootstrap administrator was not found after startup SQL.');
-          await client.query(
-            `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-             SELECT $1, rt.id, $2::"UserDesignation", $3
-             FROM "rolesTable" rt WHERE rt.label='IS_STAFF'`,
-            [id, account.branch, adminRows[0].id],
-          );
-        }
+        const { rows: adminRows } = await client.query(
+          `SELECT mp.id FROM "UserCredentials" uc
+           JOIN "MedicalPersonnel" mp ON mp.id=uc.id WHERE uc.email=$1`,
+          [process.env.E2E_ADMIN_EMAIL],
+        );
+        if (!adminRows[0]) throw new Error('Bootstrap administrator was not found after startup SQL.');
+        await client.query(
+          `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
+           SELECT $1, rt.id, $2::"UserDesignation", $3
+           FROM "rolesTable" rt WHERE rt.label='IS_STAFF'`,
+          [id, account.branch, adminRows[0].id],
+        );
       }
     }
+
+    await client.query(
+      `INSERT INTO "UsersPersonal" (id, first_name, last_name, branch)
+       SELECT uc.id, 'E2E', 'Administrator', 'Both'::"UserDesignation"
+       FROM "UserCredentials" uc WHERE uc.email=$1
+       ON CONFLICT (id) DO NOTHING`,
+      [process.env.E2E_ADMIN_EMAIL],
+    );
+    await client.query(
+      `UPDATE "UserCredentials"
+       SET data_consent=true, data_consent_version=$2, data_consent_agreed=now()
+       WHERE email=$1`,
+      [process.env.E2E_ADMIN_EMAIL, process.env.DATA_CONSENT_VERSION || 'v1.0'],
+    );
   } finally {
     await client.end();
   }
