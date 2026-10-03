@@ -37,7 +37,9 @@ x-app-base: &app-base
     SMTP_PASS: e2e
     JWT_SECRET: ${E2E_JWT_SECRET}
     JWT_ALGORITHM: HS256
-    JWT_EXPIRES_IN: 1h
+    JWT_PATIENT_ACCESS_EXPIRATION: 3600
+    JWT_STAFF_ACCESS_EXPIRATION: 3600
+    JWT_REFRESH_EXPIRATION: 604800
     JWT_ISSUER: mdsystem-e2e
     TOTP_ENCRYPTION_KEY: ${E2E_TOTP_ENCRYPTION_KEY}
     DATA_CONSENT_VERSION: v1.0
@@ -49,6 +51,10 @@ x-app-base: &app-base
     MEDIA_PATH: /app/media
     LOGGER_DIR: /tmp/mdsystem-logs
     EMAIL_DELAY: 0
+    # All browser tests share one runner IP and Redis rate-limit counter.
+    # Allow the suite's login, OTP, and completion requests within one minute.
+    PATIENT_AUTH_RATE_LIMIT_MAX_REQUESTS: 100
+    STAFF_AUTH_RATE_LIMIT_MAX_REQUESTS: 100
   volumes:
     - e2e-media:/app/media
   depends_on:

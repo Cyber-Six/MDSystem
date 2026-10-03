@@ -70,13 +70,13 @@ test('CORE-AUTH-01,02 rejects invalid credentials and OTP, then authenticates th
   await page.getByLabel('Email address').fill(process.env.E2E_PATIENT_EMAIL);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByText('Email or password is incorrect.')).toBeVisible();
+  await expect(page.getByText('Email or password is incorrect.', { exact: true })).toBeVisible();
 
   await openLogin(page, patientUrl);
   await page.getByLabel('Email address').fill(process.env.E2E_PATIENT_EMAIL);
   await page.getByLabel('Password', { exact: true }).fill(`${password}-invalid`);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByText('Email or password is incorrect.')).toBeVisible();
+  await expect(page.getByText('Email or password is incorrect.', { exact: true })).toBeVisible();
 
   await signIn(page, patientUrl, process.env.E2E_PATIENT_EMAIL, { rejectOtpOnce: true });
   await page.reload();
