@@ -1,6 +1,11 @@
 const { test, expect } = require('@playwright/test');
 require('./sanitized-artifacts');
 
+// The patient flow performs three logins, polls email, and verifies two OTPs.
+// Keep individual UI actions bounded while allowing the complete flow on the Pi.
+test.setTimeout(90_000);
+test.use({ actionTimeout: 15_000 });
+
 const patientUrl = process.env.E2E_PATIENT_URL;
 const staffUrl = process.env.E2E_STAFF_URL;
 const password = process.env.E2E_ACCOUNT_PASSWORD;
@@ -9,8 +14,12 @@ const mailpitUrl = process.env.MAILPIT_URL;
 async function openLogin(page, baseUrl) {
   await page.goto(`${baseUrl}/auth/login`);
   const openLoginButton = page.getByRole('button', { name: 'Open login panel' });
-  if (await openLoginButton.isVisible().catch(() => false)) await openLoginButton.click();
-  await expect(page.getByLabel('Email address')).toBeVisible();
+  // Both portals start with a closed sliding panel. isVisible() is an immediate
+  // snapshot and can skip opening it when the React UI has not rendered yet.
+  await expect(openLoginButton).toBeVisible({ timeout: 15_000 });
+  await openLoginButton.click();
+  await expect(page.getByLabel('Email address')).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
 }
 
 async function readLatestOtp(email) {
@@ -39,7 +48,7 @@ async function signIn(page, baseUrl, email, { rejectOtpOnce = false } = {}) {
   await openLogin(page, baseUrl);
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible();
 
   const otp = await readLatestOtp(email);
@@ -60,18 +69,18 @@ test('CORE-AUTH-01,02 rejects invalid credentials and OTP, then authenticates th
   await openLogin(page, staffUrl);
   await page.getByLabel('Email address').fill(process.env.E2E_PATIENT_EMAIL);
   await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Email or password is incorrect.')).toBeVisible();
 
   await openLogin(page, patientUrl);
   await page.getByLabel('Email address').fill(process.env.E2E_PATIENT_EMAIL);
   await page.getByLabel('Password', { exact: true }).fill(`${password}-invalid`);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Email or password is incorrect.')).toBeVisible();
 
   await signIn(page, patientUrl, process.env.E2E_PATIENT_EMAIL, { rejectOtpOnce: true });
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
 });
 
 test('CORE-AUTH-03 startup administrator can authenticate and open role management', async ({ page }) => {
