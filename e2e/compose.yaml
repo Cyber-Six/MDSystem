@@ -41,6 +41,7 @@ x-app-base: &app-base
     JWT_ISSUER: mdsystem-e2e
     TOTP_ENCRYPTION_KEY: ${E2E_TOTP_ENCRYPTION_KEY}
     DATA_CONSENT_VERSION: v1.0
+    RESET_PASSWORD_DOMAIN_ROUTE: http://patient:3000/reset-password
     RECAPTCHA_TEST_MODE: "true"
     GOOGLE_OAUTH_ENABLED: "false"
     DEBUG_BYPASS_OTP: "false"
