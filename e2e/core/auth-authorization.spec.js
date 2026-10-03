@@ -38,7 +38,7 @@ async function enterOtp(page, code) {
 async function signIn(page, baseUrl, email, { rejectOtpOnce = false } = {}) {
   await openLogin(page, baseUrl);
   await page.getByLabel('Email address').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible();
 
@@ -59,13 +59,13 @@ test('CORE-AUTH-01,02 rejects invalid credentials and OTP, then authenticates th
   // Patient credentials must not grant a staff portal session.
   await openLogin(page, staffUrl);
   await page.getByLabel('Email address').fill(process.env.E2E_PATIENT_EMAIL);
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Email or password is incorrect.')).toBeVisible();
 
   await openLogin(page, patientUrl);
   await page.getByLabel('Email address').fill(process.env.E2E_PATIENT_EMAIL);
-  await page.getByLabel('Password').fill(`${password}-invalid`);
+  await page.getByLabel('Password', { exact: true }).fill(`${password}-invalid`);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Email or password is incorrect.')).toBeVisible();
 
