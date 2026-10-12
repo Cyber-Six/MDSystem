@@ -138,8 +138,8 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
         run: |
-          if [ "$GITHUB_REF" != "refs/heads/docker-testing" ]; then
-            echo "Manual Pi operations must be run from the docker-testing branch." >&2
+          if [ "$GITHUB_REF" != "refs/heads/docker-testing" ] && [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
+            echo "Manual Pi operations must be run from the docker-testing, deployment, or development branch." >&2
             exit 1
           fi
           if [ "$OPERATION" = "reset-database" ] && [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
