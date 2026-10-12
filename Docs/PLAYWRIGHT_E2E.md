@@ -51,6 +51,61 @@ Keep `e2e.private.env` on the Pi and ignored by Git. The runner service account 
 
 ## Running tests
 
+### Selecting portal URLs for the smoke suite
+
+The smoke suite reads `E2E_PATIENT_URL` and `E2E_STAFF_URL` from the repository-root `.env.e2e` file. Copy `.env.e2e.example` to `.env.e2e`, then edit the two URLs to select local preview servers or deployed portals. The local file is ignored by Git. Shell environment variables with the same names override the file.
+
+For the internet deployment:
+
+```dotenv
+E2E_PATIENT_URL=https://www.mdsystemtip.space
+E2E_STAFF_URL=https://staff.mdsystemtip.space
+```
+
+For local Vite preview servers:
+
+```dotenv
+E2E_PATIENT_URL=http://127.0.0.1:4173
+E2E_STAFF_URL=http://127.0.0.1:4174
+```
+
+Run `npm run build` before using local preview URLs. When a portal URL points to a remote deployment, Playwright does not start a local preview server for that portal. The smoke suite checks the portal UI and mocks an invalid login response, so it does not authenticate or change deployed data.
+
+```sh
+npm run test:e2e:smoke
+```
+
+These URL settings apply to the GUI smoke suite. The disposable `core` and `full` suites continue to use their isolated Docker environment.
+
+### Saving and running recorded tests
+
+Save Codegen-based tests under `e2e/recorded/` with filenames ending in `.spec.js`. Start from `e2e/recorded/template.spec.js`, choose the patient or staff URL from `.env.e2e`, and paste Codegen's actions inside the `test()` callback. Codegen can open the selected portal directly:
+
+```sh
+npx playwright codegen https://www.mdsystemtip.space/auth/login
+```
+
+Run the saved recorded tests explicitly from the repository root:
+
+```sh
+npm run test:e2e:recorded
+```
+
+This project is separate from smoke and is not run by `npm run test:e2e:smoke`. Recorded tests can submit forms and change data; use a local or disposable test environment when possible. If `.env.e2e` points to the deployed portals, actions may create or alter live records. Set `E2E_VISUAL_RECORDING=1` to save a video for each recorded test under `e2e-results/`.
+
+If you organize tests in `e2e/review/`, run that folder with `npm run test:e2e:review`. It discovers `*.spec.js` files there and uses the same portal URL settings. Start from `e2e/review/template.spec.js` when adding a test.
+
+### Adding smoke tests
+
+Put additional GUI smoke tests in `e2e/smoke/`. Copy `e2e/smoke/template.js` to a new filename ending in `.spec.js` (for example, `e2e/smoke/appointments.spec.js`), then edit the portal, steps, and assertions. The smoke project discovers `login-smoke.spec.js` and every `*.spec.js` under `e2e/smoke/`, so the usual command runs the new file too:
+
+```sh
+cp e2e/smoke/template.js e2e/smoke/appointments.spec.js
+npm run test:e2e:smoke
+```
+
+The template only opens a portal and checks its heading. For tests that create or modify records, prefer the isolated database-backed suites under `e2e/core/` or `e2e/flows/`; the internet smoke target is a real deployment.
+
 The mocked browser smoke suite needs only the repository dependencies and built frontend apps:
 
 ```sh

@@ -120,6 +120,7 @@ mds-mobile/.dev/
 .env.local
 .env.*.local
 e2e.private.env
+.env.e2e
 /e2e/.run-*
 /e2e-results/
 e2e-state/

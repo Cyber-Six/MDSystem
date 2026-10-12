@@ -16,6 +16,8 @@
     "test:mobile": "jest --runInBand --selectProjects mobile",
     "test:gui": "playwright test --project=smoke",
     "test:e2e:smoke": "playwright test --project=smoke",
+    "test:e2e:recorded": "playwright test --project=recorded",
+    "test:e2e:review": "playwright test --project=review",
     "test:e2e:core": "node scripts/e2e.js core",
     "test:e2e:full": "node scripts/e2e.js full",
     "build": "npm run build:patient && npm run build:staff",
