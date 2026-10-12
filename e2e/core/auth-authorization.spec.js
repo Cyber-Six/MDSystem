@@ -22,20 +22,34 @@ async function openLogin(page, baseUrl) {
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
 }
 
-async function readLatestOtp(email) {
-  const url = `${mailpitUrl}/view/latest.txt?query=${encodeURIComponent(`to:${email}`)}`;
+async function latestMessageId(email) {
+  const url = `${mailpitUrl}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}&limit=1`;
+  const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+  if (!response.ok) throw new Error(`SMTP capture search failed (${response.status}).`);
+  const result = await response.json();
+  return result.messages?.[0]?.ID || null;
+}
+
+async function readLatestOtp(email, previousMessageId) {
+  let otp;
   await expect.poll(async () => {
-    const response = await fetch(url);
-    if (!response.ok) return null;
+    const messageId = await latestMessageId(email);
+    if (!messageId || messageId === previousMessageId) return false;
+    // Read this specific message so polling and retrieval cannot select
+    // different emails, or reuse an OTP from an earlier login.
+    const response = await fetch(`${mailpitUrl}/view/${encodeURIComponent(messageId)}.txt`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return false;
     const body = await response.text();
-    const code = body.match(/\b\d{6}\b/)?.[0];
-    return code || null;
-  }, { timeout: 20_000, intervals: [200, 400, 800, 1200] }).not.toBeNull();
-  const response = await fetch(url);
-  const body = await response.text();
-  const code = body.match(/\b\d{6}\b/)?.[0];
-  if (!code) throw new Error('The local SMTP capture received no six-digit OTP.');
-  return code;
+    otp = body.match(/\b\d{6}\b/)?.[0];
+    return Boolean(otp);
+  }, {
+    message: 'Wait for a new OTP email from the current login',
+    timeout: 20_000,
+    intervals: [200, 400, 800, 1200],
+  }).toBe(true);
+  return otp;
 }
 
 async function enterOtp(page, code) {
@@ -48,10 +62,11 @@ async function signIn(page, baseUrl, email, { rejectOtpOnce = false } = {}) {
   await openLogin(page, baseUrl);
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
+  const previousMessageId = await latestMessageId(email);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible();
 
-  const otp = await readLatestOtp(email);
+  const otp = await readLatestOtp(email, previousMessageId);
   if (rejectOtpOnce) {
     const invalidOtp = otp === '123456' ? '654321' : '123456';
     await enterOtp(page, invalidOtp);
