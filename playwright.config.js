@@ -1,7 +1,40 @@
 const { defineConfig } = require('@playwright/test');
+const fs = require('node:fs');
+const path = require('node:path');
+
+// Load local Playwright targets without adding a runtime dependency. Shell
+// environment variables take precedence over values in .env.e2e.
+const targetFile = path.join(__dirname, '.env.e2e');
+if (fs.existsSync(targetFile)) {
+  for (const line of fs.readFileSync(targetFile, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match || match[1] in process.env) continue;
+    process.env[match[1]] = match[2].replace(/^(["'])(.*)\1$/, '$2');
+  }
+}
 
 const coreMode = process.env.E2E_CORE === '1';
 const recordE2EVideo = process.env.E2E_VISUAL_RECORDING === '1';
+const patientTarget = process.env.E2E_PATIENT_URL;
+const staffTarget = process.env.E2E_STAFF_URL;
+const localWebServers = [];
+
+if (!coreMode && !patientTarget) {
+  localWebServers.push({
+    command: 'node node_modules/vite/bin/vite.js preview --outDir mds-patient/dist --host 127.0.0.1 --port 4173 --strictPort',
+    url: 'http://127.0.0.1:4173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  });
+}
+if (!coreMode && !staffTarget) {
+  localWebServers.push({
+    command: 'node node_modules/vite/bin/vite.js preview --outDir mds-staff/dist --host 127.0.0.1 --port 4174 --strictPort',
+    url: 'http://127.0.0.1:4174',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  });
+}
 
 module.exports = defineConfig({
   testDir: './e2e',
@@ -20,7 +53,17 @@ module.exports = defineConfig({
     screenshot: 'off',
   },
   projects: [
-    { name: 'smoke', testMatch: 'login-smoke.spec.js' },
+    { name: 'smoke', testMatch: ['login-smoke.spec.js', 'smoke/**/*.spec.js'] },
+    {
+      name: 'recorded',
+      testMatch: 'recorded/**/*.spec.js',
+      use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
+    },
+    {
+      name: 'review',
+      testMatch: 'review/**/*.spec.js',
+      use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
+    },
     {
       name: 'core',
       testMatch: 'core/**/*.spec.js',
@@ -32,18 +75,5 @@ module.exports = defineConfig({
       use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
     },
   ],
-  webServer: coreMode ? undefined : [
-    {
-      command: 'node node_modules/vite/bin/vite.js preview --outDir mds-patient/dist --host 127.0.0.1 --port 4173 --strictPort',
-      url: 'http://127.0.0.1:4173',
-      reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
-    },
-    {
-      command: 'node node_modules/vite/bin/vite.js preview --outDir mds-staff/dist --host 127.0.0.1 --port 4174 --strictPort',
-      url: 'http://127.0.0.1:4174',
-      reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
-    },
-  ],
+  webServer: localWebServers.length ? localWebServers : undefined,
 });

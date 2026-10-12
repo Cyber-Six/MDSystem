@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
 
+const withLoginPath = (baseUrl, fallback) => `${(baseUrl || fallback).replace(/\/+$/, '')}/auth/login`;
 const portals = [
-  { name: 'patient', url: 'http://127.0.0.1:4173/auth/login', title: 'Patient Portal' },
-  { name: 'staff', url: 'http://127.0.0.1:4174/auth/login', title: 'Staff Portal' },
+  { name: 'patient', url: withLoginPath(process.env.E2E_PATIENT_URL, 'http://127.0.0.1:4173'), title: 'Patient Portal' },
+  { name: 'staff', url: withLoginPath(process.env.E2E_STAFF_URL, 'http://127.0.0.1:4174'), title: 'Staff Portal' },
 ];
 
 for (const portal of portals) {
