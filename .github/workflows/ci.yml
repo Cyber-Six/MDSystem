@@ -183,7 +183,9 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database'
         working-directory: /srv/projects/MDSystem
         run: |
-          node "$GITHUB_WORKSPACE/scripts/compose.js" stop patient staff email-worker postgres
+          # Stopping leaves containers attached to their volumes. Remove the
+          # project containers first so Docker can release the database volumes.
+          node "$GITHUB_WORKSPACE/scripts/compose.js" down --remove-orphans
           for volume in mdsystem_postgres-data mdsystem_schema-state; do
             if docker volume inspect "$volume" >/dev/null 2>&1; then
               docker volume rm "$volume"
