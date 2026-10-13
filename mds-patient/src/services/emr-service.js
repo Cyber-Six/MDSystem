@@ -1147,16 +1147,13 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   // Employee Profile (conditional)
   if (formData.personalInfo.department) {
     const ROLE_MAP = {
-      'Teaching':              'Faculty',
-      'Teaching (Officer)':    'AcademicHead',
+      'Teaching':              'NonStaff',
+      'Teaching (Officer)':    'NonStaffOfficer',
       'Non-Teaching':          'Staff',
-      'Non-Teaching (Officer)':'AcademicHead',
+      'Non-Teaching (Officer)':'StaffOfficer',
       'Other':                 'Other',
     };
-    const rawCategory = formData.personalInfo.employmentCategory === 'Other'
-      ? formData.personalInfo.employmentCategoryOther
-      : formData.personalInfo.employmentCategory;
-    const mappedRole = ROLE_MAP[rawCategory] || 'Employee';
+    const mappedRole = ROLE_MAP[formData.personalInfo.employmentCategory] || 'Other';
     inputs.employeeProfile = {
       department: formData.personalInfo.department,
       role: mappedRole,

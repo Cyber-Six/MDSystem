@@ -77,6 +77,27 @@ npm run test:e2e:smoke
 
 These URL settings apply to the GUI smoke suite. The disposable `core` and `full` suites continue to use their isolated Docker environment.
 
+### Student and employee registration form coverage
+
+The opt-in `registration` project registers synthetic student and employee accounts on the patient deployment. Each of the five student and five employee tests fills and submits a complete initial medical record, including personal information, emergency contacts, medical background, dental answers and synthetic dental images, certification, and OB-GYNE details for female profiles. Profiles vary student/employment categories, campus, names, dates, contacts, and personal/family history. Tests assert accepted personal-profile data, a successful medical-record batch with no GraphQL errors, the submission success message, and a persisted Pending ticket after refreshing the page. They create persistent accounts and medical records, so configure `E2E_PATIENT_URL` for the test deployment and set `E2E_REGISTRATION_ENABLED=1` before running. The deployment must accept any six-digit verification code; set `E2E_TEST_OTP` only if a fixed test code is configured. Each run generates unique institutional emails and record identifiers and attaches account/record data to the report. Accounts and submitted records are left for inspection. Staff approval, revision, and cancellation are outside this suite.
+
+```sh
+E2E_REGISTRATION_ENABLED=1 npm run test:e2e:registration
+```
+
+Each account test has its own file: `mstudent-01.spec.js` through `mstudent-05.spec.js`, and `memployee-01.spec.js` through `memployee-05.spec.js`. The three mocked registration input-validation tests remain in their separate file. With one worker, account creation pauses eight seconds per test to respect registration rate limits.
+
+Run an individual account test:
+
+```sh
+E2E_REGISTRATION_ENABLED=1 npm run test:e2e:registration -- mstudent-01.spec.js
+E2E_REGISTRATION_ENABLED=1 npm run test:e2e:registration -- memployee-01.spec.js
+```
+
+The suite uses ten synthetic profiles: five students and five employees, with male and female form paths and varied names and IDs. Student tests select a catalog program using `E2E_PROGRAM_SEARCH` (default `Computer`); configure it to match a program in your test database. Dental uploads are synthetic PNG fixtures supplied in memory.
+
+Deployment verification on 2026-10-13 confirmed five student submissions and the Non-Teaching employee submission persisted as `Pending`; all three mocked input-validation tests passed. The other four employee cases exposed deployed `employeeRole` enum errors for `Faculty`, `AcademicHead`, and `Employee`, produced by the employment-category mapping in `mds-patient/src/services/emr-service.js`. These valid-data tests remain active and report the backend errors instead of treating the rejected submissions as successful.
+
 ### Saving and running recorded tests
 
 Save Codegen-based tests under `e2e/recorded/` with filenames ending in `.spec.js`. Start from `e2e/recorded/template.spec.js`, choose the patient or staff URL from `.env.e2e`, and paste Codegen's actions inside the `test()` callback. Codegen can open the selected portal directly:
