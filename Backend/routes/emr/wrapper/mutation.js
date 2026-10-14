@@ -124,18 +124,20 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "employee_profile" 
-       ("profileId", department, role, position)
-       VALUES ($1, $2, $3, $4)
+       ("profileId", department, role, position, "employmentCategoryOther")
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT ("profileId") DO UPDATE
          SET department = EXCLUDED.department,
              role = EXCLUDED.role,
-             position = EXCLUDED.position
+             position = EXCLUDED.position,
+             "employmentCategoryOther" = EXCLUDED."employmentCategoryOther"
              RETURNING *;`,
       [
         recordId,
         args.input.department,
-        roleForStorage(args.input.role, args.input.employmentCategoryOther),
-        args.input.position
+        roleForStorage(args.input.role),
+        args.input.position,
+        args.input.role === "Other" ? args.input.employmentCategoryOther?.trim() || null : null,
       ]
     );
 

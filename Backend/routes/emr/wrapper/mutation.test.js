@@ -20,16 +20,16 @@ test('rejects invalid staff ticket statuses before opening a database transactio
   await expect(Mutation._StaffUpdateTicket(null, { args: { status: 'Pending' }, recordId: 1, scope: 'Both' }, { user: { id: 3 }, res: {} })).rejects.toThrow("400:Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.");
 });
 
-test('stores the employee custom category in the existing role column', async () => {
+test('stores a valid employee role enum and custom category in its text column', async () => {
   db.getUserIdentity.mockResolvedValue('Employee');
-  db.query.mockResolvedValue({ rows: [{ profileId: 12, role: 'Research officer' }] });
+  db.query.mockResolvedValue({ rows: [{ profileId: 12, role: 'Other', employmentCategoryOther: 'Research officer' }] });
 
   const result = await Mutation._EmployeeProfile(null, {
     args: { input: { department: 'Science', role: 'Other', position: 'Analyst', employmentCategoryOther: 'Research officer' } },
     recordId: 12,
   }, { user: { id: 4 }, res: {} });
 
-  expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO "employee_profile"'), [12, 'Science', 'Research officer', 'Analyst']);
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining('"employmentCategoryOther"'), [12, 'Science', 'Other', 'Analyst', 'Research officer']);
   expect(result.employmentCategoryOther).toBe('Research officer');
 });
 

@@ -126,20 +126,28 @@ const RecordUpdateForm = ({
             getMyProfile {
               __typename
               ... on StudentProfile { program year }
-              ... on EmployeeProfile { department role position }
+              ... on EmployeeProfile { department role position employmentCategoryOther }
             }
           }` },
         });
         const profile = response.data?.data?.getMyProfile;
         if (!profile) return;
+        const employeeRoleByDatabaseRole = {
+          NonStaff: 'Teaching',
+          NonStaffOfficer: 'Teaching (Officer)',
+          Staff: 'Non-Teaching',
+          StaffOfficer: 'Non-Teaching (Officer)',
+        };
+        const employeeRole = employeeRoleByDatabaseRole[profile.role]
+          || (['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? profile.role : 'Other');
         setFormData((previous) => ({
           ...previous,
           profileType: profile.__typename === 'EmployeeProfile' ? 'Employee' : 'Student',
           ...(profile.__typename === 'EmployeeProfile' ? {
             employeeDepartment: profile.department || '',
-            employeeRole: ['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? profile.role : 'Other',
+            employeeRole,
             employeePosition: profile.position || '',
-            employeeCategoryOther: ['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? '' : profile.role || '',
+            employeeCategoryOther: employeeRole === 'Other' ? profile.employmentCategoryOther || (profile.role === 'Other' ? '' : profile.role || '') : '',
           } : {}),
         }));
       } catch (error) {

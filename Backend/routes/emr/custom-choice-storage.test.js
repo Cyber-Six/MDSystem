@@ -43,15 +43,18 @@ describe('oral appliance custom-choice storage', () => {
 });
 
 describe('employee custom employment category storage', () => {
-  test('stores a custom category in the role field only for Other', () => {
-    expect(roleForStorage('Other', 'Research officer')).toBe('Research officer');
-    expect(roleForStorage('Non-Teaching', 'Research officer')).toBe('Non-Teaching');
-    expect(roleForStorage('Other', '   ')).toBe('Other');
+  test('keeps free-text categories out of the enum role field', () => {
+    expect(roleForStorage('Other')).toBe('Other');
+    expect(roleForStorage('Teaching')).toBe('NonStaff');
+    expect(roleForStorage('Teaching (Officer)')).toBe('NonStaffOfficer');
+    expect(roleForStorage('Non-Teaching')).toBe('Staff');
+    expect(roleForStorage('Non-Teaching (Officer)')).toBe('StaffOfficer');
   });
 
-  test('reads legacy custom roles while keeping known roles as enum categories', () => {
+  test('reads the custom category column and keeps known roles as enum categories', () => {
+    expect(employeeCategoryFromRole('Other', 'Research officer')).toBe('Research officer');
     expect(employeeCategoryFromRole('Research officer')).toBe('Research officer');
-    expect(employeeCategoryFromRole('Non-Teaching')).toBeNull();
+    expect(employeeCategoryFromRole('Staff')).toBe('Non-Teaching');
     expect(employeeCategoryFromRole('')).toBeNull();
     expect(employeeCategoryFromRole(null)).toBeNull();
   });

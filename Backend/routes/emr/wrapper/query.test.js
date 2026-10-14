@@ -21,3 +21,16 @@ test('rejects missing IDs and expires an old validated in-progress ticket', asyn
   await expect(Query._getUserUpdateTicket(null, { userId: 7 }, { user: { id: 7 }, res: {} })).resolves.toMatchObject({ id: 5, patientId: 7, status: 'Expired' });
   expect(db.setExpiredUpdateTickets).toHaveBeenCalledWith(5);
 });
+
+test('returns the stored custom employee category in readable profile data', async () => {
+  db.query.mockResolvedValueOnce({ rows: [{ id: 12, profile_type: 'Employee', role: 'Other', employmentCategoryOther: 'Research officer' }] });
+
+  const profiles = await Query._getUserProfile(null, { userId: 7 }, { user: { id: 7 }, res: {} });
+
+  expect(db.query.mock.calls[0][0]).toContain('ep."employmentCategoryOther"');
+  expect(profiles[0]).toMatchObject({
+    __typename: 'EmployeeProfile',
+    role: 'Other',
+    employmentCategoryOther: 'Research officer',
+  });
+});

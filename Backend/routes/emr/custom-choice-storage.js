@@ -28,18 +28,33 @@ function decodeOralApplianceNotes(value) {
   }
 }
 
-function employeeCategoryFromRole(role) {
+function employeeCategoryFromRole(role, employmentCategoryOther) {
+  const custom = String(employmentCategoryOther ?? "").trim();
+  if (role === "Other" && custom) return custom;
+
   const value = String(role ?? "").trim();
-  const knownRoles = new Set([
-    "Faculty", "Staff", "AcademicHead", "Teaching", "Teaching (Officer)",
-    "Non-Teaching", "Non-Teaching (Officer)", "Other",
-  ]);
-  return value && !knownRoles.has(value) ? value : null;
+  const categoryByRole = {
+    NonStaff: "Teaching",
+    NonStaffOfficer: "Teaching (Officer)",
+    Staff: "Non-Teaching",
+    StaffOfficer: "Non-Teaching (Officer)",
+  };
+  if (categoryByRole[value]) return categoryByRole[value];
+  if (["Faculty", "AcademicHead", "Teaching", "Teaching (Officer)", "Non-Teaching", "Non-Teaching (Officer)"].includes(value)) return value;
+  return value && value !== "Other" ? value : null;
 }
 
-function roleForStorage(role, employmentCategoryOther) {
-  const custom = String(employmentCategoryOther ?? "").trim();
-  return role === "Other" && custom ? custom : role;
+function roleForStorage(role) {
+  // The PostgreSQL employeeRole enum cannot contain free-text categories.
+  // Keep the canonical enum value in `role`; persist the description in its
+  // dedicated text column instead.
+  const roleByCategory = {
+    Teaching: "NonStaff",
+    "Teaching (Officer)": "NonStaffOfficer",
+    "Non-Teaching": "Staff",
+    "Non-Teaching (Officer)": "StaffOfficer",
+  };
+  return roleByCategory[role] || role;
 }
 
 module.exports = {

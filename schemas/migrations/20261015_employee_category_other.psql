@@ -1,0 +1,4 @@
+-- Apply before deploying the application change. This only adds a nullable text
+-- column and preserves all existing employee profile rows.
+ALTER TABLE "employee_profile"
+  ADD COLUMN IF NOT EXISTS "employmentCategoryOther" text;
