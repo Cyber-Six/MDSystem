@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup, RadioButton } from './form-elements';
 import { fetchAllMedicalCatalogs } from './medical-history-service';
 import { useBanner } from '../../../context/use-banner.js';
+import { additionalCatalogItems } from '../initial-record/review-components';
 import {
   searchImmunizationCatalog,
   createImmunizationCatalog,
@@ -318,7 +319,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
   }, [catalogs, medicalConditionOthers.dynamicItems, immunizationOthers.dynamicItems, allergenOthers.dynamicItems, hospitalizationOthers.dynamicItems, operationOthers.dynamicItems, medicationOthers.dynamicItems, onCatalogItemSelected]);
 
   // Merge dynamic items with catalogs for lookups
-  const allAllergens = [...catalogs.allergens, ...allergenOthers.dynamicItems];
+  const allAllergens = [...catalogs.allergens, ...additionalCatalogItems(catalogs.allergens, allergenOthers.dynamicItems)];
 
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
@@ -356,7 +357,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               {/* Dynamically added medical conditions from search */}
               {medicalConditionOthers.dynamicItems.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                  {medicalConditionOthers.dynamicItems.map((condition) => (
+                  {additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems).map((condition) => (
                     <Checkbox
                       key={condition.id}
                       label={condition.name}
@@ -485,7 +486,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             <div>
                               <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-2">Added by you</p>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
-                                {allergenOthers.dynamicItems.map((allergen) => {
+                                {additionalCatalogItems(catalogs.allergens, allergenOthers.dynamicItems).map((allergen) => {
                                   const isChecked = (formData.selectedAllergies || []).includes(allergen.id);
                                   return (
                                     <div key={allergen.id}>
@@ -839,7 +840,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
             {/* Dynamically added vaccines from search */}
             {immunizationOthers.dynamicItems.length > 0 && (
               <div className="space-y-2 mt-3">
-                {immunizationOthers.dynamicItems.map((vaccine) => {
+                {additionalCatalogItems(catalogs.immunizations, immunizationOthers.dynamicItems).map((vaccine) => {
                   const isChecked = (formData.immunizations || []).includes(vaccine.id);
                   return (
                     <div key={vaccine.id}>
@@ -997,7 +998,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {hospitalizationOthers.dynamicItems.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
-                    {hospitalizationOthers.dynamicItems.map((condition) => {
+                    {additionalCatalogItems(catalogs.hospitalizations, hospitalizationOthers.dynamicItems).map((condition) => {
                       const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
                       return (
                         <div key={condition.id}>
@@ -1141,7 +1142,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {operationOthers.dynamicItems.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
-                    {operationOthers.dynamicItems.map((procedure) => {
+                    {additionalCatalogItems(catalogs.operations, operationOthers.dynamicItems).map((procedure) => {
                       const isChecked = formData.operationConditions?.[procedure.id] || false;
                       return (
                         <div key={procedure.id}>
@@ -1267,7 +1268,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {medicationOthers.dynamicItems.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
-                    {medicationOthers.dynamicItems.map((medicine) => {
+                    {additionalCatalogItems(catalogs.medications, medicationOthers.dynamicItems).map((medicine) => {
                       const isChecked = formData.selectedMedications?.[medicine.id] || false;
                       return (
                         <div key={medicine.id}>
@@ -1382,7 +1383,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 </div>
               ))}
               {/* Dynamically added family medical conditions from search */}
-              {medicalConditionOthers.dynamicItems.map((condition) => (
+              {additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems).map((condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"

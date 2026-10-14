@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Checkbox, Input } from './form-elements';
 import { searchDomainCatalog, createDomainCatalog } from '@core/services/emr-service';
+import { additionalCatalogItems } from '../review-components';
 
 const isValidCatalogId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
 
@@ -207,7 +208,7 @@ const MedicalHistoryForm = ({
           {/* Dynamically added conditions from search */}
           {conditionOthers.dynamicItems.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {conditionOthers.dynamicItems.map((condition) => (
+              {additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems).map((condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -322,7 +323,7 @@ const MedicalHistoryForm = ({
           {/* Dynamically added conditions from search */}
           {conditionOthers.dynamicItems.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {conditionOthers.dynamicItems.map((condition) => (
+              {additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems).map((condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"

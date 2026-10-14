@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server.node';
 import ReviewForm from './medical/review-form';
 import EmployeeReviewForm from './employee/review-form';
 import UpdateReview from '../update-record/review-step';
-import { ReviewDataRow, collectUnresolvedCatalogSelections, isResolvableCatalogSelection, resolveCatalogLabel } from './review-components';
+import { ReviewDataRow, additionalCatalogItems, collectUnresolvedCatalogSelections, isResolvableCatalogSelection, resolveCatalogLabel } from './review-components';
 
 const catalog = (id, name, extra = {}) => ({ id, name, ...extra });
 const catalogs = {
@@ -101,6 +101,17 @@ test('catalog labels require a valid ID and a resolvable name', () => {
   expect(resolveCatalogLabel([catalog(7, 'Choice')], 7)).toBe('Choice');
   expect(isResolvableCatalogSelection([catalog(7, 'Choice')], 7)).toBe(true);
   expect(isResolvableCatalogSelection([], 'undefined')).toBe(false);
+});
+
+test('deduplicates dynamic catalog items against parent items by normalized ID', () => {
+  const available = additionalCatalogItems(
+    [catalog(12, 'Created choice')],
+    [catalog('12', 'Created choice'), catalog(13, 'New choice'), catalog('13', 'Duplicate new choice')],
+  );
+  expect(available).toEqual([catalog(13, 'New choice')]);
+
+  // When the parent catalog catches up after creation, the dynamic copy stops rendering.
+  expect(additionalCatalogItems([catalog('13', 'New choice')], available)).toEqual([]);
 });
 
 test('flags active catalog selections that cannot be resolved and ignores deselected choices', () => {

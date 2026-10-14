@@ -8,6 +8,7 @@ import {
   searchAllergenCatalogByName,
   createAllergenCatalogEntry,
 } from '@core/services/emr-service';
+import { additionalCatalogItems } from '../review-components';
 
 const LIFESTYLE_FREQUENCY_OPTIONS = [
   { value: 'Daily',      label: 'Daily' },
@@ -335,7 +336,7 @@ const MedicalBackgroundForm = ({
           {/* Dynamically added vaccines from "Others" search — always shown */}
           {immunizationOthers.dynamicItems.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-              {immunizationOthers.dynamicItems.map((vaccine) => (
+              {additionalCatalogItems(immunizationCatalog, immunizationOthers.dynamicItems).map((vaccine) => (
                 <div key={vaccine.id} className="space-y-2">
                   <Checkbox
                     label={vaccine.name}
@@ -526,7 +527,7 @@ const MedicalBackgroundForm = ({
                 <div className="space-y-4 mt-4">
                   <p className="text-xs font-semibold text-secondary-500 uppercase tracking-wide mb-2">Added by you</p>
                   <div className="space-y-2 ml-2">
-                    {allergenOthers.dynamicItems.map((allergen) => {
+                    {additionalCatalogItems(allergenCatalog, allergenOthers.dynamicItems).map((allergen) => {
                       const allergyVal = data.allergies?.[allergen.id];
                       const isChecked = typeof allergyVal === 'object' ? !!allergyVal?.checked : !!allergyVal;
                       const severity = typeof allergyVal === 'object' ? (allergyVal?.severity || 'Unknown') : 'Unknown';
@@ -749,7 +750,7 @@ const MedicalBackgroundForm = ({
               {/* Dynamically added hospitalizations from "Others" search */}
               {hospitalizationOthers.dynamicItems.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  {hospitalizationOthers.dynamicItems.map((condition) => (
+                  {additionalCatalogItems(hospitalizationCatalog, hospitalizationOthers.dynamicItems).map((condition) => (
                     <div key={condition.id} className="space-y-2">
                       <Checkbox
                         label={condition.name}
@@ -923,7 +924,7 @@ const MedicalBackgroundForm = ({
               {/* Dynamically added operations from "Others" search */}
               {operationOthers.dynamicItems.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  {operationOthers.dynamicItems.map((procedure) => (
+                  {additionalCatalogItems(operationCatalog, operationOthers.dynamicItems).map((procedure) => (
                     <div key={procedure.id} className="space-y-2">
                       <Checkbox
                         label={procedure.name}
@@ -1076,7 +1077,7 @@ const MedicalBackgroundForm = ({
               {/* Dynamically added medications from "Others" search */}
               {medicationOthers.dynamicItems.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  {medicationOthers.dynamicItems.map((medicine) => (
+                    {additionalCatalogItems(medicationCatalog, medicationOthers.dynamicItems).map((medicine) => (
                     <Checkbox
                       key={medicine.id}
                       label={medicine.name}

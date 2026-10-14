@@ -34,6 +34,17 @@ export const isResolvableCatalogSelection = (catalog, id, registry = {}) =>
 export const selectedCatalogEntries = (selection = {}, catalog, registry = {}) =>
   Object.entries(selection || {}).filter(([id, selected]) => Boolean(selected) && isResolvableCatalogSelection(catalog, id, registry));
 
+export const additionalCatalogItems = (catalog = [], dynamicItems = []) => {
+  const seenIds = new Set((catalog || []).map((item) => String(item?.id)));
+  return (dynamicItems || []).filter((item) => {
+    if (item?.id === undefined || item?.id === null) return false;
+    const id = String(item.id);
+    if (seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
+};
+
 export const collectUnresolvedCatalogSelections = (formData = {}, catalogs = {}) => {
   const selected = (selection, catalogKey, active = (value) => Boolean(value)) =>
     Object.entries(selection || {}).filter(([, value]) => active(value)).map(([id]) => [catalogKey, id]);
