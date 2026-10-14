@@ -333,7 +333,7 @@ const sections = {
   operation: 'getOperationProfile(pending: true) { id operations { procedureId operationDate } notes }',
   medication: 'getMedicationProfile(pending: true) { id medications { medicineId description } notes }',
   vaccine: 'getImmunizationProfile(pending: true) { id immunizations { vaccineTypeId immunizationDate doseNumber } notes }',
-  appliance: 'getOralApplianceProfile(pending: true) { id appliances { tagId arch } notes }',
+  appliance: 'getOralApplianceProfile(pending: true) { id appliances { tagId arch } notes otherDescription otherArch }',
 };
 
 async function verify(page, state) {
@@ -380,13 +380,15 @@ async function verify(page, state) {
       compare(state, 'Hospitalization ID', state.created.hospitalization.id, hospital && String(hospital.conditionId));
       compare(state, 'Admission date', state.data.admission, hospital?.admissionDate?.slice(0, 10));
       compare(state, 'Discharge date', state.data.discharge, hospital?.dischargeDate?.slice(0, 10));
-      compare(state, 'hospitalization notes', state.data.hospitalizationNotes, saved.hospitalization.notes);
+      compare(state, 'hospitalization record notes', state.data.hospitalizationNotes, hospital?.notes);
+      compare(state, 'hospitalization profile notes', state.data.hospitalizationNotes, saved.hospitalization.notes);
     }
     if (saved.operation) {
       const operation = saved.operation.operations.find(item => String(item.procedureId) === state.created.operation.id);
       compare(state, 'Operation ID', state.created.operation.id, operation && String(operation.procedureId));
       compare(state, 'Operation date', state.data.operationDate, operation?.operationDate?.slice(0, 10));
-      compare(state, 'operation notes', state.data.operationNotes, saved.operation.notes);
+      compare(state, 'operation record notes', state.data.operationNotes, operation?.notes);
+      compare(state, 'operation profile notes', state.data.operationNotes, saved.operation.notes);
     }
     if (saved.medication) {
       const medication = saved.medication.medications.find(item => String(item.medicineId) === state.created.medication.id);
@@ -402,13 +404,11 @@ async function verify(page, state) {
       if (state.mode === 'update') compare(state, 'Immunization notes', state.data.immunizationNotes, saved.vaccine.notes);
     }
     if (state.mode === 'initial' && saved.appliance) {
-      compare(state, 'Other appliance text', state.data.appliance, saved.appliance.notes);
-      compare(state, 'Other appliance location', [state.data.arch], saved.appliance.appliances.map(item => item.arch));
+      compare(state, 'Other appliance text', state.data.appliance, saved.appliance.otherDescription);
+      compare(state, 'Other appliance location', state.data.arch, saved.appliance.otherArch);
       if (state.role === 'Employee') {
-        const info = await query(page, state, '/emr/patient', 'query ReadEmployeeCustomText { getPatientBasicInfo(userId: "self") { role department position } }');
-        // Current schema exposes role but no custom employment-description field.
-        // Fail visibly if readback cannot reproduce the patient's text.
-        compare(state, 'Custom employment description', state.data.employment, info.getPatientBasicInfo?.employmentCategoryOther ?? info.getPatientBasicInfo?.role);
+        const info = await query(page, state, '/emr/patient', 'query ReadEmployeeCustomText { getPatientBasicInfo(userId: "self") { role department position employmentCategoryOther } }');
+        compare(state, 'Custom employment description', state.data.employment, info.getPatientBasicInfo?.employmentCategoryOther);
       }
     }
     for (const [key, created] of Object.entries(state.created)) {

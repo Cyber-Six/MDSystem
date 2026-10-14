@@ -55,7 +55,7 @@ const Query = {
       SELECT pr.id, pr.profile_type,
              sp."programId", sp.year,
              spd.label as program_label,
-             ep.department, ep.role, ep.position,
+             ep.department, ep.role, ep.position, ep."employmentCategoryOther",
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
       JOIN "patientUpdateLog" pul ON pul.id = pr.id
@@ -97,6 +97,7 @@ const Query = {
           department: row.department,
           role: row.role,
           position: row.position,
+          employmentCategoryOther: row.employmentCategoryOther,
           created_at: row.created_at,
           status: row.status,
         };
@@ -886,6 +887,7 @@ const Query = {
         sp.year,
         ep.department,
         ep.role,
+        ep."employmentCategoryOther",
         uc.credentials_status,
         latest.id           AS latest_ticket_id,
         latest.status       AS latest_status,

@@ -123,18 +123,20 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "employee_profile" 
-        ("profileId", department, role, position)
-       VALUES ($1, $2, $3, $4)
+       ("profileId", department, role, position, "employmentCategoryOther")
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT ("profileId") DO UPDATE
          SET department = EXCLUDED.department,
              role = EXCLUDED.role,
-             position = EXCLUDED.position
+             position = EXCLUDED.position,
+             "employmentCategoryOther" = EXCLUDED."employmentCategoryOther"
              RETURNING *;`,
       [
         recordId,
         args.input.department,
         args.input.role,
-        args.input.position
+        args.input.position,
+        args.input.employmentCategoryOther ?? null
       ]
     );
 
@@ -404,7 +406,10 @@ const Mutation = {
 
   
   _OralApplianceProfile: async (_, {args, recordId}, { user, res }) => {
-    await anchor.OralAppliance(recordId);
+    const profile = await anchor.OralAppliance(recordId, args.input.notes, {
+      otherDescription: args.input.otherDescription,
+      otherArch: args.input.otherArch,
+    });
     await remove.OralApplianceRecord(recordId);
 
     if (args.input.appliances.length === 0) {
@@ -412,6 +417,9 @@ const Mutation = {
       return {
         id: recordId,
         appliances: [],
+        notes: profile?.notes ?? null,
+        otherDescription: profile?.otherDescription ?? null,
+        otherArch: profile?.otherArch ?? null,
         archived_at: null
         };
       }
@@ -447,6 +455,9 @@ const Mutation = {
     return {
       id: recordId,
       appliances: inserted,
+      notes: profile?.notes ?? null,
+      otherDescription: profile?.otherDescription ?? null,
+      otherArch: profile?.otherArch ?? null,
       archived_at: null
     };
   },
@@ -478,7 +489,7 @@ const Mutation = {
 
   _VisualAcuityProfile: async (_, { args, recordId }, { user, res }) => {
     // Anchor and cleanup existing records
-    await anchor.VisualAcuity(recordId);
+    await anchor.VisualAcuity(recordId, args.input.notes);
     await remove.VisualAcuityRecord(recordId);
 
     // If no acuity input provided, return with acuity = null
@@ -536,7 +547,7 @@ const Mutation = {
 
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {
-    await anchor.MedicalHistory(recordId);
+    await anchor.MedicalHistory(recordId, args.input.notes);
     await remove.MedicalCondition(recordId);
 
     if (args.input.conditions.length === 0) {
@@ -580,7 +591,7 @@ const Mutation = {
   _HospitalizationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Hospitalization(recordId);
+    await anchor.Hospitalization(recordId, args.input.notes);
     await remove.HospitalizationRecord(recordId);
 
     if (args.input.hospitalizations.length === 0) {
@@ -624,7 +635,7 @@ const Mutation = {
   _OperationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Operation(recordId);
+    await anchor.Operation(recordId, args.input.notes);
     await remove.OperationRecord(recordId);
 
     if (args.input.operations.length === 0) {
@@ -665,7 +676,7 @@ const Mutation = {
   _ImmunizationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Immunization(recordId);
+    await anchor.Immunization(recordId, args.input.notes);
     await remove.ImmunizationRecord(recordId);
 
     if (args.input.immunizations.length === 0) {
@@ -707,7 +718,7 @@ const Mutation = {
   _DentalProcedureProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.DentalProcedure(recordId);
+    await anchor.DentalProcedure(recordId, args.input.notes);
     await remove.DentalProcedureRecord(recordId);
 
     if (args.input.procedures.length === 0) {
@@ -754,7 +765,7 @@ const Mutation = {
   _AllergyProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Allergy(recordId);
+    await anchor.Allergy(recordId, args.input.notes);
     await remove.AllergyRecord(recordId);
 
     if (args.input.allergies.length === 0) {
@@ -804,7 +815,7 @@ const Mutation = {
   _MedicationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.MaintenanceMedication(recordId);
+    await anchor.MaintenanceMedication(recordId, args.input.notes);
     await remove.MedicationRecord(recordId);
 
     if (args.input.medications.length === 0) {

@@ -1,4 +1,4 @@
-jest.mock('../../../config/query.js', () => ({ query: jest.fn(), connect: jest.fn() }));
+jest.mock('../../../config/query.js', () => ({ query: jest.fn(), connect: jest.fn(), getUserIdentity: jest.fn() }));
 jest.mock('../../../config/multer.js', () => ({ promoteFile: jest.fn(), deleteFile: jest.fn() }));
 jest.mock('../query/upsert.js', () => ({ upsertEmergencyNumber: jest.fn() }));
 jest.mock('../query/anchor.js', () => ({}));
@@ -10,7 +10,37 @@ jest.mock('../../profile/resolvers/wrapper/wrapper.js', () => ({ Mutation: { _re
 jest.mock('../resolvers/record-validator.js', () => ({ validateUpdateTicket: jest.fn() }));
 
 const Mutation = require('./mutation.js');
+const db = require('../../../config/query.js');
+const anchor = require('../query/anchor.js');
+const remove = require('../query/delete.js');
+
+beforeEach(() => jest.clearAllMocks());
 
 test('rejects invalid staff ticket statuses before opening a database transaction', async () => {
   await expect(Mutation._StaffUpdateTicket(null, { args: { status: 'Pending' }, recordId: 1, scope: 'Both' }, { user: { id: 3 }, res: {} })).rejects.toThrow("400:Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.");
+});
+
+test('stores the employee custom category separately from the Other role', async () => {
+  db.getUserIdentity.mockResolvedValue('Employee');
+  db.query.mockResolvedValue({ rows: [{ profileId: 12, role: 'Other', employmentCategoryOther: 'Research officer' }] });
+
+  const result = await Mutation._EmployeeProfile(null, {
+    args: { input: { department: 'Science', role: 'Other', position: 'Analyst', employmentCategoryOther: 'Research officer' } },
+    recordId: 12,
+  }, { user: { id: 4 }, res: {} });
+
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining('"employmentCategoryOther"'), [12, 'Science', 'Other', 'Analyst', 'Research officer']);
+  expect(result.employmentCategoryOther).toBe('Research officer');
+});
+
+test('stores and clears notes and custom appliance details when no catalog appliances are selected', async () => {
+  anchor.OralAppliance = jest.fn().mockResolvedValue({ notes: null, otherDescription: 'Custom guard', otherArch: 'Upper' });
+  remove.OralApplianceRecord = jest.fn();
+  const input = { appliances: [], notes: null, otherDescription: 'Custom guard', otherArch: 'Upper' };
+
+  const result = await Mutation._OralApplianceProfile(null, { args: { input }, recordId: 13 }, { user: { id: 4 }, res: {} });
+
+  expect(anchor.OralAppliance).toHaveBeenCalledWith(13, null, { otherDescription: 'Custom guard', otherArch: 'Upper' });
+  expect(remove.OralApplianceRecord).toHaveBeenCalledWith(13);
+  expect(result).toMatchObject({ id: 13, notes: null, otherDescription: 'Custom guard', otherArch: 'Upper', appliances: [] });
 });

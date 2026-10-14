@@ -1044,7 +1044,14 @@ const buildOralApplianceRecords = (dentalHistory, catalog) => {
       const itemArch = (typeof val === 'object' && val?.arch) ? val.arch : 'None';
       return [{ tagId: id, status: 'Active', dateIssued: today, arch: itemArch }];
     });
-  return { appliances, notes: dentalHistory?.applianceOther || null };
+  const other = dentalHistory?.intraOralAppliances?.other;
+  const otherChecked = typeof other === 'object' ? Boolean(other?.checked) : Boolean(other);
+  return {
+    appliances,
+    notes: null,
+    otherDescription: otherChecked ? dentalHistory?.applianceOther?.trim() || null : null,
+    otherArch: otherChecked && typeof other === 'object' ? other.arch || null : null,
+  };
 };
 
 const VISUAL_ACUITY_META_PREFIX = 'VA_META::';
@@ -1157,7 +1164,10 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
     inputs.employeeProfile = {
       department: formData.personalInfo.department,
       role: mappedRole,
-      position: formData.personalInfo.position || ''
+      position: formData.personalInfo.position || '',
+      employmentCategoryOther: formData.personalInfo.employmentCategory === 'Other'
+        ? formData.personalInfo.employmentCategoryOther?.trim() || null
+        : null,
     };
   }
 
@@ -1782,7 +1792,10 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const identifier       = bid?.identifier || patientBasicInfo?.identifier || '';
   const branch           = bid?.branch || patientBasicInfo?.branch || '';
   const ec               = emr?.emergencyContact || {};
-  const { employmentCategory, employmentCategoryOther } = reverseMapEmploymentCategory(rawRole);
+  const { employmentCategory, employmentCategoryOther: mappedEmploymentCategoryOther } = reverseMapEmploymentCategory(rawRole);
+  const employmentCategoryOther = emrProfile?.employmentCategoryOther
+    ?? patientBasicInfo?.employmentCategoryOther
+    ?? mappedEmploymentCategoryOther;
 
   const personalInfo = {
     firstName:          pr.first_name     || '',
@@ -1950,9 +1963,13 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
                               ? String(dh.lastVisitDate).slice(0, 7)  // YYYY-MM-DD → YYYY-MM
                               : '',
     lastDentalCleaning:   reverseMapDentalCleaningRange(dh.lastDentalCleaning || ''),
-    hasIntraOralAppliance: appliances.length > 0 ? 'yes' : 'no',
-    intraOralAppliances:   applianceMap,
-    applianceLocation:     appliances[0]?.arch || '',
+    hasIntraOralAppliance: appliances.length > 0 || Boolean(oaProfile.otherDescription) ? 'yes' : 'no',
+    intraOralAppliances: {
+      ...applianceMap,
+      ...(oaProfile.otherDescription ? { other: { checked: true, arch: oaProfile.otherArch || '' } } : {}),
+    },
+    applianceOther:       oaProfile.otherDescription || '',
+    applianceLocation:     oaProfile.otherArch || appliances[0]?.arch || '',
     selectedDentalProcedures,
     toothExtraction:       '',   // never persisted to backend
     dentalFilling:         '',   // never persisted to backend
@@ -1990,7 +2007,7 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
   let query = `query GetRevisionEMRData {
     emrProfile: getProfile {
       ... on StudentProfile { program year }
-      ... on EmployeeProfile { department role position }
+      ... on EmployeeProfile { department role position employmentCategoryOther }
     }
     patientBasicInfo: getPatientBasicInfo(userId: "self") {
       identifier
@@ -2000,6 +2017,7 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
       year
       department
       role
+      employmentCategoryOther
     }
     emergencyContact: getEmergencyContact {
       firstContact  { contactName relationship contactNumber address }
@@ -2059,6 +2077,8 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
     }
     oralAppliance: getOralApplianceProfile {
       appliances { tagId arch }
+      otherDescription
+      otherArch
     }`;
   }
 

@@ -11,8 +11,20 @@ test.each(['VisualAcuity', 'MaintenanceMedication', 'MedicalHistory', 'Hospitali
   expect(query.mock.calls[0][0]).toContain('DO UPDATE');
   await anchors[table](12);
   expect(query).toHaveBeenLastCalledWith(expect.stringContaining('DO NOTHING'), [12]);
+  await anchors[table](12, null);
+  expect(query).toHaveBeenLastCalledWith(expect.stringContaining(`INSERT INTO "${table}"`), [12, null]);
+  expect(query.mock.calls.at(-1)[0]).toContain('SET "notes" = EXCLUDED."notes"');
 });
 test('propagates storage failures', async () => {
   query.mockRejectedValue(new Error('unavailable'));
   await expect(anchors.Allergy(12)).rejects.toThrow('unavailable');
+});
+
+test('persists and clears the oral appliance custom fields and notes', async () => {
+  query.mockResolvedValue({ rows: [{ id: 12, notes: null, otherDescription: 'Custom guard', otherArch: 'Upper' }] });
+  await anchors.OralAppliance(12, null, { otherDescription: 'Custom guard', otherArch: 'Upper' });
+  expect(query).toHaveBeenLastCalledWith(expect.stringContaining('"otherDescription" = EXCLUDED."otherDescription"'), [12, null, 'Custom guard', 'Upper']);
+
+  await anchors.OralAppliance(12, null, { otherDescription: null, otherArch: null });
+  expect(query).toHaveBeenLastCalledWith(expect.stringContaining('"otherArch" = EXCLUDED."otherArch"'), [12, null, null, null]);
 });

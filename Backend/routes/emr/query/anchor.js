@@ -7,7 +7,7 @@ const { query } = require("../../../config/query.js");
 async function queryAnchor(tableName, id, notes) {
   let queryText, values;
 
-  if (notes) {
+  if (notes !== undefined) {
     queryText = `
       INSERT INTO "${tableName}" ("id", "notes")
       VALUES ($1, $2)
@@ -61,8 +61,25 @@ async function Allergy(id, notes) {
   return queryAnchor("Allergy", id, notes);
 }
 
-async function OralAppliance(id, notes) {
-  return queryAnchor("OralAppliance", id, notes);
+async function OralAppliance(id, notes, customFields = {}) {
+  const fields = [
+    ["notes", notes],
+    ["otherDescription", customFields.otherDescription],
+    ["otherArch", customFields.otherArch],
+  ].filter(([, value]) => value !== undefined);
+  if (fields.length === 0) return queryAnchor("OralAppliance", id);
+
+  const columns = ["id", ...fields.map(([name]) => `"${name}"`)];
+  const values = [id, ...fields.map(([, value]) => value)];
+  const placeholders = values.map((_, index) => `$${index + 1}`);
+  const updates = fields.map(([name]) => `"${name}" = EXCLUDED."${name}"`);
+  const result = await query(`
+    INSERT INTO "OralAppliance" (${columns.join(", ")})
+    VALUES (${placeholders.join(", ")})
+    ON CONFLICT (id) DO UPDATE SET ${updates.join(", ")}
+    RETURNING *;
+  `, values);
+  return result.rows[0];
 }
 
 async function DentalRecord(id, notes) {

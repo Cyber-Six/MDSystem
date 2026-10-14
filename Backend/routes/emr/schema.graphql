@@ -71,6 +71,7 @@ type EmployeeProfile implements UserProfile {
   department: String
   role: String
   position: String
+  employmentCategoryOther: String
   status: UpdateStatus
   archived_at: Date
   created_at: Date
@@ -85,6 +86,7 @@ input EmployeeProfileInput {
   department: String!
   role: String!
   position: String!
+  employmentCategoryOther: String
 }
 
 input StudentProfileUpdateInput{
@@ -96,6 +98,7 @@ input EmployeeProfileUpdateInput {
   department: String
   role: String
   position: String
+  employmentCategoryOther: String
 }
 
 ### ====================== EMR SCHEMA ==================== ###
@@ -311,6 +314,8 @@ type OralApplianceProfile{
   id: ID!
   appliances: [OralAppliance!]!
   notes: String
+  otherDescription: String
+  otherArch: oralApplianceArch
   status: UpdateStatus
 
   archived_at: Date
@@ -320,6 +325,8 @@ type OralApplianceProfile{
 input OralApplianceProfileInput{
   appliances: [OralApplianceInput]!
   notes: String
+  otherDescription: String
+  otherArch: oralApplianceArch
 }
 
 
@@ -760,6 +767,7 @@ type PatientSearchResult {
   department: String
   role: String
   position: String
+  employmentCategoryOther: String
   credentials_status: CredentialStatus
   latest_ticket_id: ID
   latest_status: UpdateStatus
