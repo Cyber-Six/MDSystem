@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [development, docker-testing, deployment]
+    branches: [development, deployment]
   push:
-    branches: [development, docker-testing, deployment]
+    branches: [development, deployment]
   workflow_dispatch:
     inputs:
       operation:
@@ -113,13 +113,13 @@ jobs:
         run: docker build --target runtime --tag mdsystem:ci .
 
       - name: Run disposable database-backed Playwright core suite
-        if: github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/deployment'
         env:
           E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
         run: npm run test:e2e:core
 
       - name: Upload disposable Playwright core report
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/deployment'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-core-${{ github.sha }}
@@ -128,7 +128,7 @@ jobs:
           retention-days: 7
 
       - name: Remove registered interrupted E2E projects
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/deployment'
         env:
           E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
         run: node scripts/e2e-cleanup.js --registered
@@ -139,8 +139,8 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
         run: |
-          if [ "$GITHUB_REF" != "refs/heads/docker-testing" ] && [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
-            echo "Manual Pi operations must be run from the docker-testing, deployment, or development branch." >&2
+          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
+            echo "Manual Pi operations must be run from the deployment or development branch." >&2
             exit 1
           fi
           if [ "$OPERATION" = "reset-database" ] && [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
@@ -148,12 +148,22 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy tested image to the Pi use-case stack
-        if: github.event_name == 'push' && github.ref == 'refs/heads/docker-testing'
+      - name: Reset test database and deploy the tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/deployment'
         working-directory: /srv/projects/MDSystem
         run: |
+          # This runs only after the push has passed tests and produced the CI image.
+          docker image inspect mdsystem:ci >/dev/null
           docker image tag mdsystem:ci mdsystem:local
-          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
+          node "$GITHUB_WORKSPACE/scripts/compose.js" down --remove-orphans
+          for volume in mdsystem_postgres-data mdsystem_schema-state; do
+            if docker volume inspect "$volume" >/dev/null 2>&1; then
+              docker volume rm "$volume"
+            fi
+          done
+          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
+          node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
+          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
           patient_ok=1
           staff_ok=1
@@ -193,8 +203,8 @@ jobs:
         env:
           RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
         run: |
-          if [ "$GITHUB_REF" != "refs/heads/docker-testing" ] && [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
-            echo "Manual Pi operations must be run from the docker-testing, deployment, or development branch." >&2
+          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
+            echo "Manual Pi operations must be run from the deployment or development branch." >&2
             exit 1
           fi
           if [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then

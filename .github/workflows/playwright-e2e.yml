@@ -25,7 +25,7 @@ concurrency:
 jobs:
   disposable-e2e:
     name: Run ${{ inputs.suite }} E2E suite on the Pi
-    if: github.ref == 'refs/heads/docker-testing'
+    if: github.ref == 'refs/heads/deployment'
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 60
     steps:

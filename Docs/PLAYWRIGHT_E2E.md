@@ -184,9 +184,9 @@ Successful and failed reports stay under the ignored `e2e-results/` directory in
 
 ## GitHub Actions
 
-The existing hosted `gui-smoke` job remains fast and uses mocked invalid-login responses. For a trusted push to `docker-testing`, the self-hosted ARM64 job first runs unit tests and builds the app image, then runs the disposable database-backed core suite before it can deploy the use-case services. Fork pull requests run only the hosted GUI smoke job. The local Pi config file and SQL files must be present before this deployment gate runs.
+The existing hosted `gui-smoke` job remains fast and uses mocked invalid-login responses. For a trusted push to `deployment`, the self-hosted ARM64 job first runs unit tests and builds the app image, then runs the disposable database-backed core suite before it resets the Pi use-case database and deploys the tested image. Fork pull requests run only the hosted GUI smoke job. The local Pi config file and SQL files must be present before this deployment gate runs.
 
-For a manual run, select **Actions → Playwright E2E → Run workflow** on `docker-testing`, then choose `core` or `full`. The `record_video` option is enabled by default and saves a video for each browser test. Download the workflow's `playwright-...` artifact and open the HTML report to view the videos alongside the test results. Turn `record_video` off to skip them. Automatic deployment-gate runs do not record video. Traces remain disabled.
+For a manual run, select **Actions → Playwright E2E → Run workflow** on `deployment`, then choose `core` or `full`. The `record_video` option is enabled by default and saves a video for each browser test. Download the workflow's `playwright-...` artifact and open the HTML report to view the videos alongside the test results. Turn `record_video` off to skip them. Automatic deployment-gate runs do not record video. Traces remain disabled.
 
 Videos show the synthetic account activity used during sign-in, including the one-time code. Keep downloaded workflow artifacts private and do not publish them. The E2E database and accounts are disposable, and videos are retained as GitHub Actions artifacts for seven days.
 
