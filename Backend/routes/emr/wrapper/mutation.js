@@ -3,6 +3,7 @@ const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { upsertEmergencyNumber } = require("../query/upsert.js");
 
 const anchor = require("../query/anchor.js");
+const { decodeOralApplianceNotes, roleForStorage } = require("../custom-choice-storage.js");
 const remove = require("../query/delete.js");
 
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
@@ -123,20 +124,18 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "employee_profile" 
-       ("profileId", department, role, position, "employmentCategoryOther")
-       VALUES ($1, $2, $3, $4, $5)
+       ("profileId", department, role, position)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT ("profileId") DO UPDATE
          SET department = EXCLUDED.department,
              role = EXCLUDED.role,
-             position = EXCLUDED.position,
-             "employmentCategoryOther" = EXCLUDED."employmentCategoryOther"
+             position = EXCLUDED.position
              RETURNING *;`,
       [
         recordId,
         args.input.department,
-        args.input.role,
-        args.input.position,
-        args.input.employmentCategoryOther ?? null
+        roleForStorage(args.input.role, args.input.employmentCategoryOther),
+        args.input.position
       ]
     );
 
@@ -417,9 +416,7 @@ const Mutation = {
       return {
         id: recordId,
         appliances: [],
-        notes: profile?.notes ?? null,
-        otherDescription: profile?.otherDescription ?? null,
-        otherArch: profile?.otherArch ?? null,
+        ...decodeOralApplianceNotes(profile?.notes),
         archived_at: null
         };
       }
@@ -455,9 +452,7 @@ const Mutation = {
     return {
       id: recordId,
       appliances: inserted,
-      notes: profile?.notes ?? null,
-      otherDescription: profile?.otherDescription ?? null,
-      otherArch: profile?.otherArch ?? null,
+      ...decodeOralApplianceNotes(profile?.notes),
       archived_at: null
     };
   },
@@ -489,7 +484,7 @@ const Mutation = {
 
   _VisualAcuityProfile: async (_, { args, recordId }, { user, res }) => {
     // Anchor and cleanup existing records
-    await anchor.VisualAcuity(recordId, args.input.notes);
+    await anchor.VisualAcuity(recordId);
     await remove.VisualAcuityRecord(recordId);
 
     // If no acuity input provided, return with acuity = null
@@ -520,7 +515,7 @@ const Mutation = {
           args.input.acuity.recorded_at,
           args.input.acuity.left_eye,
           args.input.acuity.right_eye,
-          args.input.acuity.notes
+          args.input.acuity.notes ?? args.input.notes ?? null
         ]
       );
 
@@ -547,7 +542,7 @@ const Mutation = {
 
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {
-    await anchor.MedicalHistory(recordId, args.input.notes);
+    await anchor.MedicalHistory(recordId);
     await remove.MedicalCondition(recordId);
 
     if (args.input.conditions.length === 0) {
@@ -591,7 +586,7 @@ const Mutation = {
   _HospitalizationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Hospitalization(recordId, args.input.notes);
+    await anchor.Hospitalization(recordId);
     await remove.HospitalizationRecord(recordId);
 
     if (args.input.hospitalizations.length === 0) {
@@ -603,7 +598,11 @@ const Mutation = {
       }
 
     const inserted = [];
-    for (const hospitalization of args.input.hospitalizations) {
+    const hospitalizationInputs = args.input.hospitalizations.map((hospitalization, index) => ({
+      ...hospitalization,
+      notes: hospitalization.notes ?? (index === 0 ? args.input.notes ?? null : null),
+    }));
+    for (const hospitalization of hospitalizationInputs) {
       try {
         const result = await db.queryControlled(
           `INSERT INTO "HospitalizationRecord"
@@ -635,7 +634,7 @@ const Mutation = {
   _OperationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Operation(recordId, args.input.notes);
+    await anchor.Operation(recordId);
     await remove.OperationRecord(recordId);
 
     if (args.input.operations.length === 0) {
@@ -646,7 +645,11 @@ const Mutation = {
         };
       }
     const inserted = [];
-    for (const operation of args.input.operations) {
+    const operationInputs = args.input.operations.map((operation, index) => ({
+      ...operation,
+      notes: operation.notes ?? (index === 0 ? args.input.notes ?? null : null),
+    }));
+    for (const operation of operationInputs) {
       try {
         const result = await db.queryControlled(
           `INSERT INTO "OperationRecord"
@@ -676,7 +679,7 @@ const Mutation = {
   _ImmunizationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Immunization(recordId, args.input.notes);
+    await anchor.Immunization(recordId);
     await remove.ImmunizationRecord(recordId);
 
     if (args.input.immunizations.length === 0) {
@@ -718,7 +721,7 @@ const Mutation = {
   _DentalProcedureProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.DentalProcedure(recordId, args.input.notes);
+    await anchor.DentalProcedure(recordId);
     await remove.DentalProcedureRecord(recordId);
 
     if (args.input.procedures.length === 0) {
@@ -765,7 +768,7 @@ const Mutation = {
   _AllergyProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Allergy(recordId, args.input.notes);
+    await anchor.Allergy(recordId);
     await remove.AllergyRecord(recordId);
 
     if (args.input.allergies.length === 0) {
@@ -776,7 +779,11 @@ const Mutation = {
         };
       }
     const inserted = [];
-    for (const allergy of args.input.allergies) {
+    const allergyInputs = args.input.allergies.map((allergy, index) => ({
+      ...allergy,
+      notes: allergy.notes ?? (index === 0 ? args.input.notes ?? null : null),
+    }));
+    for (const allergy of allergyInputs) {
       try {
         const result = await db.queryControlled(
           `INSERT INTO "AllergyRecord"

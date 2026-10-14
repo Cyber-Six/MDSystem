@@ -373,7 +373,7 @@ async function verify(page, state) {
       compare(state, 'Allergen ID', state.created.allergen.id, allergy && String(allergy.allergenCatalogId));
       compare(state, 'Allergy status', 'Active', allergy?.status);
       compare(state, 'Allergy severity', 'Mild', allergy?.severity);
-      compare(state, 'Allergy notes', state.mode === 'initial' ? `Other: ${state.data.allergyNotes}` : state.data.allergyNotes, saved.allergies.notes);
+      compare(state, 'Allergy record notes', `Other: ${state.data.allergyNotes}`, allergy?.notes);
     }
     if (saved.hospitalization) {
       const hospital = saved.hospitalization.hospitalizations.find(item => String(item.conditionId) === state.created.hospitalization.id);
@@ -381,14 +381,12 @@ async function verify(page, state) {
       compare(state, 'Admission date', state.data.admission, hospital?.admissionDate?.slice(0, 10));
       compare(state, 'Discharge date', state.data.discharge, hospital?.dischargeDate?.slice(0, 10));
       compare(state, 'hospitalization record notes', state.data.hospitalizationNotes, hospital?.notes);
-      compare(state, 'hospitalization profile notes', state.data.hospitalizationNotes, saved.hospitalization.notes);
     }
     if (saved.operation) {
       const operation = saved.operation.operations.find(item => String(item.procedureId) === state.created.operation.id);
       compare(state, 'Operation ID', state.created.operation.id, operation && String(operation.procedureId));
       compare(state, 'Operation date', state.data.operationDate, operation?.operationDate?.slice(0, 10));
       compare(state, 'operation record notes', state.data.operationNotes, operation?.notes);
-      compare(state, 'operation profile notes', state.data.operationNotes, saved.operation.notes);
     }
     if (saved.medication) {
       const medication = saved.medication.medications.find(item => String(item.medicineId) === state.created.medication.id);
@@ -401,7 +399,6 @@ async function verify(page, state) {
       compare(state, 'Vaccine ID', state.created.vaccine.id, vaccine && String(vaccine.vaccineTypeId));
       compare(state, 'Vaccine date', state.data.vaccineDate, vaccine?.immunizationDate?.slice(0, 10));
       compare(state, 'Vaccine dose', state.data.dose, vaccine?.doseNumber);
-      if (state.mode === 'update') compare(state, 'Immunization notes', state.data.immunizationNotes, saved.vaccine.notes);
     }
     if (state.mode === 'initial' && saved.appliance) {
       compare(state, 'Other appliance text', state.data.appliance, saved.appliance.otherDescription);
@@ -544,8 +541,8 @@ async function runWorkflow(page, role, mode) {
           review: () => review(page, state),
           afterBatch: async body => {
             await step(state, 'Inspect batch errors and saved pending sections', async () => {
-              expect.soft(body.errors || [], 'Initial medical batch must have no GraphQL errors').toEqual([]);
-              expect.soft(body.data?.submitTicket, 'Initial batch must submit a Pending ticket').toBe('Pending');
+              expect(body.errors || [], 'Initial medical batch must have no GraphQL errors').toEqual([]);
+              expect(body.data?.submitTicket, 'Initial batch must submit a Pending ticket').toBe('Pending');
               await Promise.allSettled([...state.pending]);
               await verify(page, state);
             });

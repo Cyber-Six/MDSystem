@@ -20,21 +20,21 @@ test('rejects invalid staff ticket statuses before opening a database transactio
   await expect(Mutation._StaffUpdateTicket(null, { args: { status: 'Pending' }, recordId: 1, scope: 'Both' }, { user: { id: 3 }, res: {} })).rejects.toThrow("400:Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.");
 });
 
-test('stores the employee custom category separately from the Other role', async () => {
+test('stores the employee custom category in the existing role column', async () => {
   db.getUserIdentity.mockResolvedValue('Employee');
-  db.query.mockResolvedValue({ rows: [{ profileId: 12, role: 'Other', employmentCategoryOther: 'Research officer' }] });
+  db.query.mockResolvedValue({ rows: [{ profileId: 12, role: 'Research officer' }] });
 
   const result = await Mutation._EmployeeProfile(null, {
     args: { input: { department: 'Science', role: 'Other', position: 'Analyst', employmentCategoryOther: 'Research officer' } },
     recordId: 12,
   }, { user: { id: 4 }, res: {} });
 
-  expect(db.query).toHaveBeenCalledWith(expect.stringContaining('"employmentCategoryOther"'), [12, 'Science', 'Other', 'Analyst', 'Research officer']);
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO "employee_profile"'), [12, 'Science', 'Research officer', 'Analyst']);
   expect(result.employmentCategoryOther).toBe('Research officer');
 });
 
-test('stores and clears notes and custom appliance details when no catalog appliances are selected', async () => {
-  anchor.OralAppliance = jest.fn().mockResolvedValue({ notes: null, otherDescription: 'Custom guard', otherArch: 'Upper' });
+test('stores notes and custom appliance details when no catalog appliances are selected', async () => {
+  anchor.OralAppliance = jest.fn().mockResolvedValue({ notes: 'ORAL_APPLIANCE_META::{"notes":null,"otherDescription":"Custom guard","otherArch":"Upper"}' });
   remove.OralApplianceRecord = jest.fn();
   const input = { appliances: [], notes: null, otherDescription: 'Custom guard', otherArch: 'Upper' };
 
@@ -43,4 +43,18 @@ test('stores and clears notes and custom appliance details when no catalog appli
   expect(anchor.OralAppliance).toHaveBeenCalledWith(13, null, { otherDescription: 'Custom guard', otherArch: 'Upper' });
   expect(remove.OralApplianceRecord).toHaveBeenCalledWith(13);
   expect(result).toMatchObject({ id: 13, notes: null, otherDescription: 'Custom guard', otherArch: 'Upper', appliances: [] });
+});
+
+test('stores allergy profile notes in the existing allergy record notes field', async () => {
+  anchor.Allergy = jest.fn();
+  remove.AllergyRecord = jest.fn();
+  db.queryControlled = jest.fn().mockResolvedValue({ rows: [{ allergenCatalogId: 8, notes: 'Other: seasonal reactions' }] });
+  const result = await Mutation._AllergyProfile(null, {
+    args: { input: { notes: 'Other: seasonal reactions', allergies: [{ allergenCatalogId: 8, status: 'Active', severity: 'Mild' }] } },
+    recordId: 14,
+  }, { user: { id: 4 }, res: {} });
+
+  expect(anchor.Allergy).toHaveBeenCalledWith(14);
+  expect(db.queryControlled.mock.calls[0][1]).toEqual([14, 8, 'Active', 'Mild', 'Other: seasonal reactions', null]);
+  expect(result.allergies[0].notes).toBe('Other: seasonal reactions');
 });

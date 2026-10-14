@@ -956,7 +956,9 @@ const buildAllergyRecords = (medicalBackground) => {
       date_identified: null,
     }));
   if (medicalBackground.allergyOther) notes.push(`Other: ${medicalBackground.allergyOther}`);
-  return { allergies, notes: notes.length ? notes.join('; ') : null };
+  const sectionNotes = notes.length ? notes.join('; ') : null;
+  if (sectionNotes && allergies.length) allergies[0].notes = sectionNotes;
+  return { allergies, notes: null };
 };
 
 /**
@@ -1285,8 +1287,8 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   inputs.dentalProcedureProfile = { procedures: dentalProcedures, notes: null };
 
   // Oral Appliance Profile — oral appliance catalog IDs
-  const { appliances, notes: oralNotes } = buildOralApplianceRecords(formData.dentalHistory, oralApplianceCatalog);
-  inputs.oralApplianceProfile = { appliances, notes: oralNotes };
+  const { appliances, notes: oralNotes, otherDescription, otherArch } = buildOralApplianceRecords(formData.dentalHistory, oralApplianceCatalog);
+  inputs.oralApplianceProfile = { appliances, notes: oralNotes, otherDescription, otherArch };
 
   // Dental Photo Record – use real staged fileIds from the media REST API
   inputs.dentalPhotoRecord = {

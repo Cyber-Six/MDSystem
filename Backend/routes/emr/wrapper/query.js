@@ -2,6 +2,7 @@ const db  = require("../../../config/query.js");
 
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
+const { decodeOralApplianceNotes, employeeCategoryFromRole } = require("../custom-choice-storage.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const { log } = require("console");
@@ -55,7 +56,7 @@ const Query = {
       SELECT pr.id, pr.profile_type,
              sp."programId", sp.year,
              spd.label as program_label,
-             ep.department, ep.role, ep.position, ep."employmentCategoryOther",
+             ep.department, ep.role, ep.position,
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
       JOIN "patientUpdateLog" pul ON pul.id = pr.id
@@ -97,7 +98,7 @@ const Query = {
           department: row.department,
           role: row.role,
           position: row.position,
-          employmentCategoryOther: row.employmentCategoryOther,
+          employmentCategoryOther: employeeCategoryFromRole(row.role),
           created_at: row.created_at,
           status: row.status,
         };
@@ -243,6 +244,7 @@ const Query = {
     if (result.rows.length === 0) return [];
 
     for (const row of result.rows) {
+      Object.assign(row, decodeOralApplianceNotes(row.notes));
       const appliancesQuery = `
         SELECT id, status, "dateIssued", "tagId", arch
         FROM "OralApplianceRecord"
@@ -887,7 +889,6 @@ const Query = {
         sp.year,
         ep.department,
         ep.role,
-        ep."employmentCategoryOther",
         uc.credentials_status,
         latest.id           AS latest_ticket_id,
         latest.status       AS latest_status,
@@ -989,6 +990,9 @@ const Query = {
       LIMIT 1;
     `;
     const result = await db.query(query, [userId]);
+    if (result.rows[0]) {
+      result.rows[0].employmentCategoryOther = employeeCategoryFromRole(result.rows[0].role);
+    }
     logger.debug('getPatientBasicInfo result:', result.rows[0]);
     return result.rows[0] || null;
   },
@@ -1113,6 +1117,10 @@ const Query = {
       limit || 15,
       offset || 0,
     ]);
+
+    for (const row of result.rows) {
+      row.employmentCategoryOther = employeeCategoryFromRole(row.role);
+    }
 
     logger.debug(
       `Patient search for "${term}" returned ${result.rows.length} results (includeLatestTicket=${includeLatestTicketFields})`

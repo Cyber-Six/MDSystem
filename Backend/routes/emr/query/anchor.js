@@ -1,6 +1,7 @@
 const logger = require("../../../utils/logger.js");
 
 const { query } = require("../../../config/query.js");
+const { encodeOralApplianceNotes } = require("../custom-choice-storage.js");
 
 // ✅ Generic query wrapper
 // Generic helper
@@ -31,7 +32,7 @@ async function queryAnchor(tableName, id, notes) {
 }
 
 async function VisualAcuity(id, notes) {
-  return queryAnchor("VisualAcuity", id, notes);
+  return queryAnchor("VisualAcuity", id);
 }
 
 async function MaintenanceMedication(id, notes) {
@@ -39,47 +40,31 @@ async function MaintenanceMedication(id, notes) {
 }
 
 async function MedicalHistory (id, notes) {
-  return queryAnchor("MedicalHistory", id, notes);}
+  return queryAnchor("MedicalHistory", id);}
 
 async function Hospitalization(id, notes) {
-  return queryAnchor("Hospitalization", id, notes);
+  return queryAnchor("Hospitalization", id);
 }
 
 async function Operation(id, notes) {
-  return queryAnchor("Operation", id, notes);
+  return queryAnchor("Operation", id);
 }
 
 async function Immunization(id, notes) {
-  return queryAnchor("Immunization", id, notes);
+  return queryAnchor("Immunization", id);
 }
 
 async function DentalProcedure(id, notes) {
-  return queryAnchor("DentalProcedure", id, notes);
+  return queryAnchor("DentalProcedure", id);
 }
 
 async function Allergy(id, notes) {
-  return queryAnchor("Allergy", id, notes);
+  return queryAnchor("Allergy", id);
 }
 
 async function OralAppliance(id, notes, customFields = {}) {
-  const fields = [
-    ["notes", notes],
-    ["otherDescription", customFields.otherDescription],
-    ["otherArch", customFields.otherArch],
-  ].filter(([, value]) => value !== undefined);
-  if (fields.length === 0) return queryAnchor("OralAppliance", id);
-
-  const columns = ["id", ...fields.map(([name]) => `"${name}"`)];
-  const values = [id, ...fields.map(([, value]) => value)];
-  const placeholders = values.map((_, index) => `$${index + 1}`);
-  const updates = fields.map(([name]) => `"${name}" = EXCLUDED."${name}"`);
-  const result = await query(`
-    INSERT INTO "OralAppliance" (${columns.join(", ")})
-    VALUES (${placeholders.join(", ")})
-    ON CONFLICT (id) DO UPDATE SET ${updates.join(", ")}
-    RETURNING *;
-  `, values);
-  return result.rows[0];
+  const storedNotes = encodeOralApplianceNotes(notes, customFields);
+  return queryAnchor("OralAppliance", id, storedNotes);
 }
 
 async function DentalRecord(id, notes) {
