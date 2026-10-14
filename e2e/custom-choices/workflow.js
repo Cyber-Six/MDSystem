@@ -4,6 +4,7 @@ const { registerAndOpenRecord, fillAndSubmitRecord } = require('../registration/
 const { inspectBatchSubmission } = require('../registration/submission-result');
 const { fillUpdateProfileFields } = require('./update-profile-workflow');
 const { observe, query, compare, attach } = require('./evidence');
+const accountRegistry = require('./account-registry');
 
 const PHOTO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9XkAAAAASUVORK5CYII=', 'base64');
 const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -434,11 +435,16 @@ async function verify(page, state) {
 }
 
 async function loginForUpdate(page, state) {
-  const prefix = `E2E_CUSTOM_${state.role.toUpperCase()}`;
-  const email = process.env[`${prefix}_EMAIL`];
-  const password = process.env[`${prefix}_PASSWORD`];
-  const missingCredentials = [!email && `${prefix}_EMAIL`, !password && `${prefix}_PASSWORD`].filter(Boolean);
-  expect(missingCredentials, `Update workflow is blocked: configure ${missingCredentials.join(' and ')} in .env.e2e for a dedicated approved patient QA account.`).toEqual([]);
+  const accounts = accountRegistry.candidates(state.role, state.url);
+  expect(accounts.length, 'No reusable QA accounts: run the matching initial workflow and approve its record through staff, or configure a complete E2E_CUSTOM credential pair.').toBeGreaterThan(0);
+  const blockers = [];
+  for (const account of accounts) {
+  const { email, password } = account;
+  await page.context().clearCookies();
+  await page.goto(state.url);
+  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  state.headers = {};
+  try {
   await page.goto(`${state.url}/auth/login`);
   await page.getByRole('button', { name: 'Open login panel' }).click();
   await page.getByLabel('Email address').fill(email);
@@ -457,12 +463,18 @@ async function loginForUpdate(page, state) {
   state.headers = { authorization: `Bearer ${auth.accessToken}`, 'content-type': 'application/json' };
   const personal = await query(page, state, '/profile/patient', 'query CheckCustomChoiceEligibility { getCredentialStatus getPersonalRecordLogStatus getPersonalRecord { id first_name last_name } }');
   const emr = await query(page, state, '/emr/patient', 'query CheckCustomChoiceTicket { getUpdateTicket { id status scope } getPatientBasicInfo(userId: "self") { profile_type } getEmergencyContact(approved: true) { id firstContact { id contactName } secondContact { id contactName } } }');
-  expect(personal.getCredentialStatus, 'Dedicated QA account must be active').toBe('Active');
-  expect(personal.getPersonalRecord?.id, 'Dedicated QA account requires existing main personal information').toBeTruthy();
-  expect(emr.getPatientBasicInfo?.profile_type, 'Credentials must belong to the requested patient role').toBe(state.role);
-  expect(emr.getUpdateTicket?.status, 'Dedicated QA account requires an approved record and no active draft').toBe('Approved');
-  expect(['Approved', 'Cancelled', null]).toContain(personal.getPersonalRecordLogStatus);
+  const reasons = accountRegistry.eligibility(state.role, personal, emr);
+  if (reasons.length) {
+    blockers.push(`${email}: ${reasons.join('; ')}`);
+    continue;
+  }
   state.baseline = { ticket: emr.getUpdateTicket, personal: personal.getPersonalRecord, contacts: emr.getEmergencyContact };
+  return;
+  } catch {
+    blockers.push(`${email}: authentication or read-only eligibility request failed; check credentials, OTP, and deployment availability`);
+  }
+  }
+  throw new Error(`No eligible ${state.role} QA account. ${blockers.join(' | ')}`);
 }
 
 async function updateWorkflow(page, state) {
@@ -538,7 +550,9 @@ async function runWorkflow(page, role, mode) {
       if (mode === 'update') await updateWorkflow(page, state);
       else {
         const profile = { role, gender: 'Male', branch: 'm', name: 'Custom', surname: role === 'Student' ? 'Student QA' : 'Employee QA' };
-        const account = await step(state, 'Register a synthetic patient with eight-second pacing', () => registerAndOpenRecord(page, profile, role === 'Student' ? 20 : 21));
+        const account = await step(state, 'Register a synthetic patient with eight-second pacing', () => registerAndOpenRecord(page, profile, role === 'Student' ? 20 : 21, {
+          onRegistered: credentials => accountRegistry.save({ ...credentials, role, url: state.url }),
+        }));
         await fillAndSubmitRecord(page, profile, role === 'Student' ? 20 : 24, account, {
           personal: () => initialPersonal(page, state),
           history: () => histories(page, state),
@@ -551,6 +565,9 @@ async function runWorkflow(page, role, mode) {
             });
             await Promise.allSettled([...state.pending]);
             await verify(page, state);
+            if (test.info().errors.length === 0 && state.ticket?.status === 'Pending') {
+              accountRegistry.save({ email: account.email, role, url: state.url, ready: true, ticketId: String(state.ticket.id) });
+            }
           },
         });
       }

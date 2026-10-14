@@ -110,7 +110,9 @@ E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices -- student-initial.
 E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices -- employee-update.spec.js --headed
 ```
 
-The target and test OTP use `.env.e2e` (`E2E_PATIENT_URL` and optional `E2E_TEST_OTP`). The opt-in authorizes persistent synthetic accounts, catalog entries, and pending records on this target. Initial tests reuse registration pacing. Update tests require dedicated **patient** credentials, not admin/staff credentials, in the ignored `.env.e2e`:
+The target and test OTP use `.env.e2e` (`E2E_PATIENT_URL` and optional `E2E_TEST_OTP`). The opt-in authorizes persistent synthetic accounts, catalog entries, and pending records on this target. Initial tests reuse registration pacing. The custom-choice initial workflows automatically save generated patient credentials in the Git-ignored `.e2e-private/custom-choice-accounts.json`. Credentials are saved after registration; accounts become candidates only after successful Pending submission and saved-value verification. Earlier accounts are retained. Run the initial workflows, approve their records manually through staff, then run the matching update files with the existing commands. Updates choose the newest eligible saved account for the same role and deployment. Pending accounts produce a staff-approval blocker. Keep this private credential file local. Previously created accounts without saved passwords cannot be recovered automatically.
+
+Optional explicit **patient** credentials in `.env.e2e` override automatic selection. Supply both values for a role, or remove both to use the registry:
 
 ```dotenv
 E2E_CUSTOM_STUDENT_EMAIL=your-approved-student-qa-email

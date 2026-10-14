@@ -161,3 +161,4 @@ use_case.md
 
 *temp/
 *.db-temp/
+.e2e-private/

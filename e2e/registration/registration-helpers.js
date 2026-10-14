@@ -20,7 +20,7 @@ function accountEmail(profile, index) {
   return `qa${runId}${index}.employee@tip.edu.ph`;
 }
 
-async function registerAndOpenRecord(page, profile, index) {
+async function registerAndOpenRecord(page, profile, index, hooks = {}) {
   page.setDefaultTimeout(20_000);
   // Space account creation across files to respect the eight-per-minute limit.
   await page.waitForTimeout(8_000);
@@ -47,6 +47,7 @@ async function registerAndOpenRecord(page, profile, index) {
 
   const consentScroll = page.locator('.overflow-y-auto.px-6');
   await expect(page.getByRole('heading', { name: 'Data Consent Policy', exact: true })).toBeVisible();
+  await hooks.onRegistered?.({ email, password });
   const consent = page.getByRole('checkbox', { name: /I have read and agree/ });
   await expect(consent).toBeDisabled();
   await expect(page.getByText('Loading consent policy...', { exact: true })).toBeHidden();
@@ -61,7 +62,7 @@ async function registerAndOpenRecord(page, profile, index) {
   await page.getByPlaceholder(employee ? 'Enter given name' : 'Enter first name').fill(profile.name);
   await page.locator('select').first().selectOption(profile.gender);
   const identifier = page.getByPlaceholder(employee ? 'Enter employee ID number' : 'Enter student number');
-  return { identifier, employee, email };
+  return { identifier, employee, email, password };
 }
 
 async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
