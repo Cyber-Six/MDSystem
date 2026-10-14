@@ -41,7 +41,8 @@ async function query(page, state, endpoint, document, variables = {}) {
   });
   const body = await response.json();
   state.network.push(redact({ endpoint, request: { query: document, variables }, response: body, status: response.status() }));
-  expect(response.ok(), `Read ${endpoint}`).toBeTruthy();
+  const errors = (body.errors || []).map(error => error.message).join('; ');
+  expect(response.ok(), `Read ${endpoint} failed with HTTP ${response.status()}${errors ? `: ${errors}` : ''}`).toBeTruthy();
   expect(body.errors || [], `Read ${endpoint}: GraphQL errors`).toEqual([]);
   return body.data;
 }

@@ -836,31 +836,31 @@ type Query {
   # getVitalSigns: VitalSigns
   # getUserVitalSigns(userId: ID!, from: Date, offset: Int, limit: Int): [VitalSigns!]
 
-  getOralApplianceProfile: OralApplianceProfile
+  getOralApplianceProfile(pending: Boolean = false): OralApplianceProfile
   getUserOralApplianceProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OralApplianceProfile!]
 
   getEmergencyContact(approved: Boolean): EmergencyContact
   getUserEmergencyContact(userId: ID!, from: Date, offset: Int, limit: Int): [EmergencyContact!]
 
-  getAllergyProfile: AllergyProfile
+  getAllergyProfile(pending: Boolean = false): AllergyProfile
   getUserAllergyProfile(userId: ID!, from: Date, offset: Int, limit: Int): [AllergyProfile!]
 
-  getMedicationProfile: MedicationProfile
+  getMedicationProfile(pending: Boolean = false): MedicationProfile
   getUserMedicationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [MedicationProfile!]
 
   getDentalProcedureProfile: DentalProcedureProfile
   getUserDentalProcedureProfile(userId: ID!, from: Date, offset: Int, limit: Int): [DentalProcedureProfile!]
 
-  getImmunizationProfile: ImmunizationProfile
+  getImmunizationProfile(pending: Boolean = false): ImmunizationProfile
   getUserImmunizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [ImmunizationProfile!]
 
-  getOperationProfile: OperationProfile
+  getOperationProfile(pending: Boolean = false): OperationProfile
   getUserOperationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OperationProfile!]
   
-  getHospitalizationProfile: HospitalizationProfile
+  getHospitalizationProfile(pending: Boolean = false): HospitalizationProfile
   getUserHospitalizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [HospitalizationProfile!]
 
-  getMedicalHistory: MedicalHistory
+  getMedicalHistory(pending: Boolean = false): MedicalHistory
   getUserMedicalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [MedicalHistory!]
 
   getVisualAcuityProfile: VisualAcuityProfile
@@ -973,4 +973,3 @@ type Mutation {
   createOralApplianceCatalogs(appliances: [OralApplianceTagInput!]!): [OralApplianceTag!]!
   updateOralApplianceCatalogs(appliances: [OralApplianceTagUpdateInput!]!): [OralApplianceTag!]
 }
-  

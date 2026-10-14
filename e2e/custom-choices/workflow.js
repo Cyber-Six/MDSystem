@@ -327,13 +327,13 @@ async function probeInvalidSubmit(page, state, name, message) {
 }
 
 const sections = {
-  history: 'getMedicalHistory { id conditions { conditionId relationship description } notes }',
-  allergies: 'getAllergyProfile { id allergies { allergenCatalogId status severity } notes }',
-  hospitalization: 'getHospitalizationProfile { id hospitalizations { conditionId admissionDate dischargeDate } notes }',
-  operation: 'getOperationProfile { id operations { procedureId operationDate } notes }',
-  medication: 'getMedicationProfile { id medications { medicineId description } notes }',
-  vaccine: 'getImmunizationProfile { id immunizations { vaccineTypeId immunizationDate doseNumber } notes }',
-  appliance: 'getOralApplianceProfile { id appliances { tagId arch } notes }',
+  history: 'getMedicalHistory(pending: true) { id conditions { conditionId relationship description } notes }',
+  allergies: 'getAllergyProfile(pending: true) { id allergies { allergenCatalogId status severity } notes }',
+  hospitalization: 'getHospitalizationProfile(pending: true) { id hospitalizations { conditionId admissionDate dischargeDate } notes }',
+  operation: 'getOperationProfile(pending: true) { id operations { procedureId operationDate } notes }',
+  medication: 'getMedicationProfile(pending: true) { id medications { medicineId description } notes }',
+  vaccine: 'getImmunizationProfile(pending: true) { id immunizations { vaccineTypeId immunizationDate doseNumber } notes }',
+  appliance: 'getOralApplianceProfile(pending: true) { id appliances { tagId arch } notes }',
 };
 
 async function verify(page, state) {
@@ -345,47 +345,65 @@ async function verify(page, state) {
     expect(state.ticket?.id).toBeTruthy();
     if (state.baseline) expect(String(state.ticket.id), 'Update must create a new ticket').not.toBe(String(state.baseline.ticket.id));
     const saved = {};
+    const failedReads = new Set();
     // Separate queries prevent one defective section from hiding all other reads.
     for (const [key, document] of Object.entries(sections)) {
       try {
         const data = await query(page, state, '/emr/patient', `query ReadCustom${key} { ${document} }`);
         saved[key] = Object.values(data)[0];
       } catch (error) {
+        failedReads.add(key);
         expect.soft(false, `${key} readback failed: ${error.message}`).toBe(true);
       }
-      compare(state, `${key} belongs to submitted ticket`, String(state.ticket.id), String(saved[key]?.id));
+      if (!saved[key]) {
+        if (!failedReads.has(key)) expect.soft(Boolean(saved[key]), `${key} pending readback returned no record`).toBe(true);
+        continue;
+      }
+      compare(state, `${key} belongs to submitted ticket`, String(state.ticket.id), String(saved[key].id));
     }
-    for (const key of ['self', 'family']) {
-      const row = saved.history?.conditions.find(item => String(item.conditionId) === state.created[key].id);
-      compare(state, `${key} saved ID`, state.created[key].id, row && String(row.conditionId));
-      compare(state, `${key} relationship`, key === 'self' ? null : state.data.familyRelation, row?.relationship);
+    if (saved.history) {
+      for (const key of ['self', 'family']) {
+        const row = saved.history.conditions.find(item => String(item.conditionId) === state.created[key].id);
+        compare(state, `${key} saved ID`, state.created[key].id, row && String(row.conditionId));
+        compare(state, `${key} relationship`, key === 'self' ? null : state.data.familyRelation, row?.relationship);
+      }
     }
-    const allergy = saved.allergies?.allergies.find(item => String(item.allergenCatalogId) === state.created.allergen.id);
-    compare(state, 'Allergen ID', state.created.allergen.id, allergy && String(allergy.allergenCatalogId));
-    compare(state, 'Allergy status', 'Active', allergy?.status);
-    compare(state, 'Allergy severity', 'Mild', allergy?.severity);
-    compare(state, 'Allergy notes', state.mode === 'initial' ? `Other: ${state.data.allergyNotes}` : state.data.allergyNotes, saved.allergies?.notes);
-    const hospital = saved.hospitalization?.hospitalizations.find(item => String(item.conditionId) === state.created.hospitalization.id);
-    compare(state, 'Hospitalization ID', state.created.hospitalization.id, hospital && String(hospital.conditionId));
-    compare(state, 'Admission date', state.data.admission, hospital?.admissionDate?.slice(0, 10));
-    compare(state, 'Discharge date', state.data.discharge, hospital?.dischargeDate?.slice(0, 10));
-    const operation = saved.operation?.operations.find(item => String(item.procedureId) === state.created.operation.id);
-    compare(state, 'Operation ID', state.created.operation.id, operation && String(operation.procedureId));
-    compare(state, 'Operation date', state.data.operationDate, operation?.operationDate?.slice(0, 10));
-    const medication = saved.medication?.medications.find(item => String(item.medicineId) === state.created.medication.id);
-    compare(state, 'Medication ID', state.created.medication.id, medication && String(medication.medicineId));
-    if (state.mode === 'initial') compare(state, 'Medication reason', state.data.reason, medication?.description);
-    for (const [key, note] of [['hospitalization', 'hospitalizationNotes'], ['operation', 'operationNotes'], ['medication', 'medicationNotes']]) {
-      compare(state, `${key} notes`, state.data[note], saved[key]?.notes);
+    if (saved.allergies) {
+      const allergy = saved.allergies.allergies.find(item => String(item.allergenCatalogId) === state.created.allergen.id);
+      compare(state, 'Allergen ID', state.created.allergen.id, allergy && String(allergy.allergenCatalogId));
+      compare(state, 'Allergy status', 'Active', allergy?.status);
+      compare(state, 'Allergy severity', 'Mild', allergy?.severity);
+      compare(state, 'Allergy notes', state.mode === 'initial' ? `Other: ${state.data.allergyNotes}` : state.data.allergyNotes, saved.allergies.notes);
     }
-    const vaccine = saved.vaccine?.immunizations.find(item => String(item.vaccineTypeId) === state.created.vaccine.id);
-    compare(state, 'Vaccine ID', state.created.vaccine.id, vaccine && String(vaccine.vaccineTypeId));
-    compare(state, 'Vaccine date', state.data.vaccineDate, vaccine?.immunizationDate?.slice(0, 10));
-    compare(state, 'Vaccine dose', state.data.dose, vaccine?.doseNumber);
-    if (state.mode === 'update') compare(state, 'Immunization notes', state.data.immunizationNotes, saved.vaccine?.notes);
-    if (state.mode === 'initial') {
-      compare(state, 'Other appliance text', state.data.appliance, saved.appliance?.notes);
-      compare(state, 'Other appliance location', [state.data.arch], saved.appliance?.appliances.map(item => item.arch));
+    if (saved.hospitalization) {
+      const hospital = saved.hospitalization.hospitalizations.find(item => String(item.conditionId) === state.created.hospitalization.id);
+      compare(state, 'Hospitalization ID', state.created.hospitalization.id, hospital && String(hospital.conditionId));
+      compare(state, 'Admission date', state.data.admission, hospital?.admissionDate?.slice(0, 10));
+      compare(state, 'Discharge date', state.data.discharge, hospital?.dischargeDate?.slice(0, 10));
+      compare(state, 'hospitalization notes', state.data.hospitalizationNotes, saved.hospitalization.notes);
+    }
+    if (saved.operation) {
+      const operation = saved.operation.operations.find(item => String(item.procedureId) === state.created.operation.id);
+      compare(state, 'Operation ID', state.created.operation.id, operation && String(operation.procedureId));
+      compare(state, 'Operation date', state.data.operationDate, operation?.operationDate?.slice(0, 10));
+      compare(state, 'operation notes', state.data.operationNotes, saved.operation.notes);
+    }
+    if (saved.medication) {
+      const medication = saved.medication.medications.find(item => String(item.medicineId) === state.created.medication.id);
+      compare(state, 'Medication ID', state.created.medication.id, medication && String(medication.medicineId));
+      if (state.mode === 'initial') compare(state, 'Medication reason', state.data.reason, medication?.description);
+      compare(state, 'medication notes', state.data.medicationNotes, saved.medication.notes);
+    }
+    if (saved.vaccine) {
+      const vaccine = saved.vaccine.immunizations.find(item => String(item.vaccineTypeId) === state.created.vaccine.id);
+      compare(state, 'Vaccine ID', state.created.vaccine.id, vaccine && String(vaccine.vaccineTypeId));
+      compare(state, 'Vaccine date', state.data.vaccineDate, vaccine?.immunizationDate?.slice(0, 10));
+      compare(state, 'Vaccine dose', state.data.dose, vaccine?.doseNumber);
+      if (state.mode === 'update') compare(state, 'Immunization notes', state.data.immunizationNotes, saved.vaccine.notes);
+    }
+    if (state.mode === 'initial' && saved.appliance) {
+      compare(state, 'Other appliance text', state.data.appliance, saved.appliance.notes);
+      compare(state, 'Other appliance location', [state.data.arch], saved.appliance.appliances.map(item => item.arch));
       if (state.role === 'Employee') {
         const info = await query(page, state, '/emr/patient', 'query ReadEmployeeCustomText { getPatientBasicInfo(userId: "self") { role department position } }');
         // Current schema exposes role but no custom employment-description field.

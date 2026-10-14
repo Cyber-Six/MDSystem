@@ -57,6 +57,32 @@ test.each(activeProfileResolvers)('%s returns empty/current rows and rejects row
   expect(Wrapper[wrapperName]).toHaveBeenLastCalledWith(null, { userId: 21, offset: 0, limit: 1, statuses: null }, context);
 });
 
+const pendingProfileResolvers = [
+  ['getOralApplianceProfile', '_getUserOralApplianceProfile'],
+  ['getAllergyProfile', '_getUserAllergyProfile'],
+  ['getMedicationProfile', '_getUserMedicationProfile'],
+  ['getImmunizationProfile', '_getUserImmunizationProfile'],
+  ['getOperationProfile', '_getUserOperationProfile'],
+  ['getHospitalizationProfile', '_getUserHospitalizationProfile'],
+  ['getMedicalHistory', '_getUserMedicalHistory'],
+];
+
+test.each(pendingProfileResolvers)('%s can read only the signed-in patient pending record when requested', async (resolverName, wrapperName) => {
+  const context = { user: { id: 21 }, res: {} };
+  const row = { id: 'pending-1', status: 'Pending' };
+  Wrapper[wrapperName].mockResolvedValueOnce([row]);
+
+  await expect(Query[resolverName](null, { pending: true, userId: 999 }, context)).resolves.toEqual(row);
+  expect(Wrapper[wrapperName]).toHaveBeenCalledWith(null, {
+    userId: 21, offset: 0, limit: 1, statuses: ['Pending'],
+  }, context);
+});
+
+test.each(pendingProfileResolvers)('%s returns null when no pending record exists', async (resolverName, wrapperName) => {
+  Wrapper[wrapperName].mockResolvedValueOnce([]);
+  await expect(Query[resolverName](null, { pending: true }, { user: { id: 21 }, res: {} })).resolves.toBeNull();
+});
+
 test('ticket, latest profile, and emergency contact branches preserve their special rules', async () => {
   Wrapper._getUserUpdateTicket.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 8, status: 'Expired' });
   await expect(Query.getUpdateTicket(null, {}, { user: { id: 2 }, res: {} })).resolves.toBeNull();

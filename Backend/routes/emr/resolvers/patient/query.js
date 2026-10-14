@@ -8,6 +8,20 @@ const dotenv = require("dotenv");
 
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
+const getPatientRecord = async (resolver, _, { pending = false }, { user, res }) => {
+  const statuses = pending ? ["Pending"] : null;
+  const result = await Wrapper[resolver](_, {
+    userId: user.id, offset: 0, limit: 1, statuses,
+  }, { user, res });
+  if (result.length === 0) return null;
+
+  const row = result[0];
+  const allowedStatuses = pending ? ["Pending"] : ["InProgress", "Revision"];
+  if (allowedStatuses.includes(row.status)) return row;
+
+  throwGraphQLError(res).message("No active profile found.").status(404).throw();
+};
+
 
 //const BorrowQuery = require("../medical/query.js");
 
@@ -67,13 +81,7 @@ const Query = {
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
   
-  getOralApplianceProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserOralApplianceProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getOralApplianceProfile: (_, args, context) => getPatientRecord("_getUserOralApplianceProfile", _, args, context),
 
   getEmergencyContact: async (_,  { approved }, { user, res }) => {
     const statuses = approved ? ["Approved"] : null;
@@ -84,21 +92,9 @@ const Query = {
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
 
-  getAllergyProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserAllergyProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
+  getAllergyProfile: (_, args, context) => getPatientRecord("_getUserAllergyProfile", _, args, context),
 
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
-
-  getMedicationProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserMedicationProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getMedicationProfile: (_, args, context) => getPatientRecord("_getUserMedicationProfile", _, args, context),
 
   getDentalProcedureProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserDentalProcedureProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
@@ -108,37 +104,13 @@ const Query = {
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
 
-  getImmunizationProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserImmunizationProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
+  getImmunizationProfile: (_, args, context) => getPatientRecord("_getUserImmunizationProfile", _, args, context),
 
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getOperationProfile: (_, args, context) => getPatientRecord("_getUserOperationProfile", _, args, context),
 
-  getOperationProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserOperationProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
+  getHospitalizationProfile: (_, args, context) => getPatientRecord("_getUserHospitalizationProfile", _, args, context),
 
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
-
-  getHospitalizationProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserHospitalizationProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
-
-  getMedicalHistory: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserMedicalHistory(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getMedicalHistory: (_, args, context) => getPatientRecord("_getUserMedicalHistory", _, args, context),
 
   getVisualAcuityProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserVisualAcuityProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
