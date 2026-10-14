@@ -138,6 +138,7 @@ jobs:
           SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           IMAGE_NAME: ${{ needs.verify.outputs.image }}
           IMAGE_TAG: ${{ inputs.version }}-staging
+          SOURCE_REVISION: ${{ needs.verify.outputs.source_sha }}
         run: bash .github/scripts/deploy-compose.sh
 
   use-case-testing:
@@ -202,4 +203,5 @@ jobs:
           SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           IMAGE_NAME: ${{ needs.verify.outputs.image }}
           IMAGE_TAG: ${{ inputs.version }}
+          SOURCE_REVISION: ${{ needs.verify.outputs.source_sha }}
         run: bash .github/scripts/deploy-compose.sh

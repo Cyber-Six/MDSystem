@@ -110,7 +110,7 @@ jobs:
         run: docker compose config --quiet
 
       - name: Build Docker image
-        run: docker build --target runtime --tag mdsystem:ci .
+        run: docker build --target runtime --build-arg SOURCE_REVISION="$GITHUB_SHA" --tag mdsystem:ci .
 
       - name: Run disposable database-backed Playwright core suite
         if: github.event_name == 'push' && github.ref == 'refs/heads/deployment'
@@ -151,6 +151,9 @@ jobs:
       - name: Reset test database and deploy the tested image
         if: github.event_name == 'push' && github.ref == 'refs/heads/deployment'
         working-directory: /srv/projects/MDSystem
+        env:
+          MD_SYSTEM_IMAGE: mdsystem
+          IMAGE_TAG: local
         run: |
           # This runs only after the push has passed tests and produced the CI image.
           docker image inspect mdsystem:ci >/dev/null
@@ -173,10 +176,15 @@ jobs:
             node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
             exit 1
           fi
+          node "$GITHUB_WORKSPACE/scripts/verify-image-revision.js" "$GITHUB_SHA" \
+            "patient=$(docker compose ps -q patient)" "staff=$(docker compose ps -q staff)"
 
       - name: Manually restart the Pi use-case services
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'restart'
         working-directory: /srv/projects/MDSystem
+        env:
+          MD_SYSTEM_IMAGE: mdsystem
+          IMAGE_TAG: local
         run: |
           docker image tag mdsystem:ci mdsystem:local
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
@@ -189,6 +197,8 @@ jobs:
             node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
             exit 1
           fi
+          node "$GITHUB_WORKSPACE/scripts/verify-image-revision.js" "$GITHUB_SHA" \
+            "patient=$(docker compose ps -q patient)" "staff=$(docker compose ps -q staff)"
 
   manual-reset-database:
     name: Manually reset the Pi database

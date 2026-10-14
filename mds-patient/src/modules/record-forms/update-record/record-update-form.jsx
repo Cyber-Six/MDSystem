@@ -116,6 +116,39 @@ const RecordUpdateForm = ({
     fetchUserSex();
   }, []);
 
+  useEffect(() => {
+    const fetchProfileType = async () => {
+      try {
+        const response = await axiosRequest({
+          method: 'POST',
+          url: '/emr/patient',
+          data: { query: `query GetUpdateProfileType {
+            getMyProfile {
+              __typename
+              ... on StudentProfile { program year }
+              ... on EmployeeProfile { department role position }
+            }
+          }` },
+        });
+        const profile = response.data?.data?.getMyProfile;
+        if (!profile) return;
+        setFormData((previous) => ({
+          ...previous,
+          profileType: profile.__typename === 'EmployeeProfile' ? 'Employee' : 'Student',
+          ...(profile.__typename === 'EmployeeProfile' ? {
+            employeeDepartment: profile.department || '',
+            employeeRole: ['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? profile.role : 'Other',
+            employeePosition: profile.position || '',
+            employeeCategoryOther: ['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? '' : profile.role || '',
+          } : {}),
+        }));
+      } catch (error) {
+        console.warn('[RecordUpdateForm] Could not fetch patient profile type:', error.message);
+      }
+    };
+    fetchProfileType();
+  }, []);
+
   const steps = buildUpdateRecordSteps({
     effectiveRecordType,
     skipPersonalStep,
@@ -140,11 +173,17 @@ const RecordUpdateForm = ({
     const errors = [];
 
     if (stepName === 'Personal Info') {
-      if (!formData.programId) {
-        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select a program before proceeding.' });
-      }
-      if (!formData.schoolYear) {
-        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your student category before proceeding.' });
+      if (formData.profileType === 'Employee') {
+        if (!formData.employeeDepartment) errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please enter your department before proceeding.' });
+        if (!formData.employeeRole) errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your employment category before proceeding.' });
+        if (formData.employeeRole === 'Other' && !formData.employeeCategoryOther) errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please specify your employment category before proceeding.' });
+      } else {
+        if (!formData.programId) {
+          errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select a program before proceeding.' });
+        }
+        if (!formData.schoolYear) {
+          errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your student category before proceeding.' });
+        }
       }
       if (!formData.emergencyContact1Name || !formData.emergencyContact1Relationship || !formData.emergencyContact1Number) {
         errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please complete all required Primary Emergency Contact fields.' });

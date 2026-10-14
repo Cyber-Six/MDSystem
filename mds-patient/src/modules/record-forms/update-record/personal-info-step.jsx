@@ -83,6 +83,28 @@ const PersonalInfoStep = ({ formData, onChange }) => {
 
   return (
     <div className="space-y-4">
+      {formData.profileType === 'Employee' ? (
+      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
+        <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white mb-5 pb-4 border-b border-neutral-200 dark:border-neutral-700">Employment Information</h3>
+        <Input label="Department" required placeholder="Enter department" value={formData.employeeDepartment || ''} onChange={(event) => onChange({ ...formData, employeeDepartment: event.target.value })} />
+        <Select
+          label="Employment Category"
+          required
+          value={formData.employeeRole || ''}
+          onChange={(event) => onChange({ ...formData, employeeRole: event.target.value, employeeCategoryOther: event.target.value === 'Other' ? formData.employeeCategoryOther || '' : '' })}
+          options={[
+            { value: 'Teaching', label: 'Teaching' },
+            { value: 'Teaching (Officer)', label: 'Teaching (Officer)' },
+            { value: 'Non-Teaching', label: 'Non-Teaching' },
+            { value: 'Non-Teaching (Officer)', label: 'Non-Teaching (Officer)' },
+            { value: 'Other', label: 'Other' },
+          ]}
+        />
+        {formData.employeeRole === 'Other' && <Input label="Specify Employment Category" required placeholder="Enter your employment category" value={formData.employeeCategoryOther || ''} onChange={(event) => onChange({ ...formData, employeeCategoryOther: event.target.value })} />}
+        <Input label="Position" placeholder="Enter position" value={formData.employeePosition || ''} onChange={(event) => onChange({ ...formData, employeePosition: event.target.value })} />
+      </div>
+      ) : (
+      <>
       {/* School Information Card */}
       <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
@@ -158,6 +180,8 @@ const PersonalInfoStep = ({ formData, onChange }) => {
           onChange={(e) => handleInputChange('schoolYear', e.target.value)}
         />
       </div>
+      </>
+      )}
 
       {/* Emergency Contact Card */}
       <div className="bg-white dark:bg-neutral-900 rounded-xl p-4 shadow-lg border border-neutral-200 dark:border-neutral-700">

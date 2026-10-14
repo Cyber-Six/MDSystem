@@ -1,6 +1,8 @@
 const { randomUUID } = require('node:crypto');
 const { test, expect } = require('@playwright/test');
 const { registerAndOpenRecord, fillAndSubmitRecord } = require('../registration/registration-helpers');
+const { inspectBatchSubmission } = require('../registration/submission-result');
+const { fillUpdateProfileFields } = require('./update-profile-workflow');
 const { observe, query, compare, attach } = require('./evidence');
 
 const PHOTO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9XkAAAAASUVORK5CYII=', 'base64');
@@ -328,9 +330,9 @@ async function probeInvalidSubmit(page, state, name, message) {
 
 const sections = {
   history: 'getMedicalHistory(pending: true) { id conditions { conditionId relationship description } notes }',
-  allergies: 'getAllergyProfile(pending: true) { id allergies { allergenCatalogId status severity } notes }',
-  hospitalization: 'getHospitalizationProfile(pending: true) { id hospitalizations { conditionId admissionDate dischargeDate } notes }',
-  operation: 'getOperationProfile(pending: true) { id operations { procedureId operationDate } notes }',
+  allergies: 'getAllergyProfile(pending: true) { id allergies { allergenCatalogId status severity notes } notes }',
+  hospitalization: 'getHospitalizationProfile(pending: true) { id hospitalizations { conditionId admissionDate dischargeDate notes } notes }',
+  operation: 'getOperationProfile(pending: true) { id operations { procedureId operationDate notes } notes }',
   medication: 'getMedicationProfile(pending: true) { id medications { medicineId description } notes }',
   vaccine: 'getImmunizationProfile(pending: true) { id immunizations { vaccineTypeId immunizationDate doseNumber } notes }',
   appliance: 'getOralApplianceProfile(pending: true) { id appliances { tagId arch } notes otherDescription otherArch }',
@@ -435,8 +437,8 @@ async function loginForUpdate(page, state) {
   const prefix = `E2E_CUSTOM_${state.role.toUpperCase()}`;
   const email = process.env[`${prefix}_EMAIL`];
   const password = process.env[`${prefix}_PASSWORD`];
-  expect(email, `Configure ${prefix}_EMAIL for a dedicated approved patient QA account`).toBeTruthy();
-  expect(password, `Configure ${prefix}_PASSWORD for a dedicated approved patient QA account`).toBeTruthy();
+  const missingCredentials = [!email && `${prefix}_EMAIL`, !password && `${prefix}_PASSWORD`].filter(Boolean);
+  expect(missingCredentials, `Update workflow is blocked: configure ${missingCredentials.join(' and ')} in .env.e2e for a dedicated approved patient QA account.`).toEqual([]);
   await page.goto(`${state.url}/auth/login`);
   await page.getByRole('button', { name: 'Open login panel' }).click();
   await page.getByLabel('Email address').fill(email);
@@ -468,9 +470,13 @@ async function updateWorkflow(page, state) {
   await page.goto(`${state.url}/record-update`);
   await page.getByRole('button', { name: /Both Update/ }).click();
   await step(state, 'Fill update personal information', async () => {
-    await page.getByPlaceholder('Type to search for your program...').fill(process.env.E2E_PROGRAM_SEARCH || 'Computer');
-    await page.getByPlaceholder('Type to search for your program...').locator('..').getByRole('button').first().click();
-    await field(page, 'Student Category', 'select').selectOption('Freshman');
+    if (state.role === 'Employee') {
+      await expect(page.getByText('Employment Information', { exact: true })).toBeVisible();
+    }
+    await fillUpdateProfileFields(page, state.role, {
+      programSearch: process.env.E2E_PROGRAM_SEARCH || 'Computer',
+      department: process.env.E2E_CUSTOM_EMPLOYEE_DEPARTMENT || 'Facilities',
+    });
     const labels = ['Name', 'Relationship', 'Contact Number'];
     for (const [label, values] of labels.map((label, i) => [label, i === 0 ? ['QA Primary', 'QA Secondary'] : i === 1 ? ['Parent', 'Sibling'] : ['09180000001', '09180000002']])) {
       const inputs = field(page, label);
@@ -504,8 +510,8 @@ async function updateWorkflow(page, state) {
     await page.getByRole('button', { name: 'Submit', exact: true }).click();
     const response = await submitted;
     const body = await response.json();
-    expect(body.errors || []).toEqual([]);
-    expect(body.data.submitTicket).toBe('Pending');
+    const outcome = inspectBatchSubmission(response.status(), body);
+    expect(outcome.ok, `Update submission failed: ${outcome.details}`).toBe(true);
   });
   await verify(page, state);
 }
@@ -539,17 +545,16 @@ async function runWorkflow(page, role, mode) {
           background: () => background(page, state),
           dental: () => initialDental(page, state),
           review: () => review(page, state),
-          afterBatch: async body => {
-            await step(state, 'Inspect batch errors and saved pending sections', async () => {
-              expect(body.errors || [], 'Initial medical batch must have no GraphQL errors').toEqual([]);
-              expect(body.data?.submitTicket, 'Initial batch must submit a Pending ticket').toBe('Pending');
-              await Promise.allSettled([...state.pending]);
-              await verify(page, state);
+          afterBatch: async ({ result }) => {
+            await step(state, 'Validate medical-record batch submission', async () => {
+              expect(result.ok, `Submission response: ${result.details}`).toBe(true);
             });
+            await Promise.allSettled([...state.pending]);
+            await verify(page, state);
           },
         });
       }
     } finally { await attach(state); }
 }
 
-module.exports = { runWorkflow };
+module.exports = { runWorkflow, sections };

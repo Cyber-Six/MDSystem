@@ -99,6 +99,31 @@ export const updateStudentProfile = async (schoolData) => {
   }
 };
 
+export const updateEmployeeProfile = async (employeeData) => {
+  if (!employeeData.employeeDepartment || !employeeData.employeeRole) {
+    throw new Error('Department and employment category are required');
+  }
+  if (employeeData.employeeRole === 'Other' && !employeeData.employeeCategoryOther) {
+    throw new Error('Specify the employment category');
+  }
+  const mutation = `
+    mutation CreateEmployeeProfile($input: EmployeeProfileInput!) {
+      createEmployeeProfile(input: $input) {
+        id department role position status
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(mutation, {
+    input: {
+      department: employeeData.employeeDepartment,
+      role: employeeData.employeeRole,
+      position: employeeData.employeePosition || '',
+      employmentCategoryOther: employeeData.employeeRole === 'Other' ? employeeData.employeeCategoryOther : null,
+    },
+  });
+  return data.createEmployeeProfile;
+};
+
 /**
  * Update Emergency Contact information
  * Uses CREATE mutation for patient self-update (no userId needed)
@@ -180,9 +205,11 @@ export const updatePersonalInfo = async (formData) => {
   }
   
   try {
-    console.log('[Personal Info Service] Step 1: Creating/updating student profile...');
-    const profileResult = await updateStudentProfile(formData);
-    console.log('[Personal Info Service] ✓ Student profile created/updated successfully');
+    console.log('[Personal Info Service] Step 1: Creating/updating patient profile...');
+    const profileResult = formData.profileType === 'Employee'
+      ? await updateEmployeeProfile(formData)
+      : await updateStudentProfile(formData);
+    console.log('[Personal Info Service] ✓ Patient profile created/updated successfully');
     
     console.log('[Personal Info Service] Step 2: Creating/updating emergency contact...');
     const contactResult = await updateEmergencyContact(formData);

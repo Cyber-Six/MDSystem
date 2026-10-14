@@ -1,6 +1,10 @@
 # Patient-defined choice investigation
 
-The suite reports defects without changing application behavior. Run `E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices` from Git Bash to generate the current investigation report at `e2e-results/custom-choices/errors.md` and structured evidence at `e2e-results/custom-choices/results.json`.
+The custom-choice suite reports defects without changing application code or schema. Opted-in deployment runs do create synthetic catalog entries and pending QA records. Run `E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices` from Git Bash to generate the current investigation report at `e2e-results/custom-choices/errors.md` and structured evidence at `e2e-results/custom-choices/results.json`.
+
+Initial record submissions are expected to create a **Pending** ticket. Pending is the successful patient submission state before staff review; these workflows do not require approval. Batch errors report the HTTP status, GraphQL errors, and returned `submitTicket` value before Pending ticket and section readback starts. A report that stops at registration or credential preflight did not submit a record.
+
+The `deployment` CI workflow labels each built Docker image with its source commit and checks the image revision used by the running patient and staff containers after deployment. A revision mismatch indicates stale containers and fails the workflow. Run `npm run test:custom-choice-diagnostics` to check response handling, readback field coverage, role-specific update input mapping, and image revision checks without contacting the deployed site.
 
 The report identifies each attempted workflow, failed step, reproduction command, sanitized request/response, and any expected/actual saved-value comparisons that were reached. Credentials, session tokens, and authorization headers are excluded. Test artifacts stay ignored by Git.
 

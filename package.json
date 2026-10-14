@@ -22,6 +22,7 @@
     "test:e2e:review": "playwright test --project=review",
     "test:e2e:core": "node scripts/e2e.js core",
     "test:e2e:full": "node scripts/e2e.js full",
+    "test:custom-choice-diagnostics": "node --test e2e/registration/submission-result.test.js e2e/custom-choices/workflow-readback.test.js e2e/custom-choices/update-profile-workflow.test.js scripts/verify-image-revision.test.js",
     "build": "npm run build:patient && npm run build:staff",
     "build:patient": "npm run build --workspace=mds-patient",
     "build:staff": "npm run build --workspace=mds-staff",

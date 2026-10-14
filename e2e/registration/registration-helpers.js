@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { inspectBatchSubmission } = require('./submission-result');
 
 const enabled = process.env.E2E_REGISTRATION_ENABLED === '1';
 const patientUrl = process.env.E2E_PATIENT_URL;
@@ -154,21 +155,28 @@ async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
     const request = response.request();
     return request.method() === 'POST' && (request.postData() || '').includes('BatchCreateInitialRecords');
   }, { timeout: 60_000 }).catch(error => error);
-  await page.getByRole('button', { name: 'Submit', exact: true }).click();
-  const initialProfile = await profileResponse;
-  const initialProfileData = await initialProfile.json();
-  expect(initialProfileData.errors || [], 'Backend must accept the initial personal information').toEqual([]);
-  expect(initialProfileData.data.createInitialPersonalRecord).toMatchObject({ first_name: profile.name, last_name: profile.surname, identifier: recordIdentifier });
-  const submission = await submissionResponse;
-  expect(submission, 'Backend must receive the medical-record batch submission').not.toBeInstanceOf(Error);
-  expect(submission.ok()).toBeTruthy();
-  const submittedData = await submission.json();
+  const { submission, submittedData, submissionResult } = await test.step('Send and parse the medical-record batch submission', async () => {
+    await page.getByRole('button', { name: 'Submit', exact: true }).click();
+    const [initialProfile, batchResponse] = await Promise.all([profileResponse, submissionResponse]);
+    const initialProfileData = await initialProfile.json();
+    expect(initialProfileData.errors || [], 'Backend must accept the initial personal information').toEqual([]);
+    expect(initialProfileData.data.createInitialPersonalRecord).toMatchObject({ first_name: profile.name, last_name: profile.surname, identifier: recordIdentifier });
+    expect(batchResponse, `Backend must receive the medical-record batch submission${batchResponse instanceof Error ? `: ${batchResponse.message}` : ''}`).not.toBeInstanceOf(Error);
+    let body;
+    try {
+      body = await batchResponse.json();
+    } catch (error) {
+      throw new Error(`Could not parse medical-record batch response (HTTP ${batchResponse.status()}): ${error.message}`);
+    }
+    return { submission: batchResponse, submittedData: body, submissionResult: inspectBatchSubmission(batchResponse.status(), body) };
+  });
   if (hooks.afterBatch) {
-    await hooks.afterBatch(submittedData);
+    await hooks.afterBatch({ body: submittedData, result: submissionResult, status: submission.status() });
     return;
   }
-  expect(submittedData.errors || []).toEqual([]);
-  expect(submittedData.data.submitTicket).toBe('Pending');
+  await test.step('Validate medical-record batch submission', async () => {
+    expect(submissionResult.ok, `Medical-record submission failed: ${submissionResult.details}`).toBe(true);
+  });
   await expect(page.getByText('Medical record submitted successfully. You can now access the system.', { exact: true })).toBeVisible({ timeout: 60_000 });
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.reload();
@@ -176,16 +184,18 @@ async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
   // that the backend retained a pending submission.
   const headers = Object.fromEntries(Object.entries(await submission.request().allHeaders())
     .filter(([name]) => ['authorization', 'content-type', 'x-csrf-token', 'x-xsrf-token', 'x-portal'].includes(name)));
-  const persistedResponse = await page.request.post(submission.url(), {
-    headers,
-    data: { query: 'query VerifySubmittedInitialRecord { getUpdateTicket { id status scope } }', variables: {} },
+  return test.step('Read back the submitted Pending ticket', async () => {
+    const persistedResponse = await page.request.post(submission.url(), {
+      headers,
+      data: { query: 'query VerifySubmittedInitialRecord { getUpdateTicket { id status scope } }', variables: {} },
+    });
+    const persistedData = await persistedResponse.json();
+    expect(persistedResponse.ok(), `Ticket readback failed: HTTP ${persistedResponse.status()}; ${JSON.stringify(persistedData.errors || [])}`).toBe(true);
+    expect(persistedData.errors || []).toEqual([]);
+    expect(persistedData.data.getUpdateTicket).toMatchObject({ status: 'Pending', scope: 'Both' });
+    expect(persistedData.data.getUpdateTicket.id).toBeTruthy();
+    return persistedData.data.getUpdateTicket;
   });
-  expect(persistedResponse.ok()).toBeTruthy();
-  const persistedData = await persistedResponse.json();
-  expect(persistedData.errors || []).toEqual([]);
-  expect(persistedData.data.getUpdateTicket).toMatchObject({ status: 'Pending', scope: 'Both' });
-  expect(persistedData.data.getUpdateTicket.id).toBeTruthy();
-  return persistedData.data.getUpdateTicket;
 }
 
 module.exports = { configureAccountTests, registerAndOpenRecord, fillAndSubmitRecord };
