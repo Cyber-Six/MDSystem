@@ -56,7 +56,17 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
 
   useEffect(() => {
     fetchAllCatalogs()
-      .then((cats) => setCatalogs({ ...cats, catalogsLoading: false, catalogsError: null }))
+      .then((cats) => setCatalogs((previous) => {
+        // Preserve custom entries added before the initial catalog request resolves.
+        const merged = { ...cats };
+        for (const key of Object.keys(cats)) {
+          if (!Array.isArray(cats[key]) || !Array.isArray(previous[key])) continue;
+          const byId = new Map(cats[key].map((item) => [String(item.id), item]));
+          previous[key].forEach((item) => byId.set(String(item.id), item));
+          merged[key] = Array.from(byId.values());
+        }
+        return { ...merged, catalogsLoading: false, catalogsError: null };
+      }))
       .catch((err) => {
         console.warn('[Employee Record Form] Catalog fetch failed:', err.message);
         setCatalogs((prev) => ({ ...prev, catalogsLoading: false, catalogsError: err.message }));
@@ -573,7 +583,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
       </Button>
 
       <div className="hidden sm:block text-sm text-neutral-500">
-        Step {currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
+        Step {formData.personalInfo.gender !== 'Female' && currentStep >= 5 ? currentStep : currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
       </div>
 
       {currentStep < steps.length - 1 ? (

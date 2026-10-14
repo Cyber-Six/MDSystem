@@ -88,6 +88,15 @@ async function choice(page, state, { key, placeholder, domain, scope = page, all
     const searched = await (await searchResponse).json();
     expect(searched.errors || [], `${key}: catalog search errors`).toEqual([]);
     const found = searched.data?.[allergen ? 'searchAllergenCatalogs' : 'searchDomainCatalogs'] || [];
+    if (allergen && created.isValid === false) {
+      // Patient-created allergens are pending approval and the API search
+      // explicitly filters to valid entries. Verify that behavior without
+      // treating the expected omission as a lookup failure.
+      compare(state, `${key}: pending allergen is excluded from valid-only search`, false, found.some(item => String(item.id) === String(created.id)));
+      await expect(checkbox, `${key}: pending choice remains visible in the form`).toHaveCount(1);
+      await expect(checkbox, `${key}: pending choice remains selected`).toBeChecked();
+      return checkbox;
+    }
     compare(state, `${key}: search returns the existing ID`, true, found.some(item => String(item.id) === String(created.id)));
     const suggestion = scope.getByRole('button', { name: new RegExp(`^${escape(state.data[key])}(?:.*Already selected)?$`) });
     // The app intentionally filters already-rendered choices from suggestions.
@@ -300,14 +309,17 @@ async function probeInvalidSubmit(page, state, name, message) {
   };
   await page.route(pattern, guard);
   try {
-    await page.getByRole('checkbox').check();
+    const certification = page.getByText(/I certify that the above information is/)
+      .locator('xpath=../preceding-sibling::input[@type="checkbox"]');
+    await expect(certification, 'Certification checkbox must be enabled after all selected catalog labels resolve').toBeEnabled();
+    await certification.check();
     await page.getByRole('button', { name: 'Submit', exact: true }).click();
     const close = page.getByRole('button', { name: /I understand, let me fix it|OK, I will fix it/ });
     await close.waitFor({ state: 'visible', timeout: 8_000 }).catch(() => {});
     compare(state, `Validation: ${name} must prevent writes`, [], writes);
     await expect.soft(page.getByText(message).filter({ hasNot: page.locator('input') }).first(), `Validation message: ${name}`).toBeVisible({ timeout: 2_000 });
     if (await close.isVisible()) await close.click();
-    await page.getByRole('checkbox').uncheck();
+    await certification.uncheck();
   } finally { await page.unroute(pattern, guard); }
 }
 
