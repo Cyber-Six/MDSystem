@@ -18,6 +18,7 @@
     "test:e2e:smoke": "playwright test --project=smoke",
     "test:e2e:recorded": "playwright test --project=recorded",
     "test:e2e:registration": "playwright test --project=registration",
+    "test:e2e:custom-choices": "playwright test --project=custom-choices --reporter=list,./e2e/custom-choices/error-reporter.js",
     "test:e2e:review": "playwright test --project=review",
     "test:e2e:core": "node scripts/e2e.js core",
     "test:e2e:full": "node scripts/e2e.js full",

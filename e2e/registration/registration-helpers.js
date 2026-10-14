@@ -63,7 +63,7 @@ async function registerAndOpenRecord(page, profile, index) {
   return { identifier, employee, email };
 }
 
-async function fillAndSubmitRecord(page, profile, index, account) {
+async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
   const variant = index % 5;
   const recordIdentifier = String(1_000_000 + Number(runId.slice(-6))) + index;
   const choose = async (label, value) => {
@@ -99,22 +99,29 @@ async function fillAndSubmitRecord(page, profile, index, account) {
     await page.getByPlaceholder('Contact Number', { exact: true }).nth(contact).fill('0918000000' + contact);
     await page.getByPlaceholder("Contact's home address").nth(contact).fill('25 Sample Road, Cavite');
   }
+  if (hooks.personal) await hooks.personal();
   await next();
   await expect(page.getByRole('button', { name: 'Family', exact: true })).toBeVisible();
-  if (variant === 1 || variant === 3) await page.getByRole('checkbox').first().check();
-  await page.getByRole('button', { name: 'Family', exact: true }).click();
-  if (variant >= 2) {
-    await page.getByRole('checkbox').first().check();
-    await page.getByPlaceholder('Who has this condition? (e.g., Mother, Father, Sibling)').first().fill(variant === 2 ? 'Mother' : 'Father');
+  if (hooks.history) await hooks.history();
+  else {
+    if (variant === 1 || variant === 3) await page.getByRole('checkbox').first().check();
+    await page.getByRole('button', { name: 'Family', exact: true }).click();
+    if (variant >= 2) {
+      await page.getByRole('checkbox').first().check();
+      await page.getByPlaceholder('Who has this condition? (e.g., Mother, Father, Sibling)').first().fill(variant === 2 ? 'Mother' : 'Father');
+    }
   }
   await next();
-  for (const [title, name] of [['History of Allergies', 'hasAllergies'], ['History of Hospitalizations', 'hasHospitalization'], ['History of Operation', 'hasOperation'], ['Medications', 'hasMedications']]) {
-    await page.getByRole('button', { name: title, exact: true }).click();
-    await page.locator(`input[name="${name}"][value="No"]`).check();
-  }
-  await page.getByRole('button', { name: 'Lifestyle', exact: true }).click();
-  for (const name of ['smoker', 'alcoholDrinker', 'vaper']) {
-    await page.locator(`input[name="${name}"][value="no"]`).check();
+  if (hooks.background) await hooks.background();
+  else {
+    for (const [title, name] of [['History of Allergies', 'hasAllergies'], ['History of Hospitalizations', 'hasHospitalization'], ['History of Operation', 'hasOperation'], ['Medications', 'hasMedications']]) {
+      await page.getByRole('button', { name: title, exact: true }).click();
+      await page.locator(`input[name="${name}"][value="No"]`).check();
+    }
+    await page.getByRole('button', { name: 'Lifestyle', exact: true }).click();
+    for (const name of ['smoker', 'alcoholDrinker', 'vaper']) {
+      await page.locator(`input[name="${name}"][value="no"]`).check();
+    }
   }
   await next();
   await page.locator('input[name="firstTimeDentist"][value="no"]').check();
@@ -127,6 +134,7 @@ async function fillAndSubmitRecord(page, profile, index, account) {
     await page.locator('input[type="file"]').nth(photo).setInputFiles({ name: `synthetic-dental-${photo}.png`, mimeType: 'image/png', buffer: image });
     await expect(page.getByText(`synthetic-dental-${photo}.png`, { exact: true })).toBeVisible();
   }
+  if (hooks.dental) await hooks.dental();
   await next();
   if (profile.gender === 'Female') {
     const lastPeriod = new Date();
@@ -135,6 +143,7 @@ async function fillAndSubmitRecord(page, profile, index, account) {
     await page.getByPlaceholder('Your answer').first().fill(String(4 + variant % 3));
     await next();
   }
+  if (hooks.review) await hooks.review();
   await page.getByRole('checkbox').check();
   await test.info().attach('initial-record-data.json', { body: JSON.stringify({ role: profile.role, name: profile.name, surname: profile.surname, identifier: recordIdentifier, variant, email: account.email }), contentType: 'application/json' });
   const profileResponse = page.waitForResponse(response => {
@@ -154,6 +163,10 @@ async function fillAndSubmitRecord(page, profile, index, account) {
   expect(submission, 'Backend must receive the medical-record batch submission').not.toBeInstanceOf(Error);
   expect(submission.ok()).toBeTruthy();
   const submittedData = await submission.json();
+  if (hooks.afterBatch) {
+    await hooks.afterBatch(submittedData);
+    return;
+  }
   expect(submittedData.errors || []).toEqual([]);
   expect(submittedData.data.submitTicket).toBe('Pending');
   await expect(page.getByText('Medical record submitted successfully. You can now access the system.', { exact: true })).toBeVisible({ timeout: 60_000 });
@@ -172,6 +185,7 @@ async function fillAndSubmitRecord(page, profile, index, account) {
   expect(persistedData.errors || []).toEqual([]);
   expect(persistedData.data.getUpdateTicket).toMatchObject({ status: 'Pending', scope: 'Both' });
   expect(persistedData.data.getUpdateTicket.id).toBeTruthy();
+  return persistedData.data.getUpdateTicket;
 }
 
 module.exports = { configureAccountTests, registerAndOpenRecord, fillAndSubmitRecord };

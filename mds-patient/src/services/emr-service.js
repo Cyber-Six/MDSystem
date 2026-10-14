@@ -918,11 +918,11 @@ const buildMedicalConditionRecords = (medicalHistory) => {
   const conditions = [
     // Self conditions
     ...Object.entries(medicalHistory?.self || {})
-      .filter(([, checked]) => checked)
+      .filter(([id, checked]) => checked && /^[1-9]\d*$/.test(id))
       .map(([id]) => ({ conditionId: id, diagnosedDate: null, relationship: null, description: null })),
     // Family conditions — relationship field carries the family member name
     ...Object.entries(medicalHistory?.family || {})
-      .filter(([, checked]) => checked)
+      .filter(([id, checked]) => checked && /^[1-9]\d*$/.test(id))
       .map(([id]) => {
         const who = medicalHistory.familyWhoHasIt?.[id] || 'Family';
         return { conditionId: id, diagnosedDate: null, relationship: who, description: null };

@@ -7,6 +7,7 @@ import MedicalBackgroundForm from './medical-background';
 import DentalHistoryForm from './dental-history';
 import OBGYNEForm from './obygyne';
 import ReviewForm from './review-form';
+import { collectUnresolvedCatalogSelections } from '../review-components';
 import { Button } from './form-elements';
 import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
 import { createInitialMedicalRecord, fetchAllCatalogs, ensureUpdateTicket } from '@core/services/emr-service';
@@ -46,6 +47,12 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     catalogsLoading: true,
     catalogsError: null,
   });
+  const handleCatalogItemSelected = (key, item) => setCatalogs((previous) => ({
+    ...previous,
+    [key]: (previous[key] || []).some((entry) => String(entry.id) === String(item.id))
+      ? previous[key]
+      : [...(previous[key] || []), item],
+  }));
 
   useEffect(() => {
     fetchAllCatalogs()
@@ -492,6 +499,12 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     // Sanitize the data
     const sanitizedData = sanitizeFormData(formData);
     logDataStructure(sanitizedData, 'Sanitized Form Data');
+
+    const unresolvedChoices = collectUnresolvedCatalogSelections(sanitizedData, catalogs);
+    if (unresolvedChoices.length > 0) {
+      setCurrentStep(5);
+      return;
+    }
     
     // Run comprehensive validation
     const errors = validateAllFields(sanitizedData);
@@ -558,6 +571,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
             onChange={handleMedicalHistoryChange}
             medicalConditionCatalog={catalogs.medicalConditionCatalog}
             catalogsLoading={catalogs.catalogsLoading}
+            onCatalogItemSelected={(item) => handleCatalogItemSelected('medicalConditionCatalog', item)}
           />
         );
       case 2:
@@ -573,6 +587,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
             catalogsLoading={catalogs.catalogsLoading}
             fieldErrors={fieldErrors}
             onClearFieldError={clearFieldError}
+            onCatalogItemSelected={handleCatalogItemSelected}
           />
         );
       case 3:

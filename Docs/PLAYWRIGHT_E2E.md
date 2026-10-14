@@ -98,6 +98,35 @@ The suite uses ten synthetic profiles: five students and five employees, with ma
 
 Deployment verification on 2026-10-13 confirmed five student submissions and the Non-Teaching employee submission persisted as `Pending`; all three mocked input-validation tests passed. The other four employee cases exposed deployed `employeeRole` enum errors for `Faculty`, `AcademicHead`, and `Employee`, produced by the employment-category mapping in `mds-patient/src/services/emr-service.js`. These valid-data tests remain active and report the backend errors instead of treating the rejected submissions as successful.
 
+### Patient-defined custom choices
+
+The separate `custom-choices` suite has four workflows: Student initial record, Employee initial record, Student update, and Employee update. It covers creating and reusing custom self/family conditions, vaccines, allergens, hospitalization conditions, operations, and medications. It also checks employee Other text, initial dental Other text/location, medical-background notes, navigation retention, companion-field validation, review, and authenticated saved-data readback. Existing registration coverage remains separate.
+
+In Git Bash, run all four workflows or one file:
+
+```sh
+E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices
+E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices -- student-initial.spec.js --headed
+E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices -- employee-update.spec.js --headed
+```
+
+The target and test OTP use `.env.e2e` (`E2E_PATIENT_URL` and optional `E2E_TEST_OTP`). The opt-in authorizes persistent synthetic accounts, catalog entries, and pending records on this target. Initial tests reuse registration pacing. Update tests require dedicated **patient** credentials, not admin/staff credentials, in the ignored `.env.e2e`:
+
+```dotenv
+E2E_CUSTOM_STUDENT_EMAIL=your-approved-student-qa-email
+E2E_CUSTOM_STUDENT_PASSWORD=your-student-qa-password
+E2E_CUSTOM_EMPLOYEE_EMAIL=your-approved-employee-qa-email
+E2E_CUSTOM_EMPLOYEE_PASSWORD=your-employee-qa-password
+```
+
+Each update account must be Active with an approved record and no pending/in-progress/revision update. The suite fails before modifying an ineligible account and rechecks immediately before submission. Submitted updates remain pending; subsequent runs need eligible accounts again. The suite performs no staff approval, cancellation, or cleanup. It does not change application APIs or database schemas.
+
+Every run writes `e2e-results/custom-choices/results.json` and `e2e-results/custom-choices/errors.md`, with exact failures, reproduction commands, request/response evidence, and expected/actual saved-value comparisons. Each test attaches `custom-choice-evidence.json`. Credentials and tokens are omitted, and videos, traces, and screenshots are disabled for this project. Keep artifacts private because approved QA-account readback can contain personal information.
+
+Individual-file runs update that workflow's result without discarding the other workflows; each entry has its own recorded timestamp. Initial forms validate on Submit. During intentionally invalid input probes, writes are aborted and reported if client validation fails to block them. A request guard also blocks application-initiated record cancellation. These guards do not fabricate successful backend responses. After restoring valid input, normal submission uses the real deployment, and readback still runs after a partial GraphQL batch failure.
+
+If creation saves a catalog row but fails to display/select it, the test records that failure and tries the normal search/reuse UI path so later sections can still be exercised. Assertions remain failed. No mocked backend success, automatic retries, or application fixes are used to make these workflows pass. A missing-credential failure or an earlier form error means later saved-data checks were not reached.
+
 ### Saving and running recorded tests
 
 Save Codegen-based tests under `e2e/recorded/` with filenames ending in `.spec.js`. Start from `e2e/recorded/template.spec.js`, choose the patient or staff URL from `.env.e2e`, and paste Codegen's actions inside the `test()` callback. Codegen can open the selected portal directly:

@@ -130,7 +130,7 @@ function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name' }) {
   };
 }
 
-const MedicalHistoryStep = ({ formData, onChange }) => {
+const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {} }) => {
   const { clearAllBanners } = useBanner();
   const [activeTab, setActiveTab] = useState('yourself');
   const [activeAccordion, setActiveAccordion] = useState('conditions');
@@ -304,6 +304,18 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
     searchFn: (q) => searchDomainCatalog('MedicalCondition', q),
     createFn: (name) => createDomainCatalog('MedicalCondition', name),
   });
+
+  useEffect(() => {
+    const catalogsByDomain = {
+      medicalConditions: [...catalogs.medicalConditions, ...medicalConditionOthers.dynamicItems],
+      immunizations: [...catalogs.immunizations, ...immunizationOthers.dynamicItems],
+      allergens: [...catalogs.allergens, ...allergenOthers.dynamicItems],
+      hospitalizations: [...catalogs.hospitalizations, ...hospitalizationOthers.dynamicItems],
+      operations: [...catalogs.operations, ...operationOthers.dynamicItems],
+      medications: [...catalogs.medications, ...medicationOthers.dynamicItems],
+    };
+    Object.entries(catalogsByDomain).forEach(([domain, items]) => items.forEach((item) => onCatalogItemSelected(domain, item)));
+  }, [catalogs, medicalConditionOthers.dynamicItems, immunizationOthers.dynamicItems, allergenOthers.dynamicItems, hospitalizationOthers.dynamicItems, operationOthers.dynamicItems, medicationOthers.dynamicItems, onCatalogItemSelected]);
 
   // Merge dynamic items with catalogs for lookups
   const allAllergens = [...catalogs.allergens, ...allergenOthers.dynamicItems];

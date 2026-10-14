@@ -1,34 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { ReviewSectionHeader, ReviewDataRow, resolveCatalogLabel, formatReviewDate } from '../initial-record/review-components';
 
-const ReviewStep = ({ formData, onEdit, recordType, revisionNotes = null, isRevision = false }) => {
-  const SectionHeader = ({ title, onEditClick }) => (
-    <div className="flex items-center justify-between mb-4 pb-3 border-b-2 border-primary-500">
-      <h4 className="text-lg font-heading font-semibold text-secondary-800 dark:text-white">{title}</h4>
-      <button
-        type="button"
-        onClick={onEditClick}
-        className="text-sm text-primary-600 dark:text-primary-500 hover:text-primary-700 font-semibold flex items-center gap-1.5 
-                   transition-all duration-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 px-3 py-1.5 rounded-lg"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-        </svg>
-        Edit
-      </button>
-    </div>
-  );
-
-  const DataRow = ({ label, value }) => {
-    if (!value || value === '' || value === 'Not provided') return null;
-    return (
-      <div className="grid grid-cols-3 gap-4 py-2.5 border-b border-neutral-100 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors duration-150 px-2 -mx-2 rounded">
-        <dt className="font-medium text-secondary-700 dark:text-primary-500">{label}</dt>
-        <dd className="col-span-2 text-secondary-800 dark:text-neutral-200">{value}</dd>
-      </div>
-    );
-  };
-
-  const personalInfo = {
+const ReviewStep = ({ formData, onEdit, steps = [], recordType, revisionNotes = null, isRevision = false, onValidationStateChange = () => {} }) => {
+  const registry = formData.catalogRegistry || {};
+  const getCatalogName = (domain, id) => resolveCatalogLabel(null, id, registry?.[domain] || {}) || `Unresolved choice (${id})`;
+  const selectedMap = (selection, domain) => Object.entries(selection || {}).filter(([, selected]) => selected).map(([id]) => getCatalogName(domain, id));
+  const selectedArray = (selection, domain) => (Array.isArray(selection) ? selection : []).map((id) => getCatalogName(domain, id));
+  const personalRows = {
     'First Name': formData.firstName,
     'Last Name': formData.lastName,
     'Middle Initial': formData.middleInitial,
@@ -42,146 +20,100 @@ const ReviewStep = ({ formData, onEdit, recordType, revisionNotes = null, isRevi
     'Contact Number': formData.contactNumber,
     'Email': formData.email,
     'Civil Status': formData.civilStatus,
-    'Emergency Contact 1': formData.emergencyContact1Name 
-      ? `${formData.emergencyContact1Name} (${formData.emergencyContact1Relationship}) - ${formData.emergencyContact1Number}`
-      : null,
-    'Emergency Contact 2': formData.emergencyContact2Name
-      ? `${formData.emergencyContact2Name} (${formData.emergencyContact2Relationship}) - ${formData.emergencyContact2Number}`
-      : null
+    'Emergency Contact 1': formData.emergencyContact1Name ? `${formData.emergencyContact1Name}; ${formData.emergencyContact1Relationship}; ${formData.emergencyContact1Number}; ${formData.emergencyContact1Address || 'Address not provided'}` : undefined,
+    'Emergency Contact 2': formData.emergencyContact2Name ? `${formData.emergencyContact2Name}; ${formData.emergencyContact2Relationship}; ${formData.emergencyContact2Number}; ${formData.emergencyContact2Address || 'Address not provided'}` : undefined,
   };
-
-  const selfConditionsList = formData.selfConditions
-    ? Object.entries(formData.selfConditions).filter(([_, v]) => v).map(([k]) => k).join(', ')
-    : null;
-  const familyConditionsList = formData.familyConditions
-    ? Object.entries(formData.familyConditions)
-        .filter(([_, v]) => v?.checked)
-        .map(([k, v]) => v.relationship ? `${k} (${v.relationship})` : k)
-        .join(', ')
-    : null;
-
-  const medicalHistory = {
-    'Self Conditions': selfConditionsList,
-    'Family Conditions': familyConditionsList,
+  const selfConditions = selectedMap(formData.selfConditions, 'medicalConditions');
+  const familyConditions = Object.entries(formData.familyConditions || {}).filter(([, value]) => value?.checked).map(([id, value]) => `${getCatalogName('medicalConditions', id)} — ${value.relationship || 'Relationship not provided'}`);
+  const allergies = selectedArray(formData.selectedAllergies, 'allergens').map((name, index) => {
+    const id = formData.selectedAllergies[index];
+    const detail = formData.allergyDetails?.[id] || {};
+    return `${name} (type: ${detail.type || registry.allergens?.[id]?.type || 'Not provided'}; severity: ${detail.severity || 'Unknown'}; status: ${detail.status || 'Active'})`;
+  });
+  const vaccines = selectedArray(formData.immunizations, 'immunizations').map((name, index) => {
+    const id = formData.immunizations[index];
+    const detail = formData.immunizationDetails?.[id] || {};
+    return `${name} (Dose: ${detail.doseNumber ?? 'Not provided'}; date: ${formatReviewDate(detail.date) || 'Not provided'})`;
+  });
+  const hospitals = Object.entries(formData.hospitalizationConditions || {}).filter(([, selected]) => selected).map(([id]) => {
+    const dates = formData.hospitalizationDates?.[id] || {};
+    return `${getCatalogName('hospitalizations', id)} (admitted: ${formatReviewDate(dates.admissionDate) || 'Not provided'}; discharged: ${formatReviewDate(dates.dischargeDate) || 'Not provided'})`;
+  });
+  const operations = Object.entries(formData.operationConditions || {}).filter(([, selected]) => selected).map(([id]) => `${getCatalogName('operations', id)} (${formatReviewDate(formData.operationDates?.[id]) || 'Date not provided'})`);
+  const medications = selectedMap(formData.selectedMedications, 'medications');
+  const medicalRows = {
+    'Yourself — medical conditions': selfConditions.join(', ') || 'None reported',
+    'Family medical conditions': familyConditions.join('; ') || 'None reported',
     'Allergies': formData.hasAllergies,
-    'Allergy Notes': formData.allergiesNotes,
-    'Smoker': formData.smoker,
-    'Alcohol Drinker': formData.alcoholDrinker,
-    'Alcohol Frequency': formData.alcoholDrinker === 'yes' ? (formData.alcoholFrequency || null) : null,
-    'Vaper': formData.vaper,
-    'Visual Acuity': formData.visualAcuity,
-    ...(formData.sex === 'Female' && {
-      'Last Menstrual Period': formData.lastMenstrualPeriod,
-      'Dysmenorrhea': formData.dysmenorrhea
-    }),
-    'Immunizations': Array.isArray(formData.immunizations) && formData.immunizations.length > 0
-      ? formData.immunizations.join(', ') : null,
+    'Selected allergies': allergies.join('; ') || 'None selected',
+    'Allergy details': formData.allergiesDetail,
+    'Allergy notes': formData.allergiesNotes,
+    'Immunizations': vaccines.join('; ') || 'None selected',
+    'Immunization notes': formData.immunizationNotes,
     'Hospitalizations': formData.hasHospitalizations,
-    'Hospitalization Notes': formData.hospitalizationNotes,
+    'Hospitalization history': hospitals.join('; ') || 'None selected',
+    'Hospitalization notes': formData.hospitalizationNotes,
     'Surgeries': formData.hasSurgeries,
-    'Surgery Notes': formData.surgeryNotes,
-    'Current Medications': formData.hasMedications,
-    'Medication Notes': formData.medicationNotes
+    'Operations': operations.join('; ') || 'None selected',
+    'Surgery notes': formData.surgeryNotes,
+    'Medications': formData.hasMedications,
+    'Selected medications': medications.join(', ') || 'None selected',
+    'Medication notes': formData.medicationNotes,
+    'Smoker': formData.smoker,
+    'Cigarettes per day': formData.smoker === 'yes' ? formData.smokerSticksPerDay : undefined,
+    'Years smoking': formData.smoker === 'yes' ? formData.smokerYears : undefined,
+    'Alcohol use': formData.alcoholDrinker,
+    'Alcohol frequency': formData.alcoholDrinker === 'yes' ? formData.alcoholFrequency : undefined,
+    'Vaping': formData.vaper,
+    'Vape type': formData.vaper === 'yes' ? formData.vapeType : undefined,
+    'Vape frequency': formData.vaper === 'yes' ? formData.vapeFrequency : undefined,
+    'Visual acuity': formData.visualAcuity,
+    'Right eye': formData.visualAcuity === 'yes' ? formData.rightEye : undefined,
+    'Left eye': formData.visualAcuity === 'yes' ? formData.leftEye : undefined,
+    'Visual acuity notes': formData.visualAcuityNotes,
+    'Last menstrual period': formData.sex === 'Female' ? formatReviewDate(formData.lastMenstrualPeriod) : undefined,
+    'Dysmenorrhea': formData.sex === 'Female' ? formData.dysmenorrhea : undefined,
   };
-
-  const dentalHistory = {
-    'Visited Dentist': formData.seenByDentist === true ? 'Yes' : formData.seenByDentist === false ? 'No' : null,
-    'Purpose of Last Visit': formData.purpose,
-    'Last Cleaning': formData.lastDentalCleaning,
-    'Intraoral Appliances': formData.hasOralAppliances === true ? 'Yes' : formData.hasOralAppliances === false ? 'No' : null,
-    'Appliance Count': formData.oralAppliances?.length > 0 ? `${formData.oralAppliances.length} appliance(s) added` : null,
-    'Dental Procedures': formData.dentalProcedures?.length > 0
-      ? `${formData.dentalProcedures.length} procedure(s) selected`
-      : null
+  const appliances = (formData.oralAppliances || []).map((item, index) => `Appliance ${index + 1}: ${getCatalogName('oralAppliances', item.tagId)}; location: ${item.arch || 'Not provided'}; status: ${item.status || 'Not provided'}; issued: ${formatReviewDate(item.dateIssued) || 'Not provided'}`);
+  const procedures = (formData.dentalProcedures || []).map((item) => `${getCatalogName('dentalProcedures', item.procedureTypeId)} (${formatReviewDate(item.procedureDate) || 'Date not provided'})`);
+  const activeSelections = [
+    ...Object.entries(formData.selfConditions || {}).filter(([, selected]) => selected).map(([id]) => ['medicalConditions', id]),
+    ...Object.entries(formData.familyConditions || {}).filter(([, value]) => value?.checked).map(([id]) => ['medicalConditions', id]),
+    ...(formData.selectedAllergies || []).map((id) => ['allergens', id]),
+    ...(formData.immunizations || []).map((id) => ['immunizations', id]),
+    ...Object.entries(formData.hospitalizationConditions || {}).filter(([, selected]) => selected).map(([id]) => ['hospitalizations', id]),
+    ...Object.entries(formData.operationConditions || {}).filter(([, selected]) => selected).map(([id]) => ['operations', id]),
+    ...Object.entries(formData.selectedMedications || {}).filter(([, selected]) => selected).map(([id]) => ['medications', id]),
+    ...(formData.dentalProcedures || []).map((item) => ['dentalProcedures', item.procedureTypeId]),
+    ...(formData.oralAppliances || []).filter((item) => item.tagId).map((item) => ['oralAppliances', item.tagId]),
+  ];
+  const unresolvedSelections = activeSelections.filter(([domain, id]) => !/^[1-9]\d*$/.test(String(id ?? '')) || !resolveCatalogLabel(null, id, registry?.[domain] || {}));
+  useEffect(() => onValidationStateChange(unresolvedSelections.length > 0), [unresolvedSelections.length, onValidationStateChange]);
+  const dentalRows = {
+    'Visited a dentist': formData.seenByDentist,
+    'Last dental cleaning': formData.lastDentalCleaning,
+    'Last visit date': formData.lastVisitDate,
+    'Purpose of last visit': formData.purpose,
+    'Intraoral appliances': formData.hasOralAppliances,
+    'Appliances': appliances.join('; ') || (formData.hasOralAppliances === false ? 'None reported' : undefined),
+    'Dental procedures': procedures.join('; ') || 'None selected',
+    'Upper teeth photo': formData.upperTeethPhoto?.name || (formData.upperTeethPhoto ? 'Uploaded' : 'Not uploaded'),
+    'Lower teeth photo': formData.lowerTeethPhoto?.name || (formData.lowerTeethPhoto ? 'Uploaded' : 'Not uploaded'),
   };
-
-  // Calculate correct step indices based on recordType
-  const getStepIndex = (section) => {
-    if (section === 'personal') return 0;
-    if (section === 'medical') {
-      // Medical is always at index 1 if it exists
-      return 1;
-    }
-    if (section === 'dental') {
-      // Dental is at index 1 if recordType is 'dental', otherwise index 2
-      return recordType === 'dental' ? 1 : 2;
-    }
-    return 0;
-  };
+  const stepIndex = (name) => steps.indexOf(name);
+  const renderRows = (rows) => Object.entries(rows).map(([label, value]) => <ReviewDataRow key={label} label={label} value={value} />);
 
   return (
     <div className="space-y-6">
-      {/* Revision Notes Banner - Show if this is a revision resubmission */}
-      {isRevision && revisionNotes && (
-        <div className="bg-accent-50 dark:bg-accent-900/20 border-l-4 border-accent-500 rounded-xl p-4 flex gap-4">
-          <div className="flex-shrink-0">
-            <svg className="w-5 h-5 text-accent-600 dark:text-accent-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-accent-900 dark:text-accent-200 mb-2">
-              Staff Feedback on Your Revision:
-            </p>
-            <p className="text-sm text-accent-800 dark:text-accent-300 whitespace-pre-wrap mb-0">
-              {revisionNotes}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Personal Information */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
-        <SectionHeader title="Personal Information" onEditClick={() => onEdit(getStepIndex('personal'))} />
-        <dl className="space-y-1">
-          {Object.entries(personalInfo).map(([label, value]) => (
-            <DataRow key={label} label={label} value={value} />
-          ))}
-        </dl>
-      </div>
-
-      {/* Medical History - Only show if recordType is 'medical' or 'both' */}
-      {(recordType === 'medical' || recordType === 'both') && (
-        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
-          <SectionHeader title="Medical History" onEditClick={() => onEdit(getStepIndex('medical'))} />
-          <dl className="space-y-1">
-            {Object.entries(medicalHistory).map(([label, value]) => (
-              <DataRow key={label} label={label} value={value} />
-            ))}
-          </dl>
-        </div>
-      )}
-
-      {/* Dental History - Only show if recordType is 'dental' or 'both' */}
-      {(recordType === 'dental' || recordType === 'both') && (
-        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
-          <SectionHeader title="Dental History" onEditClick={() => onEdit(getStepIndex('dental'))} />
-          <dl className="space-y-1">
-            {Object.entries(dentalHistory).map(([label, value]) => (
-              <DataRow key={label} label={label} value={value} />
-            ))}
-          </dl>
-        </div>
-      )}
-
-      <div className="p-4 bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-xl">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-500/20 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-primary-600 dark:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-secondary-800 dark:text-white">
-              Important Information
-            </p>
-            <p className="text-sm text-secondary-600 dark:text-neutral-400 mt-1">
-              By submitting this form, you confirm that all the information provided is accurate and up-to-date. 
-              This information will be used for medical purposes and kept confidential according to our privacy policy.
-            </p>
-          </div>
-        </div>
-      </div>
+      {isRevision && revisionNotes && <div className="rounded-xl border-l-4 border-accent-500 bg-accent-50 p-4"><strong>Staff feedback</strong><p className="whitespace-pre-wrap">{revisionNotes}</p></div>}
+      {steps.includes('Personal Info') && <section className="rounded-xl border border-neutral-200 bg-white p-6"><ReviewSectionHeader title="Personal Information" onEditClick={() => onEdit(stepIndex('Personal Info'))} /><dl>{renderRows(personalRows)}</dl></section>}
+      {unresolvedSelections.length > 0 && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800">Some selected catalog choices cannot be identified. Edit the affected section before submitting.<div className="mt-2 flex gap-3">{unresolvedSelections.some(([domain]) => domain === 'medicalConditions' || domain === 'allergens' || domain === 'immunizations' || domain === 'hospitalizations' || domain === 'operations' || domain === 'medications') && <button type="button" className="underline font-semibold" onClick={() => onEdit(stepIndex('Medical History'))}>Edit Medical History</button>}{unresolvedSelections.some(([domain]) => domain === 'dentalProcedures' || domain === 'oralAppliances') && <button type="button" className="underline font-semibold" onClick={() => onEdit(stepIndex('Dental History'))}>Edit Dental History</button>}</div></div>}
+      {(recordType === 'medical' || recordType === 'both') && <section className="rounded-xl border border-neutral-200 bg-white p-6"><ReviewSectionHeader title="Medical History" onEditClick={() => onEdit(stepIndex('Medical History'))} /><dl>{renderRows(medicalRows)}</dl></section>}
+      {(recordType === 'dental' || recordType === 'both') && <section className="rounded-xl border border-neutral-200 bg-white p-6"><ReviewSectionHeader title="Dental History" onEditClick={() => onEdit(stepIndex('Dental History'))} /><dl>{renderRows(dentalRows)}</dl>
+        {formData.upperTeethPhoto?.preview && <img className="mt-3 max-w-xs rounded border" src={formData.upperTeethPhoto.preview} alt="Upper teeth preview" />}
+        {formData.lowerTeethPhoto?.preview && <img className="mt-3 max-w-xs rounded border" src={formData.lowerTeethPhoto.preview} alt="Lower teeth preview" />}
+      </section>}
+      <div className="rounded-xl border border-primary-200 bg-primary-50 p-4"><strong>Before submitting</strong><p>Review each section and edit any details that need correction.</p></div>
     </div>
   );
 };

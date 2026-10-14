@@ -67,6 +67,13 @@ module.exports = defineConfig({
       use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
     },
     {
+      name: 'custom-choices',
+      testMatch: 'custom-choices/*.spec.js',
+      workers: 1,
+      retries: 0,
+      use: { trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' },
+    },
+    {
       name: 'review',
       testMatch: 'review/**/*.spec.js',
       use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },

@@ -3,7 +3,7 @@ import { Input, Select, Textarea, AccordionSection } from './form-elements';
 import { fetchAllDentalCatalogs } from './dental-history-service';
 import { useBanner } from '../../../context/use-banner.js';
 
-const DentalHistoryStep = ({ formData, onChange }) => {
+const DentalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {} }) => {
   const { clearAllBanners } = useBanner();
   const [activeAccordion, setActiveAccordion] = useState('visits');
   const [catalogs, setCatalogs] = useState({
@@ -56,6 +56,11 @@ const DentalHistoryStep = ({ formData, onChange }) => {
     
     return () => { isMounted = false; };
   }, []);
+
+  useEffect(() => {
+    (catalogs.oralAppliances || []).forEach((item) => onCatalogItemSelected('oralAppliances', item));
+    (catalogs.dentalProcedures || []).forEach((item) => onCatalogItemSelected('dentalProcedures', item));
+  }, [catalogs.oralAppliances, catalogs.dentalProcedures, onCatalogItemSelected]);
 
   const handleInputChange = (field, value) => {
     onChange({ ...formData, [field]: value });

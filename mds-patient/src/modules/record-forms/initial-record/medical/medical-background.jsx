@@ -38,7 +38,7 @@ const ALLERGEN_TYPE_OPTIONS = [
 
 // ─── Reusable search+create "Others" hook ─────────────────────────────────────
 
-function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name' }) {
+function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name', onItemSelected }) {
   const [dynamicItems, setDynamicItems] = useState([]);
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -98,6 +98,7 @@ function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name' }) {
     if (!alreadyInMain && !alreadyInDynamic) {
       setDynamicItems((prev) => [...prev, item]);
     }
+    onItemSelected?.(item);
     setInput('');
     setSuggestions([]);
     setFocused(false);
@@ -111,6 +112,7 @@ function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name' }) {
       if (created.length > 0) {
         const newItem = created[0];
         setDynamicItems((prev) => [...prev, newItem]);
+        onItemSelected?.(newItem);
         setInput('');
         setSuggestions([]);
         setFocused(false);
@@ -157,6 +159,7 @@ const MedicalBackgroundForm = ({
   catalogsLoading = false,
   fieldErrors = {},
   onClearFieldError = () => {},
+  onCatalogItemSelected = () => {},
 }) => {
   const [activeAccordion, setActiveAccordion] = useState('immunizations');
 
@@ -165,6 +168,7 @@ const MedicalBackgroundForm = ({
     catalog: immunizationCatalog,
     searchFn: searchImmunizationCatalog,
     createFn: (name) => createImmunizationCatalog(name),
+    onItemSelected: (item) => onCatalogItemSelected('immunizationCatalog', item),
   });
 
   // ── Allergen Others ──
@@ -173,6 +177,7 @@ const MedicalBackgroundForm = ({
     searchFn: searchAllergenCatalogByName,
     createFn: (name, type) => createAllergenCatalogEntry(name, type),
     nameKey: 'allergen',
+    onItemSelected: (item) => onCatalogItemSelected('allergenCatalog', item),
   });
   const [allergenTypeForCreate, setAllergenTypeForCreate] = useState('Other');
 
@@ -181,6 +186,7 @@ const MedicalBackgroundForm = ({
     catalog: hospitalizationCatalog,
     searchFn: (q) => searchDomainCatalog('Hospitalization', q),
     createFn: (name) => createDomainCatalog('Hospitalization', name),
+    onItemSelected: (item) => onCatalogItemSelected('hospitalizationCatalog', item),
   });
 
   // ── Operation Others ──
@@ -188,6 +194,7 @@ const MedicalBackgroundForm = ({
     catalog: operationCatalog,
     searchFn: (q) => searchDomainCatalog('Operation', q),
     createFn: (name) => createDomainCatalog('Operation', name),
+    onItemSelected: (item) => onCatalogItemSelected('operationCatalog', item),
   });
 
   // ── Medication Others ──
@@ -195,6 +202,7 @@ const MedicalBackgroundForm = ({
     catalog: medicationCatalog,
     searchFn: (q) => searchDomainCatalog('Medication', q),
     createFn: (name) => createDomainCatalog('Medication', name),
+    onItemSelected: (item) => onCatalogItemSelected('medicationCatalog', item),
   });
 
   const handleChange = (field, value) => {

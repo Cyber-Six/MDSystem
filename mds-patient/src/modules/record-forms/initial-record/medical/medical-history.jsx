@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Checkbox, Input } from './form-elements';
 import { searchDomainCatalog, createDomainCatalog } from '@core/services/emr-service';
 
-function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name' }) {
+const isValidCatalogId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
+
+function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name', onItemSelected }) {
   const [dynamicItems, setDynamicItems] = useState([]);
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -38,7 +40,9 @@ function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name' }
   };
 
   const selectItem = (item) => {
+    if (!isValidCatalogId(item?.id)) return null;
     setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
+    onItemSelected?.(item);
     setInput('');
     setSuggestions([]);
     setFocused(false);
@@ -49,9 +53,15 @@ function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name' }
     if (!name) return null;
     setCreating(true);
     try {
-      const item = await createFn(name, extra);
+      const created = await createFn(name, extra);
+      // Catalog mutations return an array, while the search UI consumes one
+      // catalog item. Keep the same shape whether the caller returns an array
+      // or a single item.
+      const item = Array.isArray(created) ? created[0] : created;
+      if (!isValidCatalogId(item?.id)) return null;
       if (item) {
         setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
+        onItemSelected?.(item);
         setInput('');
         setSuggestions([]);
         setFocused(false);
@@ -87,6 +97,7 @@ const MedicalHistoryForm = ({
   onChange,
   medicalConditionCatalog = [],
   catalogsLoading = false,
+  onCatalogItemSelected,
 }) => {
   const [activeTab, setActiveTab] = useState('self');
 
@@ -94,14 +105,17 @@ const MedicalHistoryForm = ({
     catalog: medicalConditionCatalog,
     searchFn: (q) => searchDomainCatalog('MedicalCondition', q),
     createFn: (name) => createDomainCatalog('MedicalCondition', name),
+    onItemSelected: onCatalogItemSelected,
   });
 
   const handleSelfConditionChange = (id, checked) => {
+    if (!isValidCatalogId(id)) return;
     const self = { ...data.self, [id]: checked };
     onChange({ ...data, self });
   };
 
   const handleFamilyConditionChange = (id, checked) => {
+    if (!isValidCatalogId(id)) return;
     const family = { ...data.family, [id]: checked };
     if (!checked) {
       const familyWhoHasIt = { ...data.familyWhoHasIt };

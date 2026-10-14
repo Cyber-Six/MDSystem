@@ -26,6 +26,7 @@ const RecordUpdateForm = ({
   const { subscribe } = usePatientNotifications();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
+  const [reviewHasUnresolvedChoices, setReviewHasUnresolvedChoices] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
   const effectiveRecordType = forceRecordType || recordType;
@@ -277,12 +278,28 @@ const RecordUpdateForm = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const registerCatalogItem = useCallback((domain, item) => {
+    if (!item?.id || String(item.id) === 'undefined') return;
+    setFormData((previous) => {
+      const domainItems = previous.catalogRegistry?.[domain] || {};
+      if (domainItems[String(item.id)]?.name === (item.name || item.allergen || item.allergy)) return previous;
+      return {
+        ...previous,
+        catalogRegistry: {
+          ...(previous.catalogRegistry || {}),
+          [domain]: { ...domainItems, [String(item.id)]: item },
+        },
+      };
+    });
+  }, []);
+
   const handleEdit = (step) => {
     setCurrentStep(step);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async () => {
+    if (reviewHasUnresolvedChoices) return;
     // Check for an existing Pending ticket first and warn the patient before cancelling it
     try {
       const existing = await getUpdateTicketStatus();
@@ -403,15 +420,17 @@ const RecordUpdateForm = ({
       case 'Personal Info':
         return <PersonalInfoStep formData={formData} onChange={setFormData} />;
       case 'Medical History':
-        return <MedicalHistoryStep formData={formData} onChange={setFormData} />;
+        return <MedicalHistoryStep formData={formData} onChange={setFormData} onCatalogItemSelected={registerCatalogItem} />;
       case 'Dental History':
-        return <DentalHistoryStep formData={formData} onChange={setFormData} />;
+        return <DentalHistoryStep formData={formData} onChange={setFormData} onCatalogItemSelected={registerCatalogItem} />;
       case 'Review & Submit':
         return (
           <ReviewStep 
             formData={formData} 
             onEdit={handleEdit} 
+            steps={steps}
             recordType={effectiveRecordType}
+            onValidationStateChange={setReviewHasUnresolvedChoices}
             isRevision={revisionStatus?.status === 'Revision'}
             revisionNotes={revisionStatus?.notes || null}
           />
@@ -733,7 +752,7 @@ const RecordUpdateForm = ({
 
               <button
                 onClick={safeCurrentStep === steps.length - 1 ? handleSubmit : handleNext}
-                disabled={isSubmitting}
+                disabled={isSubmitting || (safeCurrentStep === steps.length - 1 && reviewHasUnresolvedChoices)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg 
                          transition-all duration-200
                          disabled:opacity-50 disabled:cursor-not-allowed"
