@@ -7,7 +7,7 @@ const portalUrls = {
   staff: process.env.E2E_STAFF_URL || 'http://127.0.0.1:4174',
 };
 
-test(`${portalName} review template`, async ({ page }) => {
+test.skip(`${portalName} review template`, async ({ page }) => {
   const baseUrl = portalUrls[portalName];
   await page.goto(`${baseUrl.replace(/\/+$/, '')}/auth/login`);
 

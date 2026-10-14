@@ -1,40 +1,57 @@
-import { test, expect } from '@playwright/test';
+const { test, expect } = require('@playwright/test');
 
-test('test', async ({ page }) => {
-  await page.goto('https://staff.mdsystemtip.space/auth/login');
-  await page.getByRole('button', { name: 'Open login panel' }).click();
-  await page.getByRole('textbox', { name: 'Email address' }).click();
-  await page.getByRole('textbox', { name: 'Email address' }).fill('mdsystem@tip.edu.ph');
-  await page.getByRole('textbox', { name: 'Email address' }).press('Tab');
-  await page.getByRole('textbox', { name: 'Password' }).fill('mdsystem');
-  await page.getByRole('textbox', { name: 'Password' }).press('Enter');
-  await page.getByRole('textbox').first().fill('1');
-  await page.getByRole('textbox').nth(1).fill('1');
-  await page.getByRole('textbox').nth(2).fill('1');
-  await page.getByRole('textbox').nth(3).fill('1');
-  await page.getByRole('textbox').nth(4).fill('1');
-  await page.getByRole('textbox').nth(5).fill('1');
-  await page.getByRole('button', { name: 'Verify code' }).click();
-  await page.getByRole('link', { name: 'Pending Requests', description: 'Pending Requests' }).click();
-  await page.getByRole('cell', { name: 'Librong James' }).click();
-  await page.getByRole('button', { name: 'Review Full Record' }).click();
-  await page.getByText('VA_META::{"version":2,"').click();
-  await page.getByText('VA_META::{"version":2,"').click();
-  await page.getByText('NotesVA_META::{"version":2,"').click();
-  await page.getByRole('button', { name: 'Approve' }).nth(1).click();
-  await page.getByRole('link', { name: 'Search Patient' }).click();
-  await page.locator('div').filter({ hasText: /^Search$/ }).click();
-  await page.locator('.bg-white.dark\\:bg-neutral-800.rounded-lg').first().click();
-  await page.getByRole('textbox', { name: 'Search patient by name or' }).click();
-  await page.getByRole('textbox', { name: 'Search patient by name or' }).fill('librong james');
-  await page.getByRole('textbox', { name: 'Search patient by name or' }).press('Enter');
-  await page.getByRole('button', { name: 'LJ James, Librong 23100049' }).click();
-  await page.getByRole('tab', { name: 'Medical Info' }).click();
-  await page.locator('.grid.grid-cols-1').click();
-  await page.getByRole('button', { name: 'History' }).click();
-  await page.getByRole('button', { name: 'History' }).press('F11');
-  await page.getByRole('button', { name: 'History' }).press('Escape');
-  await page.getByRole('button', { name: 'History' }).press('Escape');
-  await page.getByRole('link', { name: 'Pending Requests' }).click();
-  await page.getByRole('link', { name: 'Search Patient' }).click();
+const requiredSettings = [
+  ['E2E_STAFF_URL', 'Staff portal URL'],
+  ['E2E_REVIEW_STAFF_EMAIL', 'Review QA staff email'],
+  ['E2E_REVIEW_STAFF_PASSWORD', 'Review QA staff password'],
+  ['E2E_TEST_OTP', 'Test OTP'],
+  ['E2E_REVIEW_PATIENT_NAME', 'Pending QA patient name'],
+];
+
+test('staff can open a pending patient record for read-only review', async ({ page }) => {
+  for (const [key, label] of requiredSettings) {
+    expect(process.env[key]?.trim(), `Set ${key} (${label}) in .env.e2e`).toBeTruthy();
+  }
+
+  const staffUrl = process.env.E2E_STAFF_URL.replace(/\/+$/, '');
+  const email = process.env.E2E_REVIEW_STAFF_EMAIL.trim();
+  const password = process.env.E2E_REVIEW_STAFF_PASSWORD;
+  const otp = process.env.E2E_TEST_OTP.trim();
+  const patientName = process.env.E2E_REVIEW_PATIENT_NAME.trim();
+  expect(otp, 'E2E_TEST_OTP must contain exactly six digits').toMatch(/^\d{6}$/);
+
+  await page.goto(`${staffUrl}/auth/login`);
+  const openLogin = page.getByRole('button', { name: 'Open login panel' });
+  await expect(openLogin).toBeVisible();
+  await openLogin.click();
+  await page.getByLabel('Email address').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+
+  await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible();
+  const otpInputs = page.locator('input[inputmode="numeric"][maxlength="1"]');
+  await expect(otpInputs).toHaveCount(6);
+  for (let index = 0; index < 6; index += 1) await otpInputs.nth(index).fill(otp[index]);
+  await page.getByRole('button', { name: 'Verify code', exact: true }).click();
+  await expect(page).not.toHaveURL(/\/auth\/login(?:$|\?)/, { timeout: 20_000 });
+
+  const pendingLink = page.getByRole('link', { name: /Pending Requests/ });
+  await expect(pendingLink).toBeVisible();
+  await pendingLink.click();
+  await expect(page.getByRole('heading', { name: /Initial Record Submissions/ })).toBeVisible();
+
+  const patientCell = page.getByText(patientName, { exact: true });
+  const patientRows = page.getByRole('row').filter({ has: patientCell });
+  await expect.poll(() => patientRows.count(), {
+    message: `Expected exactly one pending initial record for "${patientName}"`,
+    timeout: 20_000,
+  }).toBe(1);
+  const patientRow = patientRows.first();
+  await expect(patientRow.getByRole('cell').nth(3)).toHaveText('Pending');
+  await patientRow.click();
+
+  await page.getByRole('button', { name: 'Review Full Record', exact: true }).click();
+  await expect(page.getByText('Personal Information', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Medical History', { exact: true })).toBeVisible();
+  await expect(page.getByText(patientName, { exact: false }).first()).toBeVisible();
 });

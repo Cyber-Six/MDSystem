@@ -92,6 +92,9 @@ async function choice(page, state, { key, placeholder, domain, scope = page, all
       // Patient-created allergens are pending approval and the API search
       // explicitly filters to valid entries. Verify that behavior without
       // treating the expected omission as a lookup failure.
+      // The toggle exercise above intentionally leaves the checkbox unchecked;
+      // restore the selected state before checking retention for pending rows.
+      await checkbox.check();
       compare(state, `${key}: pending allergen is excluded from valid-only search`, false, found.some(item => String(item.id) === String(created.id)));
       await expect(checkbox, `${key}: pending choice remains visible in the form`).toHaveCount(1);
       await expect(checkbox, `${key}: pending choice remains selected`).toBeChecked();

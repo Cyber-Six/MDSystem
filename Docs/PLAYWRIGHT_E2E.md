@@ -145,6 +145,22 @@ This project is separate from smoke and is not run by `npm run test:e2e:smoke`. 
 
 If you organize tests in `e2e/review/`, run that folder with `npm run test:e2e:review`. It discovers `*.spec.js` files there and uses the same portal URL settings. Start from `e2e/review/template.spec.js` when adding a test.
 
+The read-only staff review test uses dedicated QA values in the ignored `.env.e2e` file. The patient must have exactly one pending initial record visible to that staff account. The test opens the record for review and leaves its status unchanged.
+
+```dotenv
+E2E_STAFF_URL=https://staff.mdsystemtip.space
+E2E_REVIEW_STAFF_EMAIL=your-review-qa-staff-email
+E2E_REVIEW_STAFF_PASSWORD=your-review-qa-staff-password
+E2E_TEST_OTP=111111
+E2E_REVIEW_PATIENT_NAME=QA Patient Name
+```
+
+Run the test with the browser visible:
+
+```sh
+npm run test:e2e:review -- review-review-registration.spec.js --headed
+```
+
 ### Adding smoke tests
 
 Put additional GUI smoke tests in `e2e/smoke/`. Copy `e2e/smoke/template.js` to a new filename ending in `.spec.js` (for example, `e2e/smoke/appointments.spec.js`), then edit the portal, steps, and assertions. The smoke project discovers `login-smoke.spec.js` and every `*.spec.js` under `e2e/smoke/`, so the usual command runs the new file too:

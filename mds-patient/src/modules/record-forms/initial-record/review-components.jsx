@@ -56,7 +56,10 @@ export const collectUnresolvedCatalogSelections = (formData = {}, catalogs = {})
     ...selected(formData.medicalBackground?.hospitalizationConditions, 'hospitalizationCatalog'),
     ...selected(formData.medicalBackground?.operationConditions, 'operationCatalog'),
     ...selected(formData.medicalBackground?.selectedMedications, 'medicationCatalog'),
-    ...selected(formData.dentalHistory?.intraOralAppliances, 'oralApplianceCatalog', (value) => typeof value === 'object' ? Boolean(value?.checked) : Boolean(value)),
+    // "Other" is a form-only appliance option with its own description and
+    // arch fields; it is not an oral-appliance catalog ID to resolve.
+    ...selected(formData.dentalHistory?.intraOralAppliances, 'oralApplianceCatalog', (value) => typeof value === 'object' ? Boolean(value?.checked) : Boolean(value))
+      .filter(([, id]) => String(id).toLowerCase() !== 'other'),
     ...selected(formData.dentalHistory?.selectedDentalProcedures, 'dentalProcedureCatalog'),
   ];
   return candidates.filter(([key, id]) => !isResolvableCatalogSelection(catalogs[key], id, catalogs.registry));
