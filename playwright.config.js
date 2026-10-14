@@ -55,6 +55,16 @@ module.exports = defineConfig({
   projects: [
     { name: 'smoke', testMatch: ['login-smoke.spec.js', 'smoke/**/*.spec.js'] },
     {
+      name: 'core',
+      testMatch: 'core/**/*.spec.js',
+      use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
+    },
+    {
+      name: 'full',
+      testMatch: ['core/**/*.spec.js', 'flows/**/*.spec.js'],
+      use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
+    },
+    {
       name: 'recorded',
       testMatch: 'recorded/**/*.spec.js',
       use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
