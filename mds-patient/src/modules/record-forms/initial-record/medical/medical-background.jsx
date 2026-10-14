@@ -110,8 +110,10 @@ function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name', onIte
     setCreating(true);
     try {
       const created = await createFn(...args);
-      if (created.length > 0) {
-        const newItem = created[0];
+      // Catalog creation can return one row or a list of rows depending on
+      // the service. Normalize the shape before adding it to the form.
+      const newItem = Array.isArray(created) ? created[0] : created;
+      if (newItem?.id != null) {
         setDynamicItems((prev) => [...prev, newItem]);
         onItemSelected?.(newItem);
         setInput('');
