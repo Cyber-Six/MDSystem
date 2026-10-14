@@ -288,6 +288,11 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     if (!dh.firstTimeDentist) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'First time dentist question is required' });
     if (!dh.lastDentalCleaning) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Last dental cleaning is required' });
     if (!dh.hasIntraOralAppliance) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Intra-oral appliance question is required (Yes/No)' });
+    const otherAppliance = dh.intraOralAppliances?.other;
+    const otherApplianceChecked = typeof otherAppliance === 'object' ? Boolean(otherAppliance?.checked) : Boolean(otherAppliance);
+    if (dh.hasIntraOralAppliance === 'yes' && otherApplianceChecked && !dh.applianceOther?.trim()) {
+      errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Please specify the appliance type' });
+    }
     if (!dh.upperTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Upper teeth photo is required' });
     if (!dh.lowerTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Lower teeth photo is required' });
 
@@ -431,6 +436,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
         if (msg.includes('first time dentist')) errors.firstTimeDentist = err.message;
         if (msg.includes('last dental cleaning')) errors.lastDentalCleaning = err.message;
         if (msg.includes('intra-oral appliance')) errors.hasIntraOralAppliance = err.message;
+        if (msg.includes('specify the appliance')) errors.applianceOther = err.message;
         if (msg.includes('upper teeth photo')) errors.upperTeethPhoto = err.message;
         if (msg.includes('lower teeth photo')) errors.lowerTeethPhoto = err.message;
       }

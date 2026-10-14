@@ -236,11 +236,14 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
                 {(typeof data.intraOralAppliances?.other === 'object' ? !!data.intraOralAppliances.other?.checked : !!data.intraOralAppliances?.other) && (
                   <>
                     <div className="ml-6 mt-1">
-                      <Input
-                        placeholder="Specify other appliance..."
-                        value={data.applianceOther || ''}
-                        onChange={(e) => handleChange('applianceOther', e.target.value)}
-                      />
+                      <div className={fieldErrors.applianceOther ? 'rounded-lg border border-error-500 bg-error-50 p-2' : ''}>
+                        <Input
+                          placeholder="Specify other appliance..."
+                          value={data.applianceOther || ''}
+                          onChange={(e) => handleChange('applianceOther', e.target.value)}
+                        />
+                        {fieldErrors.applianceOther && <p className="mt-1 text-sm text-error-600">{fieldErrors.applianceOther}</p>}
+                      </div>
                     </div>
                     <div className="ml-6 mt-1 mb-2 flex gap-4">
                       {['Upper', 'Lower', 'Both'].map((loc) => {
