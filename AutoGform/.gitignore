@@ -1,0 +1,14 @@
+.DS_Store
+*_UiCache.zip
+**/.local
+*.crswap
+**/.entities/EntitiesBundle.*.zip
+remote-repository.config.json
+.sw-path-marker
+venv/
+.venv/
+__pycache__/
+node_modules/
+**/.agent-builder/
+**/.uipath/
+**/.output/

@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "schemaVersion": 4,
+  "id": "eval-set-001",
+  "name": "Dataset",
+  "evaluatorRefs": [
+    "llm-judge-evaluator",
+    "exact-match-evaluator",
+    "llm-judge-trajectory-evaluator"
+  ],
+  "evaluations": [],
+  "fileName": "evaluation-set.json",
+  "createdAt": "2026-10-17T15:33:38.236Z",
+  "updatedAt": "2026-10-17T15:33:38.236Z",
+  "target": {
+    "kind": "flow",
+    "entrypoint": "start"
+  },
+  "nodeEval": false,
+  "selectedEntrypoint": "start"
+}

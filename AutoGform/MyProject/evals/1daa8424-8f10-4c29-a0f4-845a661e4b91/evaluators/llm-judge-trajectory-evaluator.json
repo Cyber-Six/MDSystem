@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "id": "llm-judge-trajectory-eval-001",
+  "name": "LLM Judge Trajectory",
+  "description": "Use LLM to judge the run trajectory and behavior",
+  "evaluatorTypeId": "uipath-llm-judge-trajectory-similarity",
+  "evaluatorConfig": {
+    "name": "LLM Judge Trajectory",
+    "prompt": "As an expert evaluator, determine how well the agent did on a scale of 0-100. Focus on if the simulation was successful and if the agent behaved according to the expected output accounting for alternative valid expressions, and reasonable variations in language while maintaining high standards for accuracy and completeness. Provide your score with a justification, explaining briefly and concisely why you gave that score.\n----\nUserOrSyntheticInputGivenToAgent:\n{{UserOrSyntheticInput}}\n----\nSimulationInstructions:\n{{SimulationInstructions}}\n----\nExpectedAgentBehavior:\n{{ExpectedAgentBehavior}}\n----\nAgentRunHistory:\n{{AgentRunHistory}}\n",
+    "temperature": 0,
+    "maxTokens": 8192,
+    "defaultEvaluationCriteria": {
+      "expectedAgentBehavior": "The flow should follow the captured successful path and complete with the expected result."
+    },
+    "model": "anthropic.claude-sonnet-5"
+  },
+  "fileName": "llm-judge-trajectory-evaluator.json",
+  "createdAt": "2026-10-17T15:33:38.182Z",
+  "updatedAt": "2026-10-17T15:33:39.085Z"
+}

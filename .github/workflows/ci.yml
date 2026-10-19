@@ -13,6 +13,7 @@ on:
         type: choice
         options:
           - restart
+          - migrate-employee-category
           - reset-database
         default: restart
       confirm_database_reset:
@@ -30,7 +31,7 @@ concurrency:
 jobs:
   gui-smoke:
     name: Patient and staff GUI smoke tests
-    if: github.event_name != 'workflow_dispatch' || inputs.operation != 'reset-database'
+    if: github.event_name != 'workflow_dispatch' || (inputs.operation != 'reset-database' && inputs.operation != 'migrate-employee-category')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -66,7 +67,7 @@ jobs:
 
   test-and-build:
     needs: gui-smoke
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'workflow_dispatch' || inputs.operation != 'migrate-employee-category')
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 45
     steps:
@@ -199,6 +200,35 @@ jobs:
           fi
           node "$GITHUB_WORKSPACE/scripts/verify-image-revision.js" "$GITHUB_SHA" \
             "patient=$(docker compose ps -q patient)" "staff=$(docker compose ps -q staff)"
+
+  manual-employee-category-migration:
+    name: Apply employee category column migration without resetting data
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'migrate-employee-category'
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Validate migration target
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
+            echo "Manual Pi migrations must be run from the deployment or development branch." >&2
+            exit 1
+          fi
+
+      - name: Apply additive employee category migration
+        working-directory: /srv/projects/MDSystem
+        run: |
+          docker compose ps postgres
+          docker compose exec -T postgres sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
+            < "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
+          column_exists=$(docker compose exec -T postgres sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = '\''employee_profile'\'' AND column_name = '\''employmentCategoryOther'\'')"')
+          if [ "$column_exists" != "t" ]; then
+            echo 'Migration ran but employee_profile.employmentCategoryOther is still missing.' >&2
+            exit 1
+          fi
+          echo 'Verified employee_profile.employmentCategoryOther exists.'
 
   manual-reset-database:
     name: Manually reset the Pi database

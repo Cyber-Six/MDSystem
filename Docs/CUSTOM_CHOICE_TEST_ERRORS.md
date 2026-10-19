@@ -6,7 +6,7 @@ Initial record submissions are expected to create a **Pending** ticket. Pending 
 
 The `deployment` CI workflow labels each built Docker image with its source commit and checks the image revision used by the running patient and staff containers after deployment. A revision mismatch indicates stale containers and fails the workflow. Run `npm run test:custom-choice-diagnostics` to check response handling, readback field coverage, role-specific update input mapping, and image revision checks without contacting the deployed site.
 
-The report identifies each attempted workflow, failed step, reproduction command, sanitized request/response, and any expected/actual saved-value comparisons that were reached. Credentials, session tokens, and authorization headers are excluded. Test artifacts stay ignored by Git.
+The report identifies each attempted workflow, failed step, reproduction command, sanitized request/response, and any expected/actual saved-value comparisons that were reached. Account emails, passwords, session tokens, and authorization headers are excluded. Test artifacts stay ignored by Git.
 
 Source inspection identified two concerns to verify against the deployment:
 
@@ -45,4 +45,12 @@ The exact per-workflow requests, returned catalog IDs, expected inputs, comparis
 
 The latest rerun reached `submitTicket: Pending` for the Employee initial record but also returned `invalid input value for enum "employeeRole"` with the custom employment description as the value. PostgreSQL accepts only the fixed enum values; the prior backend helper incorrectly wrote free text into that enum column. The Student initial workflow passed. Student and Employee update workflows stopped before login because dedicated approved QA credentials were not configured; those failures are configuration blockers, not submission errors.
 
-The local correction keeps the enum value (`Other`) in `employee_profile.role` and stores the description in a new nullable `employmentCategoryOther` text column. It also reads that value back for profiles. Apply `schemas/migrations/20261015_employee_category_other.psql` to the target database **before deploying the corrected backend**. The migration only adds a nullable column and preserves existing rows. Do not use the database reset action to apply it.
+The local correction keeps the enum value (`Other`) in `employee_profile.role` and stores the description in a new nullable `employmentCategoryOther` text column. It also reads that value back for profiles. Apply `schemas/migrations/20261015_employee_category_other.psql` to the target database before using the corrected backend. The migration only adds a nullable column and preserves existing rows. Do not use the database reset action to apply it.
+
+## Deployed custom-choice rerun on 2026-10-19
+
+- Student initial registration and custom-choice submission passed. Its generated credentials are saved locally; its ticket is Pending and must be approved by staff before update testing. The update workflow reused the saved account and stopped at the Pending eligibility check without submitting an update.
+- Employee initial submission returned `submitTicket: Pending` together with `column "employmentCategoryOther" of relation "employee_profile" does not exist`. The account is retained locally but marked unready. The response indicates a partial submission may exist; it was not cancelled or cleaned up.
+- The Student and Employee credential values in `.env.e2e` were sample placeholders. The runner now ignores a complete pair of sample values and falls back to the local registry.
+- CI now has a `migrate-employee-category` manual operation. Run it from the `deployment` branch to apply and verify the additive migration without resetting the database. Then rerun `employee-initial.spec.js`; that creates a new QA account. After staff approval, rerun the update workflows.
+- Employee batch errors with a returned Pending status now trigger readback diagnostics before the test ends, so future reports can identify any persisted sections and ticket ID.

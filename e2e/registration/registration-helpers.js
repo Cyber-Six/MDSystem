@@ -27,7 +27,7 @@ async function registerAndOpenRecord(page, profile, index, hooks = {}) {
 
   const email = accountEmail(profile, index);
   await test.info().attach('synthetic-test-data.json', {
-    body: JSON.stringify({ runId, role: profile.role, gender: profile.gender, email }),
+    body: JSON.stringify({ runId, role: profile.role, gender: profile.gender, email: hooks.hideCredentials ? undefined : email }),
     contentType: 'application/json',
   });
 
@@ -147,7 +147,7 @@ async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
   }
   if (hooks.review) await hooks.review();
   await page.getByRole('checkbox').check();
-  await test.info().attach('initial-record-data.json', { body: JSON.stringify({ role: profile.role, name: profile.name, surname: profile.surname, identifier: recordIdentifier, variant, email: account.email }), contentType: 'application/json' });
+  await test.info().attach('initial-record-data.json', { body: JSON.stringify({ role: profile.role, name: profile.name, surname: profile.surname, identifier: recordIdentifier, variant, email: hooks.hideCredentials ? undefined : account.email }), contentType: 'application/json' });
   const profileResponse = page.waitForResponse(response => {
     const request = response.request();
     return request.method() === 'POST' && (request.postData() || '').includes('mutation CreateInitialPersonalRecord');

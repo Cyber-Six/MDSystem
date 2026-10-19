@@ -14,10 +14,11 @@ class ErrorReporter {
   clean(value = '') {
     let clean = value.replace(/\u001b\[[0-9;]*m/g, '');
     for (const account of require('./account-registry').read()) {
+      if (account.email) clean = clean.split(account.email).join('[redacted account]');
       if (account.password) clean = clean.split(account.password).join('[redacted]');
     }
     for (const [key, secret] of Object.entries(process.env)) {
-      if (/E2E_.*(PASSWORD|TOKEN|OTP|SECRET)/i.test(key) && secret) clean = clean.split(secret).join('[redacted]');
+      if (/E2E_.*(EMAIL|PASSWORD|TOKEN|OTP|SECRET)/i.test(key) && secret) clean = clean.split(secret).join('[redacted]');
     }
     return clean;
   }

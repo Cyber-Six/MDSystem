@@ -213,3 +213,7 @@ Videos show the synthetic account activity used during sign-in, including the on
 This records the browser as the test runs; it is not an interactive Codegen session. Playwright Codegen generates test code from manual clicks and is a separate desktop workflow.
 
 Google OAuth, real reCAPTCHA challenges, third-party chatbot responses, and external mail delivery remain manual integration checks. Automated tests use controlled substitutes for those external providers.
+
+### Custom-choice Employee category migration
+
+If the Employee initial submission reports that `employee_profile.employmentCategoryOther` is missing, run **Actions ? CI ? Run workflow** on the `deployment` branch and choose `migrate-employee-category`. The action applies and verifies the additive migration without resetting the database. Then rerun `employee-initial.spec.js`; after staff approves that new QA record, the saved account can be used by `employee-update.spec.js`.

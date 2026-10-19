@@ -441,15 +441,21 @@ async function loginForUpdate(page, state) {
   for (const account of accounts) {
   const { email, password } = account;
   await page.context().clearCookies();
-  await page.goto(state.url);
+  await page.goto(`${state.url}/auth/login`, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
   state.headers = {};
   try {
-  await page.goto(`${state.url}/auth/login`);
   await page.getByRole('button', { name: 'Open login panel' }).click();
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
+  const loginResponsePromise = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/login' && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  const loginResponse = await loginResponsePromise;
+  let loginBody = {};
+  try { loginBody = await loginResponse.json(); } catch {}
+  if (!loginResponse.ok() || loginBody.ok !== true) {
+    throw new Error(`Patient sign-in rejected (HTTP ${loginResponse.status()}${loginBody.error ? `, ${loginBody.error}` : ''}). Check the configured QA account credentials.`);
+  }
   const inputs = page.locator('input[inputmode="numeric"][maxlength="1"]');
   await expect(inputs).toHaveCount(6);
   const otp = process.env.E2E_TEST_OTP || '111111';
@@ -461,17 +467,27 @@ async function loginForUpdate(page, state) {
   expect(auth.ok, 'Patient authentication must succeed').toBe(true);
   expect(auth.accessToken).toBeTruthy();
   state.headers = { authorization: `Bearer ${auth.accessToken}`, 'content-type': 'application/json' };
-  const personal = await query(page, state, '/profile/patient', 'query CheckCustomChoiceEligibility { getCredentialStatus getPersonalRecordLogStatus getPersonalRecord { id first_name last_name } }');
-  const emr = await query(page, state, '/emr/patient', 'query CheckCustomChoiceTicket { getUpdateTicket { id status scope } getPatientBasicInfo(userId: "self") { profile_type } getEmergencyContact(approved: true) { id firstContact { id contactName } secondContact { id contactName } } }');
-  const reasons = accountRegistry.eligibility(state.role, personal, emr);
+  const personal = await query(page, state, '/profile/patient', 'query CheckCustomChoiceEligibility { getCredentialStatus getPersonalRecordLogStatus getPersonalRecord { id } }');
+  const ticketData = await query(page, state, '/emr/patient', 'query CheckCustomChoiceTicket { getUpdateTicket { id status scope } }');
+  if (ticketData.getUpdateTicket?.status !== 'Approved') {
+    blockers.push(`saved QA account: staff approval required; latest ticket status is ${ticketData.getUpdateTicket?.status || 'missing'}`);
+    continue;
+  }
+  const emr = await query(page, state, '/emr/patient', 'query CheckCustomChoiceProfile { getPatientBasicInfo(userId: "self") { profile_type } getEmergencyContact(approved: true) { id firstContact { id contactName } secondContact { id contactName } } }');
+  const emrEligibility = { ...emr, getUpdateTicket: ticketData.getUpdateTicket };
+  const reasons = accountRegistry.eligibility(state.role, personal, emrEligibility);
   if (reasons.length) {
     blockers.push(`${email}: ${reasons.join('; ')}`);
     continue;
   }
-  state.baseline = { ticket: emr.getUpdateTicket, personal: personal.getPersonalRecord, contacts: emr.getEmergencyContact };
+  state.baseline = { ticket: ticketData.getUpdateTicket, personal: personal.getPersonalRecord, contacts: emr.getEmergencyContact };
   return;
-  } catch {
-    blockers.push(`${email}: authentication or read-only eligibility request failed; check credentials, OTP, and deployment availability`);
+  } catch (error) {
+    const message = error?.message || '';
+    let reason = 'authentication or read-only eligibility request failed; check credentials, OTP, and deployment availability';
+    if (/^Patient sign-in rejected \(HTTP \d{3}(?:, [A-Z_]+)?\)/.test(message)) reason = message;
+    else if (error?.name === 'TimeoutError') reason = 'patient sign-in or eligibility check timed out';
+    blockers.push(`saved account: ${reason}`);
   }
   }
   throw new Error(`No eligible ${state.role} QA account. ${blockers.join(' | ')}`);
@@ -551,6 +567,7 @@ async function runWorkflow(page, role, mode) {
       else {
         const profile = { role, gender: 'Male', branch: 'm', name: 'Custom', surname: role === 'Student' ? 'Student QA' : 'Employee QA' };
         const account = await step(state, 'Register a synthetic patient with eight-second pacing', () => registerAndOpenRecord(page, profile, role === 'Student' ? 20 : 21, {
+          hideCredentials: true,
           onRegistered: credentials => accountRegistry.save({ ...credentials, role, url: state.url }),
         }));
         await fillAndSubmitRecord(page, profile, role === 'Student' ? 20 : 24, account, {
@@ -559,15 +576,26 @@ async function runWorkflow(page, role, mode) {
           background: () => background(page, state),
           dental: () => initialDental(page, state),
           review: () => review(page, state),
+          hideCredentials: true,
           afterBatch: async ({ result }) => {
             await step(state, 'Validate medical-record batch submission', async () => {
-              expect(result.ok, `Submission response: ${result.details}`).toBe(true);
+              expect.soft(result.ok, `Submission response: ${result.details}`).toBe(true);
             });
             await Promise.allSettled([...state.pending]);
-            await verify(page, state);
-            if (test.info().errors.length === 0 && state.ticket?.status === 'Pending') {
-              accountRegistry.save({ email: account.email, role, url: state.url, ready: true, ticketId: String(state.ticket.id) });
+            if (result.ticketStatus === 'Pending') {
+              await step(state, 'Read back ticket and sections even when submission reports partial errors', async () => {
+                try { await verify(page, state); }
+                catch (error) { expect.soft(false, `Pending ticket readback failed: ${error.message}`).toBe(true); }
+              });
             }
+            accountRegistry.save({
+              email: account.email,
+              role,
+              url: state.url,
+              ready: result.ok && test.info().errors.length === 0 && state.ticket?.status === 'Pending',
+              ticketId: state.ticket?.id ? String(state.ticket.id) : null,
+              lastSubmissionStatus: result.ticketStatus,
+            });
           },
         });
       }

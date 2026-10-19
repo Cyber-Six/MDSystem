@@ -3,6 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const filename = path.resolve(__dirname, '../../.e2e-private/custom-choice-accounts.json');
 const normalizeUrl = url => new URL(url).href.replace(/\/+$/, '');
+const isPlaceholder = value => /^(?:actual-|your-|placeholder\b|<|\.\.\.|example\b)/i.test(String(value || '').trim()) || /@example\.(?:com|test)$/i.test(String(value || '').trim());
 function read(file = filename) {
   if (!fs.existsSync(file)) return [];
   const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -28,9 +29,19 @@ function candidates(role, url, env = process.env, file = filename) {
   const prefix = `E2E_CUSTOM_${role.toUpperCase()}`;
   const email = env[`${prefix}_EMAIL`];
   const password = env[`${prefix}_PASSWORD`];
-  if (email && password) return [{ role, email, password, url: normalizeUrl(url) }];
-  if (email || password) throw new Error(`Configure both ${prefix}_EMAIL and ${prefix}_PASSWORD, or remove both to use saved QA accounts.`);
-  return read(file).filter(row => row.role === role && row.url === normalizeUrl(url) && row.ready && row.email && row.password)
+  if (email && password) {
+    if (isPlaceholder(email) && isPlaceholder(password)) {
+      // Documentation examples in .env.e2e should not mask usable saved QA accounts.
+    } else if (isPlaceholder(email) || isPlaceholder(password)) {
+      throw new Error(`Only one of ${prefix}_EMAIL and ${prefix}_PASSWORD contains a sample value. Replace both with real patient QA credentials, or remove both to use saved accounts.`);
+    } else {
+      return [{ role, email, password, url: normalizeUrl(url) }];
+    }
+  }
+  if ((email && !isPlaceholder(email)) || (password && !isPlaceholder(password))) {
+    throw new Error(`Configure both ${prefix}_EMAIL and ${prefix}_PASSWORD, or remove both to use saved QA accounts.`);
+  }
+  return read(file).filter(row => row.role === role && row.url === normalizeUrl(url) && row.ready && row.email && row.password && !isPlaceholder(row.email) && !isPlaceholder(row.password))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 function eligibility(role, personal, emr) {
@@ -42,4 +53,4 @@ function eligibility(role, personal, emr) {
   if (!['Approved', 'Cancelled', null].includes(personal.getPersonalRecordLogStatus)) reasons.push('personal record draft or update is active');
   return reasons;
 }
-module.exports = { read, save, candidates, eligibility };
+module.exports = { read, save, candidates, eligibility, isPlaceholder };
