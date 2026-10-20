@@ -44,6 +44,9 @@ export function useHealthChatSocket({
   onTicketClosed,
 }: UseHealthChatSocketOptions) {
   const socketRef = useRef<any>(null);
+  const connectingRef = useRef<SocketService | null>(null);
+  const enabledRef = useRef(false);
+  const joinedRoomRef = useRef<{ service: SocketService; chatId: string } | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [socketError, setSocketError] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,8 +75,20 @@ export function useHealthChatSocket({
     chatIdRef.current = chatId;
   }, [chatId]);
 
+  const joinCurrentRoom = useCallback((service: SocketService | null) => {
+    const roomId = chatIdRef.current;
+    if (!service?.isConnected() || !roomId) return;
+    if (joinedRoomRef.current?.service === service && joinedRoomRef.current.chatId === roomId) return;
+    if (joinedRoomRef.current?.service === service) {
+      service.emit('healthchat:leave-room', { chatId: joinedRoomRef.current.chatId });
+    }
+    service.emit('healthchat:join-room', { chatId: roomId });
+    joinedRoomRef.current = { service, chatId: roomId };
+  }, []);
+
   // Handle app state changes — reconnect when app comes to foreground
   useEffect(() => {
+    if (!shouldConnect) return;
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && shouldConnect && !socketRef.current?.isConnected()) {
         // Force reconnection attempt
@@ -86,7 +101,7 @@ export function useHealthChatSocket({
   }, [shouldConnect]);
 
   const connectSocket = useCallback(async () => {
-    if (socketRef.current?.isConnected()) return;
+    if (!enabledRef.current || socketRef.current?.isConnected() || connectingRef.current) return;
 
     // Clean up existing socket
     if (socketRef.current) {
@@ -94,8 +109,9 @@ export function useHealthChatSocket({
       socketRef.current = null;
     }
 
+    let socketService: SocketService | null = null;
     try {
-      const socketService = createSocketService({
+      socketService = createSocketService({
         getApiBaseUrl,
         getToken: () => TokenStorage.getAccessToken(),
         onAuthError: async () => {
@@ -110,20 +126,24 @@ export function useHealthChatSocket({
         },
       }) as SocketService;
 
-      await socketService.connect();
       socketRef.current = socketService;
+      connectingRef.current = socketService;
+      await socketService.connect();
+      if (!enabledRef.current || socketRef.current !== socketService) return;
       setIsConnected(true);
       setSocketError(false);
 
       // Handle reconnection — rejoin current room
-      socketService.getSocket()?.on('reconnect', () => {
+      socketService.on('connect', () => {
+        if (!enabledRef.current || socketRef.current !== socketService) return;
         setIsConnected(true);
-        if (chatIdRef.current) {
-          socketService.emit('healthchat:join-room', { chatId: chatIdRef.current });
-        }
+        setSocketError(false);
+        joinCurrentRoom(socketService);
       });
 
-      socketService.getSocket()?.on('disconnect', () => {
+      socketService.on('disconnect', () => {
+        if (!enabledRef.current || socketRef.current !== socketService) return;
+        joinedRoomRef.current = null;
         setIsConnected(false);
       });
 
@@ -173,24 +193,29 @@ export function useHealthChatSocket({
       });
 
       // Join room for current chatId
-      if (chatIdRef.current) {
-        socketService.emit('healthchat:join-room', { chatId: chatIdRef.current });
-      }
+      joinCurrentRoom(socketService);
     } catch (err: any) {
+      if (!enabledRef.current || socketRef.current !== socketService) return;
+      socketService?.disconnect();
+      socketRef.current = null;
       console.error('[HealthChatSocket] Connection failed:', err.message);
       setIsConnected(false);
       setSocketError(true);
+    } finally {
+      if (connectingRef.current === socketService) connectingRef.current = null;
     }
-  }, []);
+  }, [joinCurrentRoom]);
 
   // Connect/disconnect based on shouldConnect
   useEffect(() => {
+    enabledRef.current = shouldConnect;
     if (!shouldConnect) {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
-        setIsConnected(false);
       }
+      joinedRoomRef.current = null;
+      setIsConnected(false);
       return;
     }
 
@@ -199,10 +224,12 @@ export function useHealthChatSocket({
     }
 
     return () => {
+      enabledRef.current = false;
+      connectingRef.current = null;
+      joinedRoomRef.current = null;
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
-        setIsConnected(false);
       }
       processedMessageIds.current.clear();
     };
@@ -210,16 +237,17 @@ export function useHealthChatSocket({
 
   // Manage room join/leave when chatId changes
   useEffect(() => {
-    if (!socketRef.current?.isConnected() || !chatId) return;
-
-    socketRef.current.emit('healthchat:join-room', { chatId });
+    const service = socketRef.current;
+    joinCurrentRoom(service);
 
     return () => {
-      if (socketRef.current?.isConnected()) {
-        socketRef.current.emit('healthchat:leave-room', { chatId });
+      const joinedRoom = joinedRoomRef.current;
+      if (joinedRoom && joinedRoom.service === service && joinedRoom.chatId === chatId) {
+        if (service?.isConnected()) service.emit('healthchat:leave-room', { chatId });
+        joinedRoomRef.current = null;
       }
     };
-  }, [chatId, isConnected]);
+  }, [chatId, joinCurrentRoom]);
 
   /**
    * Emit typing status with throttling and debouncing.
@@ -272,6 +300,9 @@ export function useHealthChatSocket({
   );
 
   const disconnect = useCallback(() => {
+    enabledRef.current = false;
+    connectingRef.current = null;
+    joinedRoomRef.current = null;
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;

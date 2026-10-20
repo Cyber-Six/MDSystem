@@ -9,6 +9,7 @@
  */
 
 import axios from 'axios';
+import { apiEndpoint, normalizeApiBaseUrl } from '../internal/api-url.js';
 
 /**
  * Creates a token service with platform-specific dependencies
@@ -49,14 +50,15 @@ import axios from 'axios';
  * 
  * const tokenService = createTokenService({
  *   storage: AsyncStorage,
- *   navigator: navigation, // from useNavigation()
- *   getApiBaseUrl: () => apiBaseUrlProvider.getApiBaseUrl()
+ *   navigator: { navigate: () => navigation.navigate('Auth') },
+ *   getApiBaseUrl: () => Config.API_URL || 'https://www.mdsystemtip.space'
  * });
  * 
  * // In React Native, storage operations return promises
  * const token = await tokenService.TokenStorage.getAccessToken();
  */
 export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNamespace }) => {
+  const baseURL = normalizeApiBaseUrl(getApiBaseUrl());
   // Derive namespaced storage keys (e.g. 'patient_accessToken') or fall back to bare keys
   const accessTokenKey  = tokenNamespace ? `${tokenNamespace}_accessToken`  : 'accessToken';
   const refreshTokenKey = tokenNamespace ? `${tokenNamespace}_refreshToken` : 'refreshToken';
@@ -192,7 +194,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
       // SECURITY: Use plain axios (not axiosRequest) to avoid interceptor recursion
       // This prevents infinite loops when refresh endpoint returns 401
       const response = await axios.post(
-        `${getApiBaseUrl()}/auth/refresh`,
+        apiEndpoint(baseURL, '/auth/refresh'),
         { refreshToken },
         {
           headers: { 
@@ -321,7 +323,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
 
       try {
         await axios.post(
-          `${getApiBaseUrl()}/auth/logout`,
+          apiEndpoint(baseURL, '/auth/logout'),
           { refreshToken },
           {
             withCredentials: true,

@@ -13,6 +13,7 @@
 
 import axios from 'axios';
 import { createRequestLogger } from './console-request-logger.js';
+import { apiEndpoint, normalizeApiBaseUrl } from '../internal/api-url.js';
 
 /**
  * Creates an axios instance with platform-specific dependencies
@@ -52,7 +53,7 @@ import { createRequestLogger } from './console-request-logger.js';
  * import * as bannerConfig from '@mdsystem/core/config/banner-config';
  * 
  * const axiosRequest = createAxiosRequestHandler({
- *   getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
+ *   getApiBaseUrl: () => Config.API_URL || 'https://www.mdsystemtip.space',
  *   getDevSubdomain: apiBaseUrlProvider.getDevSubdomain,
  *   tokenService,
  *   bannerConfig,
@@ -78,7 +79,7 @@ export const createAxiosRequestHandler = ({
       ? requestLoggerForceEnabled
       : runtimeDevFlag;
 
-  const computedBaseURL = getApiBaseUrl();
+  const computedBaseURL = normalizeApiBaseUrl(getApiBaseUrl());
   const requestLogger = createRequestLogger({
     forceEnabled: loggerForceEnabled,
     computedBaseURL,
@@ -97,8 +98,13 @@ export const createAxiosRequestHandler = ({
   // This client carries session credentials and must only contact the configured API.
   // Resolve Axios' final URL, including per-request baseURL overrides, before reading tokens.
   const browserUrl = typeof window !== 'undefined' ? window.location?.href : undefined;
+  if (!browserUrl && !/^https?:\/\//i.test(computedBaseURL)) {
+    throw new Error('An absolute HTTP(S) API base URL is required without a browser location');
+  }
   const trustedUrl = new URL(computedBaseURL || '/', browserUrl);
+  const refreshPath = new URL(apiEndpoint(computedBaseURL, '/auth/refresh'), browserUrl).pathname;
   const resolveApiUrl = (config) => {
+    if (config.baseURL !== undefined) config.baseURL = normalizeApiBaseUrl(config.baseURL);
     const url = new URL(axiosRequest.getUri(config), browserUrl || trustedUrl.href);
     if (!['http:', 'https:'].includes(url.protocol) || url.origin !== trustedUrl.origin || url.username || url.password) {
       throw new Error('Authenticated requests must target the configured API origin');
@@ -171,7 +177,7 @@ export const createAxiosRequestHandler = ({
       requestLogger.logError(error);
 
       const originalRequest = error.config;
-      const isRefreshEndpoint = originalRequest && resolveApiUrl(originalRequest).pathname.replace(/\/$/, '') === '/auth/refresh';
+      const isRefreshEndpoint = originalRequest && resolveApiUrl(originalRequest).pathname.replace(/\/$/, '') === refreshPath;
       
       // Handle 401 errors with automatic token refresh (skip if already retrying or is refresh endpoint)
       if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isRefreshEndpoint) {

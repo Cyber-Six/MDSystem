@@ -2,8 +2,9 @@
  * API Base URL Provider Factory
  * Platform-agnostic API URL detection based on hostname and environment
  * 
- * Supports both web (window.location) and React Native (config-based) platforms
- * through dependency injection.
+ * Supplies relative API URLs for browser applications. Native applications must
+ * inject their absolute API URL directly into HTTP, token, and socket services;
+ * the hostname/portal-header helpers can still be used with native configuration.
  * 
  * @module api-base-url-provider
  */
@@ -42,7 +43,9 @@
  *   getEnv: (key) => Config[key]
  * });
  * 
- * const baseUrl = apiBaseUrlProvider.getApiBaseUrl();
+ * // Native HTTP/token/socket services need an absolute URL, not the provider's ''.
+ * const getApiBaseUrl = () => Config.API_URL || 'https://www.mdsystemtip.space';
+ * const getDevSubdomain = apiBaseUrlProvider.getDevSubdomain;
  */
 export const createApiBaseUrlProvider = ({ getHostname, getEnv }) => {
   /**

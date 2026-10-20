@@ -40,7 +40,7 @@ export const registerSessionExpiredCallback = (cb: SessionExpiredCallback): void
 // ── Backend Configuration ──
 // React Native has no proxy — always use the absolute backend URL.
 // Reads from EXPO_PUBLIC_API_URL in .env; falls back to production URL.
-const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://www.mdsystemtip.space';
+const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || 'https://www.mdsystemtip.space';
 const IS_DEV_RUNTIME = (globalThis as any).__DEV__ === true;
 
 /**

@@ -70,3 +70,32 @@ test('keeps automatic reconnection enabled after a transport error', async () =>
   await assertion;
   expect(socket.disconnect).not.toHaveBeenCalled();
 });
+
+test.each([
+  ['', undefined, '/socket.io'],
+  ['/api/v1/', undefined, '/api/v1/socket.io'],
+  [' https://www.mdsystemtip.space/ ', 'https://www.mdsystemtip.space', '/socket.io'],
+  ['https://staff.mdsystemtip.space/api/v1/', 'https://staff.mdsystemtip.space', '/api/v1/socket.io'],
+  ['http://192.168.1.5:3000/api/', 'http://192.168.1.5:3000', '/api/socket.io'],
+])('uses API base %p as an origin and transport path, not a namespace', async (base, origin, path) => {
+  const { fire } = setup();
+  const service = createSocketService({ getApiBaseUrl: () => base, getToken: async () => 'jwt' });
+  const pending = service.connect();
+  expect(io).toHaveBeenLastCalledWith(origin, expect.objectContaining({ path }));
+  fire('connect');
+  await pending;
+  service.disconnect();
+});
+
+test('preserves an explicitly configured Socket.IO transport path', async () => {
+  const { fire } = setup();
+  const service = createSocketService({
+    getApiBaseUrl: () => 'https://www.mdsystemtip.space/api',
+    getToken: async () => 'jwt', options: { path: '/custom/socket.io' },
+  });
+  const pending = service.connect();
+  expect(io).toHaveBeenLastCalledWith('https://www.mdsystemtip.space', expect.objectContaining({ path: '/custom/socket.io' }));
+  fire('connect');
+  await pending;
+  service.disconnect();
+});

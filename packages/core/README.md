@@ -123,7 +123,7 @@ import {
 import * as bannerConfig from '@mdsystem/core/config/banner-config';
 
 const getApiBaseUrl = () =>
-  process.env.EXPO_PUBLIC_API_URL ?? 'https://www.mdsystemtip.space';
+  process.env.EXPO_PUBLIC_API_URL?.trim() || 'https://www.mdsystemtip.space';
 const getDevSubdomain = () => {
   try {
     return new URL(getApiBaseUrl()).hostname;
@@ -170,6 +170,62 @@ See `src/validation/VALIDATION_UTILITIES.md` for detailed guidance and usage pat
 
 - Node: `>=18`
 - Peer dependency: React `>=18` (optional in package metadata)
+
+### App and API boundaries
+
+| App | Production API | Token storage |
+| --- | --- | --- |
+| `mds-patient` | `https://www.mdsystemtip.space` | `patient_*` in localStorage |
+| `mds-staff` | `https://staff.mdsystemtip.space` | `staff_*` in localStorage |
+| `mds-mobile` (Android, iOS, Expo web) | `https://www.mdsystemtip.space` | `patient_*` through AsyncStorage |
+
+Each authenticated client trusts its configured API origin. Patient credentials
+must not be sent to the staff API or vice versa. The web adapters keep an empty
+base URL so production uses the current page origin and local development uses
+the Vite proxy. `www2` and `staff2` keep their page origins while the forwarded
+portal header maps to `www` and `staff` respectively.
+
+Mobile uses the absolute `EXPO_PUBLIC_API_URL`; blank or whitespace-only values
+fall back to the patient production API. A local/LAN patient backend is supported,
+for example `http://192.168.1.5:3000`. Relative API bases require a browser location.
+
+HTTP, refresh, logout, and socket services normalize surrounding whitespace and
+trailing slashes. API path prefixes are preserved: a base ending in `/api/v1/`
+uses `/api/v1/auth/refresh`, `/api/v1/auth/logout`, and `/api/v1/socket.io`.
+An explicit socket `options.path` overrides the default transport path. Base URLs
+must use HTTP(S) or a root-relative path and cannot contain credentials, query
+strings, or fragments.
+
+### Platform adapters
+
+Token storage accepts synchronous localStorage or asynchronous AsyncStorage.
+Navigation and notification callbacks remain injected by each app. Expo initializes
+its native URL implementation before the mobile adapter loads; shared HTTP/token
+logic does not require `document` or browser storage.
+
+`createApiBaseUrlProvider` supplies relative URLs for web apps. Native apps should
+inject an absolute API URL directly, as shown above. `createGoogleOAuthService`
+and the core reCAPTCHA widget helper are browser integrations. Mobile continues
+to use its existing native Google sign-in component and mobile authentication
+configuration instead of rendering these DOM widgets.
+
+Chat consumers restore rooms on the socket's `connect` event, which also runs
+after reconnection. The Socket.IO manager's `reconnect` event is not a socket
+event. Pending connections and listeners must be cancelled when consumers unmount.
+
+### Verification
+
+Run the core, patient, staff, and mobile Jest suites, both Vite production builds,
+and an Expo export for Android, iOS, and web. From the repository root run
+`npm --prefix mds-mobile run export:all`; from `mds-mobile` run `npm run export:all`.
+Both commands execute in the mobile project because NativeWind reads Expo config
+from the working directory. NativeWind input/config paths are absolute and content
+discovery is relative to the mobile project. Forward Expo options after `--`, for
+example `-- --output-dir /tmp/mdsystem-mobile-export --max-workers 2`.
+
+Bundle exports and automated tests do not exercise a physical device. Live
+acceptance still includes login, authenticated upload/download, and socket
+recovery after backgrounding or losing network connectivity on Android and iOS.
 
 ## License
 

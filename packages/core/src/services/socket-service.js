@@ -9,6 +9,7 @@
  */
 
 import { io as ioClient } from 'socket.io-client';
+import { normalizeApiBaseUrl } from '../internal/api-url.js';
 
 /**
  * Creates a socket service with platform-specific dependencies.
@@ -86,7 +87,11 @@ export const createSocketService = ({
     };
 
     try {
-      const currentSocket = ioClient(getApiBaseUrl() || undefined, {
+      const baseURL = normalizeApiBaseUrl(getApiBaseUrl());
+      const absoluteBase = /^https?:\/\//i.test(baseURL) ? new URL(baseURL) : null;
+      // A base URL path is an API mount point, not a Socket.IO namespace.
+      const pathPrefix = absoluteBase ? absoluteBase.pathname.replace(/\/+$/, '') : baseURL;
+      const currentSocket = ioClient(absoluteBase?.origin, {
         auth: (cb) => {
           Promise.resolve().then(getToken)
             .then((token) => cb({ token: token || '' }))
@@ -98,6 +103,7 @@ export const createSocketService = ({
         reconnectionDelayMax: 10000,
         reconnectionAttempts: 10,
         timeout: 20000,
+        path: `${pathPrefix}/socket.io`,
         withCredentials: true,
         ...options,
         autoConnect: false,
