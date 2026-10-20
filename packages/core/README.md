@@ -10,6 +10,7 @@ Shared, platform-agnostic core utilities for MDSystem web and mobile application
   - queued retries during refresh
   - banner callback integration
 - Banner state service
+- Socket.IO service factory with token refresh and connection lifecycle handling
 - Hostname-based role detection helper
 - reCAPTCHA and Google OAuth helper factories
 - Shared validation utilities (email, password, user constants)
@@ -41,6 +42,7 @@ npm install @mdsystem/core
 packages/core/
 |-- src/
 |   |-- config/
+|   |-- internal/
 |   |-- services/
 |   |-- utils/
 |   |-- validation/
@@ -166,6 +168,54 @@ export const axiosRequest = createAxiosRequestHandler({
 
 See `src/validation/VALIDATION_UTILITIES.md` for detailed guidance and usage patterns.
 
+## Security Controls and References
+
+The controls below describe the shared package's current behavior. The CWE
+references classify the weakness each control helps prevent; they are not
+assigned vulnerability reports or a claim that every instance of that weakness
+has been eliminated.
+
+| Control | Implementation and scope | Weakness reference |
+| --- | --- | --- |
+| Credential destination restriction | The authenticated Axios interceptor validates the resolved request origin, including per-request base URL overrides, before reading tokens or dispatching. Cross-portal and unrelated origins are rejected. | [CWE-201: Insertion of Sensitive Information Into Sent Data](https://cwe.mitre.org/data/definitions/201.html) |
+| Restricted request diagnostics | The shared request logger omits bodies, query strings, headers, credentials, and server error messages. It retains method, pathname, status, and transport metadata, including when logging is explicitly enabled. | [CWE-532: Insertion of Sensitive Information into Log File](https://cwe.mitre.org/data/definitions/532.html) |
+| Session concurrency protection | Refresh callers share an in-flight operation. Session revisions discard stale refresh results after logout or a replacement login; queued storage operations protect newer sessions from older cleanup. | [CWE-362: Race Condition](https://cwe.mitre.org/data/definitions/362.html) |
+
+API base URL validation also rejects malformed configuration, embedded URL
+credentials, query strings, and fragments, while preserving supported path
+prefixes. Socket connections support shared connection attempts and cancellation;
+chat adapters remove listeners and cancel pending setup on unmount. reCAPTCHA
+reset invalidates pending executions. These lifecycle controls prevent stale
+asynchronous work from restoring disposed application state.
+
+[OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
+is a reference for verifying application security controls. This README documents
+selected controls relevant to its authentication, session management, validation,
+and logging concerns; a complete ASVS assessment or conformance level has not
+been established for this package.
+[CVE](https://www.cve.org/) identifies specific disclosed vulnerabilities rather
+than prescribing coding standards. No CVE assignment or CVSS severity score is
+claimed for these changes.
+
+### Integration security responsibilities
+
+- Use HTTPS for production APIs. HTTP support exists for local/LAN development;
+  URL validation does not enforce production TLS configuration.
+- Keep patient and staff clients and token namespaces separate. Namespace
+  separation is an application convention, not an encryption or access-control
+  boundary within a compromised runtime. localStorage and AsyncStorage adapters
+  do not add token encryption or hardware-backed storage.
+- Treat JWT expiry decoding as a client-side freshness check. The backend must
+  verify signatures, issuer/audience, expiry, session validity, authorization,
+  and chat room membership. Hostname helpers, forwarded portal headers, and
+  Google's `hd` UI hint do not establish authorization.
+- Keep sensitive values out of URL paths: diagnostic logs retain pathnames.
+  Origin validation covers the initial Axios destination; server redirects,
+  backend CORS/CSRF policy, and deployment configuration need separate review.
+- Review installed dependencies and their advisories as releases change. A
+  passing test suite or build does not establish that dependencies are free of
+  published CVEs.
+
 ## Compatibility
 
 - Node: `>=18`
@@ -214,6 +264,19 @@ after reconnection. The Socket.IO manager's `reconnect` event is not a socket
 event. Pending connections and listeners must be cancelled when consumers unmount.
 
 ### Verification
+
+Security regression coverage includes rejected origins before token access or
+network dispatch, isolated token namespaces, diagnostic redaction, concurrent
+refreshes, session replacement, storage failures, and cancelled socket/widget
+work. Platform coverage includes production portals and aliases, local/LAN APIs,
+relative and absolute URLs, path prefixes, asynchronous storage, and Expo's URL
+implementation without browser globals. Chat tests cover room restoration,
+duplicate-listener prevention, and cleanup during pending connections.
+
+The compatibility implementation was verified with 549 passing tests across
+core, patient, staff, and mobile, a clean mobile TypeScript check, both web
+production builds, and Expo exports for Android, iOS, and web. These are the
+recorded implementation results, not a continuously updated security audit.
 
 Run the core, patient, staff, and mobile Jest suites, both Vite production builds,
 and an Expo export for Android, iOS, and web. From the repository root run
