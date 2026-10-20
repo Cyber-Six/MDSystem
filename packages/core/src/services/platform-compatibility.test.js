@@ -6,6 +6,7 @@ import { createApiBaseUrlProvider } from './api-base-url-provider';
 import { createGoogleOAuthService } from './google-oauth-service';
 import { createRecaptchaService } from './recaptcha-service';
 import { normalizeApiBaseUrl } from '../internal/api-url';
+import { createRequestLogger } from './console-request-logger';
 
 const portals = [
   ['patient', 'https://www.mdsystemtip.space/dashboard', '', 'www.mdsystemtip.space'],
@@ -111,6 +112,56 @@ test('accepts absolute same-origin URLs and normalizes per-request base override
   expect(request.getUri(result.config)).toBe('https://www.mdsystemtip.space/api/records');
 });
 
+test.each([
+  'http://www.mdsystemtip.space/records',
+  'https://www.mdsystemtip.space:444/records',
+  'https://www.mdsystemtip.space./records',
+  'https://www.mdsystemtip.space@attacker.example/records',
+  'https://user:secret@www.mdsystemtip.space/records',
+])('blocks scheme, port, hostname, and userinfo tricks: %s', async (url) => {
+  const tokens = { TokenStorage: { getAccessToken: jest.fn() } };
+  const request = client('https://www.mdsystemtip.space', tokens);
+  const adapter = jest.fn();
+  await expect(request.get(url, { adapter })).rejects.toThrow();
+  expect(tokens.TokenStorage.getAccessToken).not.toHaveBeenCalled();
+  expect(adapter).not.toHaveBeenCalled();
+});
+
+test.each([
+  'https://www.mdsystemtip.space\\@attacker.example/records',
+  'data:text/plain,secret',
+])('unusual path input remains on the trusted origin after Axios resolution: %s', async (url) => {
+  const tokens = { TokenStorage: { getAccessToken: async () => 'header.payload.signature' } };
+  const request = client('https://www.mdsystemtip.space', tokens);
+  const adapter = jest.fn(async (config) => {
+    expect(new URL(request.getUri(config)).origin).toBe('https://www.mdsystemtip.space');
+    return { status: 200, config, data: {} };
+  });
+  await expect(request.get(url, { adapter })).resolves.toMatchObject({ status: 200 });
+  expect(adapter).toHaveBeenCalledTimes(1);
+});
+
+test('accepts canonical same-origin HTTPS port and case variants', async () => {
+  const tokens = { TokenStorage: { getAccessToken: async () => 'header.payload.signature' } };
+  const request = client('https://www.mdsystemtip.space/api/', tokens);
+  const adapter = jest.fn(async (config) => ({ status: 200, config, data: {} }));
+  await expect(request.get('https://WWW.MDSYSTEMTIP.SPACE:443/api/records', { adapter }))
+    .resolves.toMatchObject({ status: 200 });
+  expect(adapter).toHaveBeenCalledTimes(1);
+});
+
+test('a failed async credential read prevents dispatch and does not poison later requests', async () => {
+  const tokens = { TokenStorage: { getAccessToken: jest.fn()
+    .mockRejectedValueOnce(new Error('Storage locked'))
+    .mockResolvedValue('header.payload.signature') } };
+  const request = client('https://www.mdsystemtip.space', tokens);
+  const adapter = jest.fn(async (config) => ({ status: 200, config, data: {} }));
+  await expect(request.get('/records', { adapter })).rejects.toThrow('Storage locked');
+  expect(adapter).not.toHaveBeenCalled();
+  await expect(request.get('/records', { adapter })).resolves.toMatchObject({ status: 200 });
+  expect(adapter).toHaveBeenCalledTimes(1);
+});
+
 test('does not refresh a refresh-endpoint 401 when a path prefix is configured', async () => {
   const tokens = { TokenStorage: { getAccessToken: async () => null }, refreshAccessToken: jest.fn() };
   const request = client('https://www.mdsystemtip.space/api/', tokens);
@@ -192,4 +243,44 @@ test('browser-only authentication helpers can be imported without a DOM', async 
   jest.spyOn(console, 'warn').mockImplementation(() => {});
   expect(() => createGoogleOAuthService({ clientId: 'id', onSuccess: jest.fn(), onError: jest.fn() }).renderButton('google')).not.toThrow();
   await expect(createRecaptchaService({ siteKey: 'key' }).executeRecaptcha()).rejects.toThrow('script not loaded');
+});
+
+test.each([
+  null,
+  { location: {} },
+  { location: { hostname: 'www.mdsystemtip.space' } },
+  { location: { hostname: 'staff.mdsystemtip.space' } },
+  { location: { hostname: '192.168.1.5' } },
+])('logging is disabled by default outside loopback development: %p', (browser) => {
+  if (browser) global.window = browser;
+  const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+  const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const logger = createRequestLogger({});
+  logger.logRequest({ method: 'get', url: '/records' });
+  logger.logResponse({ status: 200 });
+  logger.logError({ request: {} });
+  expect(log).not.toHaveBeenCalled();
+  expect(error).not.toHaveBeenCalled();
+});
+
+test.each(['https://www.mdsystemtip.space', 'https://staff.mdsystemtip.space', 'http://[::1]:3000'])('rejects a generated hostile-origin corpus for %s before credentials are read', async (origin) => {
+  const trusted = new URL(origin);
+  const tokens = { TokenStorage: { getAccessToken: jest.fn() } };
+  const request = client(origin, tokens);
+  const adapter = jest.fn();
+  const hostile = new Set([
+    `${trusted.protocol}//attacker.example`,
+    `${trusted.protocol}//${trusted.host}@attacker.example`,
+    `${trusted.protocol}//${trusted.host}.attacker.example`,
+    `${trusted.protocol}//${trusted.hostname}:4444`,
+    `${trusted.protocol === 'http:' ? 'https:' : 'http:'}//${trusted.host}`,
+  ]);
+  // IPv6 host suffix concatenation is syntactically invalid and must also fail closed.
+  for (const target of hostile) {
+    for (const config of [{ url: `${target}/records` }, { url: '/records', baseURL: target }]) {
+      await expect(request({ ...config, adapter })).rejects.toThrow();
+    }
+  }
+  expect(tokens.TokenStorage.getAccessToken).not.toHaveBeenCalled();
+  expect(adapter).not.toHaveBeenCalled();
 });

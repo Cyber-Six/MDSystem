@@ -71,3 +71,65 @@ test.each(['expired-callback', 'error-callback'])('%s rejects the current challe
   callbacks[0][event]();
   await assertion;
 });
+
+test.each(['', null, undefined, {}, 123])('rejects invalid challenge response %p and permits a retry', async (value) => {
+  const service = createRecaptchaService({ siteKey: 'key' });
+  const pending = service.executeRecaptcha('first');
+  const rejected = expect(pending).rejects.toThrow('empty token');
+  callbacks[0].callback(value);
+  await rejected;
+  const retry = service.executeRecaptcha('first');
+  callbacks[0].callback('valid-token');
+  await expect(retry).resolves.toBe('valid-token');
+});
+
+test('a rendering failure does not cache a broken widget', async () => {
+  window.grecaptcha.render.mockImplementationOnce(() => { throw new Error('Render failed'); });
+  const service = createRecaptchaService({ siteKey: 'key' });
+  await expect(service.executeRecaptcha('first')).rejects.toThrow('Render failed');
+  const retry = service.executeRecaptcha('first');
+  callbacks[0].callback('valid-token');
+  await expect(retry).resolves.toBe('valid-token');
+  expect(window.grecaptcha.render).toHaveBeenCalledTimes(2);
+});
+
+test('replacing a DOM container creates a new widget and isolates its callbacks', async () => {
+  const service = createRecaptchaService({ siteKey: 'key' });
+  const old = service.executeRecaptcha('first');
+  callbacks[0].callback('old-token');
+  await old;
+  document.getElementById('first').remove();
+  const replacement = document.createElement('div');
+  replacement.id = 'first';
+  document.body.appendChild(replacement);
+  const current = service.executeRecaptcha('first');
+  callbacks[0]['error-callback']();
+  callbacks[1].callback('new-token');
+  await expect(current).resolves.toBe('new-token');
+  expect(window.grecaptcha.render).toHaveBeenCalledTimes(2);
+});
+
+test('a missing container or readiness failure permits a later valid execution', async () => {
+  const service = createRecaptchaService({ siteKey: 'key' });
+  await expect(service.executeRecaptcha('missing')).rejects.toThrow('not found');
+  window.grecaptcha.ready.mockImplementationOnce(() => { throw new Error('Library unavailable'); });
+  await expect(service.executeRecaptcha('first')).rejects.toThrow('Library unavailable');
+  const pending = service.executeRecaptcha('first');
+  callbacks[0].callback('valid-token');
+  await expect(pending).resolves.toBe('valid-token');
+});
+
+test('reset settles all waiters even if the external widget reset throws', async () => {
+  const service = createRecaptchaService({ siteKey: 'key' });
+  const pending = Promise.allSettled([service.executeRecaptcha('first'), service.executeRecaptcha('second')]);
+  window.grecaptcha.reset.mockImplementation(() => { throw new Error('Removed widget'); });
+  expect(() => service.reset()).not.toThrow();
+  expect((await pending).every((result) => result.status === 'rejected' && /reset/.test(result.reason.message))).toBe(true);
+  expect(window.grecaptcha.reset).toHaveBeenCalledTimes(2);
+});
+
+test('rejects native execution explicitly and allows safe reset', async () => {
+  const service = createRecaptchaService({ siteKey: 'key', platform: 'mobile' });
+  await expect(service.executeRecaptcha()).rejects.toThrow('Inject a custom executor');
+  expect(() => service.reset()).not.toThrow();
+});

@@ -265,6 +265,11 @@ event. Pending connections and listeners must be cancelled when consumers unmoun
 
 ### Verification
 
+Run `npm --prefix packages/core run test:security` for the complete package suite
+with coverage regression gates. See [SECURITY_TESTING.md](SECURITY_TESTING.md) for
+OWASP guidance, risk-to-test mappings, loopback integration requirements, and
+the limits of these checks.
+
 Security regression coverage includes rejected origins before token access or
 network dispatch, isolated token namespaces, diagnostic redaction, concurrent
 refreshes, session replacement, storage failures, and cancelled socket/widget

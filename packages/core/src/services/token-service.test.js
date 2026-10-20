@@ -24,6 +24,124 @@ const setup = () => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('token lifecycle', () => {
+  test('logout during a pending refresh-token read prevents HTTP dispatch', async () => {
+    const service = setup();
+    const read = deferred();
+    const started = deferred();
+    service.storage.getItem.mockImplementationOnce(() => { started.resolve(); return read.promise; });
+    const post = jest.spyOn(axios, 'post').mockResolvedValue({});
+    const pending = service.refreshAccessToken();
+    const assertion = expect(pending).rejects.toMatchObject({ code: 'AUTH_SESSION_CHANGED' });
+    await started.promise;
+    await service.logout(false);
+    read.resolve(refresh);
+    await assertion;
+    expect(post.mock.calls.every(([url]) => url.endsWith('/logout'))).toBe(true);
+    expect(service.data.size).toBe(0);
+  });
+
+  test('a rejected async token read fails closed and clears both stored tokens', async () => {
+    const service = setup();
+    service.storage.getItem.mockRejectedValueOnce(new Error('Keychain locked'));
+    const post = jest.spyOn(axios, 'post');
+    await expect(service.refreshAccessToken()).rejects.toThrow('Keychain locked');
+    expect(post).not.toHaveBeenCalled();
+    expect(service.data.size).toBe(0);
+  });
+
+  test('preserves a structured server refresh error after local session cleanup', async () => {
+    const service = setup();
+    jest.spyOn(axios, 'post').mockRejectedValue({ response: {
+      status: 403, data: { error: 'SESSION_REVOKED', message: 'Session revoked' },
+    } });
+    await expect(service.refreshAccessToken()).rejects.toMatchObject({ code: 'SESSION_REVOKED', status: 403, message: 'Session revoked' });
+    expect(service.data.size).toBe(0);
+  });
+
+  test.each([
+    ['login', 'clear', 'login'], ['clear', 'login', 'clear'],
+    ['login', 'login', 'clear'], ['clear', 'clear', 'login'],
+  ])('queued async storage honors command order: %s → %s → %s', async (...commands) => {
+    const service = setup();
+    service.storage.setItem.mockImplementation(async (key, value) => {
+      await Promise.resolve();
+      service.data.set(key, value);
+    });
+    const work = commands.map((command, index) => command === 'clear'
+      ? service.TokenStorage.clearTokens()
+      : service.TokenStorage.setTokens(`login${index}.payload.signature`, `${index}:device:login`));
+    await Promise.all(work);
+    if (commands[commands.length - 1] === 'clear') expect(service.data.size).toBe(0);
+    else {
+      expect(service.data.get('patient_accessToken')).toBe('login2.payload.signature');
+      expect(service.data.get('patient_refreshToken')).toBe('2:device:login');
+    }
+  });
+
+  test.each([
+    null, {}, { ok: false },
+    { ok: true, accessToken: access },
+    { ok: true, accessToken: 'invalid', refreshToken: refresh },
+    { ok: true, accessToken: access, refreshToken: 'invalid' },
+  ])('clears the session after an unusable refresh response %p', async (data) => {
+    const service = setup();
+    jest.spyOn(axios, 'post').mockResolvedValue({ data });
+    await expect(service.refreshAccessToken()).rejects.toThrow(/Invalid/);
+    expect(service.data.size).toBe(0);
+  });
+
+  test('failed storage mutation does not block a later valid login', async () => {
+    const service = setup();
+    service.storage.setItem.mockImplementationOnce(() => { throw new Error('Storage full'); });
+    await expect(service.TokenStorage.setTokens(access, refresh)).rejects.toThrow('Storage full');
+    await service.TokenStorage.setTokens('login.payload.signature', '2:device:login');
+    expect(await service.isAuthenticated()).toBe(true);
+    expect(service.data.get('patient_refreshToken')).toBe('2:device:login');
+  });
+
+  test('network refresh failure settles all callers and permits refresh after a new login', async () => {
+    const service = setup();
+    const post = jest.spyOn(axios, 'post')
+      .mockRejectedValueOnce(Object.assign(new Error('Offline'), { request: {} }))
+      .mockResolvedValueOnce(rotated);
+    const results = await Promise.allSettled(Array.from({ length: 20 }, () => service.refreshAccessToken()));
+    expect(results.every((result) => result.status === 'rejected' && result.reason.code === 'NETWORK_ERROR')).toBe(true);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(service.data.size).toBe(0);
+    await service.TokenStorage.setTokens(access, refresh);
+    await expect(service.refreshAccessToken()).resolves.toBe(rotated.data.accessToken);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  test('logout clears local tokens and navigates even when server revocation fails', async () => {
+    const service = setup();
+    jest.spyOn(axios, 'post').mockRejectedValue(new Error('Offline'));
+    await service.logout();
+    expect(service.data.size).toBe(0);
+    expect(service.navigator.navigate).toHaveBeenCalledWith('/auth');
+    expect(service.navigator.navigate).toHaveBeenCalledTimes(1);
+  });
+
+  test('logout attempts both removals when reading the stored session fails', async () => {
+    const service = setup();
+    service.storage.getItem.mockImplementationOnce(() => { throw new Error('Storage locked'); });
+    const post = jest.spyOn(axios, 'post');
+    await expect(service.logout()).rejects.toThrow('Storage locked');
+    expect(service.data.size).toBe(0);
+    expect(post).not.toHaveBeenCalled();
+    expect(service.navigator.navigate).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [{}, true], [{ exp: '9999999999' }, true], [{ exp: null }, true],
+    [{ exp: 1060 }, true], [{ exp: 1061 }, false], [{ exp: 1000 }, true],
+  ])('handles missing, mistyped, and buffer-boundary JWT claims %p', async (payload, expired) => {
+    const service = setup();
+    jest.spyOn(Date, 'now').mockReturnValue(1000 * 1000);
+    service.data.set('patient_accessToken', `header.${btoa(JSON.stringify(payload))}.signature`);
+    expect(await service.isAccessTokenExpired()).toBe(expired);
+  });
+
   test('shares one rotating refresh across independent callers', async () => {
     const service = setup();
     const post = jest.spyOn(axios, 'post').mockResolvedValue(rotated);

@@ -27,3 +27,19 @@ test('reports missing or malformed credentials through onError', () => {
   callback({ credential: 'jwt' });
   expect(onSuccess).toHaveBeenCalledWith('jwt');
 });
+
+test('can initialize after a late GSI script load and renders into the requested container', () => {
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  const service = createGoogleOAuthService({ clientId: 'client', onSuccess: jest.fn(), onError: jest.fn() });
+  service.initialize();
+  const initialize = jest.fn();
+  const renderButton = jest.fn();
+  window.google = { accounts: { id: { initialize, renderButton } } };
+  document.body.innerHTML = '<div id="google-sign-in"></div>';
+  service.renderButton('missing');
+  expect(renderButton).not.toHaveBeenCalled();
+  service.renderButton('google-sign-in', { width: 320, theme: 'filled_blue' });
+  expect(initialize).toHaveBeenCalledTimes(1);
+  expect(renderButton).toHaveBeenCalledWith(document.getElementById('google-sign-in'), expect.objectContaining({ width: 320, theme: 'filled_blue' }));
+  warn.mockRestore();
+});
