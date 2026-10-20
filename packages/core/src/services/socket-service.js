@@ -44,6 +44,7 @@ export const createSocketService = ({
 }) => {
   let socket = null;
   let connectionPromise = null;
+  let rejectConnection = null;
 
   /**
    * Connect to the Socket.IO server.
@@ -66,80 +67,94 @@ export const createSocketService = ({
       socket = null;
     }
 
-    connectionPromise = new Promise((resolve, reject) => {
-      const baseUrl = getApiBaseUrl();
-      let settled = false;
+    // Assign the promise before starting the socket, so synchronous setup failures
+    // and connection events cannot leave a rejected promise cached forever.
+    let resolveConnection;
+    const pending = new Promise((resolve, reject) => {
+      resolveConnection = resolve;
+      rejectConnection = reject;
+    });
+    connectionPromise = pending;
 
-      // In development with relative URLs, Socket.IO will connect to the current origin.
-      // The Vite proxy at /socket.io will forward requests to the backend.
-      // In production, we use relative URLs to avoid CORS issues (same origin).
-      const socketUrl = baseUrl ? baseUrl : undefined; // undefined = use current origin
+    const settle = (error) => {
+      if (connectionPromise !== pending) return;
+      const reject = rejectConnection;
+      connectionPromise = null;
+      rejectConnection = null;
+      if (error) reject(error);
+      else resolveConnection();
+    };
 
-      socket = ioClient(socketUrl, {
-        // Auth function called on every connection/reconnection.
-        // Ensures token is always fresh.
+    try {
+      const currentSocket = ioClient(getApiBaseUrl() || undefined, {
         auth: (cb) => {
-          Promise.resolve(getToken())
+          Promise.resolve().then(getToken)
             .then((token) => cb({ token: token || '' }))
             .catch(() => cb({ token: '' }));
         },
-        // Use both WebSocket and polling for maximum compatibility
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 10000,
         reconnectionAttempts: 10,
-        // Increase timeout for slow connections
         timeout: 20000,
-        // Allow CORS for cross-origin connections
         withCredentials: true,
         ...options,
+        autoConnect: false,
+      });
+      socket = currentSocket;
+      let authRecoveryAttempted = false;
+      let authRecoveryInProgress = false;
+
+      currentSocket.on('connect', () => {
+        authRecoveryAttempted = false;
+        settle();
       });
 
-      socket.once('connect', () => {
-        if (!settled) {
-          settled = true;
-          connectionPromise = null;
-          console.log('[SocketService] Connected successfully');
-          resolve();
-        }
-      });
-
-      socket.on('connect_error', async (err) => {
-        console.error('[SocketService] Connection error:', err.message);
-        if (err.message?.includes('SOCKET_AUTH_FAILED') && onAuthError) {
-          try {
-            await onAuthError();
-            // Token refreshed; socket.io will auto-retry with fresh token
-            return;
-          } catch {
-            // Refresh failed
+      currentSocket.on('connect_error', async (err) => {
+        if (socket !== currentSocket) return;
+        const isAuthError = err.message?.includes('SOCKET_AUTH_FAILED');
+        if (isAuthError && onAuthError) {
+          if (authRecoveryInProgress) return;
+          if (!authRecoveryAttempted) {
+            authRecoveryAttempted = true;
+            authRecoveryInProgress = true;
+            try {
+              await onAuthError();
+              // Middleware rejection disables Socket.IO's automatic reconnection.
+              // Retry explicitly, but never revive a socket after disconnect().
+              if (socket === currentSocket) currentSocket.connect();
+              return;
+            } catch (error) {
+              err = error;
+            } finally {
+              authRecoveryInProgress = false;
+            }
           }
         }
-        if (!settled) {
-          settled = true;
-          connectionPromise = null;
-          reject(err);
-        }
+        settle(err);
+        // Transport failures remain eligible for Socket.IO's automatic retries.
+        if (isAuthError) currentSocket.disconnect();
       });
 
-      socket.on('disconnect', (reason) => {
-        console.log('[SocketService] Disconnected:', reason);
-      });
+      currentSocket.connect();
+    } catch (error) {
+      settle(error);
+      socket?.disconnect();
+      socket = null;
+    }
 
-      socket.on('error', (error) => {
-        console.error('[SocketService] Socket error:', error);
-      });
-    });
-
-    return connectionPromise;
+    return pending;
   };
 
   /**
    * Disconnect from the server and clean up.
    */
   const disconnect = () => {
+    const reject = rejectConnection;
     connectionPromise = null;
+    rejectConnection = null;
+    reject?.(new Error('Socket connection cancelled'));
     if (socket) {
       socket.removeAllListeners();
       socket.disconnect();

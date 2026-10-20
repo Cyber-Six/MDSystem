@@ -35,6 +35,7 @@ export function createGoogleOAuthService(config) {
    * Must be called after the GSI script is loaded.
    */
   function initialize() {
+    if (initialized) return;
     if (typeof window === 'undefined' || !window.google?.accounts?.id) {
       console.warn('[GoogleOAuth] GSI library not loaded — skipping initialization');
       return;
@@ -45,8 +46,8 @@ export function createGoogleOAuthService(config) {
       callback: handleCredentialResponse,
       auto_select: false,
       cancel_on_tap_outside: true,
-      // Restrict to TIP domain for Workspace accounts
-      hosted_domain: 'tip.edu.ph',
+      // Account-selection hint; the backend must still verify the token's hd claim.
+      hd: 'tip.edu.ph',
     });
 
     initialized = true;
@@ -62,7 +63,7 @@ export function createGoogleOAuthService(config) {
       initialize();
     }
 
-    if (!window.google?.accounts?.id) {
+    if (typeof window === 'undefined' || !window.google?.accounts?.id) {
       return;
     }
 
@@ -90,7 +91,7 @@ export function createGoogleOAuthService(config) {
    * @param {string} response.credential - JWT ID token
    */
   function handleCredentialResponse(response) {
-    if (response.credential) {
+    if (typeof response?.credential === 'string' && response.credential) {
       onSuccess(response.credential);
     } else {
       onError('Google Sign-In did not return a credential.');

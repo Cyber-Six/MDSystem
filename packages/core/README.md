@@ -14,6 +14,12 @@ Shared, platform-agnostic core utilities for MDSystem web and mobile application
 - reCAPTCHA and Google OAuth helper factories
 - Shared validation utilities (email, password, user constants)
 
+The authenticated Axios client only accepts requests to the configured API origin
+(the page origin when the base URL is relative). Use a separate client for external
+URLs. Request diagnostics include transport metadata and omit request/response
+payloads and query strings. Token refreshes are shared across callers, and logout
+or a new login invalidates refresh responses from the previous session.
+
 ## Installation
 
 Inside the MDSystem repository this package is resolved through workspace/local linking.

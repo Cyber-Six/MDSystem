@@ -25,9 +25,12 @@
  */
 export function createRecaptchaService(config) {
   const { siteKey, platform = 'web' } = config;
+  const widgets = new Map();
+  const pending = new Set();
+  let revision = 0;
 
   if (!siteKey) {
-    console.warn('[reCAPTCHA] No site key provided — tokens will be empty');
+    console.warn('[reCAPTCHA] No site key provided');
   }
 
   /**
@@ -39,7 +42,7 @@ export function createRecaptchaService(config) {
    */
   async function executeRecaptcha(containerId) {
     if (platform === 'web') {
-      return executeWebRecaptcha(siteKey, containerId);
+      return executeWebRecaptcha(containerId);
     }
     throw new Error(`reCAPTCHA: platform "${platform}" not supported in core. Inject a custom executor.`);
   }
@@ -49,53 +52,80 @@ export function createRecaptchaService(config) {
    * so the user can re-verify if they need to submit again.
    */
   function reset() {
+    revision += 1;
+    for (const waiter of [...pending]) waiter.reject(new Error('reCAPTCHA reset. Please try again.'));
     if (platform === 'web' && typeof window !== 'undefined' && window.grecaptcha) {
-      try {
-        window.grecaptcha.reset();
-      } catch {
-        // Widget may not be rendered yet — safe to ignore
+      for (const widget of widgets.values()) {
+        try {
+          window.grecaptcha.reset(widget.id);
+        } catch {
+          // The widget may have been removed from the DOM.
+        }
       }
     }
   }
 
-  return { executeRecaptcha, reset, siteKey };
-}
+  function executeWebRecaptcha(containerId = 'recaptcha-container') {
+    return new Promise((resolve, reject) => {
+      if (!siteKey) return reject(new Error('reCAPTCHA site key is required.'));
+      if (typeof window === 'undefined' || !window.grecaptcha) {
+        return reject(new Error('reCAPTCHA script not loaded. Add the script tag to index.html.'));
+      }
 
-/**
- * Renders reCAPTCHA v2 checkbox widget in the specified container and
- * returns a Promise that resolves with the response token when the user
- * completes the challenge.
- * 
- * @param {string} siteKey
- * @param {string} [containerId='recaptcha-container']
- * @returns {Promise<string>}
- */
-function executeWebRecaptcha(siteKey, containerId = 'recaptcha-container') {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || !window.grecaptcha) {
-      return reject(new Error('reCAPTCHA script not loaded. Add the script tag to index.html.'));
-    }
-
-    // Ensure the grecaptcha API is ready
-    window.grecaptcha.ready(() => {
+      const requestRevision = revision;
+      let widget;
+      const finish = (callback, value) => {
+        pending.delete(waiter);
+        widget?.waiters.delete(waiter);
+        callback(value);
+      };
+      const waiter = {
+        resolve: (token) => finish(resolve, token),
+        reject: (error) => finish(reject, error),
+      };
+      pending.add(waiter);
       try {
-        const container = document.getElementById(containerId);
-        if (!container) {
-          return reject(new Error(`reCAPTCHA container #${containerId} not found in DOM.`));
-        }
+        window.grecaptcha.ready(() => {
+          if (revision !== requestRevision) return;
+          try {
+            const container = document.getElementById(containerId);
+            if (!container) throw new Error(`reCAPTCHA container #${containerId} not found in DOM.`);
+            widget = widgets.get(container);
+            if (widget) {
+              const token = window.grecaptcha.getResponse(widget.id);
+              if (token) return waiter.resolve(token);
+              widget.waiters.add(waiter);
+              return;
+            }
 
-        // Clear previous widget if re-rendering
-        container.innerHTML = '';
-
-        window.grecaptcha.render(containerId, {
-          sitekey: siteKey,
-          callback: (token) => resolve(token),
-          'expired-callback': () => reject(new Error('reCAPTCHA expired. Please try again.')),
-          'error-callback': () => reject(new Error('reCAPTCHA error. Please try again.')),
+            widget = { id: null, waiters: new Set([waiter]) };
+            widgets.set(container, widget);
+            const settle = (method, value) => {
+              for (const request of [...widget.waiters]) request[method](value);
+            };
+            try {
+              widget.id = window.grecaptcha.render(container, {
+                sitekey: siteKey,
+                callback: (token) => {
+                  if (typeof token === 'string' && token) settle('resolve', token);
+                  else settle('reject', new Error('reCAPTCHA returned an empty token.'));
+                },
+                'expired-callback': () => settle('reject', new Error('reCAPTCHA expired. Please try again.')),
+                'error-callback': () => settle('reject', new Error('reCAPTCHA error. Please try again.')),
+              });
+            } catch (error) {
+              widgets.delete(container);
+              settle('reject', error);
+            }
+          } catch (error) {
+            waiter.reject(error);
+          }
         });
-      } catch (err) {
-        reject(err);
+      } catch (error) {
+        waiter.reject(error);
       }
     });
-  });
+  }
+
+  return { executeRecaptcha, reset, siteKey };
 }
