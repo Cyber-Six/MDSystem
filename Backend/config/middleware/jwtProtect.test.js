@@ -8,7 +8,8 @@ jest.mock("../../utils/logger.js", () => ({
   error: jest.fn()
 }));
 jest.mock("../redis.js", () => ({
-  getStaffAnchor: jest.fn()
+  getStaffAnchor: jest.fn(),
+  getSessionBlacklist: jest.fn().mockResolvedValue(false)
 }));
 jest.mock("../query.js", () => ({
   isActiveMedicalPersonnel: jest.fn()
@@ -16,7 +17,7 @@ jest.mock("../query.js", () => ({
 
 const jwt = require("jsonwebtoken");
 const logger = require("../../utils/logger.js");
-const { getStaffAnchor } = require("../redis.js");
+const { getStaffAnchor, getSessionBlacklist } = require("../redis.js");
 const { isActiveMedicalPersonnel } = require("../query.js");
 const { jwtProtect } = require("./jwtProtect.js");
 
@@ -131,4 +132,18 @@ describe("jwtProtect middleware", () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: "INVALID_TOKEN" }));
   });
+});
+
+test('rejects blacklisted JWTs immediately but accepts legacy tokens without revocation metadata', async () => {
+  jwt.verify.mockReturnValue({ id: 12, role: 'patient', jti: 'revoked-jwt' });
+  getSessionBlacklist.mockResolvedValueOnce(true);
+  let state = mockReqRes('Bearer signed');
+  await jwtProtect()(state.req, state.res, state.next);
+  expect(state.res.status).toHaveBeenCalledWith(401);
+  expect(state.res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'TOKEN_INVALID' }));
+  expect(state.next).not.toHaveBeenCalled();
+  jwt.verify.mockReturnValue({ id: 12, role: 'patient' });
+  state = mockReqRes('Bearer legacy');
+  await jwtProtect()(state.req, state.res, state.next);
+  expect(state.next).toHaveBeenCalled();
 });

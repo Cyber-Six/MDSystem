@@ -1,11 +1,11 @@
-jest.mock('../../../../../config/query.js', () => ({ query: jest.fn() }));
+jest.mock('../../../../../config/query.js', () => ({ query: jest.fn(), connect: jest.fn(), setSystemAuditLog: jest.fn() }));
 jest.mock('../../../../../utils/graphql-helper.js', () => ({ throwGraphQLError: jest.fn(() => { const c = { message: jest.fn(), status: jest.fn(), throw: jest.fn() }; c.message.mockReturnValue(c); c.status.mockReturnValue(c); c.throw.mockImplementation(() => { throw new Error(`${c.status.mock.lastCall[0]}:${c.message.mock.lastCall[0]}`); }); return c; }) }));
 jest.mock('./helper.js', () => ({ validateItemActive: jest.fn() }));
 jest.mock('../../../../../utils/logger.js', () => ({ error: jest.fn(), info: jest.fn(), warn: jest.fn() }));
 jest.mock('../../../../../config/sockets', () => ({ emitToRole: jest.fn() }));
 
 const db = require('../../../../../config/query.js');
-const { Query } = require('./wrapper.js');
+const { Query, Mutation } = require('./wrapper.js');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -24,4 +24,16 @@ test('requires boolean stock filters and queries inventory supplies and batches'
   await expect(Query._getSupplyBatches(null, { supplyItemId: 5, availableOnly: false }, { res: {} })).resolves.toEqual([{ id: 3 }]);
   expect(db.query.mock.calls[0][1]).toEqual([1, 'Manila', true, 0, 20]);
   expect(db.query.mock.calls[1][1]).toEqual([5, undefined, false, 0, 20]);
+});
+
+test.each([false, true])('inventory creation audits before commit and rolls back audit failure=%s', async failure => {
+  const client = { query: jest.fn(async sql => /^\s*INSERT/.test(sql) ? { rows: [{ id: 42 }] } : { rows: [] }), release: jest.fn() };
+  db.connect.mockResolvedValueOnce(client);
+  if (failure) db.setSystemAuditLog.mockRejectedValueOnce(Error('audit unavailable'));
+  const operation = Mutation._createMedicalItems(null, { input: { item_code: 'GAUZE', item_name: 'Gauze', category: 'Supply' } }, { user: { id: 3 }, res: {} });
+  if (failure) await expect(operation).rejects.toThrow('500:Database error');
+  else await expect(operation).resolves.toEqual({ id: 42 });
+  expect(db.setSystemAuditLog).toHaveBeenCalledWith(expect.objectContaining({ client, actorId: 3, targetId: null, action: 'CREATE_MEDICAL_ITEM' }));
+  expect(client.query).toHaveBeenLastCalledWith(failure ? 'ROLLBACK' : 'COMMIT');
+  expect(client.release).toHaveBeenCalledTimes(1);
 });

@@ -343,3 +343,30 @@ test('locks TOTP keys at the threshold and expires the first failure', async () 
   await store.recordTotpFailureForKey('token', '2fa');
   expect(client.expire).toHaveBeenLastCalledWith('totp_fail:2fa:token', 30);
 });
+
+test('blacklist lookups reflect expiring token keys without persistent membership sets', async () => {
+  await store.initRedis();
+  client.exists.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+  await expect(store.getSessionBlacklist('token')).resolves.toBe(true);
+  await expect(store.getSessionBlacklist('token')).resolves.toBe(false);
+  expect(client.exists).toHaveBeenCalledWith('blacklist:token:token');
+  expect(client.sAdd).not.toHaveBeenCalled();
+  await expect(store.getSessionBlacklist('')).rejects.toThrow('tokenId is required');
+});
+
+test('revocation returns every blacklisted JWT ID and tolerates expired sessions', async () => {
+  await store.initRedis();
+  client.eval = jest.fn().mockResolvedValueOnce(['before-refresh', 'after-refresh']).mockResolvedValueOnce([]);
+  await expect(store.revokeRefreshSession('12', 'phone')).resolves.toEqual([
+    { tokenId: 'before-refresh', blacklisted: true }, { tokenId: 'after-refresh', blacklisted: true },
+  ]);
+  await expect(store.revokeRefreshSession('12', 'gone')).resolves.toEqual([]);
+  expect(client.eval.mock.calls[0][1].keys).toEqual(['rt:12:phone']);
+});
+
+test('refresh persistence reports an atomic conflict instead of overwriting a revoked session', async () => {
+  await store.initRedis();
+  client.eval = jest.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+  await expect(store.saveRotatedRefreshSession('12', 'phone', 'old', { refreshToken: 'new' }, 120)).resolves.toBe(false);
+  await expect(store.saveRotatedRefreshSession('12', 'phone', 'old', { refreshToken: 'new' }, 120)).resolves.toBe(true);
+});

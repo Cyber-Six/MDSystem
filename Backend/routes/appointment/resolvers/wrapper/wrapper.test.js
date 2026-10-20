@@ -1,4 +1,4 @@
-jest.mock('../../../../config/query.js', () => ({ query: jest.fn(), connect: jest.fn(), getUserBranch: jest.fn(), getUserPatientType: jest.fn() }));
+jest.mock('../../../../config/query.js', () => ({ query: jest.fn(), connect: jest.fn(), getUserBranch: jest.fn(), getUserPatientType: jest.fn(), setSystemAuditLog: jest.fn() }));
 jest.mock('../../../../utils/graphql-helper.js', () => ({ throwGraphQLError: jest.fn(() => { const c = { message: jest.fn(), status: jest.fn(), throw: jest.fn() }; c.message.mockReturnValue(c); c.status.mockReturnValue(c); c.throw.mockImplementation(() => { throw new Error(`GraphQL ${c.status.mock.lastCall[0]}: ${c.message.mock.lastCall[0]}`); }); return c; }) }));
 jest.mock('../../../../utils/logger.js', () => ({ debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../../../config/multer.js', () => ({ promoteFile: jest.fn(), deleteFile: jest.fn() }));
@@ -75,4 +75,22 @@ test('lists month availability in a transaction and releases its client', async 
   expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN');
   expect(client.query).toHaveBeenLastCalledWith('COMMIT');
   expect(client.release).toHaveBeenCalled();
+});
+
+test.each([
+  ['_updateScheduler', { schedulerId: 4, input: { label: 'Clinic' } }],
+  ['_updateSchedulerRequirement', { schedulerId: 4, input: { label: 'Consent', notes: 'Updated' } }],
+  ['_deleteSchedulerRequirement', { schedulerId: 4, label: 'Consent' }],
+  ['_addEntryWhitelist', { schedulerId: 4, patientIds: [8] }],
+  ['_removeEntryWhitelist', { schedulerId: 4, patientIds: [8] }],
+  ['_updateDateIdentity', { schedulerId: 4, date: '2099-01-01', input: { morningAllowed: 5 } }],
+])('%s rolls back its database edits when the audit cannot be saved', async (name, args) => {
+  const client = { query: jest.fn(async () => ({ rowCount: 1, rows: [{ id: 4, patientId: 8, scheduledDate: '2099-01-01' }] })), release: jest.fn() };
+  db.connect.mockResolvedValueOnce(client);
+  db.setSystemAuditLog.mockRejectedValueOnce(Error('audit unavailable'));
+  await expect(Mutation[name](null, args, { user: { id: 3 }, res: {} })).rejects.toThrow('audit unavailable');
+  expect(db.setSystemAuditLog).toHaveBeenCalledWith(expect.objectContaining({ client, actorId: 3, targetId: null }));
+  expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
+  expect(client.query).not.toHaveBeenCalledWith('COMMIT');
+  expect(client.release).toHaveBeenCalledTimes(1);
 });

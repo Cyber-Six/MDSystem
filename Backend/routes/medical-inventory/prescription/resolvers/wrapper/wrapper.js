@@ -201,6 +201,23 @@ const Mutation = {
         );
       }
 
+      await db.setSystemAuditLog({
+        client,
+        eventType: "MEDICINE_REQUESTS",
+        actorId: issuedBy,
+        actorType: "Staff",
+        targetId: input.patientId,
+        action: linkedRequest ? "ISSUE_LINKED_PRESCRIPTION" : "ISSUE_DIRECT_PRESCRIPTION",
+        details: JSON.stringify({
+          transactionId: transaction.id,
+          patientId: input.patientId,
+          requestId: linkedRequest?.id ?? null,
+          totalQuantity,
+          itemCount: mergedItems.length,
+        }),
+        changedBy: "Medical"
+      });
+
       await client.query('COMMIT');
 
       // Notify all medical staff that stock changed (units were dispensed)

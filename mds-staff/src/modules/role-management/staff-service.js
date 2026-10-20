@@ -169,7 +169,7 @@ const GQL_LIST_USER_SESSIONS = `
   query ListUserSessions($userId: ID!, $offset: Int!, $limit: Int!) {
     listUserSessions(userId: $userId, offset: $offset, limit: $limit) {
       deviceId
-      refreshToken
+      accessTokenExpired
       status
       createdAt
       updatedAt
@@ -199,7 +199,7 @@ const GQL_LIST_ALL_SESSIONS = `
         email
         role
         device
-        refreshToken
+        accessTokenExpired
         ttlSeconds
         numberOfSessions
         status

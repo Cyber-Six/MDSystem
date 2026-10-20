@@ -2,8 +2,9 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
+const { recordAccessToken, getLiveAccessTokens } = require("../utils/access-token-session");
 const { saveRefreshSession, getRefreshSession, 
-        saveStaffAnchor, getStaffAnchor, } = require("./redis.js");
+        saveStaffAnchor, getStaffAnchor, saveRotatedRefreshSession, } = require("./redis.js");
 const logger = require("../utils/logger.js");
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -16,13 +17,17 @@ const ACCESS_PATIENT_EXPIRATION = parseInt(process.env.JWT_PATIENT_ACCESS_EXPIRA
 const ACCESS_STAFF_EXPIRATION = parseInt(process.env.JWT_STAFF_ACCESS_EXPIRATION, 10);
 const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800; // default 7d
 
+function getAccessTokenExpirationSeconds(role) {
+  return role === "medical" ? ACCESS_STAFF_EXPIRATION : ACCESS_PATIENT_EXPIRATION;
+}
+
 function isValidUserRole(role) {
   if (typeof role !== "string") return false;
   return ["patient", "medical"].includes(role.toLowerCase());
 }
 
 // Generate short-lived access token
-function generateAccessToken(user, anchorSessionId = null) {
+function generateAccessToken(user, anchorSessionId = null, tokenId = crypto.randomUUID()) {
   // Validate user.id
   if (typeof user.id !== "string" && typeof user.id !== "number") {
     throw new Error("Invalid user.id");
@@ -34,12 +39,13 @@ function generateAccessToken(user, anchorSessionId = null) {
   }
 
   const normalizedRole = user.role.toLowerCase();
+  const accessTokenExpirationSeconds = getAccessTokenExpirationSeconds(normalizedRole);
 
   // Base payload for all users
   const payload = {
     id: user.id,
     role: normalizedRole, // store normalized role
-    jti: crypto.randomUUID(),
+    jti: tokenId // Stored with the refresh session for immediate revocation
   };
 
   // Only staff/medical roles get sid (anchor)
@@ -48,10 +54,7 @@ function generateAccessToken(user, anchorSessionId = null) {
   }
 
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn:
-      normalizedRole === "medical"
-        ? ACCESS_STAFF_EXPIRATION
-        : ACCESS_PATIENT_EXPIRATION,
+    expiresIn: accessTokenExpirationSeconds,
     audience: "mdsystem-app",
     issuer: "mdsystem-auth",
   });
@@ -121,6 +124,7 @@ function requireRole(token, allowedRoles) {
 
 
 async function handleSuspiciousRefresh({ userId, deviceId, session, reason, now }) {
+  const expectedToken = session.refreshToken;
   const isStaff = session.role === "medical";
 
   session.suspiciousCount = (session.suspiciousCount || 0) + 1;
@@ -144,12 +148,12 @@ async function handleSuspiciousRefresh({ userId, deviceId, session, reason, now 
     session.refreshToken = "";
     session.prevToken = null;
 
-    await saveRefreshSession(userId, deviceId, session, REFRESH_EXP);
+    await saveRotatedRefreshSession(userId, deviceId, expectedToken, session, REFRESH_EXP);
     return;
   }
 
   // Otherwise just persist suspiciousCount
-  await saveRefreshSession(userId, deviceId, session, REFRESH_EXP);
+  await saveRotatedRefreshSession(userId, deviceId, expectedToken, session, REFRESH_EXP);
 }
 
 async function handleRefresh({ userId, deviceId, providedToken }) {
@@ -219,6 +223,7 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
 
   // 4. Valid refresh → rotate tokens
   const newRefreshToken = crypto.randomUUID();
+  const accessTokenExpirationSeconds = getAccessTokenExpirationSeconds(session.role);
 
   session.prevToken = session.refreshToken;
   session.refreshToken = newRefreshToken;
@@ -226,12 +231,15 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
   session.status = "active";
   session.cooldownUntil = null;
 
-  await saveRefreshSession(userId, deviceId, session, REFRESH_EXP);
+  recordAccessToken(session, accessTokenExpirationSeconds, now);
+  const saved = await saveRotatedRefreshSession(userId, deviceId, providedToken, session, REFRESH_EXP);
+  if (!saved) throw new Error("Session changed or revoked during refresh");
 
   // Generate new access token
   const accessToken = generateAccessToken(
     { id: userId, role: session.role },
-    session.sessionId // anchor for medical
+    session.sessionId, // anchor for medical
+    session.tokenId
   );
 
   return { accessToken, refreshToken: newRefreshToken };
@@ -242,6 +250,7 @@ async function handleLogin({ userId, deviceId, role }) {
   const normalizedRole = role.toLowerCase();
 
   let session = await getRefreshSession(userId, deviceId);
+  const previousAccessTokens = getLiveAccessTokens(session, now);
 
   // If suspicious session exists → self-heal
   if (session && (session.suspiciousCount || 0) >= 1) {
@@ -278,10 +287,12 @@ async function handleLogin({ userId, deviceId, role }) {
     status: "active",
     cooldownUntil: null,
     suspiciousCount: 0,
+    accessTokens: previousAccessTokens,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 
+  recordAccessToken(newSession, getAccessTokenExpirationSeconds(normalizedRole), now);
   await saveRefreshSession(userId, deviceId, newSession, REFRESH_EXP);
 
   // Staff anchor update
@@ -291,7 +302,8 @@ async function handleLogin({ userId, deviceId, role }) {
 
   const accessToken = generateAccessToken(
     { id: userId, role: normalizedRole },
-    newSessionId
+    newSessionId,
+    newSession.tokenId
   );
 
   return { accessToken, refreshToken: newRefreshToken };

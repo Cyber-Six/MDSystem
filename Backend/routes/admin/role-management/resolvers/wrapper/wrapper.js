@@ -27,6 +27,7 @@ const {
   scanAllRefreshSessions,
   scanAllRefreshSessionsWithMeta,
   deleteAllUserSessions,
+  revokeRefreshSession,
   getStaffAnchor,
   saveStaffAnchor,
   createAdminTransferSession,
@@ -43,6 +44,7 @@ const { emitToUser } = require('../../../../../config/sockets');
 const { generateOTP, verifyPassword, 
   delayRandom, generateUUID } = require('../../../../../utils/security.js');
 const crypto = require('crypto');
+const { isAccessTokenExpired } = require('../../../../../utils/access-token-session');
 const logger = require('../../../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../../../utils/graphql-helper.js');
 
@@ -871,7 +873,7 @@ function normalizeScannedRefreshSession(record, nowMs) {
     sessionId: String(rawSession.sessionId || `${userId}:${deviceId}`),
     userId,
     deviceId,
-    refreshToken: sessionRefreshToken,
+    accessTokenExpired: isAccessTokenExpired(rawSession, nowMs),
     ttlSeconds,
     lastActiveMs,
     status,
@@ -1915,7 +1917,7 @@ const Query = {
           sessionId: latest.sessionId,
           userId: entry.userId,
           device: latest.deviceId,
-          refreshToken: latest.refreshToken || '',
+          accessTokenExpired: latest.accessTokenExpired,
           ttlSeconds: Number(latest.ttlSeconds) || 0,
           numberOfSessions: Number(entry.numberOfSessions) || 0,
           lastActive: latest.lastActiveMs,
@@ -1993,7 +1995,7 @@ const Query = {
 
       const mappedSession = {
         deviceId,
-        refreshToken,
+        accessTokenExpired: isAccessTokenExpired(rawSession, nowMs),
         status,
         createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : null,
         updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : null,
@@ -2886,6 +2888,14 @@ const Mutation = {
       throwGraphQLError(res).message('deviceId is required').status(400).throw();
     }
 
+    if (!shouldRevoke) {
+      return {
+        ok: false,
+        message: 'Unrevoking sessions is not allowed.',
+        results: [],
+      };
+    }
+
     const sessionRecords = await listUserSessionsWithMeta(normalizedUserId);
     const mutableRecords = sessionRecords
       .map((record) => normalizeMutableUserSessionRecord(record, normalizedUserId))
@@ -2897,28 +2907,11 @@ const Mutation = {
       return {
         ok: true,
         message: 'Session not found or already expired.',
+        results: [],
       };
     }
 
-    const sessionKey = matchedRecord.sessionKey;
-    const currentSession = matchedRecord.session;
-    const currentStatus = matchedRecord.status;
-    const nextStatus = shouldRevoke ? 'revoked' : 'active';
-
-    if (currentStatus === nextStatus) {
-      return {
-        ok: true,
-        message: shouldRevoke ? 'Session already revoked.' : 'Session already active.',
-      };
-    }
-
-    const updatedPayload = {
-      ...currentSession,
-      status: nextStatus,
-      updatedAt: Date.now(),
-    };
-
-    await setKey(sessionKey, JSON.stringify(updatedPayload), matchedRecord.ttlSeconds);
+    const blacklistEntries = await revokeRefreshSession(normalizedUserId, normalizedDeviceId);
 
     logger.info('User refresh session status toggled by admin', {
       adminId: String(user?.id || ''),
@@ -2929,17 +2922,25 @@ const Mutation = {
 
     return {
       ok: true,
-      message: shouldRevoke ? 'Session revoked successfully.' : 'Session unrevoked successfully.',
+      message: matchedRecord.status === 'revoked' ? 'Session already revoked.' : 'Session revoked successfully.',
+      results: blacklistEntries,
     };
   },
 
   _setAllUserSessionsRevoked: async (_, { userId, revoked }, { user, res }) => {
     const normalizedUserId = String(userId || '').trim();
     const shouldRevoke = Boolean(revoked);
-    const nextStatus = shouldRevoke ? 'revoked' : 'active';
 
     if (!normalizedUserId) {
       throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    if (!shouldRevoke) {
+      return {
+        ok: false,
+        message: 'Unrevoking sessions is not allowed.',
+        results: [],
+      };
     }
 
     const sessionRecords = await listUserSessionsWithMeta(normalizedUserId);
@@ -2951,28 +2952,15 @@ const Mutation = {
       return {
         ok: true,
         message: 'No active sessions found for this user.',
+        results: [],
       };
     }
 
-    const recordsToUpdate = mutableRecords.filter((record) => record.status !== nextStatus);
-
-    if (recordsToUpdate.length === 0) {
-      return {
-        ok: true,
-        message: shouldRevoke ? 'All sessions are already revoked.' : 'All sessions are already active.',
-      };
+    const blacklistResults = [];
+    for (const record of mutableRecords) {
+      blacklistResults.push(...await revokeRefreshSession(normalizedUserId, record.deviceId));
     }
-
-    const updatedAt = Date.now();
-    for (const record of recordsToUpdate) {
-      const updatedPayload = {
-        ...record.session,
-        status: nextStatus,
-        updatedAt,
-      };
-
-      await setKey(record.sessionKey, JSON.stringify(updatedPayload), record.ttlSeconds);
-    }
+    const recordsToUpdate = mutableRecords.filter(record => record.status !== 'revoked');
 
     logger.info('All user refresh sessions status toggled by admin', {
       adminId: String(user?.id || ''),
@@ -2982,11 +2970,14 @@ const Mutation = {
       updatedSessions: recordsToUpdate.length,
     });
 
+    const message = recordsToUpdate.length === 0
+      ? 'All sessions are already revoked.'
+      : `${recordsToUpdate.length} session(s) revoked successfully.`;
+
     return {
       ok: true,
-      message: shouldRevoke
-        ? `${recordsToUpdate.length} session(s) revoked successfully.`
-        : `${recordsToUpdate.length} session(s) unrevoked successfully.`,
+      message,
+      results: blacklistResults,
     };
   },
 

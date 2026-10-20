@@ -112,7 +112,7 @@ async function validateSchedulerDate(schedulerId, date) {
   return false;
 }
 
-async function getAppointmentCounts(schedulerId, date) {
+async function getAppointmentCounts(schedulerId, date, queryClient = db) {
   const query = `
     SELECT 
       COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
@@ -126,7 +126,7 @@ async function getAppointmentCounts(schedulerId, date) {
       AND sde."scheduledDate" = $2
   `;
 
-  const result = await db.query(query, [schedulerId, date]);
+  const result = await queryClient.query(query, [schedulerId, date]);
   return result.rows[0];
 }
 

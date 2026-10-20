@@ -1,7 +1,7 @@
 const handlers = { get: [], post: [], put: [], delete: [] };
 jest.mock('express', () => ({ Router: () => Object.fromEntries(Object.keys(handlers).map(method => [method, (...args) => handlers[method].push(args)])) }));
 jest.mock('../../../utils/logger.js', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
-jest.mock('../../../config/query.js', () => ({ query: jest.fn(), queryClient: jest.fn(), queryControlled: jest.fn(), getUserBranch: jest.fn(), connect: jest.fn() }));
+jest.mock('../../../config/query.js', () => ({ query: jest.fn(), queryClient: jest.fn(), queryControlled: jest.fn(), setSystemAuditLog: jest.fn(), getUserBranch: jest.fn(), connect: jest.fn() }));
 jest.mock('../../../config/middleware/jwtProtect.js', () => ({ jwtProtect: jest.fn(() => (_req, _res, next) => next()) }));
 jest.mock('../../../services/authorization/permit.js', () => ({ isMedicalPermitted: jest.fn(), isMedicalPermittedLocationBased: jest.fn(), permissions: { announcement_allow_crud: 'ANNOUNCE' }, getStaffBranch: jest.fn() }));
 jest.mock('../../../config/multer.js', () => ({ promoteFile: jest.fn(), deleteFile: jest.fn() }));
@@ -15,7 +15,7 @@ const route = (method, path) => handlers[method].find(([candidate]) => candidate
 const res = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn() });
 const client = (responses) => ({ query: jest.fn(async (sql) => /^\s*(SELECT|UPDATE|DELETE)/.test(sql) ? responses.shift() : { rowCount: 1, rows: [] }), release: jest.fn() });
 
-beforeEach(() => { jest.clearAllMocks(); db.getUserBranch.mockResolvedValue('Manila'); permit.isMedicalPermitted.mockResolvedValue({ permitted: true }); permit.isMedicalPermittedLocationBased.mockResolvedValue(true); permit.getStaffBranch.mockResolvedValue('Manila'); });
+beforeEach(() => { jest.clearAllMocks(); db.connect.mockResolvedValue(client([])); db.getUserBranch.mockResolvedValue('Manila'); permit.isMedicalPermitted.mockResolvedValue({ permitted: true }); permit.isMedicalPermittedLocationBased.mockResolvedValue(true); permit.getStaffBranch.mockResolvedValue('Manila'); });
 
 test('patient reads are branch-scoped, return empty/not-found states, and map database errors', async () => {
   db.query.mockResolvedValueOnce({ rows: [] }); let response = res(); await route('get', '/')({ user: { id: 3 } }, response);
@@ -53,13 +53,24 @@ test('create validates location, permission, optional file promotion and SQL err
   let response = res(); await route('post', '/')({ user: { id: 2 }, body: { location: 'Mars' } }, response); expect(response.status).toHaveBeenCalledWith(400);
   permit.isMedicalPermittedLocationBased.mockResolvedValueOnce(false); response = res(); await route('post', '/')({ user: { id: 2 }, body: { location: 'Manila' } }, response); expect(response.status).toHaveBeenCalledWith(403);
   files.promoteFile.mockRejectedValueOnce(Error('missing staged file')); response = res(); await route('post', '/')({ user: { id: 2 }, body: { location: 'Manila', pubmat: 'x' } }, response); expect(response.status).toHaveBeenCalledWith(400);
-  files.promoteFile.mockResolvedValueOnce('committed.png'); db.queryControlled.mockResolvedValueOnce({ rows: [{ id: 1 }] }); response = res();
+  const created = client([]);
+  created.query.mockImplementation(async (sql) => /^\s*INSERT/.test(sql) ? { rows: [{ id: 1 }] } : { rows: [] });
+  db.connect.mockResolvedValueOnce(created);
+  files.promoteFile.mockResolvedValueOnce('committed.png'); response = res();
   await route('post', '/')({ user: { id: 2 }, body: { location: 'Manila', pubmat: 'x' } }, response);
-  expect(response.status).toHaveBeenCalledWith(201); expect(db.queryControlled.mock.calls[0][1]).toEqual([null, null, 'committed.png', true, 'Manila', null]);
-  db.queryControlled.mockRejectedValueOnce(Error('database')); response = res(); await route('post', '/')({ user: { id: 2 }, body: { location: 'Manila' } }, response); expect(response.status).toHaveBeenCalledWith(500);
-  db.queryControlled.mockResolvedValueOnce({ rows: [] }); response = res(); await route('post', '/')({ user: { id: 2 }, body: { location: 'Both', isActive: false, viewableUntil: 'tomorrow' } }, response);
   expect(response.status).toHaveBeenCalledWith(201);
-  expect(db.queryControlled.mock.calls.at(-1)[1]).toEqual([null, null, null, false, 'Both', 'tomorrow']);
+  expect(created.query.mock.calls[1][1]).toEqual([null, null, 'committed.png', true, 'Manila', null]);
+  expect(db.setSystemAuditLog).toHaveBeenCalledWith(expect.objectContaining({ client: created, actorId: 2, targetId: null, action: 'CREATE_ANNOUNCEMENT' }));
+  const failed = client([]); failed.query.mockRejectedValueOnce(Error('database'));
+  db.connect.mockResolvedValueOnce(failed); response = res();
+  await route('post', '/')({ user: { id: 2 }, body: { location: 'Manila' } }, response);
+  expect(response.status).toHaveBeenCalledWith(500);
+  const inactive = client([]);
+  inactive.query.mockImplementation(async (sql) => /^\s*INSERT/.test(sql) ? { rows: [] } : { rows: [] });
+  db.connect.mockResolvedValueOnce(inactive); response = res();
+  await route('post', '/')({ user: { id: 2 }, body: { location: 'Both', isActive: false, viewableUntil: 'tomorrow' } }, response);
+  expect(response.status).toHaveBeenCalledWith(201);
+  expect(inactive.query.mock.calls[1][1]).toEqual([null, null, null, false, 'Both', 'tomorrow']);
 });
 
 test('update rolls back missing/unauthorized records and commits successful edits while releasing client', async () => {

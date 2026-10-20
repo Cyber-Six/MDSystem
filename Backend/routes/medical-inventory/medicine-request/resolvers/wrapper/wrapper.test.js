@@ -1,4 +1,4 @@
-jest.mock('../../../../../config/query.js', () => ({ query: jest.fn(), getUserBranch: jest.fn(), connect: jest.fn() }));
+jest.mock('../../../../../config/query.js', () => ({ query: jest.fn(), getUserBranch: jest.fn(), connect: jest.fn(), setSystemAuditLog: jest.fn() }));
 jest.mock('../../../../../utils/logger.js', () => ({ error: jest.fn() }));
 jest.mock('../../../../../utils/validator.js', () => ({ ValidateBranchbyUserBranch: jest.fn() }));
 
@@ -110,21 +110,18 @@ test('adding medicine requires a pending request, inserts each item and rolls ba
   await expect(Mutation._addMedicineToRequest(null, { requestId: 4, items: [] }, ctx(null))).rejects.toThrow('Unauthorized');
   await expect(Mutation._addMedicineToRequest(null, { requestId: 4, items: null }, ctx())).rejects.toThrow('At least one medicine item');
   await expect(Mutation._addMedicineToRequest(null, { requestId: 4, items: [] }, ctx())).rejects.toThrow('At least one medicine item');
-  db.query.mockResolvedValueOnce({ rows: [] });
+  db.connect.mockResolvedValueOnce(makeClient([{ rows: [] }]));
   await expect(Mutation._addMedicineToRequest(null, { requestId: 4, items: [{ medicineId: 2 }] }, ctx())).rejects.toThrow('Medicine request not found');
-  db.query.mockResolvedValueOnce({ rows: [{ status: 'Approved' }] });
+  db.connect.mockResolvedValueOnce(makeClient([{ rows: [{ status: 'Approved' }] }]));
   await expect(Mutation._addMedicineToRequest(null, { requestId: 4, items: [{ medicineId: 2 }] }, ctx())).rejects.toThrow('Only Pending requests can be modified');
-  db.query.mockResolvedValueOnce({ rows: [{ status: 'Pending' }] });
-  const client = makeClient([{ rows: [{ id: 1 }] }, { rows: [{ id: 2 }] }, { rows: [{ id: 4 }] }]); db.connect.mockResolvedValueOnce(client);
+  const client = makeClient([{ rows: [{ status: 'Pending', patientId: 6 }] }, { rows: [{ id: 1 }] }, { rows: [{ id: 2 }] }, { rows: [{ id: 4 }] }]); db.connect.mockResolvedValueOnce(client);
   db.query.mockResolvedValueOnce({ rows: [{ itemName: 'A' }] });
   expect(await Mutation._addMedicineToRequest(null, { requestId: 4, items: [{ medicineId: 2, quantity: 3 }, { batchId: 3 }] }, ctx())).toEqual({ id: 4, items: [{ itemName: 'A' }] });
-  expect(client.query.mock.calls[1][1]).toEqual([4, 2, 3]);
-  expect(client.query.mock.calls[2][1]).toEqual([4, 3, 1]);
+  expect(client.query.mock.calls[2][1]).toEqual([4, 2, 3]);
+  expect(client.query.mock.calls[3][1]).toEqual([4, 3, 1]);
   expect(client.query).toHaveBeenCalledWith('COMMIT'); expect(client.release).toHaveBeenCalled();
-  db.query.mockResolvedValueOnce({ rows: [{ status: 'Pending' }] });
-  const empty = makeClient([{ rows: [{ id: 1 }] }, { rows: [] }]); db.connect.mockResolvedValueOnce(empty);
+  const empty = makeClient([{ rows: [{ status: 'Pending', patientId: 6 }] }, { rows: [{ id: 1 }] }, { rows: [] }]); db.connect.mockResolvedValueOnce(empty);
   expect(await Mutation._addMedicineToRequest(null, { requestId: 4, items: [{ medicineId: 2 }] }, ctx())).toBeUndefined();
-  db.query.mockResolvedValueOnce({ rows: [{ status: 'Pending' }] });
   const failed = makeClient([]); failed.query.mockRejectedValueOnce(Error('write failed')); db.connect.mockResolvedValueOnce(failed);
   await expect(Mutation._addMedicineToRequest(null, { requestId: 4, items: [{ medicineId: 2 }] }, ctx())).rejects.toThrow('Failed to add medicine to request');
   expect(failed.query).toHaveBeenCalledWith('ROLLBACK'); expect(failed.release).toHaveBeenCalled();

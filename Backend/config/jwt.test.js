@@ -1,6 +1,6 @@
 jest.mock('jsonwebtoken', () => ({ sign: jest.fn(() => 'access-token'), verify: jest.fn() }));
 jest.mock('dotenv', () => ({ config: jest.fn() }));
-jest.mock('./redis', () => ({ saveRefreshSession: jest.fn(), getRefreshSession: jest.fn(), saveStaffAnchor: jest.fn(), getStaffAnchor: jest.fn() }));
+jest.mock('./redis', () => ({ saveRefreshSession: jest.fn(), saveRotatedRefreshSession: jest.fn().mockResolvedValue(true), getRefreshSession: jest.fn(), saveStaffAnchor: jest.fn(), getStaffAnchor: jest.fn() }));
 jest.mock('../utils/logger', () => require('../test-support/fixtures.cjs').loggerMock());
 const { withEnvironment } = require('../test-support/fixtures.cjs');
 let restore, tokens, redis, jwt;
@@ -75,7 +75,7 @@ test.each(['unknown', 'previous'])('records suspicious %s refresh tokens', async
   redis.getRefreshSession.mockResolvedValue(state);
   await expect(tokens.handleRefresh({ userId: 12, deviceId: 'device', providedToken })).rejects.toThrow(providedToken === 'previous' ? 'Expired refresh token' : 'Invalid refresh token');
   expect(state.suspiciousCount).toBe(1);
-  expect(redis.saveRefreshSession).toHaveBeenCalled();
+  expect(redis.saveRotatedRefreshSession).toHaveBeenCalled();
 });
 test.each([['patient', undefined], ['medical', 2]])('rotates valid %s tokens and reduces suspicion', async (role, suspiciousCount) => {
   const state = session({ role, suspiciousCount });
@@ -105,4 +105,31 @@ test.each([
   expect(redis.saveRefreshSession).toHaveBeenLastCalledWith(12, 'device', expect.objectContaining({ refreshToken: result.refreshToken, role, status: 'active', suspiciousCount: 0 }), 604800);
   if (previous?.status === 'revoked') expect(redis.saveRefreshSession).toHaveBeenCalledTimes(2);
   if (role === 'medical') expect(redis.saveStaffAnchor).toHaveBeenCalledWith(12, anchor || expect.any(String), 604800);
+});
+
+test('refresh tracks overlapping JWTs and persists the same ID that is signed', async () => {
+  const state = session({ tokenId: 'older-jwt', accessTokenExp: 1030000 });
+  redis.getRefreshSession.mockResolvedValue(state);
+  await tokens.handleRefresh({ userId: 12, deviceId: 'phone', providedToken: 'current' });
+  const saved = redis.saveRotatedRefreshSession.mock.calls[0];
+  expect(saved.slice(0, 3)).toEqual([12, 'phone', 'current']);
+  expect(saved[3].accessTokens.map(token => token.tokenId)).toEqual(['older-jwt', state.tokenId]);
+  expect(jwt.sign.mock.calls[0][0].jti).toBe(state.tokenId);
+});
+
+test('does not issue a JWT if the session was revoked during refresh', async () => {
+  redis.getRefreshSession.mockResolvedValue(session());
+  redis.saveRotatedRefreshSession.mockResolvedValueOnce(false);
+  await expect(tokens.handleRefresh({ userId: 12, deviceId: 'phone', providedToken: 'current' }))
+    .rejects.toThrow('Session changed or revoked during refresh');
+  expect(jwt.sign).not.toHaveBeenCalled();
+});
+
+test('login retains earlier unexpired JWTs for the same device and preserves the staff anchor', async () => {
+  redis.getRefreshSession.mockResolvedValue(session({ tokenId: 'earlier', accessTokenExp: 1030000 }));
+  redis.getStaffAnchor.mockResolvedValue('staff-anchor');
+  await tokens.handleLogin({ userId: 12, deviceId: 'phone', role: 'medical' });
+  const saved = redis.saveRefreshSession.mock.calls[0][2];
+  expect(saved.accessTokens.map(token => token.tokenId)).toEqual(['earlier', saved.tokenId]);
+  expect(jwt.sign.mock.calls[0][0]).toMatchObject({ sid: 'staff-anchor', jti: saved.tokenId });
 });

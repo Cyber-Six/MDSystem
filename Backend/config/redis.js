@@ -925,6 +925,64 @@ async function getRefreshSession(userId, deviceId) {
   return JSON.parse(raw);
 }
 
+// Access-token revocation and refresh updates are atomic so a concurrent
+// refresh cannot restore a revoked session or lose an issued token ID.
+const SESSION_BLACKLIST_TOKEN_PREFIX = "blacklist:token:";
+
+async function getSessionBlacklist(tokenId) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (typeof tokenId !== "string" || !tokenId.trim()) throw new Error("tokenId is required");
+  return Boolean(await client.exists(`${SESSION_BLACKLIST_TOKEN_PREFIX}${tokenId}`));
+}
+
+async function saveRotatedRefreshSession(userId, deviceId, expectedToken, session, ttlSeconds) {
+  if (!client) throw new Error("Redis client not initialized");
+  const result = await client.eval(`
+    local raw = redis.call('GET', KEYS[1])
+    if not raw then return 0 end
+    local current = cjson.decode(raw)
+    if current.status == 'revoked' or current.refreshToken ~= ARGV[1] then return 0 end
+    redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+    return 1
+  `, {
+    keys: [`rt:${userId}:${deviceId}`],
+    arguments: [expectedToken, JSON.stringify(session), String(ttlSeconds)],
+  });
+  return result === 1;
+}
+
+async function revokeRefreshSession(userId, deviceId) {
+  if (!client) throw new Error("Redis client not initialized");
+  const tokenIds = await client.eval(`
+    local raw = redis.call('GET', KEYS[1])
+    if not raw or redis.call('TTL', KEYS[1]) <= 0 then return {} end
+    local session = cjson.decode(raw)
+    local now = tonumber(ARGV[1])
+    local records = session.accessTokens or {}
+    if session.tokenId and session.accessTokenExp then
+      table.insert(records, {tokenId=session.tokenId, expiresAt=session.accessTokenExp})
+    end
+    local result = {}
+    local seen = {}
+    for _, record in ipairs(records) do
+      local expires = tonumber(record.expiresAt)
+      if type(record.tokenId) == 'string' and expires and expires > now and not seen[record.tokenId] then
+        redis.call('SET', ARGV[2] .. record.tokenId, '1', 'PX', math.ceil(expires - now))
+        seen[record.tokenId] = true
+        table.insert(result, record.tokenId)
+      end
+    end
+    session.status = 'revoked'
+    session.updatedAt = now
+    redis.call('SET', KEYS[1], cjson.encode(session), 'KEEPTTL')
+    return result
+  `, {
+    keys: [`rt:${userId}:${deviceId}`],
+    arguments: [String(Date.now()), SESSION_BLACKLIST_TOKEN_PREFIX],
+  });
+  return tokenIds.map(tokenId => ({ tokenId, blacklisted: true }));
+}
+
 // -----------------------------------------------------//
 // Generic Fail Limiter Helper 
 // -----------------------------------------------------//
@@ -1435,6 +1493,9 @@ module.exports = {
 
   saveRefreshSession,
   getRefreshSession,
+  revokeRefreshSession,
+  saveRotatedRefreshSession,
+  getSessionBlacklist,
   saveStaffAnchor,
   getStaffAnchor,
   listUserSessions,

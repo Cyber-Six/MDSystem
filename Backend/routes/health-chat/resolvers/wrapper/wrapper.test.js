@@ -4,7 +4,7 @@ const mockFormatChatRecordsBatch = jest.fn();
 const mockFormatChatRecord = jest.fn();
 const mockError = jest.fn((message, status) => Object.assign(new Error(message), { status }));
 
-jest.mock('../../../../config/query', () => ({ query: (...args) => mockQuery(...args) }));
+jest.mock('../../../../config/query', () => ({ query: (...args) => mockQuery(...args), connect: jest.fn(), setSystemAuditLog: jest.fn() }));
 jest.mock('../../../../utils/graphql-helper', () => ({ throwGraphQLError: jest.fn(() => ({ message(value) { this.errorMessage = value; return this; }, status(value) { this.statusCode = value; return this; }, throw() { throw mockError(this.errorMessage, this.statusCode); } })) }));
 jest.mock('../../../../config/multer', () => ({ promoteFile: jest.fn() }));
 jest.mock('../../../../config/sockets', () => ({ emitToRoom: jest.fn(), notifyUser: jest.fn() }));
@@ -45,4 +45,17 @@ test('ticket lookup and expiration mutation enforce authentication and format re
   mockAutoExpireTickets.mockResolvedValueOnce(3);
   await expect(Mutation._expireOldTickets(null, null, { user: { id: 8 } })).resolves.toBe(3);
   expect(mockAutoExpireTickets).toHaveBeenLastCalledWith();
+});
+
+test('ticket approval rolls back the status and system prompt when audit insertion fails', async () => {
+  const db = require('../../../../config/query');
+  const client = { query: jest.fn(async sql => /^\s*UPDATE/.test(sql) ? { rowCount: 1, rows: [{ id: 7, patientId: 8 }] } : { rows: [] }), release: jest.fn() };
+  db.connect.mockResolvedValueOnce(client);
+  mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ status: 'Open', id: 7 }] });
+  db.setSystemAuditLog.mockRejectedValueOnce(Error('audit unavailable'));
+  await expect(Mutation._approveTicket(null, { input: { chatId: 7 } }, { user: { id: 3 }, res: {} })).rejects.toThrow('audit unavailable');
+  expect(db.setSystemAuditLog).toHaveBeenCalledWith(expect.objectContaining({ client, actorId: 3, targetId: 8 }));
+  expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
+  expect(client.query).not.toHaveBeenCalledWith('COMMIT');
+  expect(client.release).toHaveBeenCalledTimes(1);
 });

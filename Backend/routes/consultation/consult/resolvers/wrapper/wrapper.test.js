@@ -1,4 +1,4 @@
-jest.mock('../../../../../config/query.js', () => ({ query: jest.fn() }));
+jest.mock('../../../../../config/query.js', () => ({ query: jest.fn(), connect: jest.fn(), setSystemAuditLog: jest.fn() }));
 jest.mock('../../../../../config/icdapi/icdmain.js', () => ({ GetIcd: jest.fn(), GetTitle: jest.fn(), getIcdDetails: jest.fn() }));
 jest.mock('../../../../../utils/graphql-helper.js', () => ({
   GraphQLError: class GraphQLError extends Error {},
@@ -11,7 +11,7 @@ jest.mock('dotenv', () => ({ config: jest.fn() }));
 const db = require('../../../../../config/query.js');
 const helper = require('./helper.js');
 const icd = require('../../../../../config/icdapi/icdmain.js');
-const { Query } = require('./wrapper.js');
+const { Query, Mutation } = require('./wrapper.js');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -47,4 +47,16 @@ test('loads and enriches consultation outcomes and delegates ICD and outcome dat
   await expect(Query._getIcdViaCode(null, { code: 'A00' }, { user: { id: 1 }, res })).resolves.toEqual(['title']);
   await expect(Query._getIcdViaTitle(null, { title: 'flu' }, { user: { id: 1 }, res })).resolves.toEqual(['icd']);
   await expect(Query._getIcdDetails(null, { id: 3 }, { user: { id: 1 }, res })).resolves.toEqual({ id: 3 });
+});
+
+test.each([false, true])('consultation creation and audit commit together or roll back on audit failure=%s', async failure => {
+  const client = { query: jest.fn(async sql => /^\s*INSERT/.test(sql) ? { rows: [{ id: 42 }] } : { rows: [] }), release: jest.fn() };
+  db.connect.mockResolvedValueOnce(client);
+  if (failure) db.setSystemAuditLog.mockRejectedValueOnce(Error('audit unavailable'));
+  const operation = Mutation._createConsultation(null, { input: { patientId: 8, mode: 'WalkIn', type: 'Medical' } }, { user: { id: 3 }, res: {} });
+  if (failure) await expect(operation).rejects.toThrow('Failed to create consultation');
+  else await expect(operation).resolves.toEqual({ id: 42 });
+  expect(db.setSystemAuditLog).toHaveBeenCalledWith(expect.objectContaining({ client, actorId: 3, targetId: 8, action: 'CREATE_CONSULTATION' }));
+  expect(client.query).toHaveBeenLastCalledWith(failure ? 'ROLLBACK' : 'COMMIT');
+  expect(client.release).toHaveBeenCalledTimes(1);
 });
