@@ -10,6 +10,7 @@
     "ios": "expo run:ios",
     "ios:clear": "expo start --ios --clear",
     "web": "expo start --web",
+    "export:all": "expo export --platform all",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch --passWithNoTests",
     "test:coverage": "jest --coverage --passWithNoTests"

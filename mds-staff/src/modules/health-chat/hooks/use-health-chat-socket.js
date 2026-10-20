@@ -73,6 +73,10 @@ export function useHealthChatSocket() {
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
+  const activeRoomRef = useRef({ chatId: activeTicketId, archived: isArchived });
+  useEffect(() => {
+    activeRoomRef.current = { chatId: activeTicketId, archived: isArchived };
+  }, [activeTicketId, isArchived]);
 
   // Fallback path: consume health-chat events from the shared notification socket.
   // This keeps the list reactive even if the dedicated health-chat socket reconnects slowly.
@@ -101,6 +105,7 @@ export function useHealthChatSocket() {
   // Connect on mount only - use empty dependency array to prevent reconnection
   useEffect(() => {
     let isMounted = true;
+    let subscribedSocket = null;
 
     const socketService = createSocketService({
       getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
@@ -183,35 +188,36 @@ export function useHealthChatSocket() {
         }
 
         socketRef.current = socketService;
-        setIsConnected(true);
-        setSocketErrorRef.current(false);
         connectRetryAttemptRef.current = 0;
         clearConnectRetry();
 
-        // Join branch-scoped notification rooms used by health chat ticket events.
-        joinBranchRoom();
-
         const rawSocket = socketService.getSocket();
+        if (subscribedSocket === rawSocket) return;
+        subscribedSocket = rawSocket;
 
-        // Keep UI connectivity status in sync across reconnect cycles.
-        rawSocket?.on('connect', () => {
+        const restoreRooms = () => {
           if (!isMounted) return;
           setIsConnected(true);
+          setSocketErrorRef.current(false);
           joinBranchRoom();
-        });
+          // A new connection has no room membership. Restore the currently active
+          // ticket only; selection may have changed while the network was down.
+          joinedRoomsRef.current.clear();
+          const { chatId, archived } = activeRoomRef.current;
+          if (chatId && !archived) {
+            socketService.emit('healthchat:join-room', { chatId });
+            joinedRoomsRef.current.add(chatId);
+          }
+        };
+
+        // Socket.IO emits connect after both the first connection and reconnection.
+        rawSocket?.on('connect', restoreRooms);
+        restoreRooms();
 
         rawSocket?.on('disconnect', () => {
           if (!isMounted) return;
           setIsConnected(false);
           setSocketErrorRef.current(true);
-        });
-
-        // Handle reconnection - rejoin all tracked rooms
-        rawSocket?.on('reconnect', () => {
-          joinBranchRoom();
-          joinedRoomsRef.current.forEach(roomId => {
-            socketService.emit('healthchat:join-room', { chatId: roomId });
-          });
         });
 
         // Listen for new ticket created by patient
@@ -360,15 +366,15 @@ export function useHealthChatSocket() {
   // IMPORTANT: Join by activeTicketId (actual ticket ID), not selectedChatId (patientId)
   // because socket rooms are named healthchat:${ticketId}
   useEffect(() => {
-    if (!socketRef.current?.isConnected() || !activeTicketId) return;
-
     // Leave previous room if different
     joinedRoomsRef.current.forEach(roomId => {
-      if (String(roomId) !== String(activeTicketId)) {
-        socketRef.current.emit('healthchat:leave-room', { chatId: roomId });
+      if (!activeTicketId || isArchived || String(roomId) !== String(activeTicketId)) {
+        if (socketRef.current?.isConnected()) socketRef.current.emit('healthchat:leave-room', { chatId: roomId });
         joinedRoomsRef.current.delete(roomId);
       }
     });
+
+    if (!socketRef.current?.isConnected() || !activeTicketId) return;
 
     // Don't join room for archived chats - no need for real-time updates
     if (isArchived) {

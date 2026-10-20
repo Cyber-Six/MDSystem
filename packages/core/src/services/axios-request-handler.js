@@ -13,6 +13,7 @@
 
 import axios from 'axios';
 import { createRequestLogger } from './console-request-logger.js';
+import { apiEndpoint, normalizeApiBaseUrl } from '../internal/api-url.js';
 
 /**
  * Creates an axios instance with platform-specific dependencies
@@ -52,7 +53,7 @@ import { createRequestLogger } from './console-request-logger.js';
  * import * as bannerConfig from '@mdsystem/core/config/banner-config';
  * 
  * const axiosRequest = createAxiosRequestHandler({
- *   getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
+ *   getApiBaseUrl: () => Config.API_URL || 'https://www.mdsystemtip.space',
  *   getDevSubdomain: apiBaseUrlProvider.getDevSubdomain,
  *   tokenService,
  *   bannerConfig,
@@ -78,7 +79,7 @@ export const createAxiosRequestHandler = ({
       ? requestLoggerForceEnabled
       : runtimeDevFlag;
 
-  const computedBaseURL = getApiBaseUrl();
+  const computedBaseURL = normalizeApiBaseUrl(getApiBaseUrl());
   const requestLogger = createRequestLogger({
     forceEnabled: loggerForceEnabled,
     computedBaseURL,
@@ -93,6 +94,23 @@ export const createAxiosRequestHandler = ({
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
   });
+
+  // This client carries session credentials and must only contact the configured API.
+  // Resolve Axios' final URL, including per-request baseURL overrides, before reading tokens.
+  const browserUrl = typeof window !== 'undefined' ? window.location?.href : undefined;
+  if (!browserUrl && !/^https?:\/\//i.test(computedBaseURL)) {
+    throw new Error('An absolute HTTP(S) API base URL is required without a browser location');
+  }
+  const trustedUrl = new URL(computedBaseURL || '/', browserUrl);
+  const refreshPath = new URL(apiEndpoint(computedBaseURL, '/auth/refresh'), browserUrl).pathname;
+  const resolveApiUrl = (config) => {
+    if (config.baseURL !== undefined) config.baseURL = normalizeApiBaseUrl(config.baseURL);
+    const url = new URL(axiosRequest.getUri(config), browserUrl || trustedUrl.href);
+    if (!['http:', 'https:'].includes(url.protocol) || url.origin !== trustedUrl.origin || url.username || url.password) {
+      throw new Error('Authenticated requests must target the configured API origin');
+    }
+    return url;
+  };
 
   // Flag to prevent multiple simultaneous refresh requests
   let isRefreshing = false;
@@ -116,6 +134,7 @@ export const createAxiosRequestHandler = ({
   // Request interceptor - inject auth token and subdomain headers
   axiosRequest.interceptors.request.use(
     async (config) => {
+      resolveApiUrl(config);
       // Inject access token if available (handles both sync and async storage)
       const token = await Promise.resolve(tokenService.TokenStorage.getAccessToken());
       if (token) {
@@ -158,10 +177,12 @@ export const createAxiosRequestHandler = ({
       requestLogger.logError(error);
 
       const originalRequest = error.config;
-      const isRefreshEndpoint = originalRequest?.url?.includes('/auth/refresh');
+      const isRefreshEndpoint = originalRequest && resolveApiUrl(originalRequest).pathname.replace(/\/$/, '') === refreshPath;
       
       // Handle 401 errors with automatic token refresh (skip if already retrying or is refresh endpoint)
-      if (error.response?.status === 401 && !originalRequest._retry && !isRefreshEndpoint) {
+      if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isRefreshEndpoint) {
+        // Queued requests also get only one retry, even if the new token is rejected.
+        originalRequest._retry = true;
         // Queue request if refresh is already in progress
         if (isRefreshing) {
           return new Promise((resolve, reject) => {
@@ -173,7 +194,6 @@ export const createAxiosRequestHandler = ({
         }
 
         // Attempt to refresh the token
-        originalRequest._retry = true;
         isRefreshing = true;
 
         try {
@@ -186,6 +206,8 @@ export const createAxiosRequestHandler = ({
         } catch (refreshError) {
           processQueue(refreshError, null);
           isRefreshing = false;
+
+          if (refreshError.code === 'AUTH_SESSION_CHANGED') return Promise.reject(refreshError);
           
           // Show session expired banner
           if (onShowBanner) {
@@ -197,8 +219,8 @@ export const createAxiosRequestHandler = ({
             });
           }
           
-          // Logout after brief delay to show banner
-          setTimeout(() => tokenService.logout(true), 1000);
+          // Finish logout now; a delayed logout could clear a subsequent login.
+          await tokenService.logout(true);
           return Promise.reject(refreshError);
         }
       }

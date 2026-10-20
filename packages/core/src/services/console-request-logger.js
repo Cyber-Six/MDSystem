@@ -1,6 +1,7 @@
 /**
  * Request Logger Service
- * Centralized logging for HTTP requests
+ * Centralized transport-metadata logging for HTTP requests.
+ * Never logs bodies, parameters, credentials, or server error messages.
  * 
  * Auto-detects environment:
  * - localhost/127.0.0.1: Logging enabled (development)
@@ -71,121 +72,46 @@ export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL 
   const shouldLog = () => _loggingEnabled;
   /**
    * Log request details to console for debugging
-   * Shows the actual URL that will be hit, including protocol and hostname
+   * Records method and path without query strings or fragments.
    * 
    * @param {Object} config - Axios request config
    */
+  // Payloads, query strings, and server error messages may contain credentials or
+  // patient information. Keep diagnostics to transport metadata, even when forced on.
+  const requestPath = (config) => {
+    try {
+      return new URL(config?.url || '/', 'https://logger.invalid').pathname;
+    } catch {
+      return '[invalid URL]';
+    }
+  };
+
   const logRequest = (config) => {
     if (!shouldLog()) return;
-
-    // Determine the actual backend being targeted
-    let backendURL = 'unknown';
-    const base = config.baseURL || '';
-    const path = config.url || '';
-    
-    if (hasBrowserLocation()) {
-      const hostname = window.location.hostname;
-      
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        // Development: Show proxy target based on X-Forwarded-Host
-        const forwardedHost = config.headers?.['X-Forwarded-Host'];
-        if (forwardedHost) {
-          backendURL = `https://${forwardedHost}${path}`;
-        } else {
-          backendURL = `${window.location.origin || ''}${path} (no proxy)`;
-        }
-      } else {
-        // Production: Show actual production URL
-        backendURL = `https://${hostname}${path}`;
-      }
-    } else {
-      // React Native or non-browser environment
-      const subdomain = getDevSubdomain ? getDevSubdomain() : null;
-      backendURL = subdomain ? `https://${subdomain}${path}` : base ? `${base}${path}` : path;
-    }
-
     console.log('🔵 Axios Request:', {
-      backendURL: backendURL,
       method: config.method?.toUpperCase(),
-      path: path,
-      data: config.data,
-      params: config.params,
+      path: requestPath(config),
     });
   };
 
-  /**
-   * Log response details to console for debugging
-   * 
-   * @param {Object} response - Axios response object
-   */
   const logResponse = (response) => {
     if (!shouldLog()) return;
-
     console.log('🟢 Axios Response:', {
       status: response.status,
-      statusText: response.statusText,
-      url: response.config.url,
-      data: response.data,
+      path: requestPath(response.config),
     });
   };
 
-  const summarizeGraphQLErrors = (payload) => {
-    const errors = Array.isArray(payload?.errors) ? payload.errors.filter(Boolean) : [];
-    if (errors.length === 0) return [];
-
-    return errors.map((error, index) => {
-      const message = error?.message || 'Unknown GraphQL error';
-      const path = Array.isArray(error?.path) && error.path.length > 0
-        ? ` @ ${error.path.join('.')}`
-        : '';
-      const status = error?.extensions?.status ? ` (status ${error.extensions.status})` : '';
-      return `${index + 1}. ${message}${path}${status}`;
-    });
-  };
-
-  /**
-   * Log error details to console for debugging
-   * 
-   * @param {Object} error - Axios error object
-   */
   const logError = (error) => {
     if (!shouldLog()) return;
-
-    if (error.response) {
-      const responseData = error.response.data;
-      const graphQLErrors = summarizeGraphQLErrors(responseData);
-
-      if (graphQLErrors.length > 0) {
-        const dataKeys = responseData?.data && typeof responseData.data === 'object'
-          ? Object.keys(responseData.data)
-          : [];
-
-        console.error('🔴 Axios Error Response:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          url: error.config?.url,
-          graphQLErrorCount: graphQLErrors.length,
-          graphQLErrors,
-          hasData: dataKeys.length > 0,
-          dataKeys,
-        });
-        return;
-      }
-
-      console.error('🔴 Axios Error Response:', {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        url: error.config?.url,
-        data: responseData,
-      });
-    } else if (error.request) {
-      console.error('🔴 Axios Network Error:', {
-        message: 'No response received',
-        url: error.config?.url,
-      });
-    } else {
-      console.error('🔴 Axios Error:', error.message);
-    }
+    console.error('🔴 Axios Error:', {
+      status: error.response?.status,
+      path: requestPath(error.config),
+      networkError: Boolean(error.request && !error.response),
+      graphQLErrorCount: Array.isArray(error.response?.data?.errors)
+        ? error.response.data.errors.length
+        : 0,
+    });
   };
 
   return {

@@ -36,6 +36,7 @@ export function useHealthChatSocket({
   onStaffChanged,
 }) {
   const socketRef = useRef(null);
+  const joinedRoomRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [socketError, setSocketError] = useState(false);
   const typingTimeoutRef = useRef(null);
@@ -65,7 +66,7 @@ export function useHealthChatSocket({
 
   // Determine if we should be connected
   // Only connect when chat is active (Ongoing) or pending (Open)
-  const shouldConnect = chatId && ['Open', 'Ongoing'].includes(chatStatus);
+  const shouldConnect = !!chatId && ['Open', 'Ongoing'].includes(chatStatus);
 
   // Use a ref for chatId in event handlers to avoid stale closures
   const chatIdRef = useRef(chatId);
@@ -73,19 +74,33 @@ export function useHealthChatSocket({
     chatIdRef.current = chatId;
   }, [chatId]);
 
+  const joinCurrentRoom = useCallback((service) => {
+    const roomId = chatIdRef.current;
+    if (!service?.isConnected() || !roomId) return;
+    if (joinedRoomRef.current?.service === service && String(joinedRoomRef.current.chatId) === String(roomId)) return;
+    if (joinedRoomRef.current?.service === service) {
+      service.emit('healthchat:leave-room', { chatId: joinedRoomRef.current.chatId });
+    }
+    service.emit('healthchat:join-room', { chatId: roomId });
+    joinedRoomRef.current = { service, chatId: roomId };
+  }, []);
+
   // Connect socket once when shouldConnect becomes true, disconnect when false
   useEffect(() => {
     if (!shouldConnect) {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
-        setIsConnected(false);
       }
+      joinedRoomRef.current = null;
+      setIsConnected(false);
       return;
     }
 
     // Already connected - nothing to do
     if (socketRef.current?.isConnected()) return;
+
+    let active = true;
 
     const socketService = createSocketService({
       getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
@@ -102,16 +117,24 @@ export function useHealthChatSocket({
       }
     });
 
+    // Keep the pending service reachable so cleanup can cancel it before connect resolves.
+    socketRef.current = socketService;
     socketService.connect().then(() => {
-      socketRef.current = socketService;
+      if (!active || socketRef.current !== socketService) return;
       setIsConnected(true);
       setSocketError(false);
 
       // Handle reconnection, rejoin current room
-      socketService.getSocket()?.on('reconnect', () => {
-        if (chatIdRef.current) {
-          socketService.emit('healthchat:join-room', { chatId: chatIdRef.current });
-        }
+      socketService.on('connect', () => {
+        if (!active) return;
+        setIsConnected(true);
+        setSocketError(false);
+        joinCurrentRoom(socketService);
+      });
+      socketService.on('disconnect', () => {
+        if (!active) return;
+        joinedRoomRef.current = null;
+        setIsConnected(false);
       });
 
       // Listen for new messages (with deduplication) - uses ref for chatId
@@ -182,10 +205,11 @@ export function useHealthChatSocket({
       });
 
       // Join room for current chatId
-      if (chatIdRef.current) {
-        socketService.emit('healthchat:join-room', { chatId: chatIdRef.current });
-      }
+      joinCurrentRoom(socketService);
     }).catch((err) => {
+      if (!active) return;
+      socketService.disconnect();
+      if (socketRef.current === socketService) socketRef.current = null;
       console.error('[HealthChatSocket] Connection failed:', err.message);
       setIsConnected(false);
       setSocketError(true);
@@ -193,27 +217,28 @@ export function useHealthChatSocket({
 
     // Cleanup on unmount
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
+      active = false;
+      socketService.disconnect();
+      joinedRoomRef.current = null;
+      if (socketRef.current === socketService) {
         socketRef.current = null;
-        setIsConnected(false);
       }
       processedMessageIds.current.clear();
     };
-  }, [shouldConnect]);
+  }, [shouldConnect, joinCurrentRoom]);
 
   // Manage room join/leave when chatId changes (reuses existing connection)
   useEffect(() => {
-    if (!socketRef.current?.isConnected() || !chatId) return;
-
-    socketRef.current.emit('healthchat:join-room', { chatId });
+    const service = socketRef.current;
+    joinCurrentRoom(service);
 
     return () => {
-      if (socketRef.current?.isConnected()) {
-        socketRef.current.emit('healthchat:leave-room', { chatId });
+      if (joinedRoomRef.current?.service === service && String(joinedRoomRef.current.chatId) === String(chatId)) {
+        if (service?.isConnected()) service.emit('healthchat:leave-room', { chatId });
+        joinedRoomRef.current = null;
       }
     };
-  }, [chatId, isConnected]);
+  }, [chatId, joinCurrentRoom]);
 
   /**
    * Emit typing status to server (OPTIMIZED with throttling and debouncing)
@@ -279,6 +304,7 @@ export function useHealthChatSocket({
    * Use when navigating away from chat
    */
   const disconnect = useCallback(() => {
+    joinedRoomRef.current = null;
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;

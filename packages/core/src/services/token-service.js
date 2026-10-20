@@ -9,6 +9,7 @@
  */
 
 import axios from 'axios';
+import { apiEndpoint, normalizeApiBaseUrl } from '../internal/api-url.js';
 
 /**
  * Creates a token service with platform-specific dependencies
@@ -49,17 +50,48 @@ import axios from 'axios';
  * 
  * const tokenService = createTokenService({
  *   storage: AsyncStorage,
- *   navigator: navigation, // from useNavigation()
- *   getApiBaseUrl: () => apiBaseUrlProvider.getApiBaseUrl()
+ *   navigator: { navigate: () => navigation.navigate('Auth') },
+ *   getApiBaseUrl: () => Config.API_URL || 'https://www.mdsystemtip.space'
  * });
  * 
  * // In React Native, storage operations return promises
  * const token = await tokenService.TokenStorage.getAccessToken();
  */
 export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNamespace }) => {
+  const baseURL = normalizeApiBaseUrl(getApiBaseUrl());
   // Derive namespaced storage keys (e.g. 'patient_accessToken') or fall back to bare keys
   const accessTokenKey  = tokenNamespace ? `${tokenNamespace}_accessToken`  : 'accessToken';
   const refreshTokenKey = tokenNamespace ? `${tokenNamespace}_refreshToken` : 'refreshToken';
+
+  let sessionRevision = 0;
+  let refreshInFlight = null;
+  let storageMutation = Promise.resolve();
+  const mutateStorage = (operation) => {
+    const result = storageMutation.then(operation);
+    storageMutation = result.catch(() => {});
+    return result;
+  };
+  const removeStoredTokens = async () => {
+    // Attempt both removals even if one storage operation fails.
+    const results = await Promise.allSettled([
+      Promise.resolve().then(() => storage.removeItem(accessTokenKey)),
+      Promise.resolve().then(() => storage.removeItem(refreshTokenKey)),
+    ]);
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure) throw failure.reason;
+  };
+  const storeTokens = (accessToken, refreshToken) => mutateStorage(async () => {
+    try {
+      await storage.setItem(accessTokenKey, accessToken);
+      await storage.setItem(refreshTokenKey, refreshToken);
+    } catch (error) {
+      await removeStoredTokens();
+      throw error;
+    }
+  });
+  const sessionChangedError = () => Object.assign(new Error('Authentication session changed during refresh'), {
+    code: 'AUTH_SESSION_CHANGED',
+  });
 
   /**
    * Token storage interface
@@ -85,7 +117,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
     },
 
     /**
-     * Store tokens atomically
+     * Store a validated token pair; clear partial writes on failure.
      * 
      * @param {string} accessToken - New access token
      * @param {string} refreshToken - New refresh token
@@ -93,11 +125,11 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
      * @returns {Promise<void>} Resolves when both tokens are stored
      */
     setTokens: async (accessToken, refreshToken) => {
-      if (!accessToken || !refreshToken) {
-        throw new Error('Both tokens are required');
+      if (!TokenStorage.validateToken(accessToken) || !TokenStorage.validateRefreshToken(refreshToken)) {
+        throw new Error('Invalid token pair');
       }
-      await Promise.resolve(storage.setItem(accessTokenKey, accessToken));
-      await Promise.resolve(storage.setItem(refreshTokenKey, refreshToken));
+      sessionRevision += 1;
+      return storeTokens(accessToken, refreshToken);
     },
 
     /**
@@ -107,8 +139,8 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
      * @returns {Promise<void>} Resolves when both tokens are removed
      */
     clearTokens: async () => {
-      await Promise.resolve(storage.removeItem(accessTokenKey));
-      await Promise.resolve(storage.removeItem(refreshTokenKey));
+      sessionRevision += 1;
+      return mutateStorage(removeStoredTokens);
     },
 
     /**
@@ -123,8 +155,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
      */
     validateToken: (token) => {
       if (!token || typeof token !== 'string') return false;
-      const parts = token.split('.');
-      return parts.length === 3 && parts.every((p) => p.length > 0);
+      return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
     },
 
     /**
@@ -152,28 +183,18 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
    * @returns {Promise<string>} New access token
    * @throws {Error} If refresh fails
    */
-  const refreshAccessToken = async () => {
-    // Handle async storage (React Native)
-    const refreshToken = await Promise.resolve(TokenStorage.getRefreshToken());
-    
-    // SECURITY: Validate refresh token exists
-    if (!refreshToken) {
-      await Promise.resolve(TokenStorage.clearTokens());
-      throw new Error('No refresh token available');
-    }
-
-    // SECURITY: Validate refresh token format (userId:deviceId:rawToken)
-    const parts = refreshToken.split(':');
-    if (parts.length !== 3) {
-      await Promise.resolve(TokenStorage.clearTokens());
-      throw new Error('Invalid refresh token format');
-    }
-
+  const performRefresh = async (revision) => {
     try {
+      await storageMutation;
+      const refreshToken = await TokenStorage.getRefreshToken();
+      if (sessionRevision !== revision) throw sessionChangedError();
+      if (!refreshToken) throw new Error('No refresh token available');
+      if (!TokenStorage.validateRefreshToken(refreshToken)) throw new Error('Invalid refresh token format');
+
       // SECURITY: Use plain axios (not axiosRequest) to avoid interceptor recursion
       // This prevents infinite loops when refresh endpoint returns 401
       const response = await axios.post(
-        `${getApiBaseUrl()}/auth/refresh`,
+        apiEndpoint(baseURL, '/auth/refresh'),
         { refreshToken },
         {
           headers: { 
@@ -196,14 +217,18 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
         throw new Error('Invalid tokens received from server');
       }
       
-      // Store new tokens atomically
-      // Handle async storage (React Native)
-      await Promise.resolve(TokenStorage.setTokens(accessToken, newRefreshToken));
+      // Logout or a new login invalidates this response, including its error cleanup.
+      if (sessionRevision !== revision) throw sessionChangedError();
+      await storeTokens(accessToken, newRefreshToken);
+      if (sessionRevision !== revision) throw sessionChangedError();
       
       return accessToken;
     } catch (error) {
+      if (sessionRevision !== revision) throw sessionChangedError();
       // SECURITY: Clear tokens on any refresh failure to prevent using stale/invalid tokens
-      await Promise.resolve(TokenStorage.clearTokens());
+      const cleanupRevision = sessionRevision + 1;
+      await TokenStorage.clearTokens();
+      if (sessionRevision !== cleanupRevision) throw sessionChangedError();
       
       // Preserve error details for better debugging
       if (error.response) {
@@ -226,6 +251,17 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
     }
   };
 
+  // Share refreshes across HTTP, route guards, and socket services, since tokens rotate.
+  const refreshAccessToken = () => {
+    if (refreshInFlight?.revision === sessionRevision) return refreshInFlight.promise;
+    const revision = sessionRevision;
+    const promise = performRefresh(revision).finally(() => {
+      if (refreshInFlight?.promise === promise) refreshInFlight = null;
+    });
+    refreshInFlight = { revision, promise };
+    return promise;
+  };
+
   /**
    * Check if the access token JWT is expired (client-side decode, no signature verification)
    * 
@@ -246,7 +282,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
       const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
       const payload = JSON.parse(atob(base64));
 
-      if (!payload.exp || typeof payload.exp !== 'number') return true;
+      if (!Number.isFinite(payload.exp)) return true;
 
       const now = Math.floor(Date.now() / 1000);
       return now >= (payload.exp - bufferSeconds);
@@ -263,11 +299,20 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
    * @param {boolean} redirectToAuth - Whether to redirect/navigate after logout
    */
   const logout = async (redirectToAuth = true) => {
-    const accessToken = await Promise.resolve(TokenStorage.getAccessToken());
-    const refreshToken = await Promise.resolve(TokenStorage.getRefreshToken());
-
-    // Clear all tokens locally first so logout is effective even when network is unavailable.
-    await Promise.resolve(TokenStorage.clearTokens());
+    // Invalidate an in-flight refresh before even awaiting asynchronous storage reads.
+    const revision = ++sessionRevision;
+    let accessToken;
+    let refreshToken;
+    // Capture and clear the old pair in one queued operation. A subsequent login
+    // is queued after this cleanup and cannot be erased by the old logout.
+    await mutateStorage(async () => {
+      try {
+        accessToken = await TokenStorage.getAccessToken();
+        refreshToken = await TokenStorage.getRefreshToken();
+      } finally {
+        await removeStoredTokens();
+      }
+    });
 
     // Best-effort server-side revocation for the current refresh session.
     if (TokenStorage.validateRefreshToken(refreshToken)) {
@@ -278,7 +323,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
 
       try {
         await axios.post(
-          `${getApiBaseUrl()}/auth/logout`,
+          apiEndpoint(baseURL, '/auth/logout'),
           { refreshToken },
           {
             withCredentials: true,
@@ -292,7 +337,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
     }
     
     // Redirect/navigate if requested
-    if (redirectToAuth) {
+    if (redirectToAuth && sessionRevision === revision) {
       navigator.navigate('/auth');
     }
   };

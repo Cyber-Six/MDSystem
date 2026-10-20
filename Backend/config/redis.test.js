@@ -187,8 +187,10 @@ test('lists valid user sessions and bulk-deletes their keys', async () => {
   scan(['rt:12:a', 'rt:12:b', 'rt:12:c']);
   client.get.mockResolvedValueOnce('{"deviceId":"a"}').mockResolvedValueOnce('invalid').mockResolvedValueOnce(null);
   await expect(store.listUserSessions(12)).resolves.toEqual([{ deviceId: 'a' }]);
+  client.eval = jest.fn().mockResolvedValue([]);
   await expect(store.deleteAllUserSessions(12)).resolves.toBe(3);
-  expect(client.del).toHaveBeenCalledWith(['rt:12:a', 'rt:12:b', 'rt:12:c']);
+  expect(client.eval).toHaveBeenCalledTimes(3);
+  expect(client.eval.mock.calls[0][1].arguments.at(-1)).toBe('1');
   scan([]);
   await expect(store.deleteAllUserSessions(12)).resolves.toBe(0);
 });

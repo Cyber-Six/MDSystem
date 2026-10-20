@@ -2,9 +2,9 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
-const { recordAccessToken, getLiveAccessTokens } = require("../utils/access-token-session");
-const { saveRefreshSession, getRefreshSession, 
-        saveStaffAnchor, getStaffAnchor, saveRotatedRefreshSession, } = require("./redis.js");
+const { recordAccessToken, isValidUserId } = require("../utils/access-token-session");
+const { getRefreshSession, getStaffAnchor, saveRotatedRefreshSession, saveLoginSession } = require("./redis.js");
+const { assertAccountAllowed } = require("../utils/authentication-state");
 const logger = require("../utils/logger.js");
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -13,9 +13,15 @@ if (!process.env.JWT_SECRET) {
   }
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const ACCESS_PATIENT_EXPIRATION = parseInt(process.env.JWT_PATIENT_ACCESS_EXPIRATION, 10);
-const ACCESS_STAFF_EXPIRATION = parseInt(process.env.JWT_STAFF_ACCESS_EXPIRATION, 10);
-const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800; // default 7d
+function expirationSeconds(name, fallback) {
+  const raw = process.env[name] ?? fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive integer`);
+  return value;
+}
+const ACCESS_PATIENT_EXPIRATION = expirationSeconds('JWT_PATIENT_ACCESS_EXPIRATION');
+const ACCESS_STAFF_EXPIRATION = expirationSeconds('JWT_STAFF_ACCESS_EXPIRATION');
+const REFRESH_EXP = expirationSeconds('JWT_REFRESH_EXPIRATION', 604800);
 
 function getAccessTokenExpirationSeconds(role) {
   return role === "medical" ? ACCESS_STAFF_EXPIRATION : ACCESS_PATIENT_EXPIRATION;
@@ -29,7 +35,7 @@ function isValidUserRole(role) {
 // Generate short-lived access token
 function generateAccessToken(user, anchorSessionId = null, tokenId = crypto.randomUUID()) {
   // Validate user.id
-  if (typeof user.id !== "string" && typeof user.id !== "number") {
+  if (!isValidUserId(user?.id)) {
     throw new Error("Invalid user.id");
   }
 
@@ -55,27 +61,21 @@ function generateAccessToken(user, anchorSessionId = null, tokenId = crypto.rand
 
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: accessTokenExpirationSeconds,
+    algorithm: "HS256",
     audience: "mdsystem-app",
     issuer: "mdsystem-auth",
   });
 }
 
 async function generateRefreshToken(user) {
+  if (!isValidUserId(user?.id) || !isValidUserRole(user?.role)) throw new Error("Invalid user identity");
   const deviceId = crypto.randomUUID();
   const refreshToken = crypto.randomUUID();
 
   const normalizedRole = user.role.toLowerCase();
   const isStaff = normalizedRole === "medical";
 
-  // Load anchor for staff
-  let sessionId = null;
-  if (isStaff) {
-    sessionId = await getStaffAnchor(user.id);
-    if (!sessionId) {
-      sessionId = crypto.randomUUID();
-      await saveStaffAnchor(user.id, sessionId, REFRESH_EXP);
-    }
-  }
+  const sessionId = isStaff ? crypto.randomUUID() : null;
 
   const now = Date.now();
 
@@ -95,7 +95,7 @@ async function generateRefreshToken(user) {
     sessionId, // null for patients, anchor for medical
   };
 
-  await saveRefreshSession(user.id, deviceId, sessionData, REFRESH_EXP);
+  await saveLoginSession(user.id, deviceId, sessionData, REFRESH_EXP);
 
   return `${user.id}:${deviceId}:${refreshToken}`;
 }
@@ -106,6 +106,7 @@ async function generateRefreshToken(user) {
 function verifyToken(token) {
   try {
     return jwt.verify(token, JWT_SECRET, {
+      algorithms: ["HS256"],
       audience: "mdsystem-app",
       issuer: "mdsystem-auth",
     });
@@ -141,14 +142,12 @@ async function handleSuspiciousRefresh({ userId, deviceId, session, reason, now 
   // Staff escalation threshold
   if (isStaff && session.suspiciousCount >= 2) {
     const newAnchor = crypto.randomUUID();
-    await saveStaffAnchor(userId, newAnchor, REFRESH_EXP);
-
     session.status = "cooldown";
     session.cooldownUntil = now + (ACCESS_STAFF_EXPIRATION * 1000);
     session.refreshToken = "";
     session.prevToken = null;
 
-    await saveRotatedRefreshSession(userId, deviceId, expectedToken, session, REFRESH_EXP);
+    await saveRotatedRefreshSession(userId, deviceId, expectedToken, session, REFRESH_EXP, newAnchor);
     return;
   }
 
@@ -160,7 +159,10 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
   const now = Date.now();
 
   const session = await getRefreshSession(userId, deviceId);
-  if (!session) throw new Error("Invalid session");
+  if (!session || !isValidUserRole(session.role) || !['active', 'revoked', 'cooldown'].includes(session.status)
+      || (session.userId != null && String(session.userId) !== String(userId))
+      || (session.deviceId != null && session.deviceId !== deviceId)) throw new Error("Invalid session");
+  if (typeof providedToken !== 'string' || !providedToken) throw new Error("Invalid refresh token");
 
   const isStaff = session.role === "medical";
 
@@ -173,14 +175,6 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
     if (!session.cooldownUntil || now > session.cooldownUntil) {
       throw new Error("Session requires re-login");
     }
-
-    await handleSuspiciousRefresh({
-      userId,
-      deviceId,
-      session,
-      reason: "cooldown_violation",
-      now
-    });
 
     throw new Error("Session in cooldown");
   }
@@ -200,13 +194,6 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
   const isPrev = prevToken && providedToken === prevToken;
 
   if (!isCurrent && !isPrev) {
-    await handleSuspiciousRefresh({
-      userId,
-      deviceId,
-      session,
-      reason: "unknown_token",
-      now
-    });
     throw new Error("Invalid refresh token");
   }
 
@@ -220,6 +207,8 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
     });
     throw new Error("Expired refresh token");
   }
+
+  await assertAccountAllowed(userId, session.role);
 
   // 4. Valid refresh → rotate tokens
   const newRefreshToken = crypto.randomUUID();
@@ -247,34 +236,10 @@ async function handleRefresh({ userId, deviceId, providedToken }) {
 
 async function handleLogin({ userId, deviceId, role }) {
   const now = Date.now();
-  const normalizedRole = role.toLowerCase();
+  const normalizedRole = typeof role === "string" ? role.toLowerCase() : "";
 
-  let session = await getRefreshSession(userId, deviceId);
-  const previousAccessTokens = getLiveAccessTokens(session, now);
-
-  // If suspicious session exists → self-heal
-  if (session && (session.suspiciousCount || 0) >= 1) {
-    session.status = "revoked";
-    session.refreshToken = "";
-    session.prevToken = null;
-    session.cooldownUntil = null;
-    session.suspiciousCount = 0;
-
-    await saveRefreshSession(userId, deviceId, session, REFRESH_EXP);
-
-    logger.warn("[SECURITY] Suspicious session cleared on login", {
-      userId,
-      deviceId,
-      role: normalizedRole,
-      at: now
-    });
-
-    session = null;
-  }
-
-  // Create new session
-  const gettedAnchor = normalizedRole === "medical" ? await getStaffAnchor(userId) : null;
-  const newSessionId = gettedAnchor ? gettedAnchor : crypto.randomUUID();
+  if (!isValidUserId(userId) || !deviceId || !isValidUserRole(normalizedRole)) throw new Error('Invalid login identity');
+  const newSessionId = crypto.randomUUID();
   const newRefreshToken = crypto.randomUUID();
 
   const newSession = {
@@ -287,22 +252,16 @@ async function handleLogin({ userId, deviceId, role }) {
     status: "active",
     cooldownUntil: null,
     suspiciousCount: 0,
-    accessTokens: previousAccessTokens,
     createdAt: now,
     updatedAt: now,
   };
 
   recordAccessToken(newSession, getAccessTokenExpirationSeconds(normalizedRole), now);
-  await saveRefreshSession(userId, deviceId, newSession, REFRESH_EXP);
-
-  // Staff anchor update
-  if (normalizedRole === "medical") {
-    await saveStaffAnchor(userId, newSessionId, REFRESH_EXP);
-  }
+  const persistedSession = await saveLoginSession(userId, deviceId, newSession, REFRESH_EXP);
 
   const accessToken = generateAccessToken(
     { id: userId, role: normalizedRole },
-    newSessionId,
+    persistedSession.sessionId,
     newSession.tokenId
   );
 

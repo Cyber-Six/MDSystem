@@ -1,211 +1,46 @@
 const express = require('express');
 const request = require('supertest');
+const mockRevokeRefreshSession = jest.fn();
+jest.mock('../../../../config/middleware/ratelimiter', () => ({ portalBasedIpRateLimiter: () => (_req, _res, next) => next() }));
+jest.mock('../../../../config/middleware/jwtProtect', () => ({ jwtProtect: () => (req, _res, next) => { req.user = { id: Number(req.headers['x-test-user-id'] || 101), role: 'patient' }; next(); } }));
+jest.mock('../../../../config/redis', () => ({ revokeRefreshSession: (...args) => mockRevokeRefreshSession(...args) }));
+jest.mock('../../../../utils/logger', () => ({ warn: jest.fn(), error: jest.fn() }));
+const router = require('../logout');
+let app;
+beforeEach(() => {
+  mockRevokeRefreshSession.mockReset().mockResolvedValue([]);
+  app = express(); app.use(express.json()); app.use('/auth/logout', router);
+});
 
-const mockGetRefreshSession = jest.fn();
-const mockSaveRefreshSession = jest.fn();
+test.each([undefined, null, {}, [], 'invalid-format', '101::token', '101:device:', '101:   :token', '101:device:   ', 'abc:device:token', '9007199254740992:device:token', '0:device:token'])('rejects malformed refresh credential %j without touching sessions', async refreshToken => {
+  const response = await request(app).post('/auth/logout').send({ refreshToken });
+  expect(response.status).toBe(400);
+  expect(response.body.error).toBe('MISSING_OR_INVALID_REFRESH_TOKEN');
+  expect(mockRevokeRefreshSession).not.toHaveBeenCalled();
+});
 
-jest.mock('../../../../config/middleware/ratelimiter.js', () => ({
-  portalBasedIpRateLimiter: () => (_req, _res, next) => next(),
-}));
+test.each(['token-current', 'token-previous'])('delegates credential matching and JWT revocation atomically for %s', async token => {
+  const response = await request(app).post('/auth/logout').send({ refreshToken: `101:device-1:${token}` });
+  expect(response.status).toBe(200);
+  expect(response.body).toEqual({ ok: true });
+  expect(mockRevokeRefreshSession).toHaveBeenCalledWith(101, 'device-1', token);
+});
 
-jest.mock('../../../../config/middleware/jwtProtect.js', () => ({
-  jwtProtect: () => (req, _res, next) => {
-    const testUserIdHeader = req.headers['x-test-user-id'];
-    const parsedUserId = Number(testUserIdHeader);
-    req.user = {
-      id: Number.isSafeInteger(parsedUserId) && parsedUserId > 0 ? parsedUserId : 101,
-      role: 'patient',
-    };
-    next();
-  },
-}));
+test('does not reveal whether the session is missing, already revoked, or the credential mismatches', async () => {
+  const response = await request(app).post('/auth/logout').send({ refreshToken: '101:device:wrong-token' });
+  expect(response.status).toBe(200);
+  expect(response.body).toEqual({ ok: true });
+});
 
-jest.mock('../../../../config/redis.js', () => ({
-  getRefreshSession: (...args) => mockGetRefreshSession(...args),
-  saveRefreshSession: (...args) => mockSaveRefreshSession(...args),
-}));
+test('cannot revoke another user by replacing the refresh token user ID', async () => {
+  const response = await request(app).post('/auth/logout').set('x-test-user-id', '202').send({ refreshToken: '101:device:token' });
+  expect(response.status).toBe(200);
+  expect(mockRevokeRefreshSession).not.toHaveBeenCalled();
+});
 
-jest.mock('../../../../utils/logger.js', () => ({
-  info: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
-}));
-
-const router = require('../logout.js');
-
-describe('POST /auth/logout', () => {
-  let app;
-
-  beforeEach(() => {
-    mockGetRefreshSession.mockReset();
-    mockSaveRefreshSession.mockReset();
-
-    app = express();
-    app.use(express.json());
-    app.use('/auth/logout', router);
-  });
-
-  test('returns 400 when refresh token is missing', async () => {
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({});
-
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBe('MISSING_OR_INVALID_REFRESH_TOKEN');
-    expect(mockGetRefreshSession).not.toHaveBeenCalled();
-    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
-  });
-
-  test('returns 400 when refresh token format is invalid', async () => {
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({ refreshToken: 'invalid-format' });
-
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBe('MISSING_OR_INVALID_REFRESH_TOKEN');
-    expect(mockGetRefreshSession).not.toHaveBeenCalled();
-    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
-  });
-
-  test.each([
-    [null, 'non-string token'],
-    ['101::token', 'empty device identifier'],
-    ['101:device:', 'empty token'],
-    ['101:   :token', 'whitespace-only device identifier'],
-    ['101:device:   ', 'whitespace-only token'],
-    ['abc:device:token', 'non-numeric user identifier'],
-    ['9007199254740992:device:token', 'unsafe user identifier'],
-    ['0:device:token', 'non-positive user identifier'],
-  ])('rejects %s (%s)', async refreshToken => {
-    const response = await request(app).post('/auth/logout').send({ refreshToken });
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBe('MISSING_OR_INVALID_REFRESH_TOKEN');
-    expect(mockGetRefreshSession).not.toHaveBeenCalled();
-  });
-
-  test('returns idempotent success when session is not found', async () => {
-    mockGetRefreshSession.mockResolvedValueOnce(null);
-
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({ refreshToken: '101:device-1:token-a' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true });
-    expect(mockGetRefreshSession).toHaveBeenCalledWith(101, 'device-1');
-    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
-  });
-
-  test('returns idempotent success when provided token does not match active/previous token', async () => {
-    mockGetRefreshSession.mockResolvedValueOnce({
-      status: 'active',
-      refreshToken: 'token-current',
-      prevToken: 'token-prev',
-    });
-
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({ refreshToken: '101:device-1:token-other' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true });
-    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
-  });
-
-  test('returns idempotent success when authenticated user does not match token user', async () => {
-    const response = await request(app)
-      .post('/auth/logout')
-      .set('x-test-user-id', '202')
-      .send({ refreshToken: '101:device-1:token-current' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true });
-    expect(mockGetRefreshSession).not.toHaveBeenCalled();
-    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
-  });
-
-  test('returns idempotent success when session is already revoked', async () => {
-    mockGetRefreshSession.mockResolvedValueOnce({
-      status: 'revoked',
-      refreshToken: 'token-current',
-      prevToken: null,
-    });
-
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({ refreshToken: '101:device-1:token-current' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true });
-    expect(mockSaveRefreshSession).toHaveBeenCalledTimes(1);
-  });
-
-  test('treats non-string stored tokens as absent without attempting revocation', async () => {
-    mockGetRefreshSession.mockResolvedValueOnce({ status: 'active', refreshToken: 42, prevToken: null });
-    const response = await request(app).post('/auth/logout').send({ refreshToken: '101:device-1:token-current' });
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true });
-    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
-  });
-
-  test('revokes active session when provided token matches current refresh token', async () => {
-    mockGetRefreshSession.mockResolvedValueOnce({
-      userId: 101,
-      deviceId: 'device-1',
-      status: 'active',
-      refreshToken: 'token-current',
-      prevToken: 'token-prev',
-      suspiciousCount: 2,
-    });
-
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({ refreshToken: '101:device-1:token-current' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true });
-    expect(mockSaveRefreshSession).toHaveBeenCalledTimes(1);
-
-    const [savedUserId, savedDeviceId, savedSession, ttl] = mockSaveRefreshSession.mock.calls[0];
-    expect(savedUserId).toBe(101);
-    expect(savedDeviceId).toBe('device-1');
-    expect(savedSession.status).toBe('revoked');
-    expect(savedSession.refreshToken).toBe('');
-    expect(savedSession.prevToken).toBeNull();
-    expect(savedSession.cooldownUntil).toBeNull();
-    expect(savedSession.suspiciousCount).toBe(0);
-    expect(savedSession.updatedAt).toEqual(expect.any(Number));
-    expect(ttl).toEqual(expect.any(Number));
-  });
-
-  test('revokes active session when provided token matches previous token', async () => {
-    mockGetRefreshSession.mockResolvedValueOnce({
-      userId: 101,
-      deviceId: 'device-1',
-      status: 'active',
-      refreshToken: 'token-current',
-      prevToken: 'token-prev',
-    });
-
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({ refreshToken: '101:device-1:token-prev' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true });
-    expect(mockSaveRefreshSession).toHaveBeenCalledTimes(1);
-  });
-
-  test('returns 500 when revocation throws unexpectedly', async () => {
-    mockGetRefreshSession.mockRejectedValueOnce(new Error('Redis unavailable'));
-
-    const response = await request(app)
-      .post('/auth/logout')
-      .send({ refreshToken: '101:device-1:token-current' });
-
-    expect(response.status).toBe(500);
-    expect(response.body.error).toBe('LOGOUT_FAILED');
-    expect(mockSaveRefreshSession).not.toHaveBeenCalled();
-  });
+test('reports revocation failure without leaking internal Redis details', async () => {
+  mockRevokeRefreshSession.mockRejectedValueOnce(new Error('private Redis details'));
+  const response = await request(app).post('/auth/logout').send({ refreshToken: '101:device:token' });
+  expect(response.status).toBe(500);
+  expect(response.body).toEqual({ error: 'LOGOUT_FAILED', message: 'Could not complete logout.' });
 });

@@ -24,5 +24,9 @@ config.watchFolders = [
 ];
 
 module.exports = withNativeWind(config, {
-  input: './global.css',
+  input: path.resolve(__dirname, 'global.css'),
+  configPath: path.resolve(__dirname, 'tailwind.config.js'),
+  // The type reference and tsconfig include are already checked in. Loading Metro
+  // from the repository root must not generate files in a different project.
+  disableTypeScriptGeneration: true,
 });

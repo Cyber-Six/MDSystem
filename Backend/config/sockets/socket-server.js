@@ -1,11 +1,11 @@
 const { Server } = require('socket.io');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const logger = require('../../utils/logger');
-const { createAuthMiddleware } = require('./socket-auth');
+const { createAuthMiddleware, authorizeSocket, protectSocketSession } = require('./socket-auth');
 const { trackConnection, untrackConnection } = require('./socket-store');
 const { bindHandlersToSocket } = require('./socket-events');
 const { flushPending } = require('./notification-store');
-const { getClient } = require('../redis');
+const { getClient, setSessionRevocationHandler } = require('../redis');
 
 let io = null;
 
@@ -77,18 +77,37 @@ async function initSocket(server, options = {}) {
 
   // Wire JWT authentication
   io.use(createAuthMiddleware());
+  setSessionRevocationHandler((tokenIds, userId) => {
+    const rooms = tokenIds.map(id => `auth:jwt:${id}`);
+    if (userId != null) rooms.push(`user:${userId}`);
+    if (rooms.length) io.in(rooms).disconnectSockets(true);
+  });
 
   // Handle new connections
   io.on('connection', async (socket) => {
     const { userId, userRole } = socket;
     logger.info(`[SOCKET] Connected: ${socket.id} (user:${userId}, role:${userRole})`);
 
+    // Join the revocation room before checking again, closing the race between
+    // handshake authorization and an administrator/logout revocation.
+    if (socket.authTokenId) await socket.join(`auth:jwt:${socket.authTokenId}`);
+    await socket.join(`user:${userId}`);
+    await socket.join(`role:${userRole}`);
+    try { await authorizeSocket(socket); }
+    catch { socket.disconnect(true); return; }
+    if (socket.connected === false) return;
+    protectSocketSession(socket);
+    if (socket.connected === false) return;
+
+    // Disconnect
+    socket.on('disconnect', async (reason) => {
+      logger.info(`[SOCKET] Disconnected: ${socket.id} (user:${userId}, reason:${reason})`);
+      await untrackConnection(userId, socket.id);
+    });
+
     // Track connection in-memory + Redis
     await trackConnection(userId, socket.id);
-
-    // Auto-join rooms
-    socket.join(`user:${userId}`);
-    socket.join(`role:${userRole}`);
+    if (socket.connected === false) { await untrackConnection(userId, socket.id); return; }
 
     // Bind registered event handlers from other modules
     bindHandlersToSocket(socket);
@@ -104,12 +123,6 @@ async function initSocket(server, options = {}) {
         socket.emit(event, data);
       }
     }
-
-    // Disconnect
-    socket.on('disconnect', async (reason) => {
-      logger.info(`[SOCKET] Disconnected: ${socket.id} (user:${userId}, reason:${reason})`);
-      await untrackConnection(userId, socket.id);
-    });
 
     // Error
     socket.on('error', (error) => {

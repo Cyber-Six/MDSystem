@@ -12,7 +12,8 @@ jest.mock("../redis.js", () => ({
   getSessionBlacklist: jest.fn().mockResolvedValue(false)
 }));
 jest.mock("../query.js", () => ({
-  isActiveMedicalPersonnel: jest.fn()
+  isActiveMedicalPersonnel: jest.fn(),
+  getCredentialLockStateByUserId: jest.fn().mockResolvedValue({ status: "Active" })
 }));
 
 const jwt = require("jsonwebtoken");
@@ -146,4 +147,26 @@ test('rejects blacklisted JWTs immediately but accepts legacy tokens without rev
   state = mockReqRes('Bearer legacy');
   await jwtProtect()(state.req, state.res, state.next);
   expect(state.next).toHaveBeenCalled();
+});
+
+test.each(['Basic token', 'Bearer token extra'])('rejects malformed Authorization header %s', async header => {
+  const state = mockReqRes(header);
+  await jwtProtect('all')(state.req, state.res, state.next);
+  expect(state.res.status).toHaveBeenCalledWith(401);
+  expect(state.next).not.toHaveBeenCalled();
+});
+test.each([null, 0, -1, '12:another-key', '9007199254740992'])('rejects invalid authenticated user ID %j', async id => {
+  jwt.verify.mockReturnValue({ id, role: 'patient' });
+  const state = mockReqRes('Bearer token');
+  await jwtProtect('all')(state.req, state.res, state.next);
+  expect(state.res.status).toHaveBeenCalledWith(401);
+  expect(state.next).not.toHaveBeenCalled();
+});
+test('locked accounts cannot continue using a previously issued access token', async () => {
+  require('../query').getCredentialLockStateByUserId.mockResolvedValueOnce({ status: 'Locked' });
+  jwt.verify.mockReturnValue({ id: 12, role: 'patient' });
+  const state = mockReqRes('Bearer token');
+  await jwtProtect('all')(state.req, state.res, state.next);
+  expect(state.res.status).toHaveBeenCalledWith(403);
+  expect(state.next).not.toHaveBeenCalled();
 });

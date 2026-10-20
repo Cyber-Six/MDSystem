@@ -12,7 +12,8 @@
     "./validation/*": "./src/validation/*.js"
   },
   "scripts": {
-    "test": "jest --config jest.config.cjs"
+    "test": "jest --config jest.config.cjs",
+    "test:security": "jest --config jest.config.cjs --runInBand --coverage"
   },
   "keywords": [
     "mdsystem",

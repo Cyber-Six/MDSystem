@@ -1,62 +1,70 @@
 const jwt = require('jsonwebtoken');
-const { getStaffAnchor } = require('../redis');
+const { getStaffAnchor, getSessionBlacklist } = require('../redis');
+const { isValidUserId } = require('../../utils/access-token-session');
+const { assertAccountAllowed } = require('../../utils/authentication-state');
 const logger = require('../../utils/logger');
 
-/**
- * Creates a Socket.IO authentication middleware that verifies JWT tokens.
- * Mirrors the verification logic from jwtProtect.js middleware.
- *
- * On success, attaches to the socket object:
- *   - socket.userId   (string)
- *   - socket.userRole ('patient' | 'medical')
- *   - socket.sessionId (string | null)
- *
- * @returns {Function} Socket.IO middleware (socket, next)
- */
+async function authorizeSocket(socket) {
+  const token = socket.handshake.auth?.token;
+  if (typeof token !== 'string' || !token) throw new Error('SOCKET_AUTH_FAILED: Token required');
+  const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+    algorithms: ['HS256'], audience: 'mdsystem-app', issuer: 'mdsystem-auth',
+  });
+  const role = typeof decoded.role === 'string' ? decoded.role.toLowerCase() : '';
+  if (!isValidUserId(decoded.id) || !['patient', 'medical'].includes(role)) {
+    throw new Error('SOCKET_AUTH_FAILED: Incomplete token payload');
+  }
+  if (decoded.jti && await getSessionBlacklist(decoded.jti)) throw new Error('SOCKET_AUTH_FAILED: Token revoked');
+  if (role === 'medical') {
+    if (!decoded.sid) throw new Error('SOCKET_AUTH_FAILED: Session anchor required');
+    const activeSession = await getStaffAnchor(decoded.id);
+    if (!activeSession || activeSession !== decoded.sid) {
+      throw new Error('SOCKET_AUTH_FAILED: Invalid or expired session');
+    }
+  }
+  await assertAccountAllowed(decoded.id, role);
+  return { ...decoded, role };
+}
+
+function socketAuthError(error) {
+  if (error.name === 'TokenExpiredError') return new Error('SOCKET_AUTH_FAILED: Token expired');
+  if (error.message.startsWith('SOCKET_AUTH_FAILED:')) return error;
+  logger.error('[SOCKET_AUTH] Authorization failed:', error.message);
+  return new Error('SOCKET_AUTH_FAILED');
+}
+
 function createAuthMiddleware() {
   return async (socket, next) => {
     try {
-      const token = socket.handshake.auth?.token;
-      if (!token) {
-        return next(new Error('SOCKET_AUTH_FAILED: Token required'));
-      }
-
-      // Verify JWT with same params as jwtProtect.js
-      const decoded = jwt.verify(token, process.env.JWT_SECRET, {
-        audience: 'mdsystem-app',
-        issuer: 'mdsystem-auth',
-      });
-
-      const role = decoded.role?.toLowerCase();
-      if (decoded.id === undefined || role === undefined) {
-        return next(new Error('SOCKET_AUTH_FAILED: Incomplete token payload'));
-      }
-
-      // Medical role: validate session anchor
-      if (role === 'medical') {
-        if (!decoded.sid) {
-          return next(new Error('SOCKET_AUTH_FAILED: Session anchor required'));
-        }
-        const activeSession = await getStaffAnchor(decoded.id);
-        if (!activeSession || activeSession !== decoded.sid) {
-          return next(new Error('SOCKET_AUTH_FAILED: Invalid or expired session'));
-        }
-      }
-
-      // Attach verified identity to socket
+      const decoded = await authorizeSocket(socket);
       socket.userId = String(decoded.id);
-      socket.userRole = role;
+      socket.userRole = decoded.role;
       socket.sessionId = decoded.sid || null;
-
+      socket.authTokenId = decoded.jti || null;
+      socket.authExpiresAt = Number.isFinite(decoded.exp) ? decoded.exp * 1000 : null;
       next();
-    } catch (err) {
-      if (err.name === 'TokenExpiredError') {
-        return next(new Error('SOCKET_AUTH_FAILED: Token expired'));
-      }
-      logger.error('[SOCKET_AUTH] JWT verification failed:', err.message);
-      next(new Error('SOCKET_AUTH_FAILED'));
+    } catch (error) {
+      next(socketAuthError(error));
     }
   };
 }
 
-module.exports = { createAuthMiddleware };
+// A connection is not a permanent authorization grant: expired/revoked tokens
+// and removed staff membership must not continue sending privileged events.
+function protectSocketSession(socket) {
+  socket.use(async (_packet, next) => {
+    try { await authorizeSocket(socket); next(); }
+    catch (error) { next(socketAuthError(error)); socket.disconnect(true); }
+  });
+  let timer;
+  const expire = () => {
+    const remaining = socket.authExpiresAt - Date.now();
+    if (remaining <= 0) return socket.disconnect(true);
+    timer = setTimeout(expire, Math.min(remaining, 2147483647));
+    timer.unref?.();
+  };
+  if (socket.authExpiresAt) expire();
+  socket.on('disconnect', () => clearTimeout(timer));
+}
+
+module.exports = { createAuthMiddleware, authorizeSocket, protectSocketSession };

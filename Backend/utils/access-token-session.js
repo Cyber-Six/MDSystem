@@ -1,5 +1,10 @@
 const crypto = require('node:crypto');
 
+function isValidUserId(value) {
+  return (typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value)))
+    && Number.isSafeInteger(Number(value)) && Number(value) > 0;
+}
+
 // Retain every unexpired JWT, including tokens issued before a refresh.
 function getLiveAccessTokens(session, now = Date.now()) {
   const tokens = new Map();
@@ -27,4 +32,4 @@ function isAccessTokenExpired(session, now = Date.now()) {
   return Number.isFinite(expiration) && expiration > 0 && expiration <= now;
 }
 
-module.exports = { getLiveAccessTokens, recordAccessToken, isAccessTokenExpired };
+module.exports = { getLiveAccessTokens, recordAccessToken, isAccessTokenExpired, isValidUserId };
