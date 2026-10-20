@@ -1,11 +1,12 @@
 jest.mock('jsonwebtoken', () => ({ verify: jest.fn() }));
-jest.mock('../redis', () => ({ getStaffAnchor: jest.fn() }));
+jest.mock('../redis', () => ({ getStaffAnchor: jest.fn(), getSessionBlacklist: jest.fn() }));
+jest.mock('../query', () => ({ getCredentialLockStateByUserId: jest.fn(), isActiveMedicalPersonnel: jest.fn() }));
 jest.mock('../../utils/logger', () => ({ error: jest.fn() }));
 const jwt = require('jsonwebtoken');
-const { getStaffAnchor } = require('../redis');
+const { getStaffAnchor, getSessionBlacklist } = require('../redis');
 const { createAuthMiddleware } = require('./socket-auth');
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => { jest.resetAllMocks(); require('../query').getCredentialLockStateByUserId.mockResolvedValue({ status: 'Active' }); require('../query').isActiveMedicalPersonnel.mockResolvedValue(true); });
 async function authenticate(decoded, auth = { token: 'signed-token' }) {
   jwt.verify.mockReturnValue(decoded);
   const socket = { handshake: { auth } };
@@ -25,11 +26,11 @@ test.each([{ role: 'patient' }, { id: 4 }, { id: 4, role: null }])('rejects inco
   expect(next).toHaveBeenCalledWith(new Error('SOCKET_AUTH_FAILED: Incomplete token payload'));
 });
 test('attaches a normalized patient identity without checking a staff anchor', async () => {
-  const { socket, next } = await authenticate({ id: 0, role: 'PATIENT' });
-  expect(socket).toMatchObject({ userId: '0', userRole: 'patient', sessionId: null });
+  const { socket, next } = await authenticate({ id: 12, role: 'PATIENT' });
+  expect(socket).toMatchObject({ userId: '12', userRole: 'patient', sessionId: null });
   expect(next).toHaveBeenCalledWith();
   expect(getStaffAnchor).not.toHaveBeenCalled();
-  expect(jwt.verify).toHaveBeenCalledWith('signed-token', process.env.JWT_SECRET, { audience: 'mdsystem-app', issuer: 'mdsystem-auth' });
+  expect(jwt.verify).toHaveBeenCalledWith('signed-token', process.env.JWT_SECRET, { algorithms: ['HS256'], audience: 'mdsystem-app', issuer: 'mdsystem-auth' });
 });
 test('rejects medical identity without a session anchor', async () => {
   const { next } = await authenticate({ id: 1, role: 'medical' });
@@ -51,4 +52,34 @@ test.each(['TokenExpiredError', 'JsonWebTokenError'])('handles %s without leakin
   const next = jest.fn();
   await createAuthMiddleware()({ handshake: { auth: { token: 'bad' } } }, next);
   expect(next).toHaveBeenCalledWith(new Error(name === 'TokenExpiredError' ? 'SOCKET_AUTH_FAILED: Token expired' : 'SOCKET_AUTH_FAILED'));
+});
+
+test('rejects a revoked JWT even though its signature and expiration are valid', async () => {
+  getSessionBlacklist.mockResolvedValueOnce(true);
+  const { next } = await authenticate({ id: 12, role: 'patient', jti: 'revoked' });
+  expect(next).toHaveBeenCalledWith(new Error('SOCKET_AUTH_FAILED: Token revoked'));
+});
+test.each([{ id: 0, role: 'patient' }, { id: 12, role: 'administrator' }])('rejects invalid socket identity %j', async identity => {
+  const { next } = await authenticate(identity);
+  expect(next).toHaveBeenCalledWith(new Error('SOCKET_AUTH_FAILED: Incomplete token payload'));
+});
+test('rechecks revocation on an already connected socket before dispatching an event', async () => {
+  const { protectSocketSession } = require('./socket-auth');
+  jwt.verify.mockReturnValue({ id: 12, role: 'patient', jti: 'revoked' });
+  getSessionBlacklist.mockResolvedValue(true);
+  const socket = { handshake: { auth: { token: 'signed' } }, use: jest.fn(), on: jest.fn(), disconnect: jest.fn() };
+  protectSocketSession(socket);
+  const next = jest.fn();
+  await socket.use.mock.calls[0][0](['privileged-event'], next);
+  expect(next).toHaveBeenCalledWith(new Error('SOCKET_AUTH_FAILED: Token revoked'));
+  expect(socket.disconnect).toHaveBeenCalledWith(true);
+});
+test('expires idle sockets so they cannot continue receiving notifications indefinitely', () => {
+  jest.useFakeTimers();
+  try {
+    const socket = { authExpiresAt: Date.now() + 1000, use: jest.fn(), on: jest.fn(), disconnect: jest.fn() };
+    require('./socket-auth').protectSocketSession(socket);
+    jest.advanceTimersByTime(1000);
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  } finally { jest.useRealTimers(); }
 });

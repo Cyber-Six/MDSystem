@@ -553,6 +553,7 @@ async function saveStaffAnchor(userId, sessionId, ttlSeconds=REFRESH_EXP) {
   const value = String(sessionId);
 
   await setKey(key, value, ttlSeconds);
+  await notifySessionRevocation([], userId);
 
   return key;
 }
@@ -692,20 +693,20 @@ async function deleteAllUserSessions(userId) {
   if (!client) throw new Error("Redis client not initialized");
   if (!userId) throw new Error("deleteAllUserSessions: userId is required");
 
-  const pattern = `rt:${String(userId)}:*`;
-  const keysToDelete = [];
-
-  // Collect all keys matching the pattern
-  for await (const key of client.scanIterator({ match: pattern, count: 100 })) {
-    keysToDelete.push(key);
+  const prefix = `rt:${String(userId)}:`;
+  const normalizeKeys = item => Array.isArray(item) ? item.flatMap(normalizeKeys)
+    : Buffer.isBuffer(item) ? [item.toString()] : typeof item === 'string' ? [item] : [];
+  const keysToDelete = new Set();
+  for await (const item of client.scanIterator({ match: `${prefix}*`, count: 100 })) {
+    for (const key of normalizeKeys(item)) {
+      if (key.startsWith(prefix) && key.length > prefix.length) keysToDelete.add(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    await revokeRefreshSession(userId, key.slice(prefix.length), null, true);
   }
 
-  // Delete all keys if any found
-  if (keysToDelete.length > 0) {
-    await client.del(keysToDelete);
-  }
-
-  return keysToDelete.length;
+  return keysToDelete.size;
 }
 
 /**
@@ -935,36 +936,86 @@ async function getSessionBlacklist(tokenId) {
   return Boolean(await client.exists(`${SESSION_BLACKLIST_TOKEN_PREFIX}${tokenId}`));
 }
 
-async function saveRotatedRefreshSession(userId, deviceId, expectedToken, session, ttlSeconds) {
+async function saveLoginSession(userId, deviceId, session, ttlSeconds) {
+  if (!client) throw new Error("Redis client not initialized");
+  const raw = await client.eval(`
+    local incoming = cjson.decode(ARGV[1])
+    local now = tonumber(ARGV[2])
+    local history = {}
+    local seen = {}
+    local function add(record)
+      local expires = tonumber(record.expiresAt)
+      if type(record.tokenId) == 'string' and expires and expires > now and not seen[record.tokenId] then
+        seen[record.tokenId] = true
+        table.insert(history, record)
+      end
+    end
+    local old = redis.call('GET', KEYS[1])
+    if old then
+      local previous = cjson.decode(old)
+      for _, record in ipairs(previous.accessTokens or {}) do add(record) end
+      add({tokenId=previous.tokenId, expiresAt=previous.accessTokenExp})
+    end
+    for _, record in ipairs(incoming.accessTokens or {}) do add(record) end
+    incoming.accessTokens = history
+    if incoming.role == 'medical' then
+      local anchor = redis.call('GET', KEYS[2])
+      if not anchor then anchor = incoming.sessionId end
+      redis.call('SET', KEYS[2], anchor, 'EX', ARGV[3])
+      incoming.sessionId = anchor
+    end
+    local value = cjson.encode(incoming)
+    redis.call('SET', KEYS[1], value, 'EX', ARGV[3])
+    return value
+  `, {
+    keys: [`rt:${userId}:${deviceId}`, `staff:anchor:${userId}`],
+    arguments: [JSON.stringify(session), String(Date.now()), String(ttlSeconds)],
+  });
+  return JSON.parse(raw);
+}
+
+async function saveRotatedRefreshSession(userId, deviceId, expectedToken, session, ttlSeconds, replacementAnchor = '') {
   if (!client) throw new Error("Redis client not initialized");
   const result = await client.eval(`
     local raw = redis.call('GET', KEYS[1])
     if not raw then return 0 end
     local current = cjson.decode(raw)
     if current.status == 'revoked' or current.refreshToken ~= ARGV[1] then return 0 end
+    if ARGV[4] ~= '' and redis.call('GET', KEYS[2]) ~= ARGV[4] then return 0 end
     redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+    if ARGV[5] ~= '' then redis.call('SET', KEYS[2], ARGV[5], 'EX', ARGV[3]) end
     return 1
   `, {
-    keys: [`rt:${userId}:${deviceId}`],
-    arguments: [expectedToken, JSON.stringify(session), String(ttlSeconds)],
+    keys: [`rt:${userId}:${deviceId}`, `staff:anchor:${userId}`],
+    arguments: [expectedToken, JSON.stringify(session), String(ttlSeconds), session.role === 'medical' ? session.sessionId : '', replacementAnchor],
   });
+  if (result === 1 && replacementAnchor) await notifySessionRevocation([], userId);
   return result === 1;
 }
 
-async function revokeRefreshSession(userId, deviceId) {
+let sessionRevocationHandler = null;
+function setSessionRevocationHandler(handler) {
+  sessionRevocationHandler = handler;
+}
+async function notifySessionRevocation(tokenIds, userId = null) {
+  if (!sessionRevocationHandler || (!tokenIds.length && userId == null)) return;
+  try {
+    if (userId == null) await sessionRevocationHandler(tokenIds);
+    else await sessionRevocationHandler(tokenIds, String(userId));
+  } catch (error) { logger.error('Failed to disconnect revoked sockets:', error.message); }
+}
+
+async function revokeRefreshSession(userId, deviceId, expectedToken = null, deleteSession = false) {
   if (!client) throw new Error("Redis client not initialized");
   const tokenIds = await client.eval(`
     local raw = redis.call('GET', KEYS[1])
     if not raw or redis.call('TTL', KEYS[1]) <= 0 then return {} end
     local session = cjson.decode(raw)
     local now = tonumber(ARGV[1])
-    local records = session.accessTokens or {}
-    if session.tokenId and session.accessTokenExp then
-      table.insert(records, {tokenId=session.tokenId, expiresAt=session.accessTokenExp})
-    end
+    if ARGV[3] ~= '' and session.refreshToken ~= ARGV[3] and session.prevToken ~= ARGV[3] then return {} end
     local result = {}
     local seen = {}
-    for _, record in ipairs(records) do
+    local function blacklist(record)
       local expires = tonumber(record.expiresAt)
       if type(record.tokenId) == 'string' and expires and expires > now and not seen[record.tokenId] then
         redis.call('SET', ARGV[2] .. record.tokenId, '1', 'PX', math.ceil(expires - now))
@@ -972,14 +1023,18 @@ async function revokeRefreshSession(userId, deviceId) {
         table.insert(result, record.tokenId)
       end
     end
+    for _, record in ipairs(session.accessTokens or {}) do blacklist(record) end
+    blacklist({tokenId=session.tokenId, expiresAt=session.accessTokenExp})
     session.status = 'revoked'
     session.updatedAt = now
-    redis.call('SET', KEYS[1], cjson.encode(session), 'KEEPTTL')
+    if ARGV[4] == '1' then redis.call('DEL', KEYS[1])
+    else redis.call('SET', KEYS[1], cjson.encode(session), 'KEEPTTL') end
     return result
   `, {
     keys: [`rt:${userId}:${deviceId}`],
-    arguments: [String(Date.now()), SESSION_BLACKLIST_TOKEN_PREFIX],
+    arguments: [String(Date.now()), SESSION_BLACKLIST_TOKEN_PREFIX, expectedToken || '', deleteSession ? '1' : '0'],
   });
+  await notifySessionRevocation(tokenIds);
   return tokenIds.map(tokenId => ({ tokenId, blacklisted: true }));
 }
 
@@ -1495,6 +1550,8 @@ module.exports = {
   getRefreshSession,
   revokeRefreshSession,
   saveRotatedRefreshSession,
+  saveLoginSession,
+  setSessionRevocationHandler,
   getSessionBlacklist,
   saveStaffAnchor,
   getStaffAnchor,

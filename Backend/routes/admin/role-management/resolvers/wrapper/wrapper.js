@@ -40,7 +40,7 @@ const {
   clearAdminTransferPasswordFailures,
 } = require('../../../../../config/redis.js');
 const { enqueueAdminTransferEmail } = require('../../../../../services/email/emailservice.js');
-const { emitToUser } = require('../../../../../config/sockets');
+const { emitToUser, getIO } = require('../../../../../config/sockets');
 const { generateOTP, verifyPassword, 
   delayRandom, generateUUID } = require('../../../../../utils/security.js');
 const crypto = require('crypto');
@@ -908,8 +908,7 @@ async function getActiveRefreshSessionsAcrossUsers({ includeEmails = false } = {
   const nowMs = Date.now();
   const scannedSessions = await scanAllRefreshSessionsWithMeta();
   logger.debug(
-    `Scanned ${scannedSessions.length} refresh sessions from Redis.`,
-    { sessions: scannedSessions.slice(0, 5) } // show first 5
+    `Scanned ${scannedSessions.length} refresh sessions from Redis.`
   );
   
   const normalizedSessions = scannedSessions
@@ -3012,6 +3011,12 @@ const Mutation = {
        WHERE id = $2`,
       [nextStatus, normalizedUserId]
     );
+
+    if (shouldLock) {
+      await Mutation._setAllUserSessionsRevoked(_, { userId: normalizedUserId, revoked: true }, { user, res });
+      const io = getIO();
+      if (io) io.in(`user:${normalizedUserId}`).disconnectSockets(true);
+    }
 
     logger.info('User account lock status updated by admin', {
       adminId: String(user?.id || ''),

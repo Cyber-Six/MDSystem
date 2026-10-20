@@ -6,7 +6,7 @@ jest.mock('../../../../../config/redis', () => ({
   listUserSessionsWithMeta: jest.fn(), scanAllRefreshSessionsWithMeta: jest.fn(), revokeRefreshSession: jest.fn(),
 }));
 jest.mock('../../../../../services/email/emailservice', () => ({}));
-jest.mock('../../../../../config/sockets', () => ({}));
+jest.mock('../../../../../config/sockets', () => ({ getIO: jest.fn(() => null) }));
 jest.mock('../../../../../utils/security', () => ({}));
 jest.mock('../../../../../utils/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
 jest.mock('dotenv', () => ({ config: jest.fn() }));
@@ -78,4 +78,15 @@ test('session lists remove refresh secrets and supply non-null expiry flags for 
   const all = await Query._listAllSessions(null, { offset: 0, limit: 10 }, context);
   expect(all.sessions[0]).toMatchObject({ accessTokenExpired: false });
   expect(all.sessions[0]).not.toHaveProperty('refreshToken');
+});
+
+test('locking an account revokes its refresh sessions and disconnects even legacy idle sockets', async () => {
+  const disconnectSockets = jest.fn();
+  const io = { in: jest.fn(() => ({ disconnectSockets })) };
+  require('../../../../../config/sockets').getIO.mockReturnValueOnce(io);
+  db.query.mockResolvedValue({ rows: [{ id: 12 }] });
+  await Mutation._setUserAccountLocked(null, { userId: '12', locked: true }, context);
+  expect(redis.revokeRefreshSession).toHaveBeenCalledWith('12', 'phone');
+  expect(io.in).toHaveBeenCalledWith('user:12');
+  expect(disconnectSockets).toHaveBeenCalledWith(true);
 });

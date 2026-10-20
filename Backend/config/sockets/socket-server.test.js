@@ -1,11 +1,11 @@
 jest.mock('socket.io', () => ({ Server: jest.fn() }));
 jest.mock('@socket.io/redis-adapter', () => ({ createAdapter: jest.fn(() => 'adapter') }));
 jest.mock('../../utils/logger', () => require('../../test-support/fixtures.cjs').loggerMock());
-jest.mock('./socket-auth', () => ({ createAuthMiddleware: jest.fn(() => 'auth') }));
+jest.mock('./socket-auth', () => ({ createAuthMiddleware: jest.fn(() => 'auth'), authorizeSocket: jest.fn(), protectSocketSession: jest.fn() }));
 jest.mock('./socket-store', () => ({ trackConnection: jest.fn(), untrackConnection: jest.fn() }));
 jest.mock('./socket-events', () => ({ bindHandlersToSocket: jest.fn() }));
 jest.mock('./notification-store', () => ({ flushPending: jest.fn() }));
-jest.mock('../redis', () => ({ getClient: jest.fn() }));
+jest.mock('../redis', () => ({ getClient: jest.fn(), setSessionRevocationHandler: jest.fn() }));
 const { socketMock, withEnvironment } = require('../../test-support/fixtures.cjs');
 let restore;
 beforeEach(() => {
@@ -45,4 +45,40 @@ test.each([false, true])('initializes socket lifecycle and offline delivery (pro
   expect(store.untrackConnection).toHaveBeenCalledWith('12', 'socket-test');
   socket.handlers.error(new Error('socket error'));
   expect(require('../../utils/logger').error).toHaveBeenCalled();
+});
+
+test('disconnects revoked JWT rooms across the Socket.IO adapter and guards the handshake race', async () => {
+  const { Server } = require('socket.io');
+  const redis = require('../redis');
+  const io = socketMock(); io.use = jest.fn(); io.adapter = jest.fn();
+  const disconnectSockets = jest.fn(); io.in = jest.fn(() => ({ disconnectSockets }));
+  Server.mockReturnValue(io);
+  redis.getClient.mockReturnValue({ duplicate: () => ({ connect: jest.fn() }) });
+  require('./notification-store').flushPending.mockResolvedValue([]);
+  await require('./socket-server').initSocket('server');
+  const revoke = redis.setSessionRevocationHandler.mock.calls[0][0];
+  revoke(['older-jwt', 'newer-jwt']);
+  expect(io.in).toHaveBeenCalledWith(['auth:jwt:older-jwt', 'auth:jwt:newer-jwt']);
+  expect(disconnectSockets).toHaveBeenCalledWith(true);
+  io.in.mockClear(); revoke([]);
+  expect(io.in).not.toHaveBeenCalled();
+  const socket = socketMock({ authTokenId: 'older-jwt', disconnect: jest.fn() });
+  require('./socket-auth').authorizeSocket.mockRejectedValueOnce(Error('revoked during handshake'));
+  await io.handlers.connection(socket);
+  expect(socket.join).toHaveBeenCalledWith('auth:jwt:older-jwt');
+  expect(socket.disconnect).toHaveBeenCalledWith(true);
+  expect(require('./socket-store').trackConnection).not.toHaveBeenCalled();
+});
+
+test('anchor rotation disconnects the whole user room, including legacy sockets', async () => {
+  const { Server } = require('socket.io');
+  const redis = require('../redis');
+  const io = socketMock(); io.use = jest.fn(); io.adapter = jest.fn();
+  const disconnectSockets = jest.fn(); io.in = jest.fn(() => ({ disconnectSockets }));
+  Server.mockReturnValue(io);
+  redis.getClient.mockReturnValue({ duplicate: () => ({ connect: jest.fn() }) });
+  await require('./socket-server').initSocket('server');
+  redis.setSessionRevocationHandler.mock.calls[0][0]([], '12');
+  expect(io.in).toHaveBeenCalledWith(['user:12']);
+  expect(disconnectSockets).toHaveBeenCalledWith(true);
 });

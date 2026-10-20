@@ -2,8 +2,8 @@ const jwt = require("jsonwebtoken");
 const logger = require("../../utils/logger.js");
 const { getStaffAnchor, getSessionBlacklist } = require("../redis.js");
 const { isActiveMedicalPersonnel } = require("../query.js");
-const { convertIdentity } = require("../../utils/converter.js");
-const { required } = require("joi");
+const { isValidUserId } = require("../../utils/access-token-session");
+const { assertAccountAllowed } = require("../../utils/authentication-state");
 
 function jwtProtect(requiredRole = "patient") {
   return async (req, res, next) => {
@@ -18,7 +18,7 @@ function jwtProtect(requiredRole = "patient") {
       });
     }
 
-    const token = authHeader.split(" ")[1];
+    const token = typeof authHeader === "string" ? /^Bearer ([^\s]+)$/i.exec(authHeader)?.[1] : null;
     if (!token) {
       logger.warn(`[AUTH] Missing Bearer token route=${req.path}, ip=${req.ip}`);
       return res.status(401).json({
@@ -29,6 +29,7 @@ function jwtProtect(requiredRole = "patient") {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+        algorithms: ["HS256"],
         audience: "mdsystem-app",
         issuer: "mdsystem-auth",
       });
@@ -43,9 +44,9 @@ function jwtProtect(requiredRole = "patient") {
           });
         }
       }
-      const role = decoded.role?.toLowerCase();
+      const role = typeof decoded.role === "string" ? decoded.role.toLowerCase() : undefined;
 
-      if (decoded.id === undefined || role === undefined) {
+      if (!isValidUserId(decoded.id) || role === undefined) {
         logger.warn(`[AUTH] Incomplete token payload route=${req.path}, ip=${req.ip}`);
         return res.status(401).json({
           error: "INVALID_TOKEN",
@@ -54,7 +55,7 @@ function jwtProtect(requiredRole = "patient") {
         }
 
        // 🔍 Role enforcement
-      if (requiredRole && role !== requiredRole.toLowerCase() && requiredRole !== "all") {
+      if (!["patient", "medical"].includes(role) || (requiredRole && role !== requiredRole.toLowerCase() && requiredRole !== "all")) {
         logger.warn(`[AUTH] Role mismatch userId=${decoded.id}, required=${requiredRole}, got=${role}, route=${req.path}, ip=${req.ip}`);
         return res.status(403).json({
           error: "FORBIDDEN",
@@ -74,7 +75,7 @@ function jwtProtect(requiredRole = "patient") {
 
         const activeSession = await getStaffAnchor(decoded.id);
         if (!activeSession || activeSession !== decoded.sid) {
-          logger.warn(`[AUTH] Invalid/expired session userId=${decoded.id}, expectedSid=${activeSession}, providedSid=${decoded.sid}, route=${req.path}, ip=${req.ip}`);
+          logger.warn(`[AUTH] Invalid/expired session userId=${decoded.id}, route=${req.path}, ip=${req.ip}`);
           return res.status(401).json({
             error: "INVALID_SESSION",
             message: "Session invalid or expired — please re-login"
@@ -92,11 +93,16 @@ function jwtProtect(requiredRole = "patient") {
         }
       }
 
+      await assertAccountAllowed(decoded.id);
+
       // ✅ Attach user payload to request for downstream use
-      req.user = decoded;
+      req.user = { ...decoded, role };
       logger.debug(`[AUTH] Access granted userId=${decoded.id}, role=${role}, route=${req.path}, ip=${req.ip}`);
       next();
     } catch (err) {
+      if (err.message === 'Account locked' || err.message === 'Account unavailable') {
+        return res.status(403).json({ error: 'ACCOUNT_UNAVAILABLE', message: 'Account access is unavailable.' });
+      }
       if (err.name === "TokenExpiredError") {
         logger.warn(`[AUTH] Token expired route=${req.path}, ip=${req.ip}`);
         return res.status(401).json({ error: "TOKEN_EXPIRED", message: "JWT expired" });
@@ -104,7 +110,7 @@ function jwtProtect(requiredRole = "patient") {
       logger.error(`[AUTH] JWT verification failed route=${req.path}, ip=${req.ip}, error=${err.message}`);
       return res.status(401).json({
         error: "INVALID_TOKEN",
-        message: err.message
+        message: "Token is invalid or could not be verified"
       });
     }
   };

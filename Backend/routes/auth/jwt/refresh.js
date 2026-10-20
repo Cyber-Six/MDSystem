@@ -5,6 +5,8 @@ const { handleRefresh } = require('../../../config/jwt.js');
 const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const { recordRefreshTokenFailure, clearRefreshTokenFailures, isRefreshTokenLocked} = require('../../../config/redis.js');
 
+const { parseRefreshToken } = require('../../../utils/refresh-token');
+
 const logger = require('../../../utils/logger.js');
 // adjust path as needed
 
@@ -20,7 +22,7 @@ router.post("/", portalBasedIpRateLimiter("r"), async (req, res) => {
       });
     }
 
-    const { refreshToken } = req.body;
+    const refreshToken = req.body?.refreshToken;
     // ✅ 1. Required field
     if (!refreshToken) {
       await recordRefreshTokenFailure(ip);
@@ -30,26 +32,12 @@ router.post("/", portalBasedIpRateLimiter("r"), async (req, res) => {
       });
     }
 
-    // ✅ 2. Parse combined token: userId:deviceId:rawToken
-    const parts = refreshToken.split(":");
-    if (parts.length !== 3) {
+    const parsed = parseRefreshToken(refreshToken);
+    if (!parsed) {
       await recordRefreshTokenFailure(ip);
-      return res.status(400).json({
-        error: "INVALID_REFRESH_TOKEN_FORMAT",
-        message: "Refresh token format is invalid."
-      });
+      return res.status(400).json({ error: 'INVALID_REFRESH_TOKEN_FORMAT', message: 'Refresh token format is invalid.' });
     }
-
-    const [userIdStr, deviceId, rawToken] = parts;
-    const userId = Number(userIdStr);
-
-    if (!userId || !deviceId || !rawToken) {
-      await recordRefreshTokenFailure(ip);
-      return res.status(400).json({
-        error: "INVALID_REFRESH_TOKEN",
-        message: "Refresh token is malformed."
-      });
-    }
+    const { userId, deviceId, token: rawToken } = parsed;
 
     // ✅ 3. Attempt refresh
     const result = await handleRefresh({
@@ -76,6 +64,10 @@ router.post("/", portalBasedIpRateLimiter("r"), async (req, res) => {
     await recordRefreshTokenFailure(ip);
 
     switch (msg) {
+      case "Account locked":
+        return res.status(403).json({ error: "ACCOUNT_LOCKED", message: "This account is locked." });
+
+      case "Account unavailable":
       case "Invalid session":
         return res.status(401).json({
           error: "INVALID_SESSION",
@@ -88,6 +80,7 @@ router.post("/", portalBasedIpRateLimiter("r"), async (req, res) => {
           message: "This session has been revoked."
         });
 
+      case "Session changed or revoked during refresh":
       case "Session requires re-login":
         return res.status(401).json({
           error: "RELOGIN_REQUIRED",
