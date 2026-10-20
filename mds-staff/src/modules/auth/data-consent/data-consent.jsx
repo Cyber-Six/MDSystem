@@ -199,7 +199,7 @@ const DataConsent = ({
     if (!version) return sanitizedHtml;
     if (/·\s*v[\w.-]+/i.test(sanitizedHtml)) return sanitizedHtml;
 
-    const versionMarkup = ` <span class="text-neutral-400 font-normal">· v${version}</span>`;
+    const versionMarkup = ` <span class="text-neutral-400 font-normal">· ${version}</span>`;
     const strongLastUpdatedPattern = /(<strong[^>]*>\s*Last\s*updated\s*:?\s*<\/strong>\s*[^<]+)/i;
     if (strongLastUpdatedPattern.test(sanitizedHtml)) {
       return sanitizedHtml.replace(strongLastUpdatedPattern, `$1${versionMarkup}`);
