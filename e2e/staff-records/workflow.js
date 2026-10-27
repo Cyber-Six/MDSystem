@@ -9,9 +9,13 @@ const { compareSaved, assertFullRecord } = require('./assertions');
 const { revise } = require('./revision');
 
 async function openRecord(staff, manifest, kind, status = 'Pending') {
-  await staff.page.goto(`${staff.url}/pending-requests`);
-  const link = staff.page.getByRole('link', { name: /Pending Requests/ });
-  if (await link.count() && await link.isVisible()) await link.click();
+  await staff.page.goto(`${staff.url}/`);
+  // The sidebar may be collapsed, in which case its title remains available.
+  const link = staff.page.locator('nav a[href="/pending"]').first();
+  await expect(link, 'Staff sidebar must expose Pending Requests').toBeVisible();
+  await link.hover();
+  await link.click();
+  await expect(staff.page).toHaveURL(`${staff.url}/pending`);
   const type = staff.page.locator('select').filter({ has: staff.page.locator('option[value="Initial Record"]') });
   await type.selectOption(kind === 'initial' ? 'Initial Record' : 'Record Update');
   const filter = staff.page.locator('select').filter({ has: staff.page.locator('option[value="all"]') }).filter({ has: staff.page.locator('option[value="RevisionSubmitted"]') });
@@ -19,7 +23,11 @@ async function openRecord(staff, manifest, kind, status = 'Pending') {
   const branch = manifest.record.personalInfo.branch;
   if (branch) {
     const branches = staff.page.locator('select').filter({ has: staff.page.locator(`option[value=${JSON.stringify(branch)}]`) });
-    if (await branches.count()) await branches.last().selectOption(branch);
+    if (await branches.count()) {
+      const selector = branches.last();
+      if (await selector.isDisabled()) await expect(selector, 'Fixed staff branch must match the selected patient').toHaveValue(branch);
+      else await selector.selectOption(branch);
+    }
   }
   await expect(staff.page.getByText(/Loading (?:submissions|requests)/)).toHaveCount(0);
   const row = staff.page.getByRole('row').filter({ has: staff.page.getByRole('cell', { name: `#${manifest.ticketId}`, exact: true }) });
@@ -29,6 +37,7 @@ async function openRecord(staff, manifest, kind, status = 'Pending') {
     await next.click();
   }
   await expect(row, `Selected QA ticket #${manifest.ticketId} must be visible in staff queue`).toHaveCount(1);
+  await row.hover();
   await row.click();
   await staff.page.getByRole('button', { name: 'Review Full Record', exact: true }).click();
 }
@@ -90,7 +99,7 @@ async function verifyState(staff, patient, manifest, status, state) {
   assertTicket(manifest, await api.ticket(staff, manifest.patientId), [status]);
   assertTicket(manifest, await api.ticket(patient), [status]);
   state.transitions.push({ ticketId: manifest.ticketId, status });
-  const saved = await api.snapshot(staff, manifest.patientId, manifest.ticketId);
+  const saved = await api.snapshot(staff, manifest.patientId, manifest.ticketId, { includeApproved: manifest.kind === 'update' || status === 'Approved' });
   compareSaved(manifest, saved, state.comparisons);
   return saved;
 }
@@ -133,12 +142,12 @@ async function runWorkflow(browser, scenario, options = {}) {
       const latest = await api.ticket(patient);
       if (String(latest?.id) !== manifest.ticketId || latest?.status !== 'Pending') { unavailable.push('saved ticket is no longer the latest Pending submission'); await patient.page.close(); patient = null; continue; }
       assertTicket(manifest, latest);
-      const personalState = await api.patientPersonal(patient);
+      const personalState = await api.patientPersonal(patient, { includeApproved: scenario.kind === 'update' });
       const activeStatuses = scenario.kind === 'initial' ? ['Active', 'Unverified'] : ['Active'];
       if (!activeStatuses.includes(personalState.getCredentialStatus)) {
         unavailable.push('patient account is not active for this workflow'); await patient.page.close(); patient = null; continue;
       }
-      const saved = await api.snapshot(staff, manifest.patientId, manifest.ticketId);
+      const saved = await api.snapshot(staff, manifest.patientId, manifest.ticketId, { includeApproved: scenario.kind === 'update' });
       expect(saved.basicInfo.profile_type, 'QA role must match').toBe(scenario.role);
       compareSaved(manifest, saved, state.comparisons);
       break;
@@ -147,7 +156,7 @@ async function runWorkflow(browser, scenario, options = {}) {
     else test.skip(!patient, `No eligible saved QA record: ${unavailable.join('; ')}`);
     await installGuard(staff, patient, manifest, state);
     const baseline = scenario.kind === 'update' ? await api.snapshot(staff, manifest.patientId, manifest.baseline.ticketId) : null;
-    const approvedPersonal = await api.patientPersonal(patient);
+    const approvedPersonal = baseline ? await api.patientPersonal(patient) : null;
     if (baseline) {
       expect(approvedPersonal.approved, 'Update requires an existing approved personal baseline').toBeTruthy();
       compareSaved({ ...manifest, ticketId: manifest.baseline.ticketId, record: manifest.baseline.record },

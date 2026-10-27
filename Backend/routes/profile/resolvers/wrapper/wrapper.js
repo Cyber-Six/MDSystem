@@ -27,7 +27,10 @@ const Query = {
       [userId]
       );
 
-    return result.rows[0] || null;
+    // Initial registration creates an identity-only row. Personal details stay
+    // in the Pending log until approval; that placeholder is not a profile.
+    const record = result.rows[0];
+    return record?.first_name == null ? null : record;
     },
 
   _getUserPersonalRecordLogStatus: async (_, { userId }, { user, res }) => {
@@ -68,8 +71,9 @@ const Query = {
     }
 
     const query = `
-      SELECT upl.*
+      SELECT upl.*, up.branch, up.identifier
       FROM "UsersPersonalLog" AS upl
+      JOIN "UsersPersonal" AS up ON up.id = upl.user_id
       WHERE upl."user_id" = $1
         AND upl.created_at >= $2
       ORDER BY upl.created_at DESC

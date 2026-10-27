@@ -101,7 +101,8 @@ function makeDriver(browser, run, scenarioIndex, services = {}) {
         if (!previous) return; // The engine blocks failed/interrupted registration; it never repeats it.
         assertTicket(previous.manifest, current, [previous.status]);
         const staff = await staffSession(await page(), run, evidence);
-        const saved = await api.snapshot(staff, previous.manifest.patientId, previous.manifest.ticketId);
+        const saved = await api.snapshot(staff, previous.manifest.patientId, previous.manifest.ticketId,
+          { includeApproved: previous.manifest.kind === 'update' || previous.status === 'Approved' });
         compareSaved(previous.manifest, saved, evidence.comparisons);
         await staffWorkflow.openRecord(staff, previous.manifest, previous.manifest.kind, previous.status);
         await assertFullRecord(staff.page, previous.manifest, evidence.comparisons);

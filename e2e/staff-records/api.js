@@ -81,7 +81,7 @@ async function ticket(session, patientId) {
   return data.ticket;
 }
 
-async function snapshot(session, patientId, ticketId) {
+async function snapshot(session, patientId, ticketId, { includeApproved = true } = {}) {
   const document = `query StaffWorkflowSnapshot($userId: ID!) {
     basicInfo: getPatientBasicInfo(userId: $userId) { id profile_type sex latest_ticket_id }
     ${Object.entries(fields).map(([key, [name, selection]]) => `${key}: getUser${name}(userId: $userId, limit: 1000) { ${selection} }`).join('\n')}
@@ -91,13 +91,16 @@ async function snapshot(session, patientId, ticketId) {
   for (const key of Object.keys(fields)) record[key] = (data[key] || []).find(row => String(row.id) === String(ticketId)) ?? null;
   const personal = await graphql(session, '/profile/medical', `query StaffWorkflowPersonal($userId: ID!) {
     logs: getUserPersonalRecordLog(userId: $userId, limit: 100) { ${personalFields} }
-    approved: getUserPersonalRecord(userId: $userId) { ${personalFields} }
+    ${includeApproved ? `approved: getUserPersonalRecord(userId: $userId) { ${personalFields} }` : ''}
   }`, { userId: patientId });
   return { record, basicInfo: data.basicInfo, personal, ticketId: String(ticketId) };
 }
 
-async function patientPersonal(session) {
-  return graphql(session, '/profile/patient', `query StaffWorkflowPatientPersonal { approved: getPersonalRecord { ${personalFields} } getCredentialStatus }`);
+async function patientPersonal(session, { includeApproved = true } = {}) {
+  return graphql(session, '/profile/patient', `query StaffWorkflowPatientPersonal {
+    ${includeApproved ? `approved: getPersonalRecord { ${personalFields} }` : `pending: getPersonalRecordLog { ${personalFields} }`}
+    getCredentialStatus
+  }`);
 }
 
 module.exports = { fields, personalFields, graphql, loginCompletion, login, ticket, snapshot, patientPersonal };

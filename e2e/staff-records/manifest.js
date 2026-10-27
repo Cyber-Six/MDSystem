@@ -6,7 +6,7 @@ const { randomUUID } = require('node:crypto');
 const registry = require('../custom-choices/account-registry');
 const directory = path.resolve(__dirname, '../../.e2e-private/record-manifests');
 const inputSections = {
-  studentInput: 'profile', employeeInput: 'profile', emergencyInput: 'emergencyContact',
+  studentInput: 'profile', employeeInput: 'profile', empInput: 'profile', emergencyInput: 'emergencyContact',
   medHistInput: 'medicalHistory', allergyInput: 'allergyProfile', hospInput: 'hospitalizationProfile',
   opInput: 'operationProfile', medInput: 'medicationProfile', immuInput: 'immunizationProfile',
   lifeInput: 'lifestyle', vaInput: 'visualAcuityProfile', dentalHistInput: 'dentalHistory',

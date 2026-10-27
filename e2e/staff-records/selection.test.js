@@ -61,6 +61,26 @@ test('only successful original submission inputs become expected values; aborted
   assert.equal(submittedRecord(network).record.personalInfo.first_name, 'QA');
 });
 
+test('Employee batch empInput is retained as the complete employment profile', () => {
+  const manifest = fixture('Employee');
+  const names = { profile: 'empInput', emergencyContact: 'emergencyInput', medicalHistory: 'medHistInput',
+    allergyProfile: 'allergyInput', hospitalizationProfile: 'hospInput', operationProfile: 'opInput',
+    medicationProfile: 'medInput', immunizationProfile: 'immuInput', lifestyle: 'lifeInput', visualAcuityProfile: 'vaInput',
+    dentalHistory: 'dentalHistInput', dentalProcedureProfile: 'dentalProcInput', oralApplianceProfile: 'oralAppInput',
+    dentalPhotoRecord: 'dentalPhotoInput', obgynHistory: 'obgynInput' };
+  const variables = Object.fromEntries(Object.entries(names).map(([section, key]) => [key, manifest.record[section]]));
+  const network = [
+    { request: { query: 'mutation CreateInitialPersonalRecord { createInitialPersonalRecord(input: $input) { id } }',
+      variables: { input: manifest.record.personalInfo } }, response: { data: {} } },
+    { request: { query: 'mutation BatchCreateInitialRecords($empInput: EmployeeProfileInput!) { employeeProfile: createEmployeeProfile(input: $empInput) { id } submitTicket }', variables },
+      response: { data: { employeeProfile: { id: manifest.ticketId }, submitTicket: 'Pending' } } },
+  ];
+  const captured = submittedRecord(network);
+  assert.deepEqual(captured.record.profile, manifest.record.profile);
+  assert.equal(captured.record.profile.employmentCategoryOther, 'QA Research Consultant');
+  assert.equal(incompleteReason({ ...manifest, record: captured.record }), null);
+});
+
 test('legacy input recovery requires matching authenticated patient, ticket, identifier and names', () => {
   const manifest = fixture();
   const account = { role: 'Student', url: manifest.url, ready: true, ticketId: manifest.ticketId };

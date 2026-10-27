@@ -23,7 +23,9 @@ test('recover original input evidence only after read-only patient identity veri
     try {
       const patient = await api.login(await context.newPage(), url, account.email, account.password, evidence);
       const ticket = await api.ticket(patient);
-      const personal = await api.graphql(patient, '/profile/patient', 'query RecoverQAIdentity { pending: getPersonalRecordLog { identifier first_name last_name } approved: getPersonalRecord { identifier first_name last_name } }');
+      const personal = await api.graphql(patient, '/profile/patient', `query RecoverQAIdentity {
+        ${ticket?.status === 'Approved' ? 'approved: getPersonalRecord' : 'pending: getPersonalRecordLog'} { identifier first_name last_name }
+      }`);
       let recovered = false;
       for (const report of candidates) {
         const manifest = recoverInputManifest(account, report, { ticket, personal: personal.pending || personal.approved });
