@@ -13,7 +13,6 @@ on:
         type: choice
         options:
           - restart
-          - migrate-employee-category
           - reset-database
         default: restart
       confirm_database_reset:
@@ -31,7 +30,7 @@ concurrency:
 jobs:
   gui-smoke:
     name: Patient and staff GUI smoke tests
-    if: github.event_name != 'workflow_dispatch' || (inputs.operation != 'reset-database' && inputs.operation != 'migrate-employee-category')
+    if: github.event_name != 'workflow_dispatch' || inputs.operation != 'reset-database'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -67,7 +66,7 @@ jobs:
 
   test-and-build:
     needs: gui-smoke
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'workflow_dispatch' || inputs.operation != 'migrate-employee-category')
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 45
     steps:
@@ -167,8 +166,6 @@ jobs:
           done
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
           node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
-          node "$GITHUB_WORKSPACE/scripts/apply-employee-category-migration.js" \
-            "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
           patient_ok=1
@@ -202,29 +199,6 @@ jobs:
           fi
           node "$GITHUB_WORKSPACE/scripts/verify-image-revision.js" "$GITHUB_SHA" \
             "patient=$(docker compose ps -q patient)" "staff=$(docker compose ps -q staff)"
-
-  manual-employee-category-migration:
-    name: Apply employee category column migration without resetting data
-    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'migrate-employee-category'
-    runs-on: [self-hosted, Linux, ARM64]
-    timeout-minutes: 10
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Validate migration target
-        run: |
-          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
-            echo "Manual Pi migrations must be run from the deployment or development branch." >&2
-            exit 1
-          fi
-
-      - name: Apply additive employee category migration
-        working-directory: /srv/projects/MDSystem
-        run: |
-          docker compose ps postgres
-          node "$GITHUB_WORKSPACE/scripts/apply-employee-category-migration.js" \
-            "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
 
   manual-reset-database:
     name: Manually reset the Pi database
@@ -264,8 +238,6 @@ jobs:
           done
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
           node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
-          node "$GITHUB_WORKSPACE/scripts/apply-employee-category-migration.js" \
-            "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
           patient_ok=1

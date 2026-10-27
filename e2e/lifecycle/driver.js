@@ -55,7 +55,7 @@ async function preflight(browser, run) {
       }`, { name: `QA_LIFECYCLE_SCHEMA_${run.id}` });
     } catch (error) {
       if (/employmentCategoryOther[\s\S]*does not exist/.test(error.message)) {
-        throw new Error('Deployment is missing employee_profile.employmentCategoryOther. Run CI operation migrate-employee-category on deployment, then retry. No lifecycle accounts were created.');
+        throw new Error('Deployment is missing employee_profile.employmentCategoryOther. Apply the employee-category ALTER TABLE statement from schemas/post_build_setup.sql to the deployed database, then retry. No lifecycle accounts were created.');
       }
       throw error;
     }

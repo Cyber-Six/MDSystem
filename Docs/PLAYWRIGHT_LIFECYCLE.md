@@ -14,7 +14,7 @@ E2E_REVIEW_STAFF_PASSWORD=your-dedicated-qa-staff-password
 E2E_TEST_OTP=111111
 ```
 
-The staff account must be active and cover Manila. Use an administrator QA account or enable Pending Requests, Medical Records and Dental Records modules plus profile/EMR viewing for the QA staff account. Preflight checks staff login, permissions, both portals and the deployed profile SQL before creating accounts. A missing `employmentCategoryOther` column requires the CI `migrate-employee-category` operation; the runner does not migrate the database.
+The staff account must be active and cover Manila. Use an administrator QA account or enable Pending Requests, Medical Records and Dental Records modules plus profile/EMR viewing for the QA staff account. Preflight checks staff login, permissions, both portals and the deployed profile SQL before creating accounts. The `employmentCategoryOther` column is created by `schemas/post_build_setup.sql` during database initialization. On an existing database, apply that file's employee-category ALTER TABLE statement once directly; restarting services does not rerun setup. The test runner does not migrate the database.
 
 ## Commands in Git Bash
 

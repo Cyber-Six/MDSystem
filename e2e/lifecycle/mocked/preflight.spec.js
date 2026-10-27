@@ -49,7 +49,7 @@ test('authenticates staff, checks permissions and SQL schema before any registra
   expect(logins).toBe(1);
   expect(registrations).toBe(0);
 });
-for (const [type, message] of [['authentication', /INVALID_CREDENTIALS/], ['schema', /migrate-employee-category/],
+for (const [type, message] of [['authentication', /INVALID_CREDENTIALS/], ['schema', /post_build_setup.sql/],
   ['permission', /pendingRequests/], ['branch', /Manila/], ['inactive', /must be active/],
   ['consent', /HTTP 400, DATA_CONSENT_REQUIRED.*Sign in manually/], ['outdatedConsent', /OUTDATED_CONSENT/],
   ['unverified2fa', /2FA_NOT_VERIFIED/], ['missingToken', /HTTP 200, INVALID_COMPLETION_RESPONSE/]]) {

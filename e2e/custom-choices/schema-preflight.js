@@ -9,7 +9,7 @@ async function checkInitialSchema(read) {
     await read(document);
   } catch (error) {
     if (/employmentCategoryOther[\s\S]*does not exist/.test(error?.message || '')) {
-      throw new Error('Deployment schema is missing employee_profile.employmentCategoryOther. Run CI on deployment with operation migrate-employee-category, then retry. Registration credentials were saved locally; no custom choices or medical ticket have been submitted by this workflow.');
+      throw new Error('Deployment schema is missing employee_profile.employmentCategoryOther. Apply the employee-category ALTER TABLE statement from schemas/post_build_setup.sql to the deployed database, then retry. Registration credentials were saved locally; no custom choices or medical ticket have been submitted by this workflow.');
     }
     throw error;
   }

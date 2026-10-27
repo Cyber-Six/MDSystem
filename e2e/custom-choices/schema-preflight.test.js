@@ -24,7 +24,7 @@ test('HTTP 200 missing-column response blocks the real readback pipeline before 
   await assert.rejects(async () => {
     await checkInitialSchema(fixture.read);
     submitted = true;
-  }, /Run CI on deployment with operation migrate-employee-category/);
+  }, /post_build_setup.sql/);
   assert.equal(submitted, false);
   assert.equal(fixture.requests.length, 1);
   assert.match(fixture.requests[0].data.query, /^query\s/);
@@ -45,7 +45,7 @@ test('HTTP authentication failure remains an authentication error rather than a 
   const fixture = apiFixture(401, { errors: [{ message: 'Unauthorized' }] });
   await assert.rejects(checkInitialSchema(fixture.read), error => {
     assert.match(error.message, /HTTP 401/);
-    assert.doesNotMatch(error.message, /migrate-employee-category/);
+    assert.doesNotMatch(error.message, /post_build_setup.sql/);
     return true;
   });
 });
@@ -64,7 +64,7 @@ test('missing Employee column stops initial work before catalog or ticket writes
       throw new Error('GraphQL errors: column ep.employmentCategoryOther does not exist');
     });
     writes++;
-  }, /migrate-employee-category/);
+  }, /post_build_setup.sql/);
   assert.equal(writes, 0);
 });
 

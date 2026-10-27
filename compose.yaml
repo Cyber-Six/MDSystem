@@ -54,16 +54,14 @@ services:
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
     volumes:
       - ${SCHEMA_SQL_PATH:?Set SCHEMA_SQL_PATH to your schema.psql path in .env}:/schema/schema.psql:ro
-      - ${POST_BUILD_SETUP_SQL_PATH:-./Backend/config/data/post_build_setup.sql}:/schema/post_build_setup.sql:ro
+      - ${POST_BUILD_SETUP_SQL_PATH:-./schemas/post_build_setup.sql}:/schema/post_build_setup.sql:ro
       - ${STARTUP_SQL_PATH:-./schemas/startup.sql}:/schema/startup.sql:ro
-      - ./schemas/migrations/20261015_employee_category_other.psql:/schema/employee_category_other.psql:ro
       - schema-state:/state
     entrypoint: ["sh", "-ec"]
     command:
       - |
         if [ -f /state/initialized ]; then
-          psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /schema/employee_category_other.psql
-          echo 'Schema already initialized; Employee category migration applied'
+          echo 'Schema already initialized; skipping setup'
           exit 0
         fi
         if [ ! -s /schema/schema.psql ]; then echo 'Schema path is missing or empty'; exit 1; fi
@@ -71,7 +69,6 @@ services:
         if [ "$$existing_tables" = t ]; then echo 'Database already contains tables but the schema marker is missing; refusing to apply schema'; exit 1; fi
         psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /schema/schema.psql
         psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /schema/post_build_setup.sql
-        psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /schema/employee_category_other.psql
         if [ -n "$$ADMIN_EMAIL" ] && [ -n "$$ADMIN_PASSWORD_HASH" ]; then
           psql -h postgres -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -v ADMIN_EMAIL="$$ADMIN_EMAIL" -v ADMIN_PASSWORD_HASH="$$ADMIN_PASSWORD_HASH" -f /schema/startup.sql
         else
