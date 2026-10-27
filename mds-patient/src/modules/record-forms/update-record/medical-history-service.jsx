@@ -11,6 +11,7 @@
  *   - Allergens (via getAllergenCatalogs)
  */
 
+import { completeCatalogPages } from '../../../services/catalog-pages';
 import { axiosRequest } from '../../../packages-core-adapter';
 
 // ==================== STATIC FALLBACK DATA ====================
@@ -68,7 +69,7 @@ const STATIC_IMMUNIZATIONS = [
  */
 const ALL_CATALOGS_QUERY = `
   query FetchAllMedicalCatalogs {
-    medicalConditions: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 100) {
+    medicalConditions: getDomainCatalogs(domain: MedicalCondition, limit: 200) {
       id
       domain
       name
@@ -76,7 +77,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    hospitalizations: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) {
+    hospitalizations: getDomainCatalogs(domain: Hospitalization, limit: 200) {
       id
       domain
       name
@@ -84,7 +85,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    operations: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) {
+    operations: getDomainCatalogs(domain: Operation, limit: 200) {
       id
       domain
       name
@@ -92,7 +93,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    immunizations: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) {
+    immunizations: getDomainCatalogs(domain: Immunization, limit: 200) {
       id
       domain
       name
@@ -100,7 +101,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    visualAcuity: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true, limit: 200) {
+    visualAcuity: getDomainCatalogs(domain: VisualAcuity, limit: 200) {
       id
       domain
       name
@@ -108,7 +109,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    medications: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) {
+    medications: getDomainCatalogs(domain: Medication, limit: 200) {
       id
       domain
       name
@@ -116,7 +117,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    allergens: getAllergenCatalogs(filterIsValid: true, limit: 200) {
+    allergens: getAllergenCatalogs(limit: 200) {
       id
       allergen
       type
@@ -168,6 +169,11 @@ export async function fetchAllMedicalCatalogs() {
     }
 
     const data = response.data.data || {};
+    await completeCatalogPages(data, { medicalConditions: 'getDomainCatalogs(domain: MedicalCondition,', hospitalizations: 'getDomainCatalogs(domain: Hospitalization,', operations: 'getDomainCatalogs(domain: Operation,', immunizations: 'getDomainCatalogs(domain: Immunization,', visualAcuity: 'getDomainCatalogs(domain: VisualAcuity,', medications: 'getDomainCatalogs(domain: Medication,', allergens: 'getAllergenCatalogs(' }, async (query, variables) => {
+      const result = await axiosRequest({ method: 'POST', url: '/emr/patient', data: { query, variables } });
+      if (result.data.errors?.length) throw new Error(result.data.errors.map(error => error.message).join('; '));
+      return result.data.data;
+    });
 
     // Build catalogs object, using static fallbacks for empty results
     const catalogs = {

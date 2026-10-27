@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
+import { TICKET_STATUS, staffUpdateTicket, approveReviewedRecord } from '../initial-record-service';
 import RecordReviewModal from './record-review-modal';
 import { formatBranchLabel } from '../../../utils/branch-utils';
 
@@ -42,7 +42,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
     try {
       // Step 1: approve personal record — if this fails the EMR ticket is NOT touched
       // Step 2: approve EMR ticket (medical + dental) — only runs if step 1 succeeded
-      const newStatus = await approveInitialRecord(ticket.patientId);
+      const newStatus = await approveReviewedRecord(ticket.patientId, ticket.is_initial !== false);
       onAction?.({ ...ticket, status: newStatus }, newStatus);
       onClose();
     } catch (err) {
@@ -60,7 +60,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
     setLoading(true);
     setError('');
     try {
-      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REJECTED);
+      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REJECTED, rejectNote.trim());
       onAction?.({ ...ticket, status: newStatus }, newStatus);
       onClose();
     } catch (err) {

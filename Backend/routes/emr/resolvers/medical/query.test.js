@@ -35,6 +35,16 @@ test('enforces patient-scoped medical permission and applies reviewable statuses
   await expect(Query.getUserProfile(null, args, { user: { id: 3 }, res: {} })).rejects.toThrow('401:Unauthorized');
 });
 
+test('staff history retains rejected and older ticket profiles under the same patient-scoped permission', async () => {
+  permit.isMedicalPermittedPatientBased.mockResolvedValue(true);
+  const records = [{ id: 'newer', status: 'Pending' }, { id: 'older', status: 'Rejected' }];
+  Wrapper._getUserProfile.mockResolvedValueOnce(records);
+  await expect(Query.getUserProfile(null, { userId: 8 }, { user: { id: 3 }, res: {} })).resolves.toEqual(records);
+  expect(Wrapper._getUserProfile.mock.calls[0][1].statuses).toContain('Rejected');
+  permit.isMedicalPermittedPatientBased.mockResolvedValue(false);
+  await expect(Query.getUserProfile(null, { userId: 8 }, { user: { id: 3 }, res: {} })).rejects.toThrow('401:Unauthorized');
+});
+
 test('returns null for empty records and rejects non-reviewable profiles', async () => {
   permit.isMedicalPermittedPatientBased.mockResolvedValue(true);
   Wrapper._getUserProfile.mockResolvedValueOnce([]);

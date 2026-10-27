@@ -127,3 +127,7 @@ test('shows a correction action and blocks certification for unresolved selectio
   expect(html).toContain('Unresolved choice (999)');
   expect(html).toMatch(/<input[^>]*disabled=""/);
 });
+
+test('resolves revision allergen registries using their actual response labels', () => {
+  expect(resolveCatalogLabel(null, 11, { 11: { id: '11', allergen: 'QA pollen', type: 'Environmental' } })).toBe('QA pollen');
+});

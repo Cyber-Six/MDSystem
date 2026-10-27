@@ -110,7 +110,7 @@ E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices -- student-initial.
 E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices -- employee-update.spec.js --headed
 ```
 
-The target and test OTP use `.env.e2e` (`E2E_PATIENT_URL` and optional `E2E_TEST_OTP`). The opt-in authorizes persistent synthetic accounts, catalog entries, and pending records on this target. Initial tests reuse registration pacing. The custom-choice initial workflows automatically save generated patient credentials in the Git-ignored `.e2e-private/custom-choice-accounts.json`. Credentials are saved after registration; accounts become candidates only after successful Pending submission and saved-value verification. Earlier accounts are retained. Run the initial workflows, approve their records manually through staff, then run the matching update files with the existing commands. Updates choose the newest eligible saved account for the same role and deployment. Pending accounts produce a staff-approval blocker. Keep this private credential file local. Previously created accounts without saved passwords cannot be recovered automatically.
+The target and test OTP use `.env.e2e` (`E2E_PATIENT_URL` and optional `E2E_TEST_OTP`). The opt-in authorizes persistent synthetic accounts, catalog entries, and pending records on this target. Initial tests reuse registration pacing. The custom-choice initial workflows automatically save generated patient credentials in the Git-ignored `.e2e-private/custom-choice-accounts.json`. Credentials are saved after registration; accounts become candidates only after successful Pending submission and saved-value verification. Earlier accounts are retained. Run the initial workflows, approve their records manually through staff, then run the matching update files with the existing commands. Updates choose the newest eligible saved account for the same role and deployment. Authenticated Active or Unverified accounts with Pending initial tickets cause the update workflow to be skipped with a manual-staff-approval reason. Keep this private credential file local. Previously created accounts without saved passwords cannot be recovered automatically.
 
 Optional explicit **patient** credentials in `.env.e2e` override automatic selection. Supply both values for a role, or remove both to use the registry:
 
@@ -121,13 +121,15 @@ E2E_CUSTOM_EMPLOYEE_EMAIL=your-approved-employee-qa-email
 E2E_CUSTOM_EMPLOYEE_PASSWORD=your-employee-qa-password
 ```
 
-Each update account must be Active with an approved record and no pending/in-progress/revision update. The suite fails before modifying an ineligible account and rechecks immediately before submission. Student updates use program and student category fields; Employee updates use department, employment category, and position fields. Submitted initial records and updates are expected to remain **Pending** until staff review. The suite verifies Pending ticket and section readback; it does not wait for approval or dashboard access. Subsequent update runs need eligible approved accounts again. The suite performs no staff approval, cancellation, or cleanup. It does not change application APIs or database schemas.
+Each update account must be Active with an approved record and no pending/in-progress/revision update. The suite skips update workflows awaiting manual staff approval; other configuration, authentication, and eligibility errors fail before modifying an account. It rechecks eligibility immediately before submission. Student updates use program and student category fields; Employee updates use department, employment category, and position fields. Submitted initial records and updates are expected to remain **Pending** until staff review. The suite verifies Pending ticket and section readback; it does not wait for approval or dashboard access. Subsequent update runs need eligible approved accounts again. The suite performs no staff approval, cancellation, or cleanup. It does not change application APIs or database schemas.
 
 Every run writes `e2e-results/custom-choices/results.json` and `e2e-results/custom-choices/errors.md`, with exact failures, reproduction commands, request/response evidence, and expected/actual saved-value comparisons. Batch failures include HTTP status, GraphQL errors, and `submitTicket`; successful submission and Pending readback appear as separate steps. Each test attaches `custom-choice-evidence.json`. Credentials and tokens are omitted, and videos, traces, and screenshots are disabled for this project. Keep artifacts private because approved QA-account readback can contain personal information.
 
 Individual-file runs update that workflow's result without discarding the other workflows; each entry has its own recorded timestamp. Initial forms validate on Submit. During intentionally invalid input probes, writes are aborted and reported if client validation fails to block them. A request guard also blocks application-initiated record cancellation. These guards do not fabricate successful backend responses. After restoring valid input, normal submission uses the real deployment. Pending ticket and section readback runs only after the batch returns a successful Pending result.
 
 If creation saves a catalog row but fails to display/select it, the test records that failure and tries the normal search/reuse UI path so later sections can still be exercised. Assertions remain failed. No mocked backend success, automatic retries, or application fixes are used to make these workflows pass. A missing-credential failure is a configuration blocker; an earlier form or batch failure means later saved-data checks were not reached. Run `npm run test:custom-choice-diagnostics` for local checks that do not contact the deployed site.
+
+Initial custom-choice workflows check the deployed profile schema after registration and before creating catalog choices or submitting a medical ticket. A missing `employmentCategoryOther` column produces an actionable `migrate-employee-category` blocker; the newly registered account's credentials remain saved locally. CI applies and verifies this additive migration after database initialization, including reset operations. Compose `schema-init` also applies it for fresh databases and existing initialized databases. These setup changes must be deployed to protect future resets. Existing databases can use the manual migration operation without another reset.
 
 Deployment images built by CI carry the source commit in the `org.opencontainers.image.revision` label. After deployment, CI inspects the actual image IDs used by the patient and staff containers and fails if either revision differs from the commit being deployed. This detects stale containers even when the Pi `.env` contains custom image-name or tag values.
 
@@ -137,6 +139,12 @@ Save Codegen-based tests under `e2e/recorded/` with filenames ending in `.spec.j
 
 ```sh
 npx playwright codegen https://www.mdsystemtip.space/auth/login
+```
+
+`e2e/recorded/custom-choices-registration-entry.spec.js` is a small recorded-style example for the patient portal. It checks navigation into the registration form and its visible fields without creating an account. Run only this recording with:
+
+```sh
+npm run test:e2e:recorded -- custom-choices-registration-entry.spec.js --headed
 ```
 
 Run the saved recorded tests explicitly from the repository root:
@@ -217,3 +225,54 @@ Google OAuth, real reCAPTCHA challenges, third-party chatbot responses, and exte
 ### Custom-choice Employee category migration
 
 If the Employee initial submission reports that `employee_profile.employmentCategoryOther` is missing, run **Actions ? CI ? Run workflow** on the `deployment` branch and choose `migrate-employee-category`. The action applies and verifies the additive migration without resetting the database. Then rerun `employee-initial.spec.js`; after staff approves that new QA record, the saved account can be used by `employee-update.spec.js`.
+
+## Staff record decisions
+
+This suite is separate from the read-only `review` suite and the patient `custom-choices` suite. It has 12 independent scenarios: Student/Employee × initial/update × approve/reject/revise. One worker and zero retries prevent repeated decisions.
+
+### Prerequisites and saved evidence
+
+Use a dedicated QA staff account authorized for both medical and dental review. Configure these keys in the ignored `.env.e2e` file:
+
+```dotenv
+E2E_PATIENT_URL=https://www.mdsystemtip.space
+E2E_STAFF_URL=https://staff.mdsystemtip.space
+E2E_REVIEW_STAFF_EMAIL=your-qa-staff-email
+E2E_REVIEW_STAFF_PASSWORD=your-qa-staff-password
+E2E_TEST_OTP=111111
+```
+
+The suite uses saved credentials in `.e2e-private/custom-choice-accounts.json` and original input manifests in `.e2e-private/record-manifests/`. Successful future custom-choice initial/update workflows retain complete original mutation inputs, catalog labels, form controls, and final-review evidence locally. Inputs and credentials are not committed. Older successful reports can be recovered by the setup project only when authenticated patient ID, ticket ID, identifier and names match the saved account. Current UI text is never used to manufacture expected input data.
+
+Each scenario needs a distinct patient with a complete, latest Pending combined medical/dental ticket. Updates additionally need a verified original approved baseline. Revision scenarios need captured original form-control and final-review evidence. Missing suitable records are explicitly skipped. Authentication, schema, saved-value and visibility errors are failures. This suite does not register replacement patients or populate missing records.
+
+Assignments persist in `.e2e-private/staff-record-assignments.json`, preventing another scenario from consuming the same patient. A `.e2e-private/staff-records-running.lock` lease prevents concurrent suite execution; the custom-choice update runner also refuses to use these accounts while the lease exists. After a crashed process, stop all QA runners and inspect/remove only the stale lock before restarting. Do not run manual staff/patient operations against reserved accounts concurrently.
+
+### Commands (Git Bash)
+
+```bash
+# Local deterministic checks; no persistent records are created or submitted.
+npm run test:staff-records:diagnostics
+npm run test:e2e:staff-records:mocked
+npx playwright test --project=staff-records --list
+
+# Explicitly authorizes persistent QA staff decisions on eligible saved tickets.
+E2E_STAFF_RECORDS_ENABLED=1 npm run test:e2e:staff-records -- --headed
+
+# One scenario, including read-only legacy-evidence recovery setup.
+E2E_STAFF_RECORDS_ENABLED=1 npm run test:e2e:staff-records -- --grep "Student initial: full record and revise" --headed
+```
+
+In PowerShell set `$env:E2E_STAFF_RECORDS_ENABLED='1'` before the live command. Deploy the application fixes before verifying them against the deployed portals.
+
+### Assertions and reports
+
+Full Record compares original input data against authenticated saved sections and section-scoped staff UI values before permitting a decision. Ticket ID, patient ownership, latest-ticket identity, scope and actionable status are rechecked immediately before every mutation. Approval/rejection are refreshed through both portals. Rejected sections remain readable in staff history. Revision verifies instructions, original patient form prefilling, representative emergency-contact/medical-note/dental-date edits, final review, RevisionSubmitted, revised/unchanged staff values and final approval. Update decisions preserve the original approved baseline and historical clinical values.
+
+`e2e-results/staff-records/errors.md` and `results.json` contain sanitized comparisons, transitions, responses, skip reasons and reproduction commands. Traces, video and screenshots are disabled. Separate browser contexts close after each scenario so credential fields do not remain in failure snapshots. Manifests stay private; reports redact passwords and tokens.
+
+Mocked browser checks mount actual staff review/detail components and actual patient form sections with the real revision mappers and a local navigation harness. They cover both roles and record types, full fields, photos, multiline text, zero values, medical/dental applicability, changed and unchanged revision values, required staff notes, rejection reasons, GraphQL failure, unresolved labels and stopping before decisions when visibility fails. Diagnostic tests cover identity recovery, reservation isolation, stale-ticket/mutation guards, schema-supported read queries and sanitization. Live login/routing, real data and deployed resubmission still require the enabled deployed run.
+
+## Connected lifecycle
+
+See [Connected patient and staff lifecycle](PLAYWRIGHT_LIFECYCLE.md) for one command covering fresh registration, initial records, staff decisions, revisions and updates, including configuration, reports and safe resume.

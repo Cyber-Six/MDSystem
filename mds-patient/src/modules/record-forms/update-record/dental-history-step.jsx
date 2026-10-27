@@ -136,7 +136,7 @@ const DentalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {
               onChange={(e) => handleInputChange('lastDentalCleaning', e.target.value)}
             />
 
-            {formData.seenByDentist === false && (
+            {formData.seenByDentist === true && (
               <Input
                 label="When was your last dental consultation?"
                 type="month"

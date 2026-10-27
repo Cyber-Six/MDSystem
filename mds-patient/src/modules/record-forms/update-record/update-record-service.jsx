@@ -208,7 +208,7 @@ export async function fetchUpdateRevisionPrefill() {
     query += `
       emrProfile: getProfile {
         ... on StudentProfile { program year }
-        ... on EmployeeProfile { department role }
+        ... on EmployeeProfile { department role position employmentCategoryOther }
       }
       emergencyContact: getEmergencyContact {
         firstContact { contactName relationship contactNumber address }
@@ -245,6 +245,7 @@ export async function fetchUpdateRevisionPrefill() {
       lifestyle: getLifestyle {
         smoker numberOfCigarettesPerDay yearsSmoked
         alcoholConsumer frequencyOfAlcoholConsumption
+        vapeUser vapeType vapeFrequency yearsVaping
         notes
       }
       visualAcuityProfile: getVisualAcuityProfile {
@@ -300,7 +301,7 @@ export async function fetchUpdateRevisionPrefill() {
  * @param {object} backendData - Data from GraphQL query (see fetchUpdateRevisionPrefill)
  * @returns {Promise<object>} Form data with all fields properly renamed and structured
  */
-async function mapRevisionDataToFormData(backendData) {
+export async function mapRevisionDataToFormData(backendData) {
   const formData = {};
 
   console.log('[MapRevisionData] ========== STARTING DATA TRANSFORMATION ==========');
@@ -365,7 +366,9 @@ async function mapRevisionDataToFormData(backendData) {
   }
   if (backendData.emrProfile?.department) {
     formData.employeeDepartment = backendData.emrProfile.department || '';
-    formData.employeeRole = backendData.emrProfile.role || '';
+    formData.employeeRole = ({ NonStaff: 'Teaching', NonStaffOfficer: 'Teaching (Officer)', Staff: 'Non-Teaching', StaffOfficer: 'Non-Teaching (Officer)' })[backendData.emrProfile.role] || backendData.emrProfile.role || '';
+    formData.employeeCategoryOther = backendData.emrProfile.employmentCategoryOther || '';
+    formData.employeePosition = backendData.emrProfile.position || '';
   }
 
   // ======== MEDICAL HISTORY ========
@@ -400,7 +403,7 @@ async function mapRevisionDataToFormData(backendData) {
 
   // Allergies
   console.log('[MapRevisionData] Allergy profile data:', backendData.allergyProfile);
-  if (backendData.allergyProfile?.allergies && Array.isArray(backendData.allergyProfile.allergies)) {
+  if (Array.isArray(backendData.allergyProfile?.allergies) && backendData.allergyProfile.allergies.length > 0) {
     formData.hasAllergies = 'yes';
     formData.selectedAllergies = [];
     formData.allergyDetails = {};
@@ -415,6 +418,13 @@ async function mapRevisionDataToFormData(backendData) {
   } else {
     formData.hasAllergies = 'no';
   }
+
+  formData.allergiesNotes = (backendData.allergyProfile?.notes || backendData.allergyProfile?.allergies?.[0]?.notes || '').replace(/^Other: /, '');
+  formData.hospitalizationNotes = backendData.hospitalizationProfile?.notes || backendData.hospitalizationProfile?.hospitalizations?.[0]?.notes || '';
+  formData.surgeryNotes = backendData.operationProfile?.notes || backendData.operationProfile?.operations?.[0]?.notes || '';
+  formData.medicationNotes = backendData.medicationProfile?.notes || '';
+  formData.medicationReason = backendData.medicationProfile?.medications?.[0]?.description || '';
+  formData.immunizationNotes = backendData.immunizationProfile?.notes || '';
 
   // Hospitalization
   console.log('[MapRevisionData] Hospitalization profile data:', backendData.hospitalizationProfile);
@@ -498,8 +508,8 @@ async function mapRevisionDataToFormData(backendData) {
   // Lifestyle
   if (backendData.lifestyle) {
     formData.smoker = backendData.lifestyle.smoker ? 'yes' : 'no';
-    formData.smokerSticksPerDay = backendData.lifestyle.numberOfCigarettesPerDay || null;
-    formData.smokerYears = backendData.lifestyle.yearsSmoked || null;
+    formData.smokerSticksPerDay = backendData.lifestyle.numberOfCigarettesPerDay ?? null;
+    formData.smokerYears = backendData.lifestyle.yearsSmoked ?? null;
 
     formData.alcoholDrinker = backendData.lifestyle.alcoholConsumer ? 'yes' : 'no';
     formData.alcoholFrequency = backendData.lifestyle.frequencyOfAlcoholConsumption || null;
@@ -507,6 +517,7 @@ async function mapRevisionDataToFormData(backendData) {
     formData.vaper = backendData.lifestyle.vapeUser ? 'yes' : 'no';
     formData.vapeType = backendData.lifestyle.vapeType || null;
     formData.vapeFrequency = backendData.lifestyle.vapeFrequency || null;
+    formData.yearsVaping = backendData.lifestyle.yearsVaping ?? null;
   }
 
   // Visual Acuity

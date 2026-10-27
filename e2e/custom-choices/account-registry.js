@@ -35,13 +35,14 @@ function candidates(role, url, env = process.env, file = filename) {
     } else if (isPlaceholder(email) || isPlaceholder(password)) {
       throw new Error(`Only one of ${prefix}_EMAIL and ${prefix}_PASSWORD contains a sample value. Replace both with real patient QA credentials, or remove both to use saved accounts.`);
     } else {
-      return [{ role, email, password, url: normalizeUrl(url) }];
+      return [{ role, email, password, url: normalizeUrl(url), source: 'environment' }];
     }
   }
   if ((email && !isPlaceholder(email)) || (password && !isPlaceholder(password))) {
     throw new Error(`Configure both ${prefix}_EMAIL and ${prefix}_PASSWORD, or remove both to use saved QA accounts.`);
   }
-  return read(file).filter(row => row.role === role && row.url === normalizeUrl(url) && row.ready && row.email && row.password && !isPlaceholder(row.email) && !isPlaceholder(row.password))
+  return read(file).filter(row => row.role === role && row.url === normalizeUrl(url) && row.ready && !row.authInvalid && row.email && row.password && !isPlaceholder(row.email) && !isPlaceholder(row.password))
+    .map(row => ({ ...row, source: 'registry' }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 function eligibility(role, personal, emr) {

@@ -167,6 +167,8 @@ jobs:
           done
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
           node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
+          node "$GITHUB_WORKSPACE/scripts/apply-employee-category-migration.js" \
+            "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
           patient_ok=1
@@ -221,14 +223,8 @@ jobs:
         working-directory: /srv/projects/MDSystem
         run: |
           docker compose ps postgres
-          docker compose exec -T postgres sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
-            < "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
-          column_exists=$(docker compose exec -T postgres sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = '\''employee_profile'\'' AND column_name = '\''employmentCategoryOther'\'')"')
-          if [ "$column_exists" != "t" ]; then
-            echo 'Migration ran but employee_profile.employmentCategoryOther is still missing.' >&2
-            exit 1
-          fi
-          echo 'Verified employee_profile.employmentCategoryOther exists.'
+          node "$GITHUB_WORKSPACE/scripts/apply-employee-category-migration.js" \
+            "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
 
   manual-reset-database:
     name: Manually reset the Pi database
@@ -268,6 +264,8 @@ jobs:
           done
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
           node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
+          node "$GITHUB_WORKSPACE/scripts/apply-employee-category-migration.js" \
+            "$GITHUB_WORKSPACE/schemas/migrations/20261015_employee_category_other.psql"
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
           patient_ok=1

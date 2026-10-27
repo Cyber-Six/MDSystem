@@ -47,7 +47,7 @@ const SectionWrapper = ({
   }
 
   return (
-    <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+    <div data-review-section={title} className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
       {/* Header */}
       <div
         className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center gap-3 cursor-pointer select-none"
@@ -138,15 +138,16 @@ export default SectionWrapper;
  * DataRow — Reusable key-value display row
  */
 export const DataRow = ({ label, value, isEdited = false, originalValue }) => {
-  if (value === null || value === undefined || value === '') return null;
+  const displayValue = value === null || value === undefined || value === '' ? 'Not provided'
+    : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value;
   return (
     <div className="grid grid-cols-3 gap-4 py-2 border-b border-neutral-100 dark:border-neutral-700/50">
       <dt className="font-medium text-secondary-600 dark:text-neutral-400 text-sm">{label}</dt>
-      <dd className="col-span-2 text-secondary-900 dark:text-white text-sm">
+      <dd className="col-span-2 text-secondary-900 dark:text-white text-sm whitespace-pre-wrap break-words">
         {isEdited && originalValue !== undefined && (
           <span className="line-through text-secondary-400 dark:text-neutral-500 mr-2 text-xs">{originalValue}</span>
         )}
-        {value}
+        {displayValue}
         {isEdited && (
           <span className="ml-2 text-xs text-warning-600 dark:text-warning-400 font-medium">
             (edited)

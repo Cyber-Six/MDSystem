@@ -1,12 +1,25 @@
 const { test, expect } = require('@playwright/test');
+const accountRegistry = require('./account-registry');
+
+function secretValues() {
+  const configured = Object.entries(process.env)
+    .filter(([key, value]) => value && /E2E_.*(?:EMAIL|PASSWORD|TOKEN|OTP|SECRET)/i.test(key))
+    .map(([, value]) => value);
+  const saved = accountRegistry.read().flatMap(account => [account.email, account.password]);
+  return [...new Set([...configured, ...saved].filter(Boolean).map(String))].sort((a, b) => b.length - a.length);
+}
 
 function redact(value) {
   if (Array.isArray(value)) return value.map(redact);
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
     .filter(([key]) => !/password|token|authorization|cookie|otp|secret/i.test(key))
     .map(([key, item]) => [key, redact(item)]));
-  if (typeof value === 'string') return value.replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
-    .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted token]');
+  if (typeof value === 'string') {
+    let clean = value.replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+      .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted token]');
+    for (const secret of secretValues()) clean = clean.split(secret).join('[redacted]');
+    return clean.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]');
+  }
   return value;
 }
 
@@ -57,8 +70,8 @@ async function attach(state) {
   await Promise.allSettled([...state.pending]);
   const evidence = redact({ role: state.role, mode: state.mode, generated: state.data, created: state.created,
     ticket: state.ticket, baseline: state.baseline, comparisons: state.comparisons, network: state.network,
-    failedStep: state.currentStep });
+    failedStep: state.currentStep, skipReason: state.skipReason });
   await test.info().attach('custom-choice-evidence.json', { body: JSON.stringify(evidence, null, 2), contentType: 'application/json' });
 }
 
-module.exports = { redact, observe, query, compare, attach };
+module.exports = { redact, observe, query, compare, attach, secretValues };

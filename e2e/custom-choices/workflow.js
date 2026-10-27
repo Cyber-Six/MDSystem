@@ -5,6 +5,9 @@ const { inspectBatchSubmission } = require('../registration/submission-result');
 const { fillUpdateProfileFields } = require('./update-profile-workflow');
 const { observe, query, compare, attach } = require('./evidence');
 const accountRegistry = require('./account-registry');
+const { checkInitialSchema } = require('./schema-preflight');
+const { finishUpdateEligibility } = require('./update-readiness');
+const staffManifest = require('../staff-records/manifest');
 
 const PHOTO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9XkAAAAASUVORK5CYII=', 'base64');
 const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -143,6 +146,8 @@ async function histories(page, state) {
   await page.getByRole('button', { name: 'Family', exact: true }).click();
   await expect(family).toBeChecked();
   await expect(relation).toHaveValue(state.data.familyRelation);
+  state.inputControls ||= [];
+  if (state.mode !== 'update') state.inputControls.push(await staffManifest.captureControls(page, 'history'));
 }
 
 async function validateBlockedNext(page, state, marker, message) {
@@ -435,9 +440,13 @@ async function verify(page, state) {
 }
 
 async function loginForUpdate(page, state) {
-  const accounts = accountRegistry.candidates(state.role, state.url);
+  expect(!state.lifecycle && require('node:fs').existsSync(require('node:path').resolve('.e2e-private/staff-records-running.lock')),
+    'A staff-record suite currently owns the saved QA accounts; wait until that run finishes.').toBe(false);
+  const accounts = state.explicitAccount ? [state.explicitAccount] : accountRegistry.candidates(state.role, state.url);
   expect(accounts.length, 'No reusable QA accounts: run the matching initial workflow and approve its record through staff, or configure a complete E2E_CUSTOM credential pair.').toBeGreaterThan(0);
   const blockers = [];
+  const pending = [];
+  const failures = [];
   for (const account of accounts) {
   const { email, password } = account;
   await page.context().clearCookies();
@@ -454,6 +463,9 @@ async function loginForUpdate(page, state) {
   let loginBody = {};
   try { loginBody = await loginResponse.json(); } catch {}
   if (!loginResponse.ok() || loginBody.ok !== true) {
+    if (account.source === 'registry' && loginBody.error === 'INVALID_CREDENTIALS') {
+      accountRegistry.save({ email, role: state.role, url: state.url, authInvalid: true });
+    }
     throw new Error(`Patient sign-in rejected (HTTP ${loginResponse.status()}${loginBody.error ? `, ${loginBody.error}` : ''}). Check the configured QA account credentials.`);
   }
   const inputs = page.locator('input[inputmode="numeric"][maxlength="1"]');
@@ -470,7 +482,10 @@ async function loginForUpdate(page, state) {
   const personal = await query(page, state, '/profile/patient', 'query CheckCustomChoiceEligibility { getCredentialStatus getPersonalRecordLogStatus getPersonalRecord { id } }');
   const ticketData = await query(page, state, '/emr/patient', 'query CheckCustomChoiceTicket { getUpdateTicket { id status scope } }');
   if (ticketData.getUpdateTicket?.status !== 'Approved') {
-    blockers.push(`saved QA account: staff approval required; latest ticket status is ${ticketData.getUpdateTicket?.status || 'missing'}`);
+    const reason = `saved QA account: staff approval required; latest ticket status is ${ticketData.getUpdateTicket?.status || 'missing'}`;
+    blockers.push(reason);
+    if (ticketData.getUpdateTicket?.status === 'Pending' && ['Active', 'Unverified'].includes(personal.getCredentialStatus)) pending.push(reason);
+    else failures.push(reason);
     continue;
   }
   const emr = await query(page, state, '/emr/patient', 'query CheckCustomChoiceProfile { getPatientBasicInfo(userId: "self") { profile_type } getEmergencyContact(approved: true) { id firstContact { id contactName } secondContact { id contactName } } }');
@@ -478,9 +493,17 @@ async function loginForUpdate(page, state) {
   const reasons = accountRegistry.eligibility(state.role, personal, emrEligibility);
   if (reasons.length) {
     blockers.push(`${email}: ${reasons.join('; ')}`);
+    failures.push(...reasons);
     continue;
   }
   state.baseline = { ticket: ticketData.getUpdateTicket, personal: personal.getPersonalRecord, contacts: emr.getEmergencyContact };
+  state.account = account;
+  const manifestEntry = (account.recordManifests || []).find(entry => String(entry.ticketId) === String(ticketData.getUpdateTicket.id));
+  if (manifestEntry && !state.initialManifest) state.initialManifest = JSON.parse(require('node:fs').readFileSync(manifestEntry.path, 'utf8'));
+  if (state.initialManifest) {
+    // The original verified manifest is the expected baseline, never current UI text.
+    state.baselineSnapshot = { ticketId: String(ticketData.getUpdateTicket.id), record: state.initialManifest.record };
+  }
   return;
   } catch (error) {
     const message = error?.message || '';
@@ -488,9 +511,18 @@ async function loginForUpdate(page, state) {
     if (/^Patient sign-in rejected \(HTTP \d{3}(?:, [A-Z_]+)?\)/.test(message)) reason = message;
     else if (error?.name === 'TimeoutError') reason = 'patient sign-in or eligibility check timed out';
     blockers.push(`saved account: ${reason}`);
+    // Old registry accounts can disappear after a reset. A valid Pending
+    // account can still supply the expected approval prerequisite.
+    if (!(account.source === 'registry' && /^Patient sign-in rejected \(HTTP 400, INVALID_CREDENTIALS\)/.test(message))) failures.push(reason);
   }
   }
-  throw new Error(`No eligible ${state.role} QA account. ${blockers.join(' | ')}`);
+  // Playwright skip throws a control-flow exception: keep it outside the
+  // candidate try/catch so it cannot become an authentication failure.
+  finishUpdateEligibility(state.role, pending, failures, blockers, reason => {
+    if (state.lifecycle) throw new Error(reason);
+    state.skipReason = reason;
+    test.skip(true, reason);
+  });
 }
 
 async function updateWorkflow(page, state) {
@@ -511,14 +543,17 @@ async function updateWorkflow(page, state) {
       await expect(inputs).toHaveCount(2);
       for (let i = 0; i < 2; i++) await inputs.nth(i).fill(values[i]);
     }
+    state.inputControls ||= [];
+    state.inputControls.push(await staffManifest.captureControls(page, 'personal'));
     await next(page);
   });
   await histories(page, state);
   await background(page, state);
+  state.inputControls.push(await staffManifest.captureControls(page, 'background'));
   await next(page);
   await step(state, 'Fill update dental form', async () => {
     let scope = await openSection(page, 'Dentist Visits');
-    await scope.locator('input[name="seenByDentist"][value="yes"]').check();
+    await scope.locator('input[name="seenByDentist"][value="true"]').check();
     await field(scope, 'When was your last dental cleaning?', 'select').selectOption({ index: 1 });
     await scope.locator('input[type="month"]').fill('2025-06');
     scope = await openSection(page, 'Intraoral Appliances');
@@ -527,9 +562,11 @@ async function updateWorkflow(page, state) {
     await scope.locator('input[name="hasDentalProcedures"][value="no"]').check();
     await openSection(page, 'Dental Photos');
     for (let i = 0; i < 2; i++) await page.locator('input[type="file"]').nth(i).setInputFiles({ name: `qa-update-dental-${i}.png`, mimeType: 'image/png', buffer: PHOTO });
+    state.inputControls.push(await staffManifest.captureControls(page, 'dental'));
     await next(page);
   });
   await review(page, state);
+  state.inputReview = await staffManifest.captureReview(page);
   await step(state, 'Submit pending update without approving existing records', async () => {
     // Recheck immediately before submission: the app can otherwise replace pending tickets.
     const eligibility = await query(page, state, '/emr/patient', 'query RecheckBeforeCustomUpdate { getUpdateTicket { id status } }');
@@ -542,12 +579,15 @@ async function updateWorkflow(page, state) {
     expect(outcome.ok, `Update submission failed: ${outcome.details}`).toBe(true);
   });
   await verify(page, state);
+  await Promise.allSettled([...state.pending]);
+  if (!test.info().errors.length) state.savedManifest = staffManifest.save(state, state.account);
 }
 
-async function runWorkflow(page, role, mode) {
-    test.setTimeout(300_000);
+async function runWorkflow(page, role, mode, options = {}) {
+    if (!options.lifecycle) test.setTimeout(300_000);
     page.setDefaultTimeout(15_000);
-    const state = { role, mode, url: (process.env.E2E_PATIENT_URL || '').replace(/\/+$/, ''), data: dataFor(role, mode) };
+    const state = { role, mode, url: (process.env.E2E_PATIENT_URL || '').replace(/\/+$/, ''), data: dataFor(role, mode),
+      lifecycle: options.lifecycle === true, explicitAccount: options.account, initialManifest: options.initialManifest };
     observe(page, state);
     await page.route(/\/(emr|profile)\/patient$/, async route => {
       const request = route.request();
@@ -560,22 +600,41 @@ async function runWorkflow(page, role, mode) {
     });
     try {
       await step(state, 'Explicit opt-in and target preflight', async () => {
-        expect(process.env.E2E_CUSTOM_CHOICES_ENABLED, 'Set E2E_CUSTOM_CHOICES_ENABLED=1 to create persistent QA choices and records').toBe('1');
+        expect(state.lifecycle ? process.env.E2E_LIFECYCLE_ENABLED : process.env.E2E_CUSTOM_CHOICES_ENABLED,
+          'Enable the selected QA workflow before creating persistent choices and records').toBe('1');
         expect(state.url, 'Configure E2E_PATIENT_URL').toBeTruthy();
       });
       if (mode === 'update') await updateWorkflow(page, state);
       else {
         const profile = { role, gender: 'Male', branch: 'm', name: 'Custom', surname: role === 'Student' ? 'Student QA' : 'Employee QA' };
-        const account = await step(state, 'Register a synthetic patient with eight-second pacing', () => registerAndOpenRecord(page, profile, role === 'Student' ? 20 : 21, {
+        const account = await step(state, 'Register a synthetic patient with eight-second pacing', () => registerAndOpenRecord(page, profile, options.accountIndex ?? (role === 'Student' ? 20 : 21), {
           hideCredentials: true,
-          onRegistered: credentials => accountRegistry.save({ ...credentials, role, url: state.url }),
+          onRegistered: async credentials => {
+            state.account = { ...credentials, role, url: state.url, createdAt: new Date().toISOString() };
+            await options.onRegistered?.(state.account);
+            state.account = accountRegistry.save(state.account);
+          },
         }));
+        await step(state, 'Check deployed profile schema before catalog or ticket writes', async () => {
+          await expect.poll(() => Boolean(state.headers.authorization), {
+            message: 'Wait for authenticated patient requests before schema preflight',
+          }).toBe(true);
+          await checkInitialSchema(document => query(page, state, '/emr/patient', document));
+        });
         await fillAndSubmitRecord(page, profile, role === 'Student' ? 20 : 24, account, {
+          identifierIndex: options.accountIndex,
           personal: () => initialPersonal(page, state),
           history: () => histories(page, state),
           background: () => background(page, state),
           dental: () => initialDental(page, state),
-          review: () => review(page, state),
+          review: async () => {
+            await review(page, state);
+            state.inputReview = await staffManifest.captureReview(page);
+          },
+          captureSection: async section => {
+            state.inputControls ||= [];
+            state.inputControls.push(await staffManifest.captureControls(page, section));
+          },
           hideCredentials: true,
           afterBatch: async ({ result }) => {
             await step(state, 'Validate medical-record batch submission', async () => {
@@ -596,9 +655,18 @@ async function runWorkflow(page, role, mode) {
               ticketId: state.ticket?.id ? String(state.ticket.id) : null,
               lastSubmissionStatus: result.ticketStatus,
             });
+            if (result.ok && !test.info().errors.length && state.ticket?.status === 'Pending') {
+              state.inputReview ||= [];
+              state.savedManifest = staffManifest.save(state, account);
+            }
           },
         });
       }
+      if (state.lifecycle) {
+        expect(test.info().errors, 'Patient submission and saved-value verification must succeed before staff review').toEqual([]);
+        expect(state.savedManifest?.verified, 'A complete verified input manifest is required').toBe(true);
+      }
+      return { account: state.account, manifest: state.savedManifest };
     } finally { await attach(state); }
 }
 

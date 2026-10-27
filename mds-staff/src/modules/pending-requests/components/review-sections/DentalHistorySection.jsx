@@ -212,7 +212,7 @@ const DentalHistorySection = ({
   const renderDentalProcedures = () => {
     const procedures = dentalProcedureProfile?.procedures;
     if (!procedures || procedures.length === 0) {
-      return <p className="text-sm text-neutral-400 italic">No dental procedures recorded.</p>;
+      return <><p className="text-sm text-neutral-400 italic">No dental procedures recorded.</p><DataRow label="Notes" value={dentalProcedureProfile?.notes} /></>;
     }
 
     return (
@@ -235,7 +235,7 @@ const DentalHistorySection = ({
                 className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
               >
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  {getCatalogName(catalogs.dentalProcedureCatalog, proc.procedureTypeId) || `Procedure #${proc.procedureTypeId}`}
+                  {getCatalogName(catalogs.dentalProcedureCatalog, proc.procedureTypeId) || 'Unresolved choice'}
                 </td>
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
                   {formatDate(proc.procedureDate)}
@@ -257,7 +257,7 @@ const DentalHistorySection = ({
   const renderOralAppliances = () => {
     const appliances = oralApplianceProfile?.appliances;
     if (!appliances || appliances.length === 0) {
-      return <p className="text-sm text-neutral-400 italic">No oral appliances on record.</p>;
+      return <dl><DataRow label="Other Appliance Description" value={oralApplianceProfile?.otherDescription} /><DataRow label="Other Appliance Location" value={oralApplianceProfile?.otherArch} /><DataRow label="Appliance Notes" value={oralApplianceProfile?.notes} /></dl>;
     }
 
     return (
@@ -286,7 +286,7 @@ const DentalHistorySection = ({
                 className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
               >
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  {getCatalogName(catalogs.oralApplianceCatalog, a.tagId) || `Tag #${a.tagId}`}
+                  {getCatalogName(catalogs.oralApplianceCatalog, a.tagId) || 'Unresolved choice'}
                 </td>
                 <td className="py-2 px-3">
                   <span
@@ -351,6 +351,7 @@ const DentalHistorySection = ({
           Oral Appliances
         </h4>
         {renderOralAppliances()}
+        {oralApplianceProfile?.appliances?.length > 0 && <dl><DataRow label="Other Appliance Description" value={oralApplianceProfile?.otherDescription} /><DataRow label="Other Appliance Location" value={oralApplianceProfile?.otherArch} /></dl>}
       </div>
 
       {/* Dental Photos */}

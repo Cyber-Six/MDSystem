@@ -2,6 +2,7 @@
  * EMR Service - Handles all GraphQL mutations and queries for EMR data
  */
 
+import { completeCatalogPages } from './catalog-pages';
 import { axiosRequest } from '../packages-core-adapter';
 import { sendGraphQLRequest } from '../utils/graphql-client';
 import { shouldRequireInitialRecordFromTicketStatus } from './record-status-utils';
@@ -674,47 +675,47 @@ export const createInitialEmployeeRecord = async (formData, { isRevision = false
 export const fetchAllCatalogs = async () => {
   const query = `
     query FetchAllCatalogs {
-      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 200) {
+      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, limit: 200) {
         id
         code
         name
       }
-      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) {
+      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, limit: 200) {
         id
         code
         name
       }
-      operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) {
+      operationCatalog: getDomainCatalogs(domain: Operation, limit: 200) {
         id
         code
         name
       }
-      medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) {
+      medicationCatalog: getDomainCatalogs(domain: Medication, limit: 200) {
         id
         code
         name
       }
-      immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) {
+      immunizationCatalog: getDomainCatalogs(domain: Immunization, limit: 200) {
         id
         code
         name
       }
-      allergenCatalog: getAllergenCatalogs(filterIsValid: true, limit: 200) {
+      allergenCatalog: getAllergenCatalogs(limit: 200) {
         id
         allergen
         type
       }
-      oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true, limit: 200) {
+      oralApplianceCatalog: getOralApplianceCatalogs(limit: 200) {
         id
         name
         description
       }
-      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true, limit: 200) {
+      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, limit: 200) {
         id
         code
         name
       }
-      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true, limit: 200) {
+      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, limit: 200) {
         id
         code
         name
@@ -723,6 +724,7 @@ export const fetchAllCatalogs = async () => {
   `;
   try {
     const data = await sendGraphQLRequest(query, {});
+    await completeCatalogPages(data, { medicalConditionCatalog: 'getDomainCatalogs(domain: MedicalCondition,', hospitalizationCatalog: 'getDomainCatalogs(domain: Hospitalization,', operationCatalog: 'getDomainCatalogs(domain: Operation,', medicationCatalog: 'getDomainCatalogs(domain: Medication,', immunizationCatalog: 'getDomainCatalogs(domain: Immunization,', visualAcuityCatalog: 'getDomainCatalogs(domain: VisualAcuity,', dentalProcedureCatalog: 'getDomainCatalogs(domain: DentalProcedure,', allergenCatalog: 'getAllergenCatalogs(', oralApplianceCatalog: 'getOralApplianceCatalogs(' }, sendGraphQLRequest);
     console.log('[EMR Service] All catalogs loaded in 1 request:', {
       medicalConditions: data.medicalConditionCatalog?.length,
       hospitalizations: data.hospitalizationCatalog?.length,
@@ -1780,7 +1782,7 @@ const KNOWN_PROGRAMS = new Set([
 /**
  * Map fetched backend data back to the InitialMedicalRecordForm's formData shape.
  */
-const mapRevisionDataToFormData = (profileData, emrData) => {
+export const mapRevisionDataToFormData = (profileData, emrData) => {
   // personalLog = candidate data from UsersPersonalLog (the patient's submitted form)
   const pr  = profileData?.personalLog || {};
   const bid = profileData?.branchId;
@@ -1911,10 +1913,10 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     immunizations:             immunMap,
     immunizationDates:         immunDatesMap,
     immunizationDoses:         immunDosesMap,
-    immunizationOther:         '',
+    immunizationOther:         emr?.immunizationProfile?.notes || '',
     hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
     allergies:                 allergyMap,
-    allergyOther:              '',
+    allergyOther:              (emr?.allergyProfile?.notes || allergies[0]?.notes || '').replace(/^Other: /, ''),
     hasHospitalization:        hosps.length > 0        ? 'Yes' : 'No',
     hospitalizationConditions: hospMap,
     hospitalizationDates:      hospDatesMap,
@@ -1937,6 +1939,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     vaper:                     ls.vapeUser ? 'yes' : 'no',
     vapeType:                  ls.vapeType || '',
     vapeFrequency:             ls.vapeFrequency || '',
+    yearsVaping:               ls.yearsVaping ?? '',
     eyeglasses:                resolvedEyeglasses,
     contactLenses:             resolvedContactLenses,
     gradeOD:                   vaFallbackOD,
@@ -2036,7 +2039,7 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
       notes
     }
     allergyProfile: getAllergyProfile {
-      allergies { allergenCatalogId status severity }
+      allergies { allergenCatalogId status severity notes dateIdentified }
       notes
     }
     hospitalizationProfile: getHospitalizationProfile {
@@ -2058,7 +2061,7 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
     lifestyle: getLifestyle {
       smoker numberOfCigarettesPerDay yearsSmoked
       alcoholConsumer frequencyOfAlcoholConsumption
-      vapeUser vapeType vapeFrequency
+      vapeUser vapeType vapeFrequency yearsVaping notes
     }
     visualAcuity: getVisualAcuityProfile {
       notes

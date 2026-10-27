@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
+import { TICKET_STATUS, staffUpdateTicket, approveReviewedRecord } from '../initial-record-service';
 import { fetchPatientRecordForReview, submitStaffEdits } from '../patient-record-service';
 import { formatBranchLabel } from '../../../utils/branch-utils';
+import { unresolvedReviewChoices } from '../review-readiness';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -70,7 +71,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
       setFetchError('');
       try {
         const sex = ticket.sex ?? null; // may not be available from ticket list
-        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex);
+        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex, ticket.id);
         if (!cancelled) {
           const { catalogs: cats, ...recordFields } = data;
           setRecordData(recordFields);
@@ -85,7 +86,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
 
     fetchData();
     return () => { cancelled = true; };
-  }, [ticket?.patientId, scope]);
+  }, [ticket?.patientId, ticket?.id, ticket?.status, scope]);
 
   // OB-GYNE is now included in the initial batched fetch for all medical-scope
   // records, so a lazy-load is only needed if recordData was set before the
@@ -153,7 +154,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
 
       // Step 1: approve personal record — if this fails the EMR ticket is NOT touched
       // Step 2: approve EMR ticket (medical + dental) — only runs if step 1 succeeded
-      const newStatus = await approveInitialRecord(ticket.patientId);
+      const newStatus = await approveReviewedRecord(ticket.patientId, ticket.is_initial !== false);
       onAction?.({ ...ticket, status: newStatus }, newStatus);
       onClose();
     } catch (err) {
@@ -185,6 +186,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
   // ── Derived render values ───────────────────────────────────────────────────
 
   const isFemale = recordData?.basicInfo?.sex?.toLowerCase() === 'female';
+  const unresolvedChoices = unresolvedReviewChoices(recordData, catalogs);
   const canAccessMedical = staffRole === 'medical' || staffRole === 'both';
   const canAccessDental  = staffRole === 'dental'  || staffRole === 'both';
   const isPending =
@@ -207,7 +209,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
   if (!ticket) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+    <div role="dialog" aria-label="Record Review" data-ticket-id={ticket.id} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] flex flex-col">
 
         {/* ── Header ── */}
@@ -269,6 +271,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
           {/* ── Sections ── */}
           {!loading && recordData && (
             <>
+              {unresolvedChoices.length > 0 && <div role="alert" className="p-4 text-error-700">Some submitted choices could not be resolved. Request correction before approval.</div>}
               {/* Personal Information — always shown */}
               <PersonalInfoSection
                 basicInfo={recordData.basicInfo}
@@ -480,7 +483,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               </button>
               <button
                 onClick={handleRequestRevision}
-                disabled={actionLoading}
+                disabled={actionLoading || !revisionNote.trim()}
                 className="px-4 py-2 text-sm font-medium text-white bg-warning-500 hover:bg-warning-600 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
               >
                 {actionLoading ? (
@@ -518,7 +521,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                 </button>
                 <button
                   onClick={handleApprove}
-                  disabled={actionLoading}
+                  disabled={actionLoading || loading || Boolean(fetchError) || unresolvedChoices.length > 0}
                   className="px-4 py-2 text-sm font-medium text-white bg-success-500 hover:bg-success-600 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
                 >
                   {actionLoading ? (

@@ -20,8 +20,12 @@ test('persist accounts, retain older credentials, isolate deployments, and honor
   assert.equal(registry.candidates('Employee', first.url, {}, file).length, 0);
   assert.equal(registry.candidates('Student', 'https://other.test', {}, file).length, 0);
   assert.equal(registry.candidates('Student', first.url, { E2E_CUSTOM_STUDENT_EMAIL: 'override', E2E_CUSTOM_STUDENT_PASSWORD: 'secret' }, file)[0].email, 'override');
+  assert.equal(registry.candidates('Student', first.url, { E2E_CUSTOM_STUDENT_EMAIL: 'override', E2E_CUSTOM_STUDENT_PASSWORD: 'secret' }, file)[0].source, 'environment');
   assert.throws(() => registry.candidates('Student', first.url, { E2E_CUSTOM_STUDENT_EMAIL: 'partial' }, file), /both/);
   assert.equal(registry.candidates('Student', first.url, { E2E_CUSTOM_STUDENT_EMAIL: 'actual-student-qa-email', E2E_CUSTOM_STUDENT_PASSWORD: 'actual-student-qa-password' }, file)[0].email, 'new@qa.test');
+  registry.save({ email: first.email, url: first.url, authInvalid: true }, file);
+  assert.deepEqual(registry.candidates('Student', first.url, {}, file).map(a => a.email), ['new@qa.test']);
+  assert.equal(registry.candidates('Student', first.url, {}, file)[0].source, 'registry');
   assert.ok(!JSON.stringify(redact(registry.read(file))).includes('private-one'));
 });
 test('mocked eligibility accepts approved records and explains pending and wrong-role blockers', () => {
@@ -52,5 +56,9 @@ test('custom-choice reports redact saved account credentials and configured secr
   const output = new ErrorReporter().clean('private-qa@qa.test private-qa-password private-qa-otp');
   for (const secret of ['private-qa@qa.test', 'private-qa-password', 'private-qa-otp']) {
     assert.equal(output.includes(secret), false);
+  }
+  const evidence = JSON.stringify(redact({ loginEmail: 'private-qa@qa.test', loginPassword: 'private-qa-password', message: 'Used private-qa@qa.test' }));
+  for (const secret of ['private-qa@qa.test', 'private-qa-password']) {
+    assert.equal(evidence.includes(secret), false);
   }
 });

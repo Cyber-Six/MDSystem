@@ -37,7 +37,7 @@ const MedicalHistorySection = ({
 
   const formatDate = (d) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
   };
 
   return (
@@ -64,10 +64,10 @@ const MedicalHistorySection = ({
           <div className="flex flex-wrap gap-2">
             {selfConditions.map((cond, i) => (
               <span
-                key={cond.id ?? i}
+                key={cond.id ?? i} data-review-entry={`medicalHistory:${conditions.indexOf(cond)}`}
                 className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-error-100 dark:bg-error-900/20 text-error-800 dark:text-error-400 font-medium"
               >
-                {getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || `Condition #${cond.conditionId}`}
+                {getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || 'Unresolved choice'}
                 {cond.diagnosedDate && (
                   <span className="ml-1 text-xs text-error-500 dark:text-error-500">
                     ({formatDate(cond.diagnosedDate)})
@@ -91,11 +91,10 @@ const MedicalHistorySection = ({
         {familyConditions.length > 0 ? (
           <dl className="space-y-0">
             {familyConditions.map((cond, i) => (
-              <DataRow
-                key={cond.id ?? i}
-                label={getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || `Condition #${cond.conditionId}`}
+              <div key={cond.id ?? i} data-review-entry={`medicalHistory:${conditions.indexOf(cond)}`}><DataRow
+                label={getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || 'Unresolved choice'}
                 value={cond.relationship}
-              />
+              /></div>
             ))}
           </dl>
         ) : (

@@ -13,6 +13,9 @@ if (fs.existsSync(targetFile)) {
   }
 }
 
+// Lifecycle registration and login must use the same configured test OTP.
+if (process.env.E2E_LIFECYCLE_RUN_ID && !process.env.E2E_TEST_OTP) process.env.E2E_TEST_OTP = '111111';
+
 const coreMode = process.env.E2E_CORE === '1';
 const recordE2EVideo = process.env.E2E_VISUAL_RECORDING === '1';
 const patientTarget = process.env.E2E_PATIENT_URL;
@@ -53,6 +56,19 @@ module.exports = defineConfig({
     screenshot: 'off',
   },
   projects: [
+    {
+      name: 'lifecycle-preflight', testMatch: 'lifecycle/preflight.setup.js', workers: 1, retries: 0,
+      use: { trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' },
+    },
+    {
+      name: 'lifecycle', testMatch: 'lifecycle/lifecycle.spec.js', dependencies: ['lifecycle-preflight'],
+      workers: 1, retries: 0, fullyParallel: false,
+      use: { trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' },
+    },
+    {
+      name: 'lifecycle-mocked', testMatch: ['lifecycle/mocked/**/*.spec.js', 'staff-records/mocked/**/*.spec.js'], workers: 1, retries: 0,
+      use: { trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' },
+    },
     { name: 'smoke', testMatch: ['login-smoke.spec.js', 'smoke/**/*.spec.js'] },
     {
       name: 'core',
@@ -87,6 +103,28 @@ module.exports = defineConfig({
       name: 'review',
       testMatch: 'review/**/*.spec.js',
       use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
+    },
+    {
+      name: 'staff-records',
+      testMatch: 'staff-records/staff-decisions.spec.js',
+      dependencies: ['staff-records-setup'],
+      workers: 1,
+      retries: 0,
+      use: { trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' },
+    },
+    {
+      name: 'staff-records-setup',
+      testMatch: 'staff-records/recover.setup.js',
+      workers: 1,
+      retries: 0,
+      use: { trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' },
+    },
+    {
+      name: 'staff-records-mocked',
+      testMatch: 'staff-records/mocked/**/*.spec.js',
+      workers: 1,
+      retries: 0,
+      use: { trace: 'off', screenshot: 'off', video: 'off', serviceWorkers: 'block' },
     },
   ],
   webServer: localWebServers.length ? localWebServers : undefined,

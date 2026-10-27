@@ -30,7 +30,7 @@ class ErrorReporter {
     // prerequisite failures or evidence from the other three workflows.
     const filename = path.join(directory, 'results.json');
     const previous = fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, 'utf8')) : [];
-    const merged = new Map(previous.map(result => [result.file, result]));
+    const merged = new Map(previous.map(result => [result.file, redact(result)]));
     this.results.forEach(result => merged.set(result.file, result));
     this.results = [...merged.values()];
     fs.writeFileSync(path.join(directory, 'results.json'), JSON.stringify(this.results, null, 2));
@@ -41,6 +41,7 @@ class ErrorReporter {
         `Workflow recorded: ${result.recordedAt || 'Earlier run'}`, '',
         `Reproduce: \`E2E_CUSTOM_CHOICES_ENABLED=1 npm run test:e2e:custom-choices -- ${result.file} --headed\``, '',
         `Last step: ${result.evidence?.failedStep || 'Preflight / unavailable'}`, '');
+      if (result.evidence?.skipReason) lines.push(`Skipped: ${result.evidence.skipReason}`, '');
       for (const error of result.errors) lines.push('```text', error.message, '```', '');
       lines.push('Saved-value comparisons:', '', '```json', JSON.stringify(result.evidence?.comparisons || [], null, 2), '```', '',
         'Captured requests and responses (credentials omitted):', '', '```json',

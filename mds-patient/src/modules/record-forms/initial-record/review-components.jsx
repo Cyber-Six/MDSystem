@@ -25,7 +25,7 @@ export const resolveCatalogLabel = (catalog, id, registry = {}) => {
   if (id === undefined || id === null || String(id) === 'undefined') return null;
   const item = (catalog || []).find((entry) => String(entry.id) === String(id));
   const registered = registry?.[String(id)];
-  return item?.name || item?.allergen || item?.allergy || registered?.name || (typeof registered === 'string' ? registered : null);
+  return item?.name || item?.allergen || item?.allergy || registered?.name || registered?.allergen || registered?.allergy || (typeof registered === 'string' ? registered : null);
 };
 
 export const isResolvableCatalogSelection = (catalog, id, registry = {}) =>

@@ -272,12 +272,36 @@ export const enrichWithInitialFlag = async (tickets) => {
   }
 
   // ── Phase 3: Synchronous classification ───────────────────────────────────
+  // Clinical updates do not create a second personal-record log. Use the
+  // actual approved ticket history to distinguish them after approval.
+  const approvedIds = [...new Set(bothScopeTickets.filter(ticket => ticket.status === 'Approved').map(ticket => ticket.patientId))];
+  const firstApproved = {};
+  for (const userId of approvedIds) {
+    let offset = 0, page;
+    const rows = [];
+    do {
+      const response = await axiosRequest.post('/emr/medical', {
+        query: 'query ApprovedTicketHistory($userId: ID!, $offset: Int!) { getUserTicketIds(userId: $userId, offset: $offset, limit: 1000) { id created_at } }',
+        variables: { userId, offset },
+      });
+      if (response.data?.errors?.length) throw new Error(response.data.errors[0].message);
+      page = response.data?.data?.getUserTicketIds || [];
+      if (page.length && rows.some(row => String(row.id) === String(page[0].id))) throw new Error('Approved ticket history pagination did not advance.');
+      rows.push(...page); offset += page.length;
+    } while (page.length === 1000);
+    rows.sort((a, b) => Number(a.id) - Number(b.id));
+    firstApproved[userId] = rows[0]?.id;
+  }
+
   return tickets.map((ticket) => {
     // Step 1: partial scope → always UPDATE
     if (ticket.scope === 'Medical' || ticket.scope === 'Dental') {
       return { ...ticket, is_initial: false };
     }
 
+    if (ticket.status === 'Approved' && firstApproved[ticket.patientId] != null) {
+      return { ...ticket, is_initial: String(ticket.id) === String(firstApproved[ticket.patientId]) };
+    }
     const credStatus = credStatuses[ticket.patientId];
 
     // Step 2: Unverified → INITIAL

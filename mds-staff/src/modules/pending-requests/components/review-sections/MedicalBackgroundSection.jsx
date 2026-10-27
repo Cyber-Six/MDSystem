@@ -47,7 +47,7 @@ const MedicalBackgroundSection = ({
 
   const formatDate = (d) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
   };
 
   return (
@@ -99,7 +99,7 @@ const MedicalBackgroundSection = ({
                   </p>
                   <div className="space-y-2 pl-2">
                     {grouped[type].map((a, i) => (
-                      <div key={a.id ?? i} className="flex items-center gap-2 flex-wrap">
+                      <div key={a.id ?? i} data-review-entry={`allergyProfile:${allergyProfile.allergies.findIndex(item => String(item.allergenCatalogId) === String(a.allergenCatalogId))}`} className="flex items-center gap-2 flex-wrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                           a.status === 'Active'
                             ? 'bg-error-100 dark:bg-error-900/20 text-error-800 dark:text-error-400'
@@ -107,11 +107,12 @@ const MedicalBackgroundSection = ({
                             ? 'bg-success-100 dark:bg-success-900/20 text-success-800 dark:text-success-400'
                             : 'bg-warning-100 dark:bg-warning-900/20 text-warning-800 dark:text-warning-400'
                         }`}>
-                          {a._allergenName || `Allergen #${a.allergenCatalogId}`}
+                          {a._allergenName || 'Unresolved choice'}
                         </span>
                         <span className="text-xs text-secondary-600 dark:text-neutral-400">
                           Severity: {a.severity || '—'} &middot; Status: {a.status}
                         </span>
+                        {a.dateIdentified && <span className="text-xs">Identified: {formatDate(a.dateIdentified)}</span>}
                         {a.notes && (
                           <span className="text-xs text-secondary-500 dark:text-neutral-500 italic">
                             — {a.notes}
@@ -149,9 +150,9 @@ const MedicalBackgroundSection = ({
               </thead>
               <tbody>
                 {immunizationProfile.immunizations.map((imm, i) => (
-                  <tr key={imm.id ?? i} className="border-b border-neutral-100 dark:border-neutral-700/50">
+                  <tr key={imm.id ?? i} data-review-entry={`immunizationProfile:${immunizationProfile.immunizations.findIndex(item => String(item.vaccineTypeId) === String(imm.vaccineTypeId))}`} className="border-b border-neutral-100 dark:border-neutral-700/50">
                     <td className="py-1.5 px-2 text-secondary-900 dark:text-white">
-                      {getCatalogName(catalogs.immunizationCatalog, imm.vaccineTypeId) || `Vaccine #${imm.vaccineTypeId}`}
+                      {getCatalogName(catalogs.immunizationCatalog, imm.vaccineTypeId) || 'Unresolved choice'}
                     </td>
                     <td className="py-1.5 px-2 text-secondary-700 dark:text-neutral-300">
                       {formatDate(imm.immunizationDate)}
@@ -177,8 +178,8 @@ const MedicalBackgroundSection = ({
         {hospitalizationProfile?.hospitalizations?.length > 0 ? (
           <div className="space-y-2">
             {hospitalizationProfile.hospitalizations.map((h, i) => (
-              <div key={h.id ?? i} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
-                <DataRow label="Condition" value={getCatalogName(catalogs.hospitalizationCatalog, h.conditionId) || `Condition #${h.conditionId}`} />
+              <div key={h.id ?? i} data-review-entry={`hospitalizationProfile:${hospitalizationProfile.hospitalizations.findIndex(item => String(item.conditionId) === String(h.conditionId))}`} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
+                <DataRow label="Condition" value={getCatalogName(catalogs.hospitalizationCatalog, h.conditionId) || 'Unresolved choice'} />
                 <DataRow label="Admitted" value={formatDate(h.admissionDate)} />
                 <DataRow label="Discharged" value={formatDate(h.dischargeDate) || 'Ongoing'} />
                 {h.notes && <DataRow label="Notes" value={h.notes} />}
@@ -198,8 +199,8 @@ const MedicalBackgroundSection = ({
         {operationProfile?.operations?.length > 0 ? (
           <div className="space-y-2">
             {operationProfile.operations.map((op, i) => (
-              <div key={op.id ?? i} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
-                <DataRow label="Procedure" value={getCatalogName(catalogs.operationCatalog, op.procedureId) || `Procedure #${op.procedureId}`} />
+              <div key={op.id ?? i} data-review-entry={`operationProfile:${operationProfile.operations.findIndex(item => String(item.procedureId) === String(op.procedureId))}`} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
+                <DataRow label="Procedure" value={getCatalogName(catalogs.operationCatalog, op.procedureId) || 'Unresolved choice'} />
                 <DataRow label="Date" value={formatDate(op.operationDate)} />
                 {op.notes && <DataRow label="Notes" value={op.notes} />}
               </div>
@@ -218,9 +219,9 @@ const MedicalBackgroundSection = ({
         {medicationProfile?.medications?.length > 0 ? (
           <div className="space-y-1">
             {medicationProfile.medications.map((med, i) => (
-              <div key={med.id ?? i} className="flex items-center gap-2 py-1">
+              <div key={med.id ?? i} data-review-entry={`medicationProfile:${medicationProfile.medications.findIndex(item => String(item.medicineId) === String(med.medicineId))}`} className="flex items-center gap-2 py-1">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-accent-100 dark:bg-accent-900/20 text-accent-800 dark:text-accent-400">
-                  {getCatalogName(catalogs.medicationCatalog, med.medicineId) || `Medicine #${med.medicineId}`}
+                  {getCatalogName(catalogs.medicationCatalog, med.medicineId) || 'Unresolved choice'}
                 </span>
                 {med.description && (
                   <span className="text-sm text-secondary-600 dark:text-neutral-400">
@@ -251,22 +252,22 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
-            <EditableField
+            {getVal('smoker', lifestyle?.smoker ? 'Yes' : 'No') === 'Yes' && <EditableField
               label="Cigarettes/Day"
               value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
               originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('cigarettesPerDay', v)}
               type="number"
-            />
-            <EditableField
+            />}
+            {getVal('smoker', lifestyle?.smoker ? 'Yes' : 'No') === 'Yes' && <EditableField
               label="Years Smoked"
               value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
               originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('yearsSmoked', v)}
               type="number"
-            />
+            />}
             <EditableField
               label="Alcohol Consumer"
               value={getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : lifestyle ? 'No' : '')}
@@ -276,13 +277,13 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
-            <EditableField
+            {getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : 'No') === 'Yes' && <EditableField
               label="Alcohol Frequency"
               value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
               originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
-            />
+            />}
             <EditableField
               label="Vaper"
               value={getVal('vaper', lifestyle?.vapeUser ? 'Yes' : lifestyle ? 'No' : '')}
@@ -292,20 +293,20 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
-            <EditableField
+            {getVal('vaper', lifestyle?.vapeUser ? 'Yes' : 'No') === 'Yes' && <EditableField
               label="Vape Type"
               value={getVal('vapeType', lifestyle?.vapeType ?? '')}
               originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('vapeType', v)}
-            />
-            <EditableField
+            />}
+            {getVal('vaper', lifestyle?.vapeUser ? 'Yes' : 'No') === 'Yes' && <EditableField
               label="Vape Frequency"
               value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
               originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('vapeFrequency', v)}
-            />
+            />}
             <EditableField
               label="Notes"
               value={getVal('lifestyleNotes', lifestyle?.notes ?? '')}
@@ -410,6 +411,14 @@ const MedicalBackgroundSection = ({
           <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No physical measurements</p>
         )}
       </div>
+      <dl>
+        <DataRow label="Immunization Notes" value={immunizationProfile?.notes} />
+        <DataRow label="Hospitalization Notes" value={hospitalizationProfile?.notes} />
+        <DataRow label="Operation Notes" value={operationProfile?.notes} />
+        <DataRow label="Medication Notes" value={medicationProfile?.notes} />
+        <DataRow label="Years Vaping" value={lifestyle?.vapeUser ? lifestyle?.yearsVaping : null} />
+        <DataRow label="Visual Acuity Notes" value={visualAcuityProfile?.notes} />
+      </dl>
     </SectionWrapper>
   );
 };

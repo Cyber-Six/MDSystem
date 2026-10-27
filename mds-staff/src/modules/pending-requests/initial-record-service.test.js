@@ -4,6 +4,7 @@ import {
   BRANCH,
   TICKET_STATUS,
   approveInitialRecord,
+  approveReviewedRecord,
   getStatusUpdateTickets,
   getUserUpdateTicket,
   setPersonalRecordLog,
@@ -57,5 +58,12 @@ describe('initial record service', () => {
     axiosRequest.post.mockReset().mockResolvedValue({ data: { errors: [{ message: 'Profile failed' }] } });
     await expect(approveInitialRecord('p2')).rejects.toThrow('Profile failed');
     expect(axiosRequest.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('approves a clinical update without trying to reapprove an unrelated personal log', async () => {
+    axiosRequest.post.mockResolvedValue({ data: { data: { staffUpdateTicket: 'Approved' } } });
+    await expect(approveReviewedRecord('p1', false)).resolves.toBe('Approved');
+    expect(axiosRequest.post).toHaveBeenCalledTimes(1);
+    expect(axiosRequest.post.mock.calls[0][0]).toBe('/emr/medical');
   });
 });

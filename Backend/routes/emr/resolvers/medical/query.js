@@ -9,7 +9,7 @@ const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 // Medical staff can view records in any active status (Approved = current live data)
-const reviewable_statuses = ["InProgress", "Pending", "RevisionSubmitted", "Revision", "Approved"];
+const reviewable_statuses = ["InProgress", "Pending", "RevisionSubmitted", "Revision", "Approved", "Rejected"];
 
 function maskRestrictedSuperiorBasicInfo(row) {
   return {
@@ -68,7 +68,7 @@ const Query = {
 
     const result = await Wrapper._getUserProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
+    else if (reviewable_statuses.includes(result[0].status)) return result;
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
