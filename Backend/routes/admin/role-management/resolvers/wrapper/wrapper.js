@@ -4320,8 +4320,7 @@ const Mutation = {
 
   _confirmAdminTransfer: async (_, { verificationToken }, { user, res }) => {
     const currentUserId = user.id;
-    const pool = require('../../../../config/db.js');
-    const client = await pool.connect();
+    const client = await db.connect();
 
     const isBootstrapMode = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
     const isBootstrapToken = verificationToken === 'BOOTSTRAP_ADMIN_TRANSFER';

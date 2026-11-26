@@ -43,7 +43,8 @@ x-app-base: &app-base
     JWT_ISSUER: mdsystem-e2e
     TOTP_ENCRYPTION_KEY: ${E2E_TOTP_ENCRYPTION_KEY}
     DATA_CONSENT_VERSION: v1.0
-    RESET_PASSWORD_DOMAIN_ROUTE: http://patient:3000/reset-password
+    RESET_PASSWORD_DOMAIN_ROUTE: e2e.invalid/auth/password/reset-password
+    RECAPTCHA_MOBILE_SECRET: ${E2E_RECAPTCHA_TOKEN}
     RECAPTCHA_TEST_MODE: "true"
     GOOGLE_OAUTH_ENABLED: "false"
     DEBUG_BYPASS_OTP: "false"
@@ -56,6 +57,7 @@ x-app-base: &app-base
     # Allow the suite's login, OTP, and completion requests within one minute.
     PATIENT_AUTH_RATE_LIMIT_MAX_REQUESTS: 100
     STAFF_AUTH_RATE_LIMIT_MAX_REQUESTS: 100
+    STRICT_RATE_LIMIT_MAX_REQUESTS: 100
   volumes:
     - e2e-media:/app/media
   depends_on:
@@ -167,6 +169,7 @@ services:
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
     volumes:
       - ./seed.js:/e2e/seed.js:ro
+      - ./core/db.js:/e2e/core/db.js:ro
     depends_on:
       postgres: { condition: service_healthy }
       schema-init: { condition: service_completed_successfully }
@@ -191,6 +194,7 @@ services:
       E2E_ALT_PATIENT_EMAIL: ${E2E_ALT_PATIENT_EMAIL}
       E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
+      E2E_RECAPTCHA_TOKEN: ${E2E_RECAPTCHA_TOKEN}
       MAILPIT_URL: http://smtp:8025
       HOME: /tmp
     depends_on:

@@ -1,5 +1,6 @@
 const bcrypt = require('/app/Backend/node_modules/bcrypt');
 const { Client } = require('/app/Backend/node_modules/pg');
+const { connectE2eDb } = require('./core/db');
 
 const {
   PRESCRIPTION_TEMPLATE_NAME,
@@ -11,14 +12,7 @@ const {
 } = require('/app/Backend/services/doc-generate-module/medical-certificate-normalized');
 
 async function main() {
-  const client = new Client({
-    host: process.env.POSTGRES_HOST,
-    port: Number(process.env.POSTGRES_PORT || 5432),
-    database: process.env.POSTGRES_DB,
-    user: process.env.POSTGRES_USER,
-    password: process.env.POSTGRES_PASSWORD,
-  });
-  await client.connect();
+  const client = await connectE2eDb(Client);
   try {
     const passwordHash = await bcrypt.hash(process.env.E2E_ACCOUNT_PASSWORD, 12);
     const accounts = [

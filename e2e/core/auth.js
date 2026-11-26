@@ -19,8 +19,8 @@ async function latestMessageId(email) {
   return result.messages?.[0]?.ID || null;
 }
 
-async function readLatestOtp(email, previousMessageId) {
-  let otp;
+async function readLatestMailValue(email, previousMessageId, pattern) {
+  let value;
   await expect.poll(async () => {
     const messageId = await latestMessageId(email);
     if (!messageId || messageId === previousMessageId) return false;
@@ -31,14 +31,18 @@ async function readLatestOtp(email, previousMessageId) {
     });
     if (!response.ok) return false;
     const body = await response.text();
-    otp = body.match(/\b\d{6}\b/)?.[0];
-    return Boolean(otp);
+    value = body.match(pattern)?.[0];
+    return Boolean(value);
   }, {
-    message: 'Wait for a new OTP email from the current login',
+    message: 'Wait for the expected value in a new Mailpit message',
     timeout: 20_000,
     intervals: [200, 400, 800, 1200],
   }).toBe(true);
-  return otp;
+  return value;
+}
+
+function readLatestOtp(email, previousMessageId) {
+  return readLatestMailValue(email, previousMessageId, /\b\d{6}\b/);
 }
 
 async function enterOtp(page, code) {
@@ -47,10 +51,12 @@ async function enterOtp(page, code) {
   for (let index = 0; index < 6; index += 1) await inputs.nth(index).fill(code[index]);
 }
 
-async function signIn(page, baseUrl, email, { rejectOtpOnce = false } = {}) {
+async function signIn(page, baseUrl, email, {
+  rejectOtpOnce = false, password = process.env.E2E_ACCOUNT_PASSWORD,
+} = {}) {
   await openLogin(page, baseUrl);
   await page.getByLabel('Email address').fill(email);
-  await page.getByLabel('Password', { exact: true }).fill(process.env.E2E_ACCOUNT_PASSWORD);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   const previousMessageId = await latestMessageId(email);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible();
@@ -75,4 +81,4 @@ async function signIn(page, baseUrl, email, { rejectOtpOnce = false } = {}) {
   return { accessToken, userId: JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url')).id };
 }
 
-module.exports = { openLogin, signIn };
+module.exports = { openLogin, signIn, latestMessageId, readLatestMailValue, readLatestOtp, enterOtp };
