@@ -33,7 +33,7 @@ test.beforeAll(async () => {
 
 for (const role of ['Student', 'Employee']) for (const kind of ['initial', 'update']) test(`${role} ${kind}: patient revision prefills original values and retains edits through navigation`, async ({ page }) => {
   const manifest = fixture(role, kind), record = structuredClone(manifest.record), catalogs = staffRecord(manifest).catalogs;
-  if (role === 'Student') record.profile.program = manifest.labels['109'];
+  if (role === 'Student') record.profile.program = manifest.labels[`program:${record.profile.programId}`];
   const names = { medicalConditions: 'medicalConditionCatalog', hospitalizations: 'hospitalizationCatalog', operations: 'operationCatalog', medications: 'medicationCatalog', immunizations: 'immunizationCatalog', allergens: 'allergenCatalog' };
   const medicalCatalogs = { ...Object.fromEntries(Object.entries(names).map(([key, value]) => [key, catalogs[value]])), visualAcuity: [{ id: '1', name: 'Glasses' }] };
   await page.setContent('<div id="root"></div>');
@@ -48,6 +48,28 @@ for (const role of ['Student', 'Employee']) for (const kind of ['initial', 'upda
   await next(); await back();
   await expect(primary).toHaveValue('QA Primary Revised');
   await next();
+  if (kind === 'update') {
+    // Apply the layout rules that position the real input over the custom indicator.
+    const layout = await page.addStyleTag({ content: `
+      .relative { position: relative; } .absolute { position: absolute; }
+      .sr-only { position: absolute; width: 1px; height: 1px; clip: rect(0, 0, 0, 0); }
+      .w-5 { width: 20px; } .h-5 { height: 20px; } .w-4 { width: 16px; } .h-4 { height: 16px; }
+      .inset-0 { inset: 0; } .z-10 { z-index: 10; } .m-0 { margin: 0; }
+      .w-full { width: 100%; } .h-full { height: 100%; } .opacity-0 { opacity: 0; }
+    ` });
+    const condition = page.getByRole('checkbox', { name: 'QA Self Condition', exact: true });
+    await expect(condition).toBeChecked();
+    await condition.uncheck({ timeout: 3000 });
+    await expect(condition).not.toBeChecked();
+    await condition.check({ timeout: 3000 });
+    await expect(condition).toBeChecked();
+    await layout.evaluate(style => style.remove());
+    const vaccines = page.getByRole('button', { name: 'Immunization History', exact: true });
+    await page.getByRole('button', { name: 'Family', exact: true }).click();
+    await expect(vaccines).toHaveCount(0);
+    await page.getByRole('button', { name: 'Yourself', exact: true }).click();
+    await expect(vaccines).toBeVisible();
+  }
   if (kind === 'initial') await next();
   const notes = page.locator('textarea').filter({ visible: true });
   // Actual form accordions are opened before inspecting the original saved notes.
@@ -62,6 +84,7 @@ for (const role of ['Student', 'Employee']) for (const kind of ['initial', 'upda
   expect(selected, 'Original hospitalization notes must be prefilled in an editable form field').toBeTruthy();
   await selected.fill('QA Hospital Notes Revised');
   await next();
+  if (kind === 'update') await expect(page.getByRole('button', { name: 'Dentist Visits', exact: true })).toBeVisible();
   const month = page.locator('input[type="month"]').first();
   await expect(month).toHaveValue('2024-02');
   await month.fill('2025-07');

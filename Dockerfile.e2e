@@ -7,6 +7,8 @@ COPY mds-patient/package.json mds-patient/package.json
 COPY mds-staff/package.json mds-staff/package.json
 RUN npm ci --ignore-scripts
 COPY playwright.config.js ./
+COPY Backend/utils/validator.js ./Backend/utils/validator.js
+COPY Backend/routes/emr/custom-choice-storage.js ./Backend/routes/emr/custom-choice-storage.js
 COPY e2e ./e2e
 ENV CI=1 E2E_CORE=1
 CMD ["npm", "run", "test:gui", "--", "--project=core"]

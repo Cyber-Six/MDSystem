@@ -61,6 +61,17 @@ test('only successful original submission inputs become expected values; aborted
   assert.equal(submittedRecord(network).record.personalInfo.first_name, 'QA');
 });
 
+test('photo readback uses the committed media IDs returned by the submission', () => {
+  const network = [{
+    request: {
+      query: 'mutation BatchCreateInitialRecords { dentalPhotoRecord: createDentalPhotoRecord { id upperTeeth lowerTeeth } }',
+      variables: { dentalPhotoInput: { upperTeeth: 'staged-upper', lowerTeeth: 'staged-lower' } },
+    },
+    response: { data: { dentalPhotoRecord: { id: '1', upperTeeth: 'saved-upper', lowerTeeth: 'saved-lower' } } },
+  }];
+  assert.deepEqual(submittedRecord(network).record.dentalPhotoRecord, { upperTeeth: 'saved-upper', lowerTeeth: 'saved-lower' });
+});
+
 test('Employee batch empInput is retained as the complete employment profile', () => {
   const manifest = fixture('Employee');
   const names = { profile: 'empInput', emergencyContact: 'emergencyInput', medicalHistory: 'medHistInput',

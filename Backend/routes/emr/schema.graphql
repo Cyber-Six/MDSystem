@@ -230,8 +230,8 @@ type DentalPhotoRecord{
 }
 
 input DentalPhotoRecordInput{
-    upperTeeth: UUID!
-    lowerTeeth: UUID!
+    upperTeeth: UUID
+    lowerTeeth: UUID
 }
 
 input DentalPhotoRecordUpdateInput{

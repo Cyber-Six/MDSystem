@@ -198,7 +198,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
           </div>
 
           {/* ── Review Request Button (Step 1 → Step 2) ── */}
-          {isPending && (
+          {(isPending || [TICKET_STATUS.APPROVED, TICKET_STATUS.REJECTED].includes(ticket.status)) && (
             <button
               onClick={() => setShowReviewModal(true)}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-medium text-sm"

@@ -48,7 +48,7 @@ describe('identity and email validation', () => {
     expect(normalizeName('  jANE   dOE ')).toBe('Jane Doe');
     expect(normalizeNumber('0917-123-4567')).toBe('+639171234567');
     expect(normalizeNumber('+63 (917) 123-4567')).toBe('+639171234567');
-    expect(normalizeNumber('')).toBe('+');
+    for (const blank of ['', '   ', '+']) expect(normalizeNumber(blank)).toBe('');
   });
 
   test('generates domain codes and enforces branch access rules', () => {

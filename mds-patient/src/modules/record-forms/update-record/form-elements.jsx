@@ -1,67 +1,77 @@
 import React from 'react';
 
-export const Input = ({ label, required, error, reserveErrorSpace = false, className = '', ...props }) => (
-  <div className="mb-2">
-    {label && (
-      <label className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
-        {label}
-        {required && <span className="text-error-500 ml-1">*</span>}
-      </label>
-    )}
-    <input
-      className={`w-full px-3 py-2 text-sm text-secondary-800 bg-white border border-neutral-300 rounded-lg
-                 transition-all duration-200
-                 hover:border-primary-400
-                 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                 placeholder:text-neutral-400
-                 dark:bg-neutral-800 dark:border-neutral-600 dark:text-white dark:placeholder:text-neutral-500
-                 dark:hover:border-primary-500 dark:focus:border-primary-500
-                 ${error ? 'border-error-500 focus:ring-error-500/20 focus:border-error-500' : ''}
-                 ${className}`}
-      {...props}
-    />
-    {(error || reserveErrorSpace) && (
-      <p className={`mt-0.5 min-h-4 text-xs text-error-600 ${error ? '' : 'invisible'}`}>{error || ' '}</p>
-    )}
-  </div>
-);
+export const Input = ({ id, label, required, error, reserveErrorSpace = false, className = '', ...props }) => {
+  const generatedId = React.useId();
+  const controlId = id ?? generatedId;
+  return (
+    <div className="mb-2">
+      {label && (
+        <label htmlFor={controlId} className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
+          {label}
+          {required && <span className="text-error-500 ml-1">*</span>}
+        </label>
+      )}
+      <input
+        className={`w-full px-3 py-2 text-sm text-secondary-800 bg-white border border-neutral-300 rounded-lg
+                   transition-all duration-200
+                   hover:border-primary-400
+                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                   placeholder:text-neutral-400
+                   dark:bg-neutral-800 dark:border-neutral-600 dark:text-white dark:placeholder:text-neutral-500
+                   dark:hover:border-primary-500 dark:focus:border-primary-500
+                   ${error ? 'border-error-500 focus:ring-error-500/20 focus:border-error-500' : ''}
+                   ${className}`}
+        id={controlId}
+        {...props}
+      />
+      {(error || reserveErrorSpace) && (
+        <p className={`mt-0.5 min-h-4 text-xs text-error-600 ${error ? '' : 'invisible'}`}>{error || ' '}</p>
+      )}
+    </div>
+  );
+};
 
-export const Select = ({ label, required, error, options, className = '', ...props }) => (
-  <div className="mb-2">
-    {label && (
-      <label className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
-        {label}
-        {required && <span className="text-error-500 ml-1">*</span>}
-      </label>
-    )}
-    <select
-      className={`w-full px-3 py-2 text-sm text-secondary-800 bg-white border border-neutral-300 rounded-lg
-                 transition-all duration-200
-                 hover:border-primary-400
-                 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                 dark:bg-neutral-800 dark:border-neutral-600 dark:text-white
-                 dark:hover:border-primary-500 dark:focus:border-primary-500
-                 ${error ? 'border-error-500 focus:ring-error-500/20 focus:border-error-500' : ''}
-                 ${className}`}
-      {...props}
-    >
-      <option value="">Select...</option>
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-    {error && <p className="mt-0.5 text-xs text-error-600">{error}</p>}
-  </div>
-);
+export const Select = ({ id, label, required, error, options, className = '', ...props }) => {
+  const generatedId = React.useId();
+  const controlId = id ?? generatedId;
+  return (
+    <div className="mb-2">
+      {label && (
+        <label htmlFor={controlId} className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
+          {label}
+          {required && <span className="text-error-500 ml-1">*</span>}
+        </label>
+      )}
+      <select
+        className={`w-full px-3 py-2 text-sm text-secondary-800 bg-white border border-neutral-300 rounded-lg
+                   transition-all duration-200
+                   hover:border-primary-400
+                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                   dark:bg-neutral-800 dark:border-neutral-600 dark:text-white
+                   dark:hover:border-primary-500 dark:focus:border-primary-500
+                   ${error ? 'border-error-500 focus:ring-error-500/20 focus:border-error-500' : ''}
+                   ${className}`}
+        id={controlId}
+        {...props}
+      >
+        <option value="">Select...</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      {error && <p className="mt-0.5 text-xs text-error-600">{error}</p>}
+    </div>
+  );
+};
 
 export const Checkbox = ({ label, checked, onChange, ...props }) => (
   <label className="flex items-center cursor-pointer group mb-2">
     <div className="relative">
       <input 
         type="checkbox" 
-        className="sr-only peer"
+        className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
         checked={checked}
         onChange={onChange}
         {...props} 
@@ -69,7 +79,7 @@ export const Checkbox = ({ label, checked, onChange, ...props }) => (
       <div className="w-5 h-5 border-2 border-neutral-300 dark:border-neutral-600 rounded 
                      peer-checked:bg-primary-500 peer-checked:border-primary-500
                      transition-all duration-200
-                     group-hover:border-primary-400">
+                     group-hover:border-primary-400 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500">
       </div>
       <svg 
         className="absolute top-0.5 left-0.5 w-4 h-4 text-white opacity-0 peer-checked:opacity-100 transition-opacity"
@@ -160,7 +170,7 @@ export const AccordionSection = ({
                    : 'bg-neutral-50 dark:bg-neutral-800 hover:bg-primary-50/50 dark:hover:bg-primary-500/5'}`}
     >
       <div className="flex items-center gap-3">
-        <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{icon}</span>
+        <span aria-hidden="true" className="w-5 h-5 flex items-center justify-center flex-shrink-0">{icon}</span>
         <span className="font-heading font-semibold text-secondary-800 dark:text-white">{title}</span>
       </div>
       <svg 
@@ -212,12 +222,13 @@ export const RadioButton = ({ label, name, value, checked, onChange, ...props })
         value={value}
         checked={checked}
         onChange={onChange}
-        className="sr-only peer"
+        className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
         {...props}
       />
       <div className="w-4 h-4 rounded-full border-2 border-neutral-400 dark:border-neutral-500 bg-white dark:bg-neutral-800
                      peer-checked:border-primary-500 transition-all duration-200
-                     group-hover:border-primary-400 dark:group-hover:border-primary-400" />
+                     group-hover:border-primary-400 dark:group-hover:border-primary-400
+                     peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500" />
       <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-primary-500 opacity-0 peer-checked:opacity-100 transition-opacity" />
     </div>
     {label && (

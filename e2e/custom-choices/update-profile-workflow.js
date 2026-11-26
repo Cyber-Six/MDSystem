@@ -10,7 +10,7 @@ async function fillUpdateProfileFields(page, role, options = {}) {
   }
 
   await page.getByLabel('Department').fill(options.department || 'Facilities');
-  await page.getByLabel('Employment Category').selectOption('Non-Teaching');
+  await page.getByRole('combobox', { name: /^Employment Category\b/ }).selectOption('Non-Teaching');
   await page.getByLabel('Position').fill('Consultant');
 }
 

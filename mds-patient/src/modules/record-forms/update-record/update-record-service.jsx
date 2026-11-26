@@ -1079,7 +1079,6 @@ export async function createImmunizationProfile(formData) {
 
   // Build immunizations array with required fields
   const immunizations = [];
-  const immunizationList = [];
   
   // Get selected immunizations with their details (dates, dose numbers)
   if (Array.isArray(formData.immunizations) && formData.immunizations.length > 0) {
@@ -1092,38 +1091,12 @@ export async function createImmunizationProfile(formData) {
         immunizationDate: detail.date || new Date().toISOString().split('T')[0], // Use today's date if not provided
         doseNumber: detail.doseNumber ? parseInt(detail.doseNumber) : 1 // Default to dose 1 if not provided
       });
-      
-      immunizationList.push(vaccineId);
     }
-  }
-
-  // Add immunization details to notes
-  if (formData.immunizationDetails) {
-    const details = Object.entries(formData.immunizationDetails)
-      .map(([vaccineId, detail]) => {
-        const parts = [vaccineId];
-        if (detail.date) parts.push(`date: ${detail.date}`);
-        if (detail.doseNumber) parts.push(`dose: ${detail.doseNumber}`);
-        return parts.join(' ');
-      });
-    if (details.length > 0) {
-      immunizationList.push(`Details: ${details.join(', ')}`);
-    }
-  }
-
-  // Add immunization notes
-  let immunizationNotes = null;
-  if (formData.immunizationNotes) {
-    immunizationList.push(formData.immunizationNotes);
-  }
-  
-  if (immunizationList.length > 0) {
-    immunizationNotes = immunizationList.join('; ');
   }
 
   const input = {
     immunizations, // Now populated with vaccine objects including date and dose
-    notes: immunizationNotes
+    notes: formData.immunizationNotes || null
   };
 
   console.log('💉 Creating immunization profile...', input);

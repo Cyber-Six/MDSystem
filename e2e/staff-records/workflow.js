@@ -39,30 +39,35 @@ async function openRecord(staff, manifest, kind, status = 'Pending') {
   await expect(row, `Selected QA ticket #${manifest.ticketId} must be visible in staff queue`).toHaveCount(1);
   await row.hover();
   await row.click();
-  await staff.page.getByRole('button', { name: 'Review Full Record', exact: true }).click();
+  const review = staff.page.getByRole('button', { name: 'Review Full Record', exact: true });
+  await expect(review).toBeVisible();
+  await review.click();
 }
 
 async function decision(staff, manifest, status, state) {
   assertTicket(manifest, await api.ticket(staff, manifest.patientId), state.actionableStatuses);
+  const review = staff.page.getByRole('dialog', { name: 'Record Review' });
+  await expect(review).toHaveAttribute('data-ticket-id', String(manifest.ticketId));
   state.permitStaffWrites = true;
   const responsePromise = staff.page.waitForResponse(response => response.request().method() === 'POST'
-    && /\bstaffUpdateTicket\b/.test(response.request().postData() || ''));
+    && /\bstaffUpdateTicket\b/.test(response.request().postData() || '')).catch(error => error);
   if (status === 'Revision') {
-    await staff.page.getByRole('button', { name: 'Request Revision', exact: true }).click();
-    const textarea = staff.page.locator('textarea').filter({ visible: true });
+    await review.getByRole('button', { name: 'Request Revision', exact: true }).click();
+    const textarea = review.locator('textarea').filter({ visible: true });
     await expect(textarea).toHaveCount(1);
-    const send = staff.page.getByRole('button', { name: 'Send Revision Request', exact: true });
+    const send = review.getByRole('button', { name: 'Send Revision Request', exact: true });
     await expect(send).toBeDisabled();
     await textarea.fill(state.instruction);
     await send.click();
   } else if (status === 'Rejected') {
-    await staff.page.getByRole('button', { name: 'Back', exact: true }).click();
+    await review.getByRole('button', { name: 'Back', exact: true }).click();
     await staff.page.getByRole('button', { name: 'Reject', exact: true }).click();
     const reason = staff.page.locator('textarea').filter({ visible: true });
     if (await reason.count()) await reason.fill(`QA rejection ${state.runId}`);
     await staff.page.getByRole('button', { name: 'Confirm Rejection', exact: true }).click();
-  } else await staff.page.getByRole('button', { name: 'Approve', exact: true }).click();
+  } else await review.getByRole('button', { name: 'Approve', exact: true }).click();
   const response = await responsePromise;
+  if (response instanceof Error) throw response;
   const body = await response.json();
   state.network.push(redact({ action: status, status: response.status(), response: body }));
   expect(response.ok(), `Staff ${status} HTTP response`).toBe(true);
@@ -87,7 +92,10 @@ async function installGuard(staff, patient, manifest, state) {
     const body = route.request().postDataJSON();
     if (!/\bmutation\b/.test(body?.query || '')) return route.continue();
     try {
-      if (!state.permitPatientWrites || /\b(?:cancel\w*|createUpdateTicket)\b/.test(body.query)) throw new Error('Unrelated or premature patient mutation blocked');
+      if (!state.permitPatientWrites || /\b(?:cancel\w*|createUpdateTicket)\b/.test(body.query)) {
+        const operation = body.query.match(/\bmutation\s+(\w+)/)?.[1] || 'anonymous';
+        throw new Error(`Unrelated or premature patient mutation blocked (${operation})`);
+      }
       assertTicket(manifest, await api.ticket(patient), ['Revision']);
       await route.continue();
     } catch (error) { state.guardErrors.push(error.message); await route.abort('blockedbyclient'); }
@@ -187,9 +195,17 @@ async function runWorkflow(browser, scenario, options = {}) {
       await test.step('Resubmit the revised record', async () => {
         assertTicket(manifest, await api.ticket(patient), ['Revision']);
         state.permitPatientWrites = true;
-        const submitted = patient.page.waitForResponse(response => /\bsubmit(?:Update)?Ticket\b/.test(response.request().postData() || ''));
+        const submitted = patient.page.waitForResponse(
+          response => /\bsubmit(?:Update)?Ticket\b/.test(response.request().postData() || ''),
+          { timeout: 45_000 }
+        ).catch(error => error);
         await patient.page.getByRole('button', { name: 'Submit', exact: true }).click();
-        const response = await submitted, body = await response.json();
+        const response = await submitted;
+        if (response instanceof Error) {
+          if (state.guardErrors.length) throw new Error(state.guardErrors.join(', '), { cause: response });
+          throw response;
+        }
+        const body = await response.json();
         expect(response.ok()).toBe(true); expect(body.errors || []).toEqual([]);
         expect(Object.values(body.data)).toContain('RevisionSubmitted');
         state.permitPatientWrites = false;

@@ -1,10 +1,11 @@
 'use strict';
+const { normalizeName, normalizeNumber } = require('../../Backend/utils/validator');
 function fixture(role = 'Student', kind = 'initial', scope = 'Both') {
   const manifest = {
     version: 1, verified: true, role, kind, scope, url: 'https://patient.qa.invalid', patientId: '7001', ticketId: '9001',
     labels: { '101': 'QA Self Condition', '102': 'QA Family Condition', '103': 'QA Vaccine',
       'allergen:11': 'QA Allergen', '104': 'QA Hospitalization', '105': 'QA Operation', '106': 'QA Medication',
-      '107': 'QA Dental Procedure', '108': 'QA Appliance', '109': 'QA Computer Science' },
+      '107': 'QA Dental Procedure', '108': 'QA Appliance', 'program:109': 'QA Computer Science' },
     record: {
       personalInfo: { first_name: 'Synthetic', middle_name: 'QA', last_name: role, suffix: 'Jr.', date_of_birth: '2000-04-05', sex: 'Female',
         civil_status: 'Single', nationality: 'Filipino', religion: 'QA Belief', contactNumber: '09170000000', present_address: 'QA Present Address\nSecond line', province_address: 'QA Province', branch: 'Manila', identifier: '70010001' },
@@ -34,7 +35,11 @@ function fixture(role = 'Student', kind = 'initial', scope = 'Both') {
 function staffRecord(manifest) {
   const record = Object.fromEntries(Object.entries(manifest.record).map(([key, value]) => [key, { id: manifest.ticketId, ...structuredClone(value) }]));
   record.basicInfo = { ...manifest.record.personalInfo, id: manifest.patientId, profile_type: manifest.role };
-  if (manifest.role === 'Student') { record.profile.program = manifest.labels[record.profile.programId]; delete record.profile.programId; }
+  for (const contact of [record.emergencyContact.firstContact, record.emergencyContact.secondContact]) {
+    contact.contactName = normalizeName(contact.contactName);
+    contact.contactNumber = normalizeNumber(contact.contactNumber);
+  }
+  if (manifest.role === 'Student') { record.profile.program = manifest.labels[`program:${record.profile.programId}`]; delete record.profile.programId; }
   const catalog = ids => ids.map(id => ({ id, name: manifest.labels[id] }));
   record.catalogs = {
     medicalConditionCatalog: catalog(['101', '102']), hospitalizationCatalog: catalog(['104']), operationCatalog: catalog(['105']),

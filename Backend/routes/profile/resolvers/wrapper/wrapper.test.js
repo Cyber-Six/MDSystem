@@ -103,7 +103,7 @@ test('uses the configured database client when mutation client arguments are omi
 test('_UpdatePersonalRecordLog updates provided fields and rejects empty or missing updates', async () => {
   db.queryClient.mockResolvedValueOnce(result({ id: 4 }));
   await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { first_name: 'Grace', optional: null } }, context)).resolves.toEqual({ id: 4 });
-  expect(db.queryClient.mock.calls[0][2]).toEqual(['Grace', 'RevisionSubmitted', 7, 4]);
+  expect(db.queryClient.mock.calls[0][2]).toEqual(['Grace', 'Pending', 7, 4]);
   await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { a: null } }, context)).rejects.toThrow('GraphQL 400: No fields to update.');
   db.queryClient.mockResolvedValueOnce(result());
   await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { a: 1 } }, context)).rejects.toThrow('GraphQL 500: Database error');

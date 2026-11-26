@@ -29,12 +29,13 @@ function submittedRecord(network) {
   const record = {};
   const labels = {};
   const domains = { MedicalCondition: 'medicalHistory', Hospitalization: 'hospitalizationProfile', Operation: 'operationProfile', Medication: 'medicationProfile', Immunization: 'immunizationProfile', DentalProcedure: 'dentalProcedureProfile', OralAppliance: 'oralApplianceProfile' };
-  const aliases = { medicalConditionCatalog: 'medicalHistory', hospitalizationCatalog: 'hospitalizationProfile', operationCatalog: 'operationProfile', medicationCatalog: 'medicationProfile', immunizationCatalog: 'immunizationProfile', allergenCatalog: 'allergyProfile', oralApplianceCatalog: 'oralApplianceProfile', dentalProcedureCatalog: 'dentalProcedureProfile' };
+  const aliases = { searchStudentProgram: 'program', medicalConditionCatalog: 'medicalHistory', hospitalizationCatalog: 'hospitalizationProfile', operationCatalog: 'operationProfile', medicationCatalog: 'medicationProfile', immunizationCatalog: 'immunizationProfile', allergenCatalog: 'allergyProfile', oralApplianceCatalog: 'oralApplianceProfile', dentalProcedureCatalog: 'dentalProcedureProfile' };
   const walk = (value, domain) => {
     if (!value || typeof value !== 'object') return;
     if (value.id != null && (value.name || value.allergen || value.label)) {
-      labels[`${value.allergen ? 'allergen:' : ''}${value.id}`] = value.allergen || value.name || value.label;
-      if (domain) labels[`${domain}:${value.id}`] = value.allergen || value.name || value.label;
+      const label = value.allergen || value.name || value.label;
+      if (domain !== 'program') labels[`${value.allergen ? 'allergen:' : ''}${value.id}`] = label;
+      if (domain) labels[`${domain}:${value.id}`] = label;
     }
     Object.entries(value).forEach(([key, child]) => walk(child, aliases[key] || domain));
   };
@@ -48,6 +49,10 @@ function submittedRecord(network) {
     for (const [key, section] of Object.entries(inputSections)) if (variables[key]) record[section] = structuredClone(variables[key]);
     for (const [operation, section] of Object.entries(operations)) {
       if (new RegExp(`\\b(?:create|update)${operation}\\b`).test(query) && variables.input) record[section] = structuredClone(variables.input);
+    }
+    const photos = event.response?.data?.dentalPhotoRecord ?? event.response?.data?.createDentalPhotoRecord;
+    if (record.dentalPhotoRecord && photos && Object.hasOwn(photos, 'upperTeeth') && Object.hasOwn(photos, 'lowerTeeth')) {
+      record.dentalPhotoRecord = { upperTeeth: photos.upperTeeth, lowerTeeth: photos.lowerTeeth };
     }
   }
   return { record, labels };

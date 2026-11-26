@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE "MedicalHistory" ADD COLUMN IF NOT EXISTS "notes" text;
+ALTER TABLE "Immunization" ADD COLUMN IF NOT EXISTS "notes" text;
+COMMIT;

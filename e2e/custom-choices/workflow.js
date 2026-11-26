@@ -10,6 +10,7 @@ const { finishUpdateEligibility } = require('./update-readiness');
 const staffManifest = require('../staff-records/manifest');
 
 const PHOTO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9XkAAAAASUVORK5CYII=', 'base64');
+const approvedPersonalFields = 'getPersonalRecord { id first_name last_name }';
 const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const next = page => page.getByRole('button', { name: 'Next', exact: true }).click();
 const back = page => page.getByRole('button', { name: 'Back', exact: true }).click();
@@ -147,7 +148,8 @@ async function histories(page, state) {
   await expect(family).toBeChecked();
   await expect(relation).toHaveValue(state.data.familyRelation);
   state.inputControls ||= [];
-  if (state.mode !== 'update') state.inputControls.push(await staffManifest.captureControls(page, 'history'));
+  if (update) await selfTab.click();
+  else state.inputControls.push(await staffManifest.captureControls(page, 'history'));
 }
 
 async function validateBlockedNext(page, state, marker, message) {
@@ -381,7 +383,8 @@ async function verify(page, state) {
       compare(state, 'Allergen ID', state.created.allergen.id, allergy && String(allergy.allergenCatalogId));
       compare(state, 'Allergy status', 'Active', allergy?.status);
       compare(state, 'Allergy severity', 'Mild', allergy?.severity);
-      compare(state, 'Allergy record notes', `Other: ${state.data.allergyNotes}`, allergy?.notes);
+      const expectedNotes = state.mode === 'update' ? state.data.allergyNotes : `Other: ${state.data.allergyNotes}`;
+      compare(state, 'Allergy record notes', expectedNotes, allergy?.notes);
     }
     if (saved.hospitalization) {
       const hospital = saved.hospitalization.hospitalizations.find(item => String(item.conditionId) === state.created.hospitalization.id);
@@ -430,7 +433,7 @@ async function verify(page, state) {
     if (state.baseline) {
       const profile = await query(page, state, '/emr/patient', 'query VerifyUpdateProfileType { getMyProfile { __typename id } }');
       compare(state, 'Update retains patient profile type', `${state.role}Profile`, profile.getMyProfile?.__typename);
-      const current = await query(page, state, '/profile/patient', 'query VerifyApprovedPersonalRecord { getPersonalRecord { id first_name last_name } }');
+      const current = await query(page, state, '/profile/patient', `query VerifyApprovedPersonalRecord { ${approvedPersonalFields} }`);
       compare(state, 'Existing approved personal record preserved', state.baseline.personal, current.getPersonalRecord);
       const approved = await query(page, state, '/emr/patient', 'query VerifyApprovedContacts { getEmergencyContact(approved: true) { id firstContact { id contactName } secondContact { id contactName } } }');
       compare(state, 'Existing approved contact record preserved', state.baseline.contacts, approved.getEmergencyContact);
@@ -479,7 +482,7 @@ async function loginForUpdate(page, state) {
   expect(auth.ok, 'Patient authentication must succeed').toBe(true);
   expect(auth.accessToken).toBeTruthy();
   state.headers = { authorization: `Bearer ${auth.accessToken}`, 'content-type': 'application/json' };
-  const personal = await query(page, state, '/profile/patient', 'query CheckCustomChoiceEligibility { getCredentialStatus getPersonalRecordLogStatus getPersonalRecord { id } }');
+  const personal = await query(page, state, '/profile/patient', `query CheckCustomChoiceEligibility { getCredentialStatus getPersonalRecordLogStatus ${approvedPersonalFields} }`);
   const ticketData = await query(page, state, '/emr/patient', 'query CheckCustomChoiceTicket { getUpdateTicket { id status scope } }');
   if (ticketData.getUpdateTicket?.status !== 'Approved') {
     const reason = `saved QA account: staff approval required; latest ticket status is ${ticketData.getUpdateTicket?.status || 'missing'}`;
@@ -557,9 +560,9 @@ async function updateWorkflow(page, state) {
     await field(scope, 'When was your last dental cleaning?', 'select').selectOption({ index: 1 });
     await scope.locator('input[type="month"]').fill('2025-06');
     scope = await openSection(page, 'Intraoral Appliances');
-    await scope.locator('input[name="hasOralAppliances"][value="no"]').check();
+    await scope.getByRole('radio', { name: 'No', exact: true }).check();
     scope = await openSection(page, 'Dental Procedures');
-    await scope.locator('input[name="hasDentalProcedures"][value="no"]').check();
+    await scope.getByRole('radio', { name: 'No', exact: true }).check();
     await openSection(page, 'Dental Photos');
     for (let i = 0; i < 2; i++) await page.locator('input[type="file"]').nth(i).setInputFiles({ name: `qa-update-dental-${i}.png`, mimeType: 'image/png', buffer: PHOTO });
     state.inputControls.push(await staffManifest.captureControls(page, 'dental'));
@@ -571,7 +574,7 @@ async function updateWorkflow(page, state) {
     // Recheck immediately before submission: the app can otherwise replace pending tickets.
     const eligibility = await query(page, state, '/emr/patient', 'query RecheckBeforeCustomUpdate { getUpdateTicket { id status } }');
     expect(eligibility.getUpdateTicket).toMatchObject({ id: state.baseline.ticket.id, status: 'Approved' });
-    const submitted = page.waitForResponse(response => response.request().method() === 'POST' && /\/(emr)\/patient$/.test(response.url()) && /\bsubmitTicket\b/.test(response.request().postData() || ''));
+    const submitted = page.waitForResponse(response => response.request().method() === 'POST' && /\/emr\/patient$/.test(response.url()) && /\bsubmit(?:Update)?Ticket\b/.test(response.request().postData() || ''));
     await page.getByRole('button', { name: 'Submit', exact: true }).click();
     const response = await submitted;
     const body = await response.json();

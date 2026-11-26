@@ -94,6 +94,7 @@ function normalizeName(name) {
 function normalizeNumber(number) {
   // Strip everything except digits
   const digits = number.replace(/\D/g, "");
+  if (!digits) return "";
 
   // Example: enforce PH country code (+63)
   if (digits.startsWith("0")) {

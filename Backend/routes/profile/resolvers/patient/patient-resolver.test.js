@@ -4,17 +4,19 @@ jest.mock('../wrapper/wrapper.js', () => ({
 }));
 jest.mock('../../../../utils/validator.js', () => ({ getStudentBranchFromEmail: jest.fn(), isStudentEmail: jest.fn(), isEmployeeEmail: jest.fn(), isMedicalEmail: jest.fn() }));
 jest.mock('../../../../config/query.js', () => ({ findEmailByUserId: jest.fn(), connect: jest.fn() }));
+jest.mock('../../../emr/wrapper/query.js', () => ({ _getUserUpdateTicket: jest.fn() }));
 jest.mock('../../../../utils/logger.js', () => ({ error: jest.fn() }));
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
 const Wrapper = require('../wrapper/wrapper.js');
 const db = require('../../../../config/query.js');
+const { _getUserUpdateTicket } = require('../../../emr/wrapper/query.js');
 const validator = require('../../../../utils/validator.js');
 const logger = require('../../../../utils/logger.js');
 const { Query, Mutation } = require('./patient-resolver.js');
 const ctx = (user = { id: 7 }) => ({ user, res: { status: jest.fn().mockReturnThis() } });
 const client = () => ({ query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() });
-beforeEach(() => { jest.clearAllMocks(); db.findEmailByUserId.mockResolvedValue('student@example.com'); validator.isStudentEmail.mockReturnValue(false); validator.getStudentBranchFromEmail.mockReturnValue('Manila'); });
+beforeEach(() => { jest.clearAllMocks(); _getUserUpdateTicket.mockResolvedValue({ status: 'Pending' }); db.findEmailByUserId.mockResolvedValue('student@example.com'); validator.isStudentEmail.mockReturnValue(false); validator.getStudentBranchFromEmail.mockReturnValue('Manila'); });
 
 test('all patient profile operations require authentication', async () => {
   const context = ctx(null);
@@ -70,11 +72,16 @@ test('initial profile creates a record transactionally with student branch and d
   expect(await Mutation.createInitialPersonalRecord(null, { input: studentInput }, context)).toEqual({ identifier: 'A', logId: 1 });
   expect(studentInput.branch).toBe('Manila'); expect(firstClient.query).toHaveBeenCalledWith('COMMIT'); expect(firstClient.release).toHaveBeenCalled();
   const secondClient = client(); db.connect.mockResolvedValueOnce(secondClient);
-  Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce({ status: 'Revision' });
+  _getUserUpdateTicket.mockResolvedValueOnce({ status: 'Revision' });
+  Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce({ id: 29, status: 'Pending' });
   Wrapper.Mutation._UpdatePersonalRecordLog.mockResolvedValueOnce({ logId: 2 }); Wrapper.Mutation._UserBranchIdentifier.mockResolvedValueOnce({ identifier: 'B' });
-  const revisedInput = {};
+  const revisedInput = { first_name: 'Revised', identifier: 'B' };
   expect(await Mutation.createInitialPersonalRecord(null, { input: revisedInput }, context)).toEqual({ identifier: 'B', logId: 2 });
-  expect(revisedInput.branch).toBe('Both'); expect(Wrapper.Mutation._UpdatePersonalRecordLog).toHaveBeenCalled();
+  expect(revisedInput.branch).toBe('Both');
+  expect(Wrapper.Mutation._UpdatePersonalRecordLog).toHaveBeenCalledWith(null, {
+    client: secondClient, userId: 7, ticketId: 29, input: { first_name: 'Revised' },
+  }, context);
+  expect(Wrapper.Mutation._cancelPersonalRecordLog).not.toHaveBeenCalled();
   expect(secondClient.release).toHaveBeenCalled();
   const thirdClient = client(); db.connect.mockResolvedValueOnce(thirdClient);
   Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce(null);
@@ -87,6 +94,7 @@ test('initial profile creates a record transactionally with student branch and d
 test('initial profile rolls back when an update, insert, or transaction fails', async () => {
   const context = ctx();
   for (const [status, operation] of [['Revision', '_UpdatePersonalRecordLog'], [null, '_PersonalRecordLog']]) {
+    if (status) _getUserUpdateTicket.mockResolvedValueOnce({ status });
     const connection = client(); db.connect.mockResolvedValueOnce(connection);
     Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce(status ? { status } : null);
     Wrapper.Mutation[operation].mockResolvedValueOnce(null);

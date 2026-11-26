@@ -204,9 +204,9 @@ const Mutation = {
       throwGraphQLError(res).message("No fields to update.").status(400).throw();
     }
 
-    // Always set status to RevisionSubmitted on update
+    // The initial approval flow applies a Pending personal log after EMR approval.
     fields.push(`"status" = $${idx}`);
-    values.push("RevisionSubmitted");
+    values.push("Pending");
     idx++;
 
     values.push(userId);

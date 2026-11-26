@@ -1,4 +1,5 @@
 const Wrapper = require("../wrapper/wrapper.js");
+const { _getUserUpdateTicket } = require("../../../emr/wrapper/query.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
@@ -65,10 +66,13 @@ const Mutation = {
       }
 
     const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
-    if (latest?.status === "Pending" || latest?.status === "InProgress") {
+    const canReviseLog = ["Pending", "Revision", "RevisionSubmitted"].includes(latest?.status);
+    const isRevision = canReviseLog &&
+      (await _getUserUpdateTicket(_, { userId: user.id }, { user, res }))?.status === "Revision";
+    if (!isRevision && (latest?.status === "Pending" || latest?.status === "InProgress")) {
       throwGraphQLError(res).message("An update is already in progress. Please wait for it to complete before creating a new one.").status(400).throw();
       }
-    if (latest?.status === "RevisionSubmitted"){
+    if (!isRevision && (latest?.status === "Revision" || latest?.status === "RevisionSubmitted")) {
       throwGraphQLError(res).message("Revision still pending. Please complete the revision before creating a new update.").status(400).throw();
     }
 
@@ -93,9 +97,11 @@ const Mutation = {
     try {
       await client.query("BEGIN");
       let updateResult;
-      if (latest?.status === "Revision") {
-        // If there's a pending revision, we want to update that record instead of creating a new one
-        updateResult = await Wrapper.Mutation._UpdatePersonalRecordLog(_, { client, userId: user.id, input }, { user, res });
+      if (isRevision) {
+        const { identifier, branch, ...personalInput } = input;
+        updateResult = await Wrapper.Mutation._UpdatePersonalRecordLog(_, {
+          client, userId: user.id, ticketId: latest.id, input: personalInput,
+        }, { user, res });
         if (!updateResult) {
           throwGraphQLError(res).message("Failed to update existing revision. Please try again later.").status(500).throw();
         }

@@ -105,30 +105,6 @@ const submitUpdateTicket = async () => {
 };
 
 /**
- * Ensure an update ticket exists for the current user.
- * If one already exists (InProgress or Revision), returns its ID.
- * Otherwise creates a new ticket with the given scope.
- * Silently returns null on failure so callers can treat it as non-blocking.
- * @param {string} scope - 'Medical', 'Dental', or 'Both'
- * @returns {Promise<string|null>} ticket ID or null
- */
-export const ensureUpdateTicket = async (scope = 'Both') => {
-  try {
-    const existing = await fetchCurrentUpdateTicket();
-    if (existing?.id && (existing.status === 'InProgress' || existing.status === 'Revision')) {
-      console.log('[EMR Service] Update ticket already exists:', existing.id, existing.status);
-      return existing.id;
-    }
-    const ticketId = await createUpdateTicket(scope);
-    console.log('[EMR Service] Early update ticket created:', ticketId);
-    return ticketId;
-  } catch (error) {
-    console.warn('[EMR Service] ensureUpdateTicket failed (non-blocking):', error.message);
-    return null;
-  }
-};
-
-/**
  * Cancel the update ticket (in case of errors)
  */
 const cancelUpdateTicket = async () => {
@@ -152,7 +128,7 @@ const cancelUpdateTicket = async () => {
 
 /**
  * Cancel the personal record log (in case of errors during initial submission)
- * This must be called when registerProfileSetup succeeds but a later step fails,
+ * This must be called when initial profile creation succeeds but a later step fails,
  * to prevent the "An update is already in progress" error on retry.
  */
 const cancelPersonalRecordLog = async () => {
@@ -247,147 +223,12 @@ const registerBranchIdentifier = async (identifier) => {
 };
 
 /**
- * Batch both profile setup mutations (branch identifier + personal info)
- * into a single POST /profile/patient request.
- *
- * @param {string} identifier - Student/employee number
- * @param {object} personalInfo - formData.personalInfo
- * @param {boolean} isRevision - When true, pre-cancels the existing InProgress log before creating a new one
- */
-const registerProfileSetup = async (identifier, personalInfo, isRevision = false, { branch } = {}) => {
-  const pi = personalInfo || {};
-  const hasIdentifier = !!identifier?.trim();
-
-  const personalInput = {
-    first_name:       pi.firstName?.trim()        || '',
-    middle_name:      pi.middleName?.trim()       || '',
-    last_name:        pi.surname?.trim()          || '',
-    suffix:           pi.suffix?.trim()           || null,
-    date_of_birth:    pi.birthday                || null,
-    sex:              pi.gender                  || null,
-    civil_status:     pi.civilStatus             || null,
-    nationality:      pi.nationality?.trim()     || '',
-    religion:         pi.religion?.trim()        || '',
-    contactNumber:    pi.contactNumber?.trim()   || '',
-    present_address:  pi.address?.trim()         || '',
-    province_address: pi.provinceAddress?.trim() || pi.address?.trim() || '',
-  };
-
-  // For revisions: cancel the existing Revision log so createInitialPersonalRecord
-  // won't be blocked by the "revision still pending" guard.
-  if (isRevision) {
-    await cancelPersonalRecordLog();
-    console.log('[EMR Service] Revision: pre-cancelled existing personal record log');
-  }
-
-  // For revisions, use createInitialPersonalRecord (works for Unverified users and
-  // atomically handles the branch identifier via UPSERT — safe to re-send existing values).
-  if (isRevision) {
-    const initialInput = {
-      ...personalInput,
-      identifier: identifier?.trim() || '',
-      branch: branch || 'Manila', // backend overrides for students based on email prefix
-    };
-
-    const revisionMutation = `mutation ProfileSetup($input: userProfileInitialInput!) {
-      createInitialPersonalRecord(input: $input) { first_name last_name branch identifier }
-    }`;
-
-    try {
-      const result = await sendGraphQLRequest(revisionMutation, { input: initialInput }, { endpoint: '/profile/patient' });
-      console.log('[EMR Service] Revision profile setup complete:', {
-        branch: result?.createInitialPersonalRecord?.branch,
-        identifier: result?.createInitialPersonalRecord?.identifier,
-      });
-    } catch (error) {
-      const msg = error.message?.toLowerCase() || '';
-      if (msg.includes('already in progress') || msg.includes('revision still pending')) {
-        console.warn('[EMR Service] Stale log on revision — cancelling and retrying...', error.message);
-        try { await cancelPersonalRecordLog(); } catch (_) { /* ignore */ }
-        const result = await sendGraphQLRequest(revisionMutation, { input: initialInput }, { endpoint: '/profile/patient' });
-        console.log('[EMR Service] Revision profile setup complete (after stale-log recovery):', {
-          branch: result?.createInitialPersonalRecord?.branch,
-          identifier: result?.createInitialPersonalRecord?.identifier,
-        });
-        return;
-      }
-      console.error('[EMR Service] Failed to register revision profile setup:', error);
-      throw error;
-    }
-    return;
-  }
-
-  // --- Non-revision path (legacy): batch createBranchIdentifier + createPersonalRecordLog ---
-  // createBranchIdentifier is conditional — skip it if no identifier is available.
-  const mutation = hasIdentifier
-    ? `mutation ProfileSetup($branchInput: BranchIdentifierInput!, $input: userProfileInput!) {
-        createBranchIdentifier(input: $branchInput) { branch identifier }
-        createPersonalRecordLog(input: $input) { first_name last_name }
-      }`
-    : `mutation ProfileSetup($input: userProfileInput!) {
-        createPersonalRecordLog(input: $input) { first_name last_name }
-      }`;
-
-  const branchInput = { identifier: identifier.trim() };
-  if (branch) branchInput.branch = branch;
-
-  const variables = hasIdentifier
-    ? { branchInput, input: personalInput }
-    : { input: personalInput };
-
-  try {
-    const result = await sendGraphQLRequest(mutation, variables, { endpoint: '/profile/patient' });
-    console.log('[EMR Service] Profile setup complete:', {
-      branch: result?.createBranchIdentifier?.branch,
-      identifier: result?.createBranchIdentifier?.identifier,
-    });
-  } catch (error) {
-    // If a stale record log is blocking the submission, auto-cancel it and retry.
-    const msg = error.message?.toLowerCase() || '';
-    const isStaleLog = msg.includes('already in progress');
-    const isPartialFailure = msg.includes('identifier') && msg.includes('branch');
-
-    if (isStaleLog || isPartialFailure) {
-      console.warn('[EMR Service] Stale/partial state detected — cleaning up and retrying...', error.message);
-      try { await cancelPersonalRecordLog(); } catch (_) { /* ignore */ }
-
-      if (hasIdentifier) {
-        try {
-          const retryBranchInput = { identifier: identifier.trim() };
-          if (branch) retryBranchInput.branch = branch;
-          const branchMutation = `mutation RetryBranch($branchInput: BranchIdentifierInput!) {
-            createBranchIdentifier(input: $branchInput) { branch identifier }
-          }`;
-          await sendGraphQLRequest(branchMutation, { branchInput: retryBranchInput }, { endpoint: '/profile/patient' });
-        } catch (branchErr) {
-          console.warn('[EMR Service] Branch retry warning (may already exist):', branchErr.message);
-        }
-      }
-
-      const retryMutation = `mutation ProfileSetupRetry($input: userProfileInput!) {
-        createPersonalRecordLog(input: $input) { first_name last_name }
-      }`;
-      await sendGraphQLRequest(retryMutation, { input: personalInput }, { endpoint: '/profile/patient' });
-      console.log('[EMR Service] Profile setup complete (after stale-log recovery):', {
-        branch: null,
-        identifier: identifier?.trim() || null,
-      });
-      return;
-    }
-
-    console.error('[EMR Service] Failed to register profile setup:', error);
-    throw error;
-  }
-};
-
-/**
  * Register initial profile using the reworked createInitialPersonalRecord mutation.
  * This single mutation atomically creates the personal record log AND sets the
  * branch identifier, replacing the old compound approach that called
  * createBranchIdentifier + createPersonalRecordLog separately.
  *
- * Only works for unverified users. Used for both initial submissions and (via
- * registerProfileSetup) revision resubmissions.
+ * Used by unverified patients for both initial submissions and requested revisions.
  *
  * @param {string} identifier - Student/employee number (e.g. "2022-12345")
  * @param {object} personalInfo - formData.personalInfo
@@ -455,17 +296,9 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    // For new submissions: uses createInitialPersonalRecord which atomically
-    // creates both the personal record log and branch identifier in a single mutation.
-    // For revisions: registerProfileSetup cancels the existing Revision log then
-    // also calls createInitialPersonalRecord (Unverified users only).
-    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
-    if (isRevision) {
-      await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
-    } else {
-      await registerInitialProfile(formData.personalInfo?.studentNumber, formData.personalInfo);
-    }
-    profileLogCreated = !isRevision; // only mark for cleanup if a new log was created
+    // The profile endpoint updates the existing personal log during a revision.
+    await registerInitialProfile(formData.personalInfo?.studentNumber, formData.personalInfo);
+    profileLogCreated = !isRevision;
 
     // ======== REQUEST 2 (parallel): Resolve ticket + upload dental photos ========
     // For revisions: pre-fetch the existing Revision ticket to avoid a 400 from
@@ -476,16 +309,10 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     let ticketPromise;
     if (isRevision) {
       const existing = await fetchCurrentUpdateTicket();
-      if (existing?.status === 'Revision') {
-        console.log('[EMR Service] Revision: reusing existing ticket:', existing.id);
-        ticketPromise = Promise.resolve(existing.id);
-        // ticket already exists — no new ticket to cancel on error
-      } else {
-        // Unexpected state (e.g. ticket was already submitted) — fall through to create
-        ticketPromise = createUpdateTicket('Both');
-      }
+      if (existing?.status !== 'Revision') throw new Error('This ticket is no longer open for revision.');
+      ticketPromise = Promise.resolve(existing.id);
     } else {
-      // Check if a ticket was already created early (e.g. by ensureUpdateTicket on form mount)
+      // Resume an existing draft when the patient submits.
       const existing = await fetchCurrentUpdateTicket();
       if (existing?.id && existing.status === 'InProgress') {
         console.log('[EMR Service] Reusing early-created ticket:', existing.id);
@@ -576,16 +403,8 @@ export const createInitialEmployeeRecord = async (formData, { isRevision = false
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    // For new submissions: uses createInitialPersonalRecord which atomically
-    // creates both the personal record log and branch identifier in a single mutation.
-    // For revisions: registerProfileSetup cancels the existing Revision log then
-    // also calls createInitialPersonalRecord (Unverified users only).
-    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
-    if (isRevision) {
-      await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo, isRevision, { branch: formData.personalInfo?.branch });
-    } else {
-      await registerInitialProfile(formData.personalInfo?.employeeId, formData.personalInfo, { branch: formData.personalInfo?.branch });
-    }
+    // The profile endpoint updates the existing personal log during a revision.
+    await registerInitialProfile(formData.personalInfo?.employeeId, formData.personalInfo, { branch: formData.personalInfo?.branch });
     profileLogCreated = !isRevision;
 
     // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
@@ -596,12 +415,8 @@ export const createInitialEmployeeRecord = async (formData, { isRevision = false
     let ticketPromise;
     if (isRevision) {
       const existing = await fetchCurrentUpdateTicket();
-      if (existing?.status === 'Revision') {
-        console.log('[EMR Service] Employee revision: reusing existing ticket:', existing.id);
-        ticketPromise = Promise.resolve(existing.id);
-      } else {
-        ticketPromise = createUpdateTicket('Both');
-      }
+      if (existing?.status !== 'Revision') throw new Error('This ticket is no longer open for revision.');
+      ticketPromise = Promise.resolve(existing.id);
     } else {
       const existing = await fetchCurrentUpdateTicket();
       if (existing?.id && existing.status === 'InProgress') {
@@ -1338,9 +1153,9 @@ const sendBatchedCreateMutations = async (inputs, formData) => {
   const variables = {};
 
   // Helper to add a mutation to the batch
-  const addMutation = (alias, mutationName, inputType, inputKey, varName) => {
+  const addMutation = (alias, mutationName, inputType, inputKey, varName, fields = 'id') => {
     variableDefs.push(`$${varName}: ${inputType}!`);
-    mutationParts.push(`${alias}: ${mutationName}(input: $${varName}) { id }`);
+    mutationParts.push(`${alias}: ${mutationName}(input: $${varName}) { ${fields} }`);
     variables[varName] = inputs[inputKey];
   };
 
@@ -1371,7 +1186,7 @@ const sendBatchedCreateMutations = async (inputs, formData) => {
   addMutation('dentalHistory', 'createDentalHistory', 'DentalHistoryInput', 'dentalHistory', 'dentalHistInput');
   addMutation('dentalProcedureProfile', 'createDentalProcedureProfile', 'DentalProcedureProfileInput', 'dentalProcedureProfile', 'dentalProcInput');
   addMutation('oralApplianceProfile', 'createOralApplianceProfile', 'OralApplianceProfileInput', 'oralApplianceProfile', 'oralAppInput');
-  addMutation('dentalPhotoRecord', 'createDentalPhotoRecord', 'DentalPhotoRecordInput', 'dentalPhotoRecord', 'dentalPhotoInput');
+  addMutation('dentalPhotoRecord', 'createDentalPhotoRecord', 'DentalPhotoRecordInput', 'dentalPhotoRecord', 'dentalPhotoInput', 'id upperTeeth lowerTeeth');
 
   // OB-GYNE (female only)
   if (inputs.obgynHistory) {
@@ -1799,6 +1614,7 @@ export const mapRevisionDataToFormData = (profileData, emrData) => {
   const identifier       = bid?.identifier || patientBasicInfo?.identifier || '';
   const branch           = bid?.branch || patientBasicInfo?.branch || '';
   const ec               = emr?.emergencyContact || {};
+  const contactPhone = (number) => number === '+' ? '' : number || '';
   const { employmentCategory, employmentCategoryOther: mappedEmploymentCategoryOther } = reverseMapEmploymentCategory(rawRole);
   const employmentCategoryOther = emrProfile?.employmentCategoryOther
     ?? patientBasicInfo?.employmentCategoryOther
@@ -1837,13 +1653,13 @@ export const mapRevisionDataToFormData = (profileData, emrData) => {
       {
         name:          ec.firstContact?.contactName   || '',
         relationship:  ec.firstContact?.relationship  || '',
-        contactNumber: ec.firstContact?.contactNumber || '',
+        contactNumber: contactPhone(ec.firstContact?.contactNumber),
         address:       ec.firstContact?.address       || '',
       },
       {
         name:          ec.secondContact?.contactName   || '',
         relationship:  ec.secondContact?.relationship  || '',
-        contactNumber: ec.secondContact?.contactNumber || '',
+        contactNumber: contactPhone(ec.secondContact?.contactNumber),
         address:       ec.secondContact?.address       || '',
       },
     ],
@@ -1920,11 +1736,11 @@ export const mapRevisionDataToFormData = (profileData, emrData) => {
     hasHospitalization:        hosps.length > 0        ? 'Yes' : 'No',
     hospitalizationConditions: hospMap,
     hospitalizationDates:      hospDatesMap,
-    hospitalizationNotes:      emr?.hospitalizationProfile?.notes || '',
+    hospitalizationNotes:      emr?.hospitalizationProfile?.notes || hosps.find(h => h.notes)?.notes || '',
     hasOperation:              ops.length > 0          ? 'Yes' : 'No',
     operationConditions:       opsMap,
     operationDates:            opsDatesMap,
-    operationNotes:            emr?.operationProfile?.notes || '',
+    operationNotes:            emr?.operationProfile?.notes || ops.find(o => o.notes)?.notes || '',
     hasMedications:            meds.length > 0         ? 'Yes' : 'No',
     selectedMedications:       medsMap,
     medicationReason:          meds[0]?.description    || '',
@@ -2183,18 +1999,15 @@ export const fetchRevisionPrefill = async (scope = 'Both') => {
     }
   }
 
-  // Fetch previously submitted dental photos.
-  // Store them as { file, preview } so uploadMediaFile() can re-stage the photo
-  // via the normal flow — passing a permanent UUID directly to createDentalPhotoRecord
-  // would fail because the backend expects a staged file UUID.
+  // Preview saved photos without staging them again. A null upload ID keeps
+  // the existing picture on this ticket unless the patient picks a new file.
   const dentalPhotoRecord = emrData?.dentalPhotoRecord;
   if (dentalPhotoRecord?.upperTeeth) {
     try {
-      const result = await fetchDentalPhotoAsBlob(dentalPhotoRecord.upperTeeth, 'upper-teeth');
-      if (result) {
+      const preview = await fetchDentalPhotoPreview(dentalPhotoRecord.upperTeeth);
+      if (preview) {
         mapped.dentalHistory.upperTeethPhoto = {
-          file: result.file,
-          preview: result.preview,
+          preview,
           name: 'Upper Teeth (previous submission)',
         };
       }
@@ -2204,11 +2017,10 @@ export const fetchRevisionPrefill = async (scope = 'Both') => {
   }
   if (dentalPhotoRecord?.lowerTeeth) {
     try {
-      const result = await fetchDentalPhotoAsBlob(dentalPhotoRecord.lowerTeeth, 'lower-teeth');
-      if (result) {
+      const preview = await fetchDentalPhotoPreview(dentalPhotoRecord.lowerTeeth);
+      if (preview) {
         mapped.dentalHistory.lowerTeethPhoto = {
-          file: result.file,
-          preview: result.preview,
+          preview,
           name: 'Lower Teeth (previous submission)',
         };
       }
@@ -2222,15 +2034,12 @@ export const fetchRevisionPrefill = async (scope = 'Both') => {
 };
 
 /**
- * Fetch a dental photo from the backend and return a File + preview URL.
- * The File is used by uploadMediaFile() to re-stage the photo so the normal
- * stage → createDentalPhotoRecord flow works correctly on revision submission.
+ * Fetch an existing dental photo for preview in the initial revision form.
  *
  * @param {string} fileId - UUID from DentalPhotoRecord.upperTeeth / lowerTeeth
- * @param {string} label  - Human-readable label used as the file name
- * @returns {Promise<{file: File, preview: string}|null>}
+ * @returns {Promise<string|null>}
  */
-const fetchDentalPhotoAsBlob = async (fileId, label = 'teeth') => {
+const fetchDentalPhotoPreview = async (fileId) => {
   if (!fileId) return null;
   try {
     const response = await axiosRequest({
@@ -2238,13 +2047,9 @@ const fetchDentalPhotoAsBlob = async (fileId, label = 'teeth') => {
       url: `/media/record/dentalPhoto/${fileId}`,
       responseType: 'blob',
     });
-    const blob = response.data;
-    const ext = blob.type?.split('/')[1] || 'jpg';
-    const file = new File([blob], `${label}.${ext}`, { type: blob.type || 'image/jpeg' });
-    const preview = URL.createObjectURL(blob);
-    return { file, preview };
+    return URL.createObjectURL(response.data);
   } catch (err) {
-    console.warn('[EMR Service] fetchDentalPhotoAsBlob failed:', err.message);
+    console.warn('[EMR Service] Could not load prior dental photo:', err.message);
     return null;
   }
 };

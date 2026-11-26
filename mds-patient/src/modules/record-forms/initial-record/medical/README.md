@@ -30,7 +30,7 @@ For non-female users, OB-GYNE is skipped in navigation and step count.
 ## Runtime Behavior
 
 - Catalogs are loaded through `fetchAllCatalogs()`.
-- Non-revision flow pre-creates/ensures update ticket context via `ensureUpdateTicket('Both')`.
+- Submitting a new initial record creates a Both-scope ticket or resumes an existing draft.
 - Submission delegates to `createInitialMedicalRecord()` from shared EMR service.
 - Validation issues and backend errors are surfaced through `ValidationWarningModal`.
 - Component supports standalone page mode and embedded modal mode.
@@ -64,7 +64,6 @@ For non-female users, OB-GYNE is skipped in navigation and step count.
 - Uses shared services from `@core/services/emr-service`
   - `createInitialMedicalRecord`
   - `fetchAllCatalogs`
-  - `ensureUpdateTicket`
 - Uses shared utilities from `@core/utils/data-transformer`
   - `sanitizeFormData`
   - `logDataStructure`

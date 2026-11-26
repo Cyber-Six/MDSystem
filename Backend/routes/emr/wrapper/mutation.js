@@ -372,19 +372,20 @@ const Mutation = {
   },
 
   _DentalPhotoRecord: async (_, {args, recordId}, { user, res }) => {
-    const upperUUID = (args.input.upperTeeth) ? await promoteFile(user.id, args.input.upperTeeth, "dentalPhoto") : null;
-    const lowerUUID = (args.input.lowerTeeth) ? await promoteFile(user.id, args.input.lowerTeeth, "dentalPhoto") : null;
-
     // check existing
     const existing = await db.query(
       `SELECT "id", "upperTeeth", "lowerTeeth" FROM "DentalPhotoRecord" WHERE "id" = $1;`,
       [recordId]
       );
 
-    if (existing.rows.length > 0) {
-      if (upperUUID && existing.rows[0].upperTeeth) await deleteFile("dentalPhoto", existing.rows[0].upperTeeth);
-      if (lowerUUID && existing.rows[0].lowerTeeth) await deleteFile("dentalPhoto", existing.rows[0].lowerTeeth);
+    const photos = existing.rows[0];
+    if ((!args.input.upperTeeth && !photos?.upperTeeth) || (!args.input.lowerTeeth && !photos?.lowerTeeth)) {
+      throwGraphQLError(res).message("Both upper and lower teeth photos are required.").status(400).throw();
     }
+    const upperUUID = args.input.upperTeeth ? await promoteFile(user.id, args.input.upperTeeth, "dentalPhoto") : null;
+    const lowerUUID = args.input.lowerTeeth ? await promoteFile(user.id, args.input.lowerTeeth, "dentalPhoto") : null;
+    if (upperUUID && photos?.upperTeeth) await deleteFile("dentalPhoto", photos.upperTeeth);
+    if (lowerUUID && photos?.lowerTeeth) await deleteFile("dentalPhoto", photos.lowerTeeth);
 
     // insert
     const result = await db.query(
@@ -544,16 +545,8 @@ const Mutation = {
 
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {
-    await anchor.MedicalHistory(recordId);
+    const profile = await anchor.MedicalHistory(recordId, args.input.notes);
     await remove.MedicalCondition(recordId);
-
-    if (args.input.conditions.length === 0) {
-      return {
-        id: recordId,
-        conditions: [],
-        archived_at: null
-        };
-      }
 
     const inserted = [];
     for (const condition of args.input.conditions) {
@@ -581,6 +574,7 @@ const Mutation = {
     return {
       id: recordId,
       conditions: inserted,
+      notes: profile.notes,
       archived_at: null
     };
   },
@@ -679,18 +673,8 @@ const Mutation = {
   },
 
   _ImmunizationProfile: async (_, {args, recordId}, { user, res }) => {
-    console.log(args.input);
-
-    await anchor.Immunization(recordId);
+    const profile = await anchor.Immunization(recordId, args.input.notes);
     await remove.ImmunizationRecord(recordId);
-
-    if (args.input.immunizations.length === 0) {
-      return {
-        id: recordId,
-        immunizations: [],
-        archived_at: null
-        };
-      }
 
     const inserted = [];
     for (const immunization of args.input.immunizations) {
@@ -716,6 +700,7 @@ const Mutation = {
     return {
       id: recordId,
       immunizations: inserted,
+      notes: profile.notes,
       archived_at: null
     };
   },

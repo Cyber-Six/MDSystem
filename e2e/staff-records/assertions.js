@@ -1,7 +1,9 @@
 'use strict';
 const { expect } = require('@playwright/test');
+const { normalizeName, normalizeNumber } = require('../../Backend/utils/validator');
+const { roleForStorage } = require('../../Backend/routes/emr/custom-choice-storage');
 const catalogFields = {
-  conditionId: '', allergenCatalogId: 'allergen:', medicineId: '', vaccineTypeId: '', tagId: '', procedureTypeId: '', procedureId: '', programId: '',
+  conditionId: '', allergenCatalogId: 'allergen:', medicineId: '', vaccineTypeId: '', tagId: '', procedureTypeId: '', procedureId: '', programId: 'program:',
 };
 const sectionTitles = {
   personalInfo: 'Personal Information', profile: 'Personal Information', emergencyContact: 'Emergency Contacts',
@@ -33,16 +35,29 @@ function valuesFor(manifest) {
   const result = [];
   for (const [section, value] of Object.entries(manifest.record)) {
     if (!applicable(section, manifest)) continue;
+    const notesEntries = { allergyProfile: 'allergies', hospitalizationProfile: 'hospitalizations', operationProfile: 'operations' }[section];
+    const persisted = notesEntries && value
+      ? { ...value, notes: undefined, [notesEntries]: value[notesEntries]?.map((entry, index) =>
+        index === 0 ? { ...entry, notes: entry.notes ?? value.notes } : entry) }
+      : value;
     const walk = (node, path = [], parent = null) => {
       if (node == null || node === '') return;
       if (Array.isArray(node)) { node.forEach((child, index) => walk(child, [...path, index], node)); return; }
       if (typeof node === 'object') { Object.entries(node).forEach(([key, child]) => walk(child, [...path, key], node)); return; }
       const key = path.at(-1);
       if (skipKeys.has(key) && !(key === 'status' && ['allergyProfile', 'oralApplianceProfile'].includes(section))) return;
+      // Approval can set this server-managed flag independently of the submitted contact details.
+      if (section === 'emergencyContact' && key === 'isVerified') return;
       // Exclude abandoned conditional lifestyle detail fields.
       if (section === 'lifestyle' && ((!value.smoker && ['numberOfCigarettesPerDay', 'yearsSmoked'].includes(key))
         || (!value.vapeUser && ['vapeType', 'vapeFrequency', 'yearsVaping'].includes(key))
         || (!value.alcoholConsumer && key === 'frequencyOfAlcoholConsumption'))) return;
+      if (section === 'emergencyContact' && typeof node === 'string') {
+        if (key === 'contactName') node = normalizeName(node);
+        if (key === 'contactNumber') node = normalizeNumber(node);
+        if (key === 'relationship') node = node.trim();
+      }
+      if (section === 'profile' && key === 'role') node = roleForStorage(node);
       const isCatalog = Object.hasOwn(catalogFields, key);
       let display = isCatalog ? (manifest.labels[`${section}:${node}`] || manifest.labels[`${catalogFields[key]}${node}`]) : node;
       if (isCatalog && !display) throw new Error(`Original input has an unresolved catalog label: ${section}.${path.join('.')}`);
@@ -52,7 +67,7 @@ function valuesFor(manifest) {
       result.push({ section, title: sectionTitles[section], path, label: labels[key], value: node, display: String(display), catalog: isCatalog,
         photo: section === 'dentalPhotoRecord' && ['upperTeeth', 'lowerTeeth'].includes(key) });
     };
-    walk(value);
+    walk(persisted);
   }
   return result;
 }

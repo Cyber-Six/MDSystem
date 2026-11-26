@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ProgressStepper from './progress-stepper';
 import PersonalInfoStep from './personal-info-step';
 import MedicalHistoryStep from './medical-history-step';
@@ -7,6 +7,7 @@ import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
 import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { sendGraphQLRequest } from '../../../utils/graphql-client';
 import { usePatientNotifications } from '../../notification/notification-context';
 import ValidationWarningModal from '../../../components/modals/validation-warning-modal';
 import {
@@ -25,7 +26,10 @@ const RecordUpdateForm = ({
 }) => {
   const { subscribe } = usePatientNotifications();
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState({});
+  const [patientDefaults, setPatientDefaults] = useState({});
+  const [profileLoadStatus, setProfileLoadStatus] = useState('loading');
+  const [recordDraft, setRecordDraft] = useState({});
+  const formData = useMemo(() => ({ ...patientDefaults, ...recordDraft }), [patientDefaults, recordDraft]);
   const [reviewHasUnresolvedChoices, setReviewHasUnresolvedChoices] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
@@ -107,7 +111,7 @@ const RecordUpdateForm = ({
         });
         const sex = response.data?.data?.getPersonalRecord?.sex;
         if (sex) {
-          setFormData(prev => ({ ...prev, sex }));
+          setPatientDefaults(prev => ({ ...prev, sex }));
         }
       } catch (error) {
         console.warn('[RecordUpdateForm] Could not fetch user sex:', error.message);
@@ -119,18 +123,15 @@ const RecordUpdateForm = ({
   useEffect(() => {
     const fetchProfileType = async () => {
       try {
-        const response = await axiosRequest({
-          method: 'POST',
-          url: '/emr/patient',
-          data: { query: `query GetUpdateProfileType {
+        const { getMyProfile: profile } = await sendGraphQLRequest(`
+          query GetUpdateProfileType {
             getMyProfile {
               __typename
               ... on StudentProfile { program year }
               ... on EmployeeProfile { department role position employmentCategoryOther }
             }
-          }` },
-        });
-        const profile = response.data?.data?.getMyProfile;
+          }`);
+        setProfileLoadStatus('ready');
         if (!profile) return;
         const employeeRoleByDatabaseRole = {
           NonStaff: 'Teaching',
@@ -140,7 +141,7 @@ const RecordUpdateForm = ({
         };
         const employeeRole = employeeRoleByDatabaseRole[profile.role]
           || (['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? profile.role : 'Other');
-        setFormData((previous) => ({
+        setPatientDefaults((previous) => ({
           ...previous,
           profileType: profile.__typename === 'EmployeeProfile' ? 'Employee' : 'Student',
           ...(profile.__typename === 'EmployeeProfile' ? {
@@ -151,6 +152,7 @@ const RecordUpdateForm = ({
           } : {}),
         }));
       } catch (error) {
+        setProfileLoadStatus('error');
         console.warn('[RecordUpdateForm] Could not fetch patient profile type:', error.message);
       }
     };
@@ -162,6 +164,7 @@ const RecordUpdateForm = ({
     skipPersonalStep,
   });
   const safeCurrentStep = clampStepIndex(currentStep, steps.length);
+  const waitingForProfile = steps[safeCurrentStep] === 'Personal Info' && profileLoadStatus !== 'ready';
   const canReturnToChoicePage = !forceRecordType && !hideRecordChoice;
   const backButtonState = getBackButtonState({
     currentStep: safeCurrentStep,
@@ -281,7 +284,7 @@ const RecordUpdateForm = ({
           break;
         }
       }
-      // Dental photos are required (backend DentalPhotoRecordInput requires UUID! for both fields)
+      // Both dental photos are required for the ticket.
       // Photos are valid if they have either:
       // 1. .file (newly uploaded) OR
       // 2. .id (pre-filled from previous revision)
@@ -327,7 +330,7 @@ const RecordUpdateForm = ({
 
   const registerCatalogItem = useCallback((domain, item) => {
     if (!item?.id || String(item.id) === 'undefined') return;
-    setFormData((previous) => {
+    setRecordDraft((previous) => {
       const domainItems = previous.catalogRegistry?.[domain] || {};
       if (domainItems[String(item.id)]?.name === (item.name || item.allergen || item.allergy)) return previous;
       return {
@@ -448,8 +451,7 @@ const RecordUpdateForm = ({
   const handleSuccessModalClose = () => {
     const submittedRecordType = effectiveRecordType || recordType || null;
     setShowSuccessModal(false);
-    // Reset form and redirect to choice page (preserve sex for OB-GYN gating)
-    setFormData(prev => ({ sex: prev.sex }));
+    setRecordDraft({});
     setCurrentStep(0);
     setRecordType(null);
     setRevisionStatus(null);
@@ -465,11 +467,16 @@ const RecordUpdateForm = ({
     
     switch (stepName) {
       case 'Personal Info':
-        return <PersonalInfoStep formData={formData} onChange={setFormData} />;
+        if (waitingForProfile) {
+          return <p role="status">{profileLoadStatus === 'error'
+            ? 'Your profile could not be loaded. Refresh this page to try again.'
+            : 'Loading your profile…'}</p>;
+        }
+        return <PersonalInfoStep formData={formData} onChange={setRecordDraft} />;
       case 'Medical History':
-        return <MedicalHistoryStep formData={formData} onChange={setFormData} onCatalogItemSelected={registerCatalogItem} />;
+        return <MedicalHistoryStep formData={formData} onChange={setRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
       case 'Dental History':
-        return <DentalHistoryStep formData={formData} onChange={setFormData} onCatalogItemSelected={registerCatalogItem} />;
+        return <DentalHistoryStep formData={formData} onChange={setRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
       case 'Review & Submit':
         return (
           <ReviewStep 
@@ -492,14 +499,14 @@ const RecordUpdateForm = ({
     if (forceRecordType && choice !== forceRecordType) return; // only allow the forced type
     setRecordType(choice);
     setCurrentStep(0);
-    setFormData(prev => ({ sex: prev.sex }));
+    setRecordDraft({});
   };
 
   const handleChangeType = () => {
     if (forceRecordType || hideRecordChoice) return;
     setRecordType(null);
     setCurrentStep(0);
-    setFormData(prev => ({ sex: prev.sex }));
+    setRecordDraft({});
   };
 
   return (
@@ -654,7 +661,7 @@ const RecordUpdateForm = ({
                   // Merge pre-filled revision data into form
                   if (revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
                     console.log('[RecordUpdateForm] Merging pre-fill data into form');
-                    setFormData(prev => {
+                    setRecordDraft(prev => {
                       // Ensure toggle states match pre-filled data presence
                       const merged = { ...prev, ...revisionPrefillData };
                       
@@ -799,7 +806,7 @@ const RecordUpdateForm = ({
 
               <button
                 onClick={safeCurrentStep === steps.length - 1 ? handleSubmit : handleNext}
-                disabled={isSubmitting || (safeCurrentStep === steps.length - 1 && reviewHasUnresolvedChoices)}
+                disabled={waitingForProfile || isSubmitting || (safeCurrentStep === steps.length - 1 && reviewHasUnresolvedChoices)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg 
                          transition-all duration-200
                          disabled:opacity-50 disabled:cursor-not-allowed"
