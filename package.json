@@ -13,7 +13,7 @@
     "test": "jest --runInBand",
     "test:coverage": "jest --runInBand --coverage",
     "test:backend": "jest --runInBand --selectProjects backend",
-    "test:backend:coverage": "jest --runInBand --config Backend/jest.config.js --coverage",
+    "test:backend:coverage": "jest --runInBand --config Backend/jest.config.js --coverage --coverageReporters=text --coverageReporters=html --coverageReporters=lcov --coverageReporters=json-summary",
     "test:patient": "jest --runInBand --selectProjects patient",
     "test:staff": "jest --runInBand --selectProjects staff",
     "test:mobile": "jest --runInBand --selectProjects mobile",

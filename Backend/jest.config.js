@@ -14,6 +14,5 @@ module.exports = {
   ],
   collectCoverageFrom: listSources(),
   coverageThreshold: coverageThresholds(),
-  coverageReporters: ['text', 'html', 'lcov', 'json-summary'],
   coverageDirectory: 'coverage',
 };

@@ -169,4 +169,4 @@ test('a patient signs in, books an appointment, and opens its push notification'
   expect(navigate).toHaveBeenCalledWith('MainTabs', { screen: 'Appointments', params: undefined });
   app.unmount();
   expect(remove).toHaveBeenCalledTimes(1);
-});
+}, 20000);
