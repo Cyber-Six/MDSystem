@@ -46,11 +46,31 @@ const MEDIA_PATH = {
 const storage = multer.memoryStorage();
 const upload = multer({ storage, limits: { fileSize: MAX_FILE_SIZE } });
 
-// Path traversal protection
-function safeResolve(base, fileId) {
-  const resolved = path.resolve(base, fileId);
-  if (!resolved.startsWith(base)) throw new Error('INVALID_PATH');
-  return resolved;
+function isMediaId(value) {
+  return typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
+}
+
+function stagedDirectory(userId) {
+  const owner = String(userId);
+  if (!/^\d+$/.test(owner)) throw new Error('INVALID_USER_ID');
+  return path.join(MEDIA_PATH.staging, owner);
+}
+
+async function findMediaFile(directory, uuid) {
+  if (!isMediaId(uuid)) return null;
+  try {
+    const files = await fs.readdir(directory);
+    return files.find(file => path.basename(file, path.extname(file)) === uuid.toLowerCase()) || null;
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+async function getStagedFile(userId, uuid) {
+  const directory = stagedDirectory(userId);
+  const filename = await findMediaFile(directory, uuid);
+  return filename ? path.join(directory, filename) : null;
 }
 
 async function validateFileType(buffer) {
@@ -65,29 +85,33 @@ async function validateFileType(buffer) {
 async function stageFile(userId, buffer, extension) {
   const uniqueId = uuidv4();
   const safeName = `${uniqueId}${extension}`;
-  const stagedPath = safeResolve(MEDIA_PATH.staging, safeName);
+  const ownerDir = stagedDirectory(userId);
+  await fs.mkdir(ownerDir, { recursive: true });
+  const stagedPath = path.join(ownerDir, safeName);
 
   const allowed = await incrementMediaStagingCount(userId);
   if (!allowed) throw new Error("MAX_FILES_STAGING_EXCEEDED");
 
-  await fs.writeFile(stagedPath, buffer);
+  try {
+    await fs.writeFile(stagedPath, buffer);
+  } catch (err) {
+    await decrementMediaStagingCount(userId);
+    throw err;
+  }
   logger.info('File staged', { userId, stagedPath, safeName });
   return uniqueId;
 }
 
 // Delete staged file
 async function unstageFile(userId, uuid) {
-  // Find the actual staged filename by UUID
-  const files = await fs.readdir(MEDIA_PATH.staging);
-  const match = files.find(file => file.startsWith(uuid));
-
-  if (!match) {
-    throw new Error("FILE_NOT_FOUND");
+  const stagedPath = await getStagedFile(userId, uuid);
+  if (!stagedPath) throw new Error('FILE_NOT_FOUND');
+  try {
+    await fs.unlink(stagedPath);
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new Error('FILE_NOT_FOUND');
+    throw err;
   }
-
-  const stagedPath = safeResolve(MEDIA_PATH.staging, match);
-
-  await fs.unlink(stagedPath);
   await decrementMediaStagingCount(userId);
 
   logger.info("Staged file deleted", { userId, uuid, stagedPath });
@@ -97,19 +121,18 @@ async function unstageFile(userId, uuid) {
 
 // Promote staged file into MEDIA_PATH/<type>
 async function promoteFile(userId, stagedFileName, type) {
-  const fullStagedName = await checkFileByUuid("staging", stagedFileName);
-  if (!fullStagedName) throw new Error("FILE_NOT_FOUND");                  // ← null check
-  const stagedPath = safeResolve(MEDIA_PATH.staging, fullStagedName);
+  const stagedPath = await getStagedFile(userId, stagedFileName);
+  if (!stagedPath) throw new Error('FILE_NOT_FOUND');
 
-  if (!MEDIA_PATH[type]) throw new Error("INVALID_TYPE");
+  if (!Object.hasOwn(MEDIA_PATH, type)) throw new Error("INVALID_TYPE");
 
   const typeDir = MEDIA_PATH[type];
   await fs.mkdir(typeDir, { recursive: true });
 
   const uniqueId = uuidv4();
-  const extension = path.extname(fullStagedName);  // ← use fullStagedName, not stagedFileName
+  const extension = path.extname(stagedPath);
   const promotedName = `${uniqueId}${extension}`;
-  const targetPath = safeResolve(typeDir, promotedName);
+  const targetPath = path.join(typeDir, promotedName);
 
   await fs.rename(stagedPath, targetPath);
   await decrementMediaStagingCount(userId);
@@ -121,44 +144,29 @@ async function promoteFile(userId, stagedFileName, type) {
 // Check if a file exists in MEDIA_PATH[type] by UUID and return its extension
 async function checkFileByUuid(type, uuid) {
   // Validate type
-  if (!MEDIA_PATH[type]) {
+  if (!Object.hasOwn(MEDIA_PATH, type)) {
     throw new Error("INVALID_TYPE");
   }
 
-  const typeDir = MEDIA_PATH[type];
-
-  try {
-    const files = await fs.readdir(typeDir);
-
-    // Find file that starts with the uuid
-    const match = files.find(file => file.startsWith(uuid));
-    if (!match) {
-      return null; // return null if no file found
-    }
-
-    // Return full filename (uuid + extension)
-    return match;
-  } catch (err) {
-    logger.error("File check failed", { type, uuid, error: err.message });
-    throw err;
-  }
+  return findMediaFile(MEDIA_PATH[type], uuid);
 }
 
 // Delete file from MEDIA_PATH[type] by UUID
 async function deleteFile(type, uuid, throwNotFound = false) {
   // Validate type
-  if (!MEDIA_PATH[type]) {
+  if (!Object.hasOwn(MEDIA_PATH, type)) {
     throw new Error("INVALID_TYPE");
   }
 
   const typeDir = MEDIA_PATH[type];
   const filename = await checkFileByUuid(type, uuid);
 
-  if (!filename && throwNotFound) {
-    throw new Error("FILE_NOT_FOUND");
+  if (!filename) {
+    if (throwNotFound) throw new Error('FILE_NOT_FOUND');
+    return false;
   }
 
-  const fileToDelete = safeResolve(typeDir, filename);
+  const fileToDelete = path.join(typeDir, filename);
 
   await fs.unlink(fileToDelete);
   logger.info("File deleted", { type, uuid, fileToDelete });
@@ -176,6 +184,8 @@ module.exports = {
   promoteFile,
   deleteFile,
   checkFileByUuid,
+  getStagedFile,
+  isMediaId,
   MEDIA_PATH,
   MAX_FILE_SIZE,
 };

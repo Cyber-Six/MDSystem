@@ -2539,8 +2539,8 @@ function hasReport(reportType) {
 /**
  * Get distinct departments and sex values for filter dropdowns
  */
-async function getFilterOptions() {
-  const cacheKey = `${CACHE_PREFIX}filter-options:v4`;
+async function getFilterOptions(branch = 'Both') {
+  const cacheKey = `${CACHE_PREFIX}filter-options:v5:${branch}`;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
@@ -2551,19 +2551,23 @@ async function getFilterOptions() {
       FROM "employee_profile" ep
       INNER JOIN "profileRecord" pr ON ep."profileId" = pr.id AND pr.profile_type = 'Employee'
       INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
+      INNER JOIN "UsersPersonal" up ON up.id = pul."patientId"
       WHERE ep.department IS NOT NULL AND ep.department <> ''
+        AND ($1 = 'Both' OR up.branch::text = $1)
       ORDER BY ep.department
-    `),
+    `, [branch]),
     // Fetch all programs
     db.query(`
       SELECT DISTINCT spg.label AS program
       FROM "student_profile" sp
       INNER JOIN "profileRecord" pr ON sp."profileId" = pr.id AND pr.profile_type = 'Student'
       INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
+      INNER JOIN "UsersPersonal" up ON up.id = pul."patientId"
       INNER JOIN "student_programs" spg ON spg.id = sp."programId"
       WHERE spg.label IS NOT NULL AND spg.label <> ''
+        AND ($1 = 'Both' OR up.branch::text = $1)
       ORDER BY spg.label
-    `),
+    `, [branch]),
   ]);
 
   // Combine departments and programs for the departments filter

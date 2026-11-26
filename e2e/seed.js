@@ -19,8 +19,11 @@ async function main() {
       { email: process.env.E2E_PATIENT_EMAIL, identity: 'Student', patient: true },
       { email: process.env.E2E_ALT_PATIENT_EMAIL, identity: 'Student', patient: true },
       { email: process.env.E2E_U2_PATIENT_EMAIL, identity: 'Student', patient: true },
+      { email: `muclinicthree${process.env.E2E_PATIENT_EMAIL}`, identity: 'Student', patient: true, batchU3: true },
+      { email: `quclinicthree${process.env.E2E_ALT_PATIENT_EMAIL}`, identity: 'Student', patient: true, branch: 'QuezonCity' },
       { email: process.env.E2E_STAFF_EMAIL, identity: 'Employee', staff: true, role: 'Nurse', branch: 'Manila' },
       { email: process.env.E2E_RESTRICTED_STAFF_EMAIL, identity: 'Employee', staff: true, role: 'Nurse', branch: 'QuezonCity' },
+      { email: `u3.${process.env.E2E_RESTRICTED_STAFF_EMAIL}`, identity: 'Employee', staff: true, role: 'Nurse', branch: 'QuezonCity', batchU3: true },
     ];
 
     for (const account of accounts) {
@@ -44,6 +47,16 @@ async function main() {
           `INSERT INTO "Patients" (id, profile) VALUES ($1, 'Student'::"patientIdentity")`,
           [id],
         );
+        if (account.batchU3) {
+          await client.query(`
+            WITH ticket AS (
+              INSERT INTO "patientUpdateLog" ("patientId", status, scope)
+              VALUES ($1, 'InProgress', 'Both') RETURNING id
+            )
+            INSERT INTO "MedicalHistory" (id, notes)
+            SELECT id, 'U3 patient medical history' FROM ticket
+          `, [id]);
+        }
       }
 
       if (account.staff) {
@@ -59,6 +72,12 @@ async function main() {
         );
         if (!adminRows[0]) throw new Error('Bootstrap administrator was not found after startup SQL.');
         const roles = ['IS_STAFF'];
+        if (account.branch === 'Manila' || account.batchU3) {
+          roles.push('ALLOW_TO_VIEW_EMR', 'ALLOW_TO_VIEW_DOCUMENTS');
+        }
+        if (account.batchU3) {
+          roles.push('ALLOW_TO_ACCESS_HEALTH_CHAT', 'ALLOW_TO_VIEW_APPOINTMENT');
+        }
         // The staff portal requires all mapped permissions to enable a module.
         if (account.branch === 'Manila') {
           roles.push(
@@ -79,7 +98,7 @@ async function main() {
             'ALLOW_TO_VIEW_PROFILE',
             'ALLOW_TO_VIEW_CONSULTATION',
             'ALLOW_TO_EDIT_CONSULTATION',
-            'ALLOW_TO_VIEW_DOCUMENTS',
+            'ALLOW_TO_MANAGE_DOCUMENTS',
             'ALLOW_TO_GENERATE_DOCUMENTS',
           );
         }
@@ -91,6 +110,8 @@ async function main() {
         );
       }
     }
+
+    await client.query('INSERT INTO "rawDocumentTag" (label) VALUES ($1)', ['U3 Private Medical Attachment']);
 
     // Post-build setup runs before the bootstrap administrator exists. Complete
     // the templates and their mappings now that there is a staff owner.
@@ -130,7 +151,13 @@ async function main() {
       INSERT INTO "slotScheduler"
         (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", "purposeRequired", "containsCustomDates")
       VALUES ('E2E Appointment', 'Arlegui', 127, 1, 1, true, false),
-             ('U2 Clinic Visit', 'Arlegui', 127, 1, 1, true, false)
+             ('U2 Clinic Visit', 'Arlegui', 127, 1, 1, true, false),
+             ('U3 Manila Clinic', 'Arlegui', 127, 1, 1, true, false),
+             ('U3 Quezon City Clinic', 'QuezonCity', 127, 1, 1, true, false)
+    `);
+    await client.query(`
+      INSERT INTO "scheduleRequirement" ("slotId", label)
+      SELECT id, 'U3 Appointment Attachment' FROM "slotScheduler" WHERE label = 'U3 Manila Clinic'
     `);
 
     await client.query(`

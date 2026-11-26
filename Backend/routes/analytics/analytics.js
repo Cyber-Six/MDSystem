@@ -26,6 +26,11 @@ async function requireAnalyticsAccess(req, res, next) {
   }
 }
 
+async function canAccessBranch(staffId, branch) {
+  const staffBranch = await getStaffBranch(staffId);
+  return staffBranch === 'Both' || staffBranch === branch;
+}
+
 // Backward-compatible aliases for analytics dataType keys.
 const DATA_TYPE_ALIASES = Object.freeze({
   'appointments-accomodated-trends': 'appointments-accommodated-trends',
@@ -106,7 +111,7 @@ function resolveAnalyticsFilters(primary, secondary = {}) {
  * GET /analytics/queries
  * List available query types
  */
-router.get('/queries', jwtProtect('medical'), async (req, res) => {
+router.get('/queries', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const queries = analytics.getAvailableQueries();
     res.json({ success: true, queries });
@@ -120,9 +125,9 @@ router.get('/queries', jwtProtect('medical'), async (req, res) => {
  * GET /analytics/filter-options
  * Returns distinct departments and sex values for filter dropdowns
  */
-router.get('/filter-options', jwtProtect('medical'), async (req, res) => {
+router.get('/filter-options', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
-    const data = await analytics.getFilterOptions();
+    const data = await analytics.getFilterOptions(await getStaffBranch(req.user.id));
     res.json({ success: true, ...data });
   } catch (err) {
     logger.error('Error fetching filter options', { error: err.message });
@@ -134,7 +139,7 @@ router.get('/filter-options', jwtProtect('medical'), async (req, res) => {
  * GET /analytics/reports
  * List available report types
  */
-router.get('/reports', jwtProtect('medical'), async (req, res) => {
+router.get('/reports', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const reports = analytics.getAvailableReports();
     res.json({ success: true, reports });
@@ -153,7 +158,7 @@ router.get('/reports', jwtProtect('medical'), async (req, res) => {
  *   - startDate: ISO date (YYYY-MM-DD)
  *   - endDate: ISO date (YYYY-MM-DD)
  */
-router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
+router.get('/query/:dataType', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const { dataType } = req.params;
     const { branch, startDate, endDate } = req.query;
@@ -194,8 +199,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 
@@ -276,8 +280,7 @@ router.post('/batch', jwtProtect('medical'), requireAnalyticsAccess, async (req,
     const normalizedDataTypes = Array.from(new Set(dataTypeMappings.map((entry) => entry.normalized)));
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 
@@ -328,7 +331,7 @@ router.post('/batch', jwtProtect('medical'), requireAnalyticsAccess, async (req,
  *   - endDate: ISO date (YYYY-MM-DD)
  *   - title: (optional) Report title
  */
-router.get('/report/:reportType', jwtProtect('medical'), async (req, res) => {
+router.get('/report/:reportType', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const { reportType } = req.params;
     const { branch, startDate, endDate, title } = req.query;
@@ -353,8 +356,7 @@ router.get('/report/:reportType', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 
@@ -500,8 +502,7 @@ router.post('/export', jwtProtect('medical'), requireAnalyticsAccess, async (req
     }
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 
@@ -649,8 +650,7 @@ router.post('/export/single', jwtProtect('medical'), requireAnalyticsAccess, asy
     }
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 

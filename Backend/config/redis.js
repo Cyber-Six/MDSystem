@@ -1129,23 +1129,25 @@ async function clearRefreshTokenFailures(ip) {
 
 // Media staging limiter (per user, not IP-based)
 
+function positiveIntegerOrDefault(value, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 async function incrementMediaStagingCount(userId) {
   if (!client) throw new Error("Redis client not initialized");
 
   const key = `media:staging:${userId}`;
-  const count = await client.incr(key);
-
-  if (count === 1) {
-    await client.expire(key, Number(process.env.MEDIA_MAX_FILES_STAGING_EXP));
-  }
-
-  const maxFiles = Number(process.env.MEDIA_MAX_FILES_STAGING);
-  if (count > maxFiles) {
-    logger.warn("Media staging limit exceeded", { userId, count, maxFiles });
-    return false; // over limit
-  }
-
-  return true; // allowed
+  const maxFiles = positiveIntegerOrDefault(process.env.MEDIA_MAX_FILES_STAGING, 5);
+  const ttl = positiveIntegerOrDefault(process.env.MEDIA_MAX_FILES_STAGING_EXP, 300);
+  const allowed = await client.eval(`
+    local count = tonumber(redis.call('GET', KEYS[1]) or '0')
+    if count >= tonumber(ARGV[1]) then return 0 end
+    redis.call('INCR', KEYS[1])
+    if redis.call('TTL', KEYS[1]) < 0 then redis.call('EXPIRE', KEYS[1], ARGV[2]) end
+    return 1
+  `, { keys: [key], arguments: [String(maxFiles), String(ttl)] });
+  return allowed === 1;
 }
 
 async function decrementMediaStagingCount(userId) {
@@ -1153,21 +1155,14 @@ async function decrementMediaStagingCount(userId) {
 
   const key = `media:staging:${userId}`;
 
-  // Get current count
-  const current = await client.get(key);
-  const count = Number(current) || 0;
-
-  if (count <= 1) {
-    // If count is 1 or less, delete the key entirely
-    await client.del(key);
-    logger.info("Media staging counter reset", { userId });
-    return 0;
-  }
-
-  // Otherwise, decrement
-  const newCount = await client.decr(key);
-  logger.info("Media staging counter decremented", { userId, newCount });
-  return newCount;
+  return client.eval(`
+    local count = tonumber(redis.call('GET', KEYS[1]) or '0')
+    if count <= 1 then
+      redis.call('DEL', KEYS[1])
+      return 0
+    end
+    return redis.call('DECR', KEYS[1])
+  `, { keys: [key], arguments: [] });
 }
 
 // ------------------------------------------------

@@ -249,10 +249,13 @@ const Query = {
     // Fetch the patient slots (with identifier + name from UsersPersonal)
     const querySlots = `
       SELECT ps.*,
+        ss.label AS "schedulerLabel",
         up."identifier" AS "patientIdentifier",
         CONCAT(up.first_name, ' ', up.last_name) AS "patientName",
         CONCAT(staff.first_name, ' ', staff.last_name) AS "approvedBy"
       FROM "patientSlot" ps
+      LEFT JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+      LEFT JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
       WHERE ps."patientId" = $1
