@@ -8,6 +8,7 @@ const accountRegistry = require('./account-registry');
 const { checkInitialSchema } = require('./schema-preflight');
 const { finishUpdateEligibility } = require('./update-readiness');
 const staffManifest = require('../staff-records/manifest');
+const { prepareOtp } = require('../core/auth');
 
 const PHOTO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9XkAAAAASUVORK5CYII=', 'base64');
 const approvedPersonalFields = 'getPersonalRecord { id first_name last_name }';
@@ -460,6 +461,7 @@ async function loginForUpdate(page, state) {
   await page.getByRole('button', { name: 'Open login panel' }).click();
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
+  const readOtp = await prepareOtp(email, process.env.E2E_TEST_OTP || '111111');
   const loginResponsePromise = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/login' && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   const loginResponse = await loginResponsePromise;
@@ -473,7 +475,7 @@ async function loginForUpdate(page, state) {
   }
   const inputs = page.locator('input[inputmode="numeric"][maxlength="1"]');
   await expect(inputs).toHaveCount(6);
-  const otp = process.env.E2E_TEST_OTP || '111111';
+  const otp = await readOtp();
   expect(otp).toMatch(/^\d{6}$/);
   for (let i = 0; i < 6; i++) await inputs.nth(i).fill(otp[i]);
   const completion = page.waitForResponse(response => response.url().endsWith('/auth/login/complete') && response.request().method() === 'POST');

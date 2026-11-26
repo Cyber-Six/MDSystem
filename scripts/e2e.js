@@ -20,8 +20,9 @@ const suite = process.argv[2] || 'core';
 const documentDownloadAuth = process.argv.includes('--document-download-auth', 3);
 const authRbacSecurity = process.argv.includes('--auth-rbac-security', 3);
 const testFilters = process.argv.slice(3).filter(arg => !['--document-download-auth', '--auth-rbac-security'].includes(arg));
-if (!['core', 'full'].includes(suite)) {
-  process.stderr.write('Usage: node scripts/e2e.js <core|full> [--document-download-auth] [--auth-rbac-security] [Playwright test filters...]\n');
+if (!['core', 'full', 'lifecycle'].includes(suite)
+    || (suite === 'lifecycle' && (documentDownloadAuth || authRbacSecurity))) {
+  process.stderr.write('Usage: node scripts/e2e.js <core|full|lifecycle> [suite options] [test filters...]\n');
   process.exit(2);
 }
 
@@ -142,9 +143,10 @@ async function main() {
     await compose(['up', '--no-deps', '--exit-code-from', 'schema-init', 'schema-init']);
     await compose(['run', '--rm', '--no-deps', 'seed']);
     await compose(['up', '-d', '--wait', '--no-deps', 'patient', 'staff', 'email-worker']);
-    const runBrowserTests = () => compose([
-      'run', '--rm', '--no-deps', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`, ...testFilters,
-    ]);
+    const runBrowserTests = () => compose(suite === 'lifecycle'
+      ? ['run', '--rm', '--no-deps', '-e', 'E2E_LIFECYCLE_ENABLED=1',
+        'test-runner', 'node', 'scripts/e2e-lifecycle.js', ...testFilters]
+      : ['run', '--rm', '--no-deps', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`, ...testFilters]);
     const runJestTest = (testPath, environment) => {
       const hostTestPath = path.join(root, testPath).replaceAll('\\', '/');
       return compose([

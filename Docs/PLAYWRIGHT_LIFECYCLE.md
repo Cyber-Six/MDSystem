@@ -2,6 +2,17 @@
 
 Use this runner for a fresh, connected test run. Each scenario passes its own account, exact ticket, original input manifest and approved baseline between stages. It does not recover or select older registry accounts, so credentials left behind by a database reset cannot be selected. Individual suites remain available for targeted troubleshooting.
 
+## Disposable Docker stack
+
+Copy `e2e/config.example.env` to `e2e.private.env` and set the three SQL paths to absolute local paths. Run all 12 scenarios or use the lifecycle runner's title filter.
+
+```sh
+node scripts/e2e.js lifecycle
+node scripts/e2e.js lifecycle --grep "Student initial: connected reject"
+```
+
+The command uses `e2e/compose.yaml`, generates an administrator for the run, and reads registration and login codes from the stack's Mailpit. The runner removes the stack and its private manifests when it finishes. Reports remain under `e2e-results/<stack-run-id>/lifecycle/<lifecycle-run-id>/`. Start a new Docker run to repeat a scenario.
+
 ## Configuration
 
 Configure the Git-ignored `.env.e2e` before running:

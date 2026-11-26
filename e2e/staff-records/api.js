@@ -1,6 +1,7 @@
 'use strict';
 const { expect, test } = require('@playwright/test');
 const { redact } = require('../custom-choices/evidence');
+const { prepareOtp } = require('../core/auth');
 const fields = {
   profile: ['Profile', '... on StudentProfile { id program year status } ... on EmployeeProfile { id department role position employmentCategoryOther status }'],
   emergencyContact: ['EmergencyContact', 'id firstContact { id contactName relationship contactNumber address } secondContact { id contactName relationship contactNumber address }'],
@@ -51,15 +52,16 @@ async function login(page, url, email, password, evidence) {
   await page.getByRole('button', { name: 'Open login panel' }).click();
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
+  const readOtp = await prepareOtp(email, process.env.E2E_TEST_OTP || '111111');
   const signed = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/login' && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   const result = await signed;
   const body = await result.json();
   if (!result.ok() || body.ok !== true) throw new Error(`QA authentication failed (HTTP ${result.status()}, ${body.error || 'unknown'}).`);
-  const otp = process.env.E2E_TEST_OTP || '111111';
-  expect(otp).toMatch(/^\d{6}$/);
   const inputs = page.locator('input[inputmode="numeric"][maxlength="1"]');
   await expect(inputs).toHaveCount(6);
+  const otp = await readOtp();
+  expect(otp).toMatch(/^\d{6}$/);
   for (let i = 0; i < 6; i++) await inputs.nth(i).fill(otp[i]);
   const completion = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/login/complete' && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Verify code', exact: true }).click();

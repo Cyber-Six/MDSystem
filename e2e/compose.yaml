@@ -190,6 +190,8 @@ services:
       E2E_PATIENT_URL: http://patient:3000
       E2E_STAFF_URL: http://staff:3001
       E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
+      E2E_REVIEW_STAFF_EMAIL: ${E2E_ADMIN_EMAIL}
+      E2E_REVIEW_STAFF_PASSWORD: ${E2E_ADMIN_PASSWORD}
       E2E_PATIENT_EMAIL: ${E2E_PATIENT_EMAIL}
       E2E_U2_PATIENT_EMAIL: muclinic${E2E_PATIENT_EMAIL}
       E2E_STAFF_EMAIL: ${E2E_STAFF_EMAIL}
@@ -206,6 +208,8 @@ services:
       smtp: { condition: service_started }
     init: true
     shm_size: 1gb
+    tmpfs:
+      - /tests/.e2e-private:mode=1777
     volumes:
       - ${E2E_ARTIFACT_DIR:?run via scripts/e2e.js}:/tests/e2e-results
 

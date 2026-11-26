@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { inspectBatchSubmission } = require('./submission-result');
+const { prepareOtp } = require('../core/auth');
 
 const enabled = process.env.E2E_REGISTRATION_ENABLED === '1';
 const patientUrl = process.env.E2E_PATIENT_URL;
@@ -38,11 +39,13 @@ async function registerAndOpenRecord(page, profile, index, hooks = {}) {
   await registrationForm.locator('input[name="email"]').fill(email);
   await registrationForm.locator('input[name="password"]').fill(password);
   await registrationForm.getByLabel('Confirm Password').fill(password);
+  const readOtp = await prepareOtp(email, testOtp);
   await page.getByRole('button', { name: 'Create Account' }).click();
 
   const otpInputs = page.locator('input[inputmode="numeric"]');
   await expect(otpInputs).toHaveCount(6, { timeout: 30_000 });
-  for (let i = 0; i < 6; i += 1) await otpInputs.nth(i).fill(testOtp[i]);
+  const otp = await readOtp();
+  for (let i = 0; i < 6; i += 1) await otpInputs.nth(i).fill(otp[i]);
   await page.getByRole('button', { name: 'Verify code' }).click();
 
   const consentScroll = page.locator('.overflow-y-auto.px-6');

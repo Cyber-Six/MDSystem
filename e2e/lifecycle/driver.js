@@ -36,7 +36,7 @@ async function preflight(browser, run) {
   for (const key of ['E2E_REVIEW_STAFF_EMAIL', 'E2E_REVIEW_STAFF_PASSWORD']) {
     if (!process.env[key] || /^(?:your-|actual-|\.\.\.)/.test(process.env[key])) throw new Error(`Configure ${key} in .env.e2e`);
   }
-  if (!/^\d{6}$/.test(process.env.E2E_TEST_OTP || '')) throw new Error('Configure a six-digit E2E_TEST_OTP');
+  if (!process.env.MAILPIT_URL && !/^\d{6}$/.test(process.env.E2E_TEST_OTP || '')) throw new Error('Configure a six-digit E2E_TEST_OTP');
   const evidence = { network: [] };
   return withContexts(browser, async page => {
     const staff = await staffSession(await page(), run, evidence);

@@ -45,6 +45,12 @@ function readLatestOtp(email, previousMessageId) {
   return readLatestMailValue(email, previousMessageId, /\b\d{6}\b/);
 }
 
+async function prepareOtp(email, configuredOtp) {
+  if (!process.env.MAILPIT_URL) return () => configuredOtp;
+  const previousMessageId = await latestMessageId(email);
+  return () => readLatestOtp(email, previousMessageId);
+}
+
 async function enterOtp(page, code) {
   const inputs = page.locator('input[inputmode="numeric"]');
   await expect(inputs).toHaveCount(6);
@@ -81,4 +87,4 @@ async function signIn(page, baseUrl, email, {
   return { accessToken, userId: JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url')).id };
 }
 
-module.exports = { openLogin, signIn, latestMessageId, readLatestMailValue, readLatestOtp, enterOtp };
+module.exports = { openLogin, signIn, latestMessageId, readLatestMailValue, readLatestOtp, prepareOtp, enterOtp };

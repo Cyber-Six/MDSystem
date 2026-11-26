@@ -43,10 +43,17 @@ for (const role of ['Student', 'Employee']) for (const kind of ['initial', 'upda
   const primary = page.getByPlaceholder('Contact Name', { exact: true }).first();
   await expect(primary).toHaveValue('QA Primary');
   await primary.fill('QA Primary Revised');
+  const studentUpdate = role === 'Student' && kind === 'update';
+  const category = page.getByLabel('Student Category');
+  if (studentUpdate) {
+    await expect(category).toHaveValue(record.profile.year);
+    await category.selectOption('Sophomore');
+  }
   const next = () => page.getByRole('button', { name: 'QA next section', exact: true }).click();
   const back = () => page.getByRole('button', { name: 'QA previous section', exact: true }).click();
   await next(); await back();
   await expect(primary).toHaveValue('QA Primary Revised');
+  if (studentUpdate) await expect(category).toHaveValue('Sophomore');
   await next();
   if (kind === 'update') {
     // Apply the layout rules that position the real input over the custom indicator.

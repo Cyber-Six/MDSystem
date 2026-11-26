@@ -13,5 +13,6 @@ COPY Backend/utils/validator.js ./Backend/utils/validator.js
 COPY Backend/utils/totp.js ./Backend/utils/totp.js
 COPY Backend/routes/emr/custom-choice-storage.js ./Backend/routes/emr/custom-choice-storage.js
 COPY e2e ./e2e
+COPY scripts/e2e-lifecycle.js ./scripts/e2e-lifecycle.js
 ENV CI=1 E2E_CORE=1
 CMD ["npm", "run", "test:gui", "--", "--project=core"]
