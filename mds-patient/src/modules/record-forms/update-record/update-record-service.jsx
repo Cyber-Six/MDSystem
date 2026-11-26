@@ -563,6 +563,9 @@ export async function mapRevisionDataToFormData(backendData) {
     console.log('[MapRevisionData] No dental procedures to prefill - array is empty or missing');
     formData.dentalProcedures = [];
   }
+  if (backendData.dentalProcedureProfile) {
+    formData.hasDentalProcedures = formData.dentalProcedures.length > 0;
+  }
 
   // Oral Appliances
   console.log('[MapRevisionData] Oral appliance profile data:', backendData.oralApplianceProfile);
@@ -581,6 +584,9 @@ export async function mapRevisionDataToFormData(backendData) {
   } else {
     console.log('[MapRevisionData] No oral appliances to prefill - array is empty or missing');
     formData.oralAppliances = [];
+  }
+  if (backendData.oralApplianceProfile) {
+    formData.hasOralAppliances = formData.oralAppliances.length > 0;
   }
 
   // Dental Photos - Convert file IDs to preview URLs

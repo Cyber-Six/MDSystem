@@ -106,6 +106,47 @@ test('captured controls retain native select and accordion identity', async ({ p
   for (const field of snapshot.fields) await expect(control(page, field)).toHaveValue(field.value);
 });
 
+test('revision controls distinguish duplicate condition labels inside and outside an accordion', async ({ page }) => {
+  const { captureControls } = require('../manifest');
+  const { control } = require('../revision');
+  await page.setContent(`
+    <label><input type="checkbox">Psychiatric Illness</label>
+    <div><button>Hospitalizations</button><div class="max-h-[2000px]">
+      <label><input type="checkbox" checked>Psychiatric Illness</label>
+    </div></div>
+  `);
+  const { fields } = await captureControls(page, 'background');
+  expect(fields).toHaveLength(2);
+  await expect(control(page, fields[0])).not.toBeChecked();
+  await expect(control(page, fields[1])).toBeChecked();
+});
+
+test('revision finds a saved allergen by ID after it moves into its catalog group', async ({ page }) => {
+  const { captureControls } = require('../manifest');
+  const { control } = require('../revision');
+  await page.setContent('<label><input name="allergen" type="checkbox" value="41" checked>Custom pollen (Environmental)</label>');
+  const { fields: [allergen] } = await captureControls(page, 'background');
+  await page.setContent('<label><input name="allergen" type="checkbox" value="40">Custom pollen</label><label><input name="allergen" type="checkbox" value="41" checked>Custom pollen</label>');
+  await expect(control(page, allergen)).toBeChecked();
+});
+
+test('revision captures the dental accordion name and native radio defaults', async ({ page }) => {
+  const { captureControls } = require('../manifest');
+  const { control } = require('../revision');
+  await page.setContent(`
+    <div><button><span aria-hidden="true">🦷</span>Dental Procedures</button>
+      <div class="max-h-[2000px]">
+        <label><input type="radio" name="hasDentalProcedures">Yes</label>
+        <label><input type="radio" name="hasDentalProcedures" checked>No</label>
+      </div>
+    </div>
+  `);
+  const { fields } = await captureControls(page, 'dental');
+  expect(fields.map(field => field.accordion)).toEqual(['Dental Procedures', 'Dental Procedures']);
+  await expect(control(page, fields[0])).not.toBeChecked();
+  await expect(control(page, fields[1])).toBeChecked();
+});
+
 for (const kind of ['initial', 'update']) test(`${kind} revision respects the workflow certification interface`, async ({ page }) => {
   const { certifyRevision } = require('../revision');
   await page.setContent(kind === 'initial' ? '<label><input type="checkbox">I certify the record</label>' : '<p>Review before submitting</p>');

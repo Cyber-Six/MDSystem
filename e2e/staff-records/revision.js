@@ -5,14 +5,18 @@ const { captureReview } = require('./manifest');
 
 function control(page, field) {
   const scope = field.accordion ? page.getByRole('button', { name: field.accordion, exact: true }).locator('..') : page;
-  if (field.type === 'checkbox' && field.label) {
-    return scope.getByRole(field.type, { name: field.label, exact: true }).filter({ visible: true });
+  if (field.type === 'checkbox' && field.label && !field.name) {
+    const checkbox = scope.getByRole(field.type, { name: field.label, exact: true }).filter({ visible: true });
+    return field.accordion ? checkbox : checkbox.and(page.locator('input:not(div.max-h-0 input, div[class*="max-h-["] input)'));
   }
   let locator = scope.locator(field.tag);
   if (field.placeholder) locator = scope.getByPlaceholder(field.placeholder, { exact: true });
   else if (field.name) locator = scope.locator(`${field.tag}[name=${JSON.stringify(field.name)}]`);
   else if (field.type && field.tag === 'input') locator = scope.locator(`${field.tag}[type=${JSON.stringify(field.type)}]`);
-  if (['checkbox', 'radio'].includes(field.type) && field.name) locator = locator.locator(`xpath=self::*[@value=${JSON.stringify(field.value)}]`);
+  if (['checkbox', 'radio'].includes(field.type) && field.name) {
+    const value = `[value=${JSON.stringify(field.value)}]`;
+    locator = locator.and(page.locator(field.value === 'on' ? `input:is(${value}, :not([value]))` : `input${value}`));
+  }
   return locator.filter({ visible: true }).nth(field.index || 0);
 }
 
@@ -39,14 +43,10 @@ async function exposeInputs(page) {
 }
 
 async function revise(page, manifest, instruction, evidence) {
-  await page.goto(`${manifest.url}/`);
+  await page.goto(`${manifest.url}${manifest.kind === 'update' ? '/record-update' : '/'}`);
   await expect(page.getByText(instruction, { exact: false }).first()).toBeVisible();
   if (manifest.kind === 'update') {
-    const continueRevision = page.getByRole('button', { name: /Continue.*Revision/ });
-    if (await continueRevision.isVisible()) await continueRevision.click();
-    else await page.goto(`${manifest.url}/record-update`);
-    const both = page.getByRole('button', { name: /Both Update/ });
-    if (await both.isVisible()) await both.click();
+    await page.getByRole('button', { name: 'Start Revision', exact: true }).click();
   }
   const revised = structuredClone(manifest);
   const edited = new Set();

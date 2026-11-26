@@ -105,7 +105,13 @@ async function captureControls(page, section) {
     .filter(el => !/search/i.test(el.placeholder || '') && el.type !== 'search')
     .map((el, ordinal, visible) => ({
       tag: el.tagName.toLowerCase(), type: el.type, name: el.name || '', placeholder: el.placeholder || '',
-      accordion: (() => { const panel = el.closest('div.max-h-0,div[class*="max-h-["]'); return panel?.parentElement.querySelector(':scope > button')?.textContent.trim().replace(/\s+/g, ' ') || null; })(),
+      accordion: (() => {
+        const panel = el.closest('div.max-h-0,div[class*="max-h-["]');
+        const button = panel?.parentElement.querySelector(':scope > button')?.cloneNode(true);
+        if (!button) return null;
+        for (const decoration of button.querySelectorAll('[aria-hidden="true"]')) decoration.remove();
+        return button.textContent.trim().replace(/\s+/g, ' ');
+      })(),
       label: (el.labels?.[0]?.textContent || el.closest('label')?.textContent || '').trim().replace(/\s+/g, ' '),
       value: el.type === 'file' ? '' : el.value, checked: ['checkbox', 'radio'].includes(el.type) ? el.checked : undefined,
       files: el.type === 'file' ? [...el.files].map(file => file.name) : undefined,

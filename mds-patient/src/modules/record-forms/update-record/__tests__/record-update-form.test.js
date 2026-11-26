@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { axiosRequest } from '../../../../packages-core-adapter';
 import RecordUpdateForm from '../record-update-form';
+import { fetchUpdateRevisionPrefill, getUpdateRevisionStatus } from '../update-record-service';
 
 jest.mock('../../../../packages-core-adapter', () => ({ axiosRequest: Object.assign(jest.fn(), { post: jest.fn() }) }));
 jest.mock('@core/services/emr-service', () => ({ searchStudentProgram: jest.fn() }), { virtual: true });
@@ -9,7 +10,10 @@ jest.mock('../../../notification/notification-context', () => {
   const subscribe = () => () => {};
   return { usePatientNotifications: () => ({ subscribe }) };
 });
-jest.mock('../update-record-service', () => ({ getUpdateRevisionStatus: async () => null }));
+jest.mock('../update-record-service', () => ({
+  getUpdateRevisionStatus: jest.fn().mockResolvedValue(null),
+  fetchUpdateRevisionPrefill: jest.fn(),
+}));
 jest.mock('../medical-history-step', () => () => null);
 jest.mock('../dental-history-step', () => () => null);
 
@@ -76,5 +80,22 @@ describe('approved patient opening an update', () => {
     expect(container.querySelector('[role="status"]').textContent).toContain('Loading your profile');
     await act(async () => resolveProfile({ data: { data: { getMyProfile: employee } } }));
     expect(container.textContent).toContain('Employment Information');
+  });
+
+  it('waits for the update draft before starting a revision', async () => {
+    const notes = 'Please update your emergency contact.';
+    let resolvePrefill;
+    getUpdateRevisionStatus.mockResolvedValueOnce({ id: '12', status: 'Revision', scope: 'Both', notes });
+    fetchUpdateRevisionPrefill.mockReturnValueOnce(new Promise(resolve => { resolvePrefill = resolve; }));
+    axiosRequest.post.mockResolvedValueOnce({ data: { data: { getMyProfile: employee } } });
+
+    await act(async () => root.render(<RecordUpdateForm />));
+    const start = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Start Revision'));
+    expect(container.textContent).toContain(notes);
+    expect(start.disabled).toBe(true);
+    await act(async () => resolvePrefill({ emergencyContact1Name: 'Saved Contact' }));
+    expect(start.disabled).toBe(false);
+    act(() => start.click());
+    expect(container.querySelector('[placeholder="Contact Name"]').value).toBe('Saved Contact');
   });
 });

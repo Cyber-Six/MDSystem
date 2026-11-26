@@ -457,6 +457,8 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                       <div key={allergen.id}>
                                         <Checkbox
                                           label={allergen.allergen}
+                                          name="allergen"
+                                          value={allergen.id}
                                           checked={isChecked}
                                           onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
                                         />
@@ -492,6 +494,8 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                     <div key={allergen.id}>
                                       <Checkbox
                                         label={`${allergen.allergen} (${allergen.type})`}
+                                        name="allergen"
+                                        value={allergen.id}
                                         checked={isChecked}
                                         onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
                                       />

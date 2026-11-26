@@ -11,3 +11,11 @@ it.each(['Follow up in June\nBring vaccine card', null])('round-trips vaccine de
   await createImmunizationProfile(form);
   expect(axiosRequest.mock.lastCall[0].data.variables.input).toEqual({ immunizations, notes });
 });
+
+it('restores saved negative dental answers during revision', async () => {
+  const form = await mapRevisionDataToFormData({
+    dentalProcedureProfile: { procedures: [] },
+    oralApplianceProfile: { appliances: [] },
+  });
+  expect(form).toMatchObject({ hasDentalProcedures: false, hasOralAppliances: false });
+});

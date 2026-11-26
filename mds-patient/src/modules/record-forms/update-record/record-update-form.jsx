@@ -41,6 +41,7 @@ const RecordUpdateForm = ({
   const [revisionStatus, setRevisionStatus] = useState(null); // { id, status, notes }
   const [showRevisionBanner, setShowRevisionBanner] = useState(false);
   const [revisionPrefillData, setRevisionPrefillData] = useState(null); // Pre-fetched form data for revision
+  const [isLoadingRevisionPrefill, setIsLoadingRevisionPrefill] = useState(false);
 
   // Success modal tracking
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -63,6 +64,7 @@ const RecordUpdateForm = ({
         console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
         setRevisionStatus(ticket);
         setShowRevisionBanner(true);
+        setIsLoadingRevisionPrefill(true);
 
         // Pre-fetch previous data for revision
         try {
@@ -73,6 +75,8 @@ const RecordUpdateForm = ({
           }
         } catch (err) {
           console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
+        } finally {
+          setIsLoadingRevisionPrefill(false);
         }
         return;
       }
@@ -648,6 +652,7 @@ const RecordUpdateForm = ({
                 Close
               </button>
               <button
+                disabled={isLoadingRevisionPrefill}
                 onClick={() => {
                   setShowRevisionBanner(false);
                   // Map scope to recordType: Medical→medical, Dental→dental, Both→both
