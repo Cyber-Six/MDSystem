@@ -1,6 +1,15 @@
 const bcrypt = require('/app/Backend/node_modules/bcrypt');
 const { Client } = require('/app/Backend/node_modules/pg');
 
+const {
+  PRESCRIPTION_TEMPLATE_NAME,
+  PRESCRIPTION_REQUIRED_TAGS,
+} = require('/app/Backend/services/doc-generate-module/prescription-normalized');
+const {
+  MEDICAL_CERTIFICATE_TEMPLATE_NAME,
+  MEDICAL_CERTIFICATE_REQUIRED_TAGS,
+} = require('/app/Backend/services/doc-generate-module/medical-certificate-normalized');
+
 async function main() {
   const client = new Client({
     host: process.env.POSTGRES_HOST,
@@ -54,14 +63,92 @@ async function main() {
           [process.env.E2E_ADMIN_EMAIL],
         );
         if (!adminRows[0]) throw new Error('Bootstrap administrator was not found after startup SQL.');
+        const roles = ['IS_STAFF'];
+        // The staff portal requires all mapped permissions to enable a module.
+        if (account.branch === 'Manila') {
+          roles.push(
+            'ALLOW_TO_CRUD_ANNOUNCEMENT',
+            'ALLOW_TO_VIEW_ANALYTICS',
+            'ALLOW_TO_EXPORT_ANALYTICS',
+            'ALLOW_TO_ACCESS_HEALTH_CHAT',
+            'ALLOW_TO_VIEW_APPOINTMENT',
+            'ALLOW_TO_APPROVE_APPOINTMENT',
+            'ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION',
+            'ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION',
+            'ALLOW_TO_VIEW_INVENTORY',
+            'ALLOW_TO_EDIT_INVENTORY',
+            'ALLOW_TO_DISPENSE_MEDICINE',
+            'ALLOW_TO_MANAGE_MEDICINE_REQUESTS',
+            'ALLOW_TO_PRESCRIBE',
+            'ALLOW_TO_CONFIGURE_INVENTORY',
+            'ALLOW_TO_VIEW_PROFILE',
+            'ALLOW_TO_VIEW_CONSULTATION',
+            'ALLOW_TO_EDIT_CONSULTATION',
+            'ALLOW_TO_VIEW_DOCUMENTS',
+            'ALLOW_TO_GENERATE_DOCUMENTS',
+          );
+        }
         await client.query(
           `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
            SELECT $1, rt.id, $2::"UserDesignation", $3
-           FROM "rolesTable" rt WHERE rt.label='IS_STAFF'`,
-          [id, account.branch, adminRows[0].id],
+           FROM "rolesTable" rt WHERE rt.label = ANY($4::text[])`,
+          [id, account.branch, adminRows[0].id, roles],
         );
       }
     }
+
+    // Post-build setup runs before the bootstrap administrator exists. Complete
+    // the templates and their mappings now that there is a staff owner.
+    for (const [template, description, tags] of [
+      [PRESCRIPTION_TEMPLATE_NAME, 'Prescription document template', PRESCRIPTION_REQUIRED_TAGS],
+      [MEDICAL_CERTIFICATE_TEMPLATE_NAME, 'Medical certificate document template', MEDICAL_CERTIFICATE_REQUIRED_TAGS],
+    ]) {
+      await client.query(`
+        INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
+        SELECT $1::text, $2, TO_CHAR(CURRENT_DATE, 'YYYY-MM'), mp.id
+        FROM "MedicalPersonnel" mp JOIN "UserCredentials" uc ON uc.id = mp.id
+        WHERE uc.email = $3
+          AND NOT EXISTS (
+            SELECT 1 FROM "documentTemplate"
+            WHERE REPLACE(LOWER(template), ' ', '-') = LOWER($1)
+          )
+      `, [template, description, process.env.E2E_ADMIN_EMAIL]);
+      await client.query(`
+        INSERT INTO "documentRequirements" ("templateId", "requirementtagId")
+        SELECT dt.id, tag.id
+        FROM "documentTemplate" dt
+        JOIN "documentRequirementsTag" tag ON LOWER(tag.vartag) = ANY($2::text[])
+        WHERE REPLACE(LOWER(dt.template), ' ', '-') = LOWER($1)
+          AND NOT EXISTS (
+            SELECT 1 FROM "documentRequirements" req
+            WHERE req."templateId" = dt.id AND req."requirementtagId" = tag.id
+          )
+      `, [template, tags]);
+    }
+
+    await client.query(
+      'INSERT INTO "ICDLookup" (code, title, release) VALUES ($1, $2, $3)',
+      ['CA40', 'Pneumonia', process.env.ICD_RELEASE],
+    );
+
+    await client.query(`
+      INSERT INTO "slotScheduler"
+        (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", "purposeRequired", "containsCustomDates")
+      VALUES ('E2E Appointment', 'Arlegui', 127, 1, 1, true, false)
+    `);
+
+    await client.query(`
+      WITH item AS (
+        INSERT INTO "MedicalItems" (item_code, item_name, category)
+        VALUES ('E2E-MED', 'E2E Medicine', 'Medicine') RETURNING id
+      ), batch AS (
+        INSERT INTO "MedicineBatch" ("medicalItemId", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location)
+        SELECT id, 'E2E-MED-BATCH', 'mg', 100, CURRENT_DATE + 365, 'Arlegui' FROM item
+        RETURNING id
+      )
+      INSERT INTO "MedicineEntity" ("batchId")
+      SELECT id FROM batch CROSS JOIN generate_series(1, 5)
+    `);
 
     await client.query(
       `INSERT INTO "UsersPersonal" (id, first_name, last_name, branch)

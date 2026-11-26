@@ -17,8 +17,10 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 const suite = process.argv[2] || 'core';
+const documentDownloadAuth = process.argv.includes('--document-download-auth', 3);
+const testFilters = process.argv.slice(3).filter(arg => arg !== '--document-download-auth');
 if (!['core', 'full'].includes(suite)) {
-  process.stderr.write('Usage: node scripts/e2e.js <core|full>\n');
+  process.stderr.write('Usage: node scripts/e2e.js <core|full> [--document-download-auth] [Playwright test filters...]\n');
   process.exit(2);
 }
 
@@ -138,7 +140,24 @@ async function main() {
     await compose(['up', '--no-deps', '--exit-code-from', 'schema-init', 'schema-init']);
     await compose(['run', '--rm', '--no-deps', 'seed']);
     await compose(['up', '-d', '--wait', '--no-deps', 'patient', 'staff', 'email-worker']);
-    await compose(['run', '--rm', '--no-deps', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`]);
+    const runBrowserTests = () => compose([
+      'run', '--rm', '--no-deps', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`, ...testFilters,
+    ]);
+    if (documentDownloadAuth) {
+      const testPath = 'Backend/routes/documents/document/__tests__/document-download-authorization.integration.test.js';
+      const hostTestPath = path.join(root, testPath).replaceAll('\\', '/');
+      const browserResult = await runBrowserTests().catch(error => error);
+      await compose([
+        'run', '--rm', '--no-deps',
+        '-e', 'DOCUMENT_DOWNLOAD_TEST_E2E=1',
+        '-v', `${hostTestPath}:/tests/${testPath}:ro`,
+        'test-runner', 'node', 'node_modules/jest/bin/jest.js',
+        '--config={}', '--runInBand', '--runTestsByPath', testPath,
+      ]);
+      if (browserResult instanceof Error) throw browserResult;
+    } else {
+      await runBrowserTests();
+    }
     passed = true;
   } catch (error) {
     process.stderr.write(`${receivedSignal ? `Interrupted by ${receivedSignal}. ` : ''}${error.message}\n`);

@@ -7,9 +7,24 @@ const analytics = require('../../services/analytics/analytics-query.js');
 const docGen = require('../../services/doc-generate-module/index.js');
 const analyticsExport = require('../../services/analytics/analytics-export.js');
 const analyticsMatrixExport = require('../../services/analytics/analytics-matrix-export.js');
-const { getStaffBranch, isMedicalPermitted, permissions: permKeys } = require('../../services/authorization/permit.js');
+const { getStaffBranch, getStaffModulePermissions, isMedicalAdmin } = require('../../services/authorization/permit.js');
 
 const router = express.Router();
+
+async function requireAnalyticsAccess(req, res, next) {
+  try {
+    const staffId = req.user.id;
+    if (!(await isMedicalAdmin(staffId))) {
+      const { modules } = await getStaffModulePermissions(staffId);
+      if (!modules.some(({ moduleId, enabled }) => moduleId === 'analytics' && enabled)) {
+        return res.status(403).json({ error: 'ANALYTICS_ACCESS_DENIED' });
+      }
+    }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
 
 // Backward-compatible aliases for analytics dataType keys.
 const DATA_TYPE_ALIASES = Object.freeze({
@@ -223,7 +238,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
  *
  * Body: { dataTypes: string[], branch, startDate, endDate }
  */
-router.post('/batch', jwtProtect('medical'), async (req, res) => {
+router.post('/batch', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const { dataTypes, branch, startDate, endDate } = req.body;
     const { groupBy, department, sex, ageGroup } = resolveAnalyticsFilters(req.body, req.query);
@@ -440,7 +455,7 @@ function validateExportParams(req, res) {
  * GET /analytics/export/presets
  * Get available export presets
  */
-router.get('/export/presets', jwtProtect('medical'), (req, res) => {
+router.get('/export/presets', jwtProtect('medical'), requireAnalyticsAccess, (req, res) => {
   res.json({ success: true, presets: analyticsExport.EXPORT_PRESETS });
 });
 
@@ -448,7 +463,7 @@ router.get('/export/presets', jwtProtect('medical'), (req, res) => {
  * GET /analytics/export/types
  * Get available export data types with metadata
  */
-router.get('/export/types', jwtProtect('medical'), (req, res) => {
+router.get('/export/types', jwtProtect('medical'), requireAnalyticsAccess, (req, res) => {
   res.json({ success: true, types: analyticsExport.EXPORT_META });
 });
 
@@ -464,7 +479,7 @@ router.get('/export/types', jwtProtect('medical'), (req, res) => {
  *   - dataTypes?: string[]     (specific queries to include)
  *   - preset?: string          (preset name, overrides dataTypes)
  */
-router.post('/export', jwtProtect('medical'), async (req, res) => {
+router.post('/export', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const params = validateExportParams(req, res);
     if (!params) return;
@@ -611,7 +626,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
  *   - startDate: YYYY-MM-DD
  *   - endDate: YYYY-MM-DD
  */
-router.post('/export/single', jwtProtect('medical'), async (req, res) => {
+router.post('/export/single', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const { dataType, branch, startDate, endDate } = req.body;
     const { groupBy, sex, department, ageGroup } = resolveAnalyticsFilters(req.body, req.query);

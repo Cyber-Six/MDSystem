@@ -44,10 +44,6 @@ const isAppointmentSection = (value) => APPOINTMENT_SECTION_KEYS.includes(value)
  *                   NoShow, CancelledByPatient, CancelledByMedical
  * Sessions: Morning, Afternoon
  * Locations: Arlegui, Casal, QuezonCity
- *
- * NOTE: Components still render mock data for the queue view while the
- * service integration is incrementally wired. The availability manager
- * and scheduler config panels (in the legacy component) are fully connected.
  */
 const StaffAppointment = () => {
   const { subscribe } = useStaffNotifications();

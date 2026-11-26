@@ -49,6 +49,7 @@ x-app-base: &app-base
     DEBUG_BYPASS_OTP: "false"
     ALLOW_BOOTSTRAP_ADMIN: "false"
     MEDIA_PATH: /app/media
+    ICD_RELEASE: "2026-01"
     LOGGER_DIR: /tmp/mdsystem-logs
     EMAIL_DELAY: 0
     # All browser tests share one runner IP and Redis rate-limit counter.
@@ -187,6 +188,7 @@ services:
       E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
       E2E_PATIENT_EMAIL: ${E2E_PATIENT_EMAIL}
       E2E_STAFF_EMAIL: ${E2E_STAFF_EMAIL}
+      E2E_ALT_PATIENT_EMAIL: ${E2E_ALT_PATIENT_EMAIL}
       E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
       MAILPIT_URL: http://smtp:8025

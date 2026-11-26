@@ -9,7 +9,11 @@ jest.mock('../../services/analytics/analytics-query.js', () => ({
 jest.mock('../../services/doc-generate-module/index.js', () => ({ downloadDocument: jest.fn() }));
 jest.mock('../../services/analytics/analytics-export.js', () => ({ EXPORT_PRESETS: { monthly: { label: 'Monthly' } }, EXPORT_META: { patients: { label: 'Patients' } }, resolveDataTypes: jest.fn(), buildFilename: jest.fn(), fetchExportData: jest.fn(), generatePDF: jest.fn(), generateSingleMetricPDF: jest.fn() }));
 jest.mock('../../services/analytics/analytics-matrix-export.js', () => ({ generateMatrixCsvFiles: jest.fn(), generateMatrixExcelWorkbook: jest.fn() }));
-jest.mock('../../services/authorization/permit.js', () => ({ getStaffBranch: jest.fn(), isMedicalPermitted: jest.fn(), permissions: {} }));
+jest.mock('../../services/authorization/permit.js', () => ({
+  getStaffBranch: jest.fn(),
+  getStaffModulePermissions: jest.fn(),
+  isMedicalAdmin: jest.fn(),
+}));
 jest.mock('archiver', () => jest.fn());
 
 const router = require('./analytics.js');
@@ -31,6 +35,65 @@ function response() {
 const req = (overrides = {}) => ({ user: { id: 9 }, params: {}, query: {}, body: {}, ...overrides });
 
 beforeEach(() => jest.clearAllMocks());
+
+test.each([
+  ['post', '/batch'],
+  ['post', '/export'],
+  ['post', '/export/single'],
+  ['get', '/export/presets'],
+  ['get', '/export/types'],
+])('%s %s enforces Analytics module access for staff', async (method, path) => {
+  const route = router.stack.find(layer => layer.route?.path === path && layer.route.methods[method]).route;
+  const body = {
+    branch: 'Manila', startDate: '2026-01-01', endDate: '2026-01-02',
+    dataTypes: ['patients'], dataType: 'patients', format: 'pdf',
+  };
+  const pdf = Buffer.from('report');
+  permit.isMedicalAdmin.mockResolvedValue(false);
+  permit.getStaffModulePermissions.mockImplementation(async staffId => ({
+    modules: [
+      { moduleId: 'appointments', enabled: true },
+      { moduleId: 'analytics', enabled: staffId === 10 },
+    ],
+  }));
+  if (method === 'post') permit.getStaffBranch.mockResolvedValueOnce('Manila');
+  if (path === '/batch') {
+    analytics.hasQuery.mockReturnValueOnce(true);
+    analytics.executeBatchQueries.mockResolvedValueOnce({ patients: { success: true } });
+  }
+  if (path === '/export' || path === '/export/single') {
+    exportService.fetchExportData.mockResolvedValueOnce({ patients: [{ count: 1 }] });
+    db.query.mockResolvedValueOnce({ rows: [] });
+  }
+  if (path === '/export') {
+    exportService.resolveDataTypes.mockReturnValueOnce(['patients']);
+    exportService.generatePDF.mockResolvedValueOnce({ buffer: pdf, filename: 'report.pdf' });
+  }
+  if (path === '/export/single') {
+    exportService.generateSingleMetricPDF.mockResolvedValueOnce({ buffer: pdf, filename: 'report.pdf' });
+  }
+
+  function dispatch(staffId) {
+    return new Promise((resolve, reject) => {
+      const res = response();
+      let status = 200;
+      res.status.mockImplementation(code => {
+        status = code;
+        return res;
+      });
+      res.json.mockImplementation(payload => resolve({ status, payload }));
+      res.send.mockImplementation(payload => resolve({ status, payload }));
+      route.dispatch(req({ method: method.toUpperCase(), user: { id: staffId }, body }), res, reject);
+    });
+  }
+
+  await expect(dispatch(9)).resolves.toEqual({
+    status: 403, payload: { error: 'ANALYTICS_ACCESS_DENIED' },
+  });
+  expect(permit.getStaffBranch).not.toHaveBeenCalled();
+  await expect(dispatch(10)).resolves.toMatchObject({ status: 200 });
+  expect(permit.getStaffModulePermissions.mock.calls).toEqual([[9], [10]]);
+});
 
 test('serves query, report, and filter metadata and handles service failures', async () => {
   const res = response();
