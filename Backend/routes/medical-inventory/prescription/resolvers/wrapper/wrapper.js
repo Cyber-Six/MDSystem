@@ -41,7 +41,7 @@ const Query = {
       SELECT mtl.*,
         COALESCE(
           json_agg(
-            json_build_object('id', me.id, 'batchId', me."batchId", me."transactionId")
+            json_build_object('id', me.id, 'batchId', me."batchId", 'transactionId', me."transactionId")
           ) FILTER (WHERE me.id IS NOT NULL),
           '[]'
         ) AS items

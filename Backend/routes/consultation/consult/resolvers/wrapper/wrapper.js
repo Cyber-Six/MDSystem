@@ -1,5 +1,5 @@
 const db  = require("../../../../../config/query.js");
-const { getLatestOutcome, getOutcomeData, groupByOutcome, getPatientIdFromConsultationId, getPatientIdFromOutcomeId } = require("./helper.js");
+const { getLatestOutcome, getOutcomeData, groupByOutcome, getPatientIdFromOutcomeId } = require("./helper.js");
 const { GetIcd, GetTitle, getIcdDetails } = require("../../../../../config/icdapi/icdmain.js");
 const { throwGraphQLError, GraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
@@ -332,32 +332,36 @@ const Mutation = {
     try {
       await client.query('BEGIN');
 
-      // Lock the consultation and outcome rows
-      const queryResult = await client.query(
-        `SELECT c.status, co."recordedBy"
-         FROM "Consultation" c
-         INNER JOIN "ConsultationOutcome" co ON co."consultationId" = c.id
-         WHERE c.id = $1
-         ORDER BY co."recordedAt" DESC
-         LIMIT 1
-         FOR UPDATE OF c, co;`,
+      const { rows: [consultation] } = await client.query(
+        `SELECT status, "patientId"
+         FROM "Consultation"
+         WHERE id = $1
+         FOR UPDATE;`,
         [consultationId]
       );
 
-      if (queryResult.rows.length === 0) {
-        await client.query('ROLLBACK');
+      if (!consultation) {
         throwGraphQLError(res).message("Consultation not found").status(404).throw();
       }
 
-      const currentStatus = queryResult.rows[0].status;
-      const patientId = await getPatientIdFromConsultationId(consultationId);
-      const recordedBy = queryResult.rows[0].recordedBy;
-
-      // Protect against submitting consultation without an outcome or invalid status
-      if (["Created", "Completed", "Referred", "Monitored"].includes(currentStatus)) {
-        await client.query('ROLLBACK');
+      const { status: currentStatus, patientId } = consultation;
+      if (!["Open", "ReOpen"].includes(currentStatus)) {
         throwGraphQLError(res).message("Consultation cannot be submitted in its current status").status(400).throw();
       }
+
+      const { rows: [outcome] } = await client.query(
+        `SELECT "recordedBy"
+         FROM "ConsultationOutcome"
+         WHERE "consultationId" = $1
+         ORDER BY "recordedAt" DESC, id DESC
+         LIMIT 1
+         FOR UPDATE;`,
+        [consultationId]
+      );
+      if (!outcome) {
+        throwGraphQLError(res).message("Consultation cannot be submitted without an outcome").status(400).throw();
+      }
+      const { recordedBy } = outcome;
 
       // Protect against other medical personnel submitting the consultation outcome created by another personnel
       if (recordedBy !== Number(user.id)) {

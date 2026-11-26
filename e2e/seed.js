@@ -18,6 +18,7 @@ async function main() {
     const accounts = [
       { email: process.env.E2E_PATIENT_EMAIL, identity: 'Student', patient: true },
       { email: process.env.E2E_ALT_PATIENT_EMAIL, identity: 'Student', patient: true },
+      { email: process.env.E2E_U2_PATIENT_EMAIL, identity: 'Student', patient: true },
       { email: process.env.E2E_STAFF_EMAIL, identity: 'Employee', staff: true, role: 'Nurse', branch: 'Manila' },
       { email: process.env.E2E_RESTRICTED_STAFF_EMAIL, identity: 'Employee', staff: true, role: 'Nurse', branch: 'QuezonCity' },
     ];
@@ -128,16 +129,19 @@ async function main() {
     await client.query(`
       INSERT INTO "slotScheduler"
         (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", "purposeRequired", "containsCustomDates")
-      VALUES ('E2E Appointment', 'Arlegui', 127, 1, 1, true, false)
+      VALUES ('E2E Appointment', 'Arlegui', 127, 1, 1, true, false),
+             ('U2 Clinic Visit', 'Arlegui', 127, 1, 1, true, false)
     `);
 
     await client.query(`
       WITH item AS (
         INSERT INTO "MedicalItems" (item_code, item_name, category)
-        VALUES ('E2E-MED', 'E2E Medicine', 'Medicine') RETURNING id
+        VALUES ('E2E-MED', 'E2E Medicine', 'Medicine'),
+               ('U2-MED', 'U2 Medicine', 'Medicine')
+        RETURNING id, item_code
       ), batch AS (
         INSERT INTO "MedicineBatch" ("medicalItemId", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location)
-        SELECT id, 'E2E-MED-BATCH', 'mg', 100, CURRENT_DATE + 365, 'Arlegui' FROM item
+        SELECT id, item_code || '-BATCH', 'mg', 100, CURRENT_DATE + 365, 'Arlegui' FROM item
         RETURNING id
       )
       INSERT INTO "MedicineEntity" ("batchId")
