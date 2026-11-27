@@ -13,7 +13,8 @@ jest.mock('../core', () => ({
 }));
 jest.mock('expo-file-system/legacy', () => ({}));
 
-import { buildBatchInputs, createEmptyFormData, type AllCatalogs } from '../services/emr-service';
+import { sendGraphQLRequest } from '../services/graphql-client';
+import { buildBatchInputs, createEmptyFormData, fetchRevisionPrefill, type AllCatalogs } from '../services/emr-service';
 
 const EMPTY_CATALOGS: AllCatalogs = {
   medicalConditionCatalog: [],
@@ -28,6 +29,28 @@ const EMPTY_CATALOGS: AllCatalogs = {
 };
 
 const NO_PHOTOS = { upperTeethFileId: null, lowerTeethFileId: null };
+
+it.each([3, 0, null])('round-trips saved vaping duration %p during mobile revision', async (yearsVaping) => {
+  const send = jest.mocked(sendGraphQLRequest);
+  send.mockReset();
+  send.mockImplementation(async (document) => {
+    if (!document.includes('GetRevisionEMRData')) return {};
+    return { lifestyle: { vapeUser: true, vapeType: 'Nicotine', vapeFrequency: 'Weekly', yearsVaping } };
+  });
+
+  const formData = await fetchRevisionPrefill('medical');
+  const [document] = send.mock.calls.find(([query]) => query.includes('GetRevisionEMRData'))!;
+  expect(document).toMatch(/getLifestyle\s*\{[^}]*\byearsVaping\b/);
+  expect(formData?.medicalBackground.yearsVaping).toBe(yearsVaping?.toString() ?? '');
+  const { lifestyle } = buildBatchInputs(formData!, NO_PHOTOS, EMPTY_CATALOGS);
+  expect(lifestyle).toMatchObject({ vapeUser: true, vapeType: 'Nicotine', vapeFrequency: 'Weekly', yearsVaping, notes: null });
+});
+
+it('omits unsupported school and drug test fields from initial form data', () => {
+  const { personalInfo } = createEmptyFormData();
+  expect(personalInfo).not.toHaveProperty('lastSchoolAttended');
+  expect(personalInfo).not.toHaveProperty('drugTestDone');
+});
 
 function makeStudentFormData(overrides: Record<string, any> = {}) {
   const fd = createEmptyFormData();

@@ -61,6 +61,15 @@ describe('patient review summaries', () => {
     expect(html).not.toContain('undefined');
   });
 
+  test('omits unsupported fields from Student initial review', () => {
+    const html = renderToStaticMarkup(<ReviewForm {...initialProps(initialFixture('Male'))} />);
+    expect(html).toContain('0 sticks/day');
+    expect(html).not.toContain('Tattoo Location');
+    expect(html).not.toContain('Piercing Location');
+    expect(html).not.toContain('Last School Attended');
+    expect(html).not.toContain('Drug Test Completed');
+  });
+
   test('shows Employee initial values with the employee fields and photos', () => {
     const fixture = initialFixture();
     fixture.personalInfo = { ...fixture.personalInfo, employeeId: 'E-1', activeEmail: 'qa@example.test', department: 'Science', employmentCategory: 'Other', employmentCategoryOther: 'Research officer', position: 'Analyst', branch: 'QuezonCity' };

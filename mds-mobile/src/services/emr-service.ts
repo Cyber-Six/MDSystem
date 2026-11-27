@@ -75,8 +75,6 @@ export interface PersonalInfo {
   programOther?: string;
   studentNumber: string;
   studentCategory: string;
-  drugTestDone: string;
-  lastSchoolAttended: string;
   // Employee-specific fields
   employeeId?: string;
   department?: string;
@@ -174,8 +172,7 @@ export const createEmptyFormData = (): FormData => ({
     birthday: '', age: '', gender: '', civilStatus: '',
     nationality: '', religion: '', address: '', provinceAddress: '',
     contactNumber: '', program: '', programId: '', programOther: '',
-    studentNumber: '', studentCategory: '', drugTestDone: '',
-    lastSchoolAttended: '',
+    studentNumber: '', studentCategory: '',
     employeeId: '', department: '', employmentCategory: '',
     employmentCategoryOther: '', employmentStatus: '', position: '',
     emergencyContacts: [
@@ -621,6 +618,7 @@ export const buildBatchInputs = (
   inputs.immunizationProfile = { immunizations: immunizationRecords, notes: immunizationNotes };
 
   // Lifestyle
+  const yearsVaping = parseInt(formData.medicalBackground.yearsVaping, 10);
   inputs.lifestyle = {
     smoker: formData.medicalBackground.smoker === 'yes',
     numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes'
@@ -635,8 +633,7 @@ export const buildBatchInputs = (
       ? formData.medicalBackground.vapeType || null : null,
     vapeFrequency: formData.medicalBackground.vaper === 'yes'
       ? formData.medicalBackground.vapeFrequency || null : null,
-    yearsVaping: formData.medicalBackground.vaper === 'yes'
-      ? parseInt(formData.medicalBackground.yearsVaping) || null : null,
+    yearsVaping: formData.medicalBackground.vaper === 'yes' && !Number.isNaN(yearsVaping) ? yearsVaping : null,
     notes: null,
   };
 
@@ -1312,7 +1309,7 @@ export const fetchRevisionPrefill = async (scope: 'medical' | 'dental' | 'both' 
       `operationProfile: getOperationProfile { operations { procedureId operationDate notes } notes }`,
       `medicationProfile: getMedicationProfile { medications { medicineId description } notes }`,
       `immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } notes }`,
-      `lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency }`,
+      `lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency yearsVaping }`,
       `visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }`,
       `obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }`,
     );
@@ -1449,6 +1446,7 @@ export const fetchRevisionPrefill = async (scope: 'medical' | 'dental' | 'both' 
   base.medicalBackground.vaper = ls.vapeUser ? 'yes' : 'no';
   base.medicalBackground.vapeType = ls.vapeType || '';
   base.medicalBackground.vapeFrequency = ls.vapeFrequency || '';
+  base.medicalBackground.yearsVaping = ls.yearsVaping?.toString() ?? '';
 
   // Visual acuity
   const va = emr?.visualAcuity;

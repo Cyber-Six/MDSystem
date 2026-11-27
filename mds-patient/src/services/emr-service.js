@@ -1036,15 +1036,9 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   inputs.immunizationProfile = { immunizations: immunizationRecords, notes: immunizationNotes };
 
   // Lifestyle
+  const yearsVaping = parseInt(formData.medicalBackground.yearsVaping, 10);
   inputs.lifestyle = {
     smoker: formData.medicalBackground.smoker === 'yes',
-    vapeUser: formData.medicalBackground.smoker === 'vape',
-    vapeType: formData.medicalBackground.smoker === 'vape' 
-      ? formData.medicalBackground.vapeType || null : null,
-    vapeFrequency: formData.medicalBackground.smoker === 'vape'
-      ? formData.medicalBackground.vapeFrequency || null : null,
-    yearsVaping: formData.medicalBackground.smoker === 'vape'
-      ? (formData.medicalBackground.yearsVaping ? parseInt(formData.medicalBackground.yearsVaping) : null) : null,
     numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes'
       ? parseInt(formData.medicalBackground.smokerSticksPerDay) || null : null,
     yearsSmoked: formData.medicalBackground.smoker === 'yes'
@@ -1057,6 +1051,7 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       ? formData.medicalBackground.vapeType || null : null,
     vapeFrequency: formData.medicalBackground.vaper === 'yes'
       ? formData.medicalBackground.vapeFrequency || null : null,
+    yearsVaping: formData.medicalBackground.vaper === 'yes' && !Number.isNaN(yearsVaping) ? yearsVaping : null,
     notes: null
   };
 
@@ -1647,8 +1642,6 @@ export const mapRevisionDataToFormData = (profileData, emrData) => {
     employmentStatus:   '',   // not persisted in backend
     position:           rawPosition,
     branch,
-    drugTestDone:       '',   // not persisted
-    lastSchoolAttended: '',   // not persisted
     emergencyContacts: [
       {
         name:          ec.firstContact?.contactName   || '',

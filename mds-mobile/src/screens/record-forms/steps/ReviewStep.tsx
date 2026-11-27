@@ -115,8 +115,6 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
         <DataRow label="Program" value={pi.program === 'Other' ? pi.programOther : pi.program} />
         <DataRow label="Student Number" value={pi.studentNumber} />
         <DataRow label="Student Category" value={pi.studentCategory === 'Grade11' ? 'Grade 11' : pi.studentCategory === 'Grade12' ? 'Grade 12' : pi.studentCategory} />
-        <DataRow label="Last School Attended" value={pi.lastSchoolAttended} />
-        <DataRow label="Drug Test" value={pi.drugTestDone} />
       </View>
 
       {/* Emergency Contacts */}

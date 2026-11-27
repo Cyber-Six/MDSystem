@@ -86,8 +86,6 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
         <SectionHeader title="Student Status" onEditClick={() => onEdit(0)} />
         <dl className="space-y-1">
           <DataRow label="Student Category" value={formData.personalInfo?.studentCategory} />
-          <DataRow label="Last School Attended" value={formData.personalInfo?.lastSchoolAttended} />
-          <DataRow label="Drug Test Completed" value={formData.personalInfo?.drugTestDone} />
         </dl>
       </div>
 
@@ -242,8 +240,6 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
           {formData.medicalBackground?.hasMedications === 'Yes' && Object.entries(formData.medicalBackground?.selectedMedications || {}).filter(([, selected]) => selected).map(([id]) => (
             <DataRow key={`medication-${id}`} label="Medication" value={getCatalogName(catalogs?.medicationCatalog, id)} />
           ))}
-          <DataRow label="Tattoo Location" value={formData.medicalBackground?.tattooLocation} />
-          <DataRow label="Piercing Location" value={formData.medicalBackground?.piercingLocation} />
           <DataRow label="Smoker" value={formData.medicalBackground?.smoker === 'yes' ? `Yes (${formData.medicalBackground?.smokerSticksPerDay ?? 'Not provided'} sticks/day, ${formData.medicalBackground?.smokerYears ?? 'Not provided'} years)` : formData.medicalBackground?.smoker === 'no' ? 'No' : undefined} />
           <DataRow label="Alcohol Drinker" value={formData.medicalBackground?.alcoholDrinker === 'yes' ? `Yes (${formData.medicalBackground?.alcoholFrequency || 'Not specified'})` : formData.medicalBackground?.alcoholDrinker === 'no' ? 'No' : undefined} />
           <DataRow label="Vaper" value={formData.medicalBackground?.vaper === 'yes' ? `Yes (${formData.medicalBackground?.vapeType || 'Not specified'}, ${formData.medicalBackground?.vapeFrequency || 'Not specified'})` : formData.medicalBackground?.vaper === 'no' ? 'No' : undefined} />

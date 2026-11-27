@@ -112,8 +112,6 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       programId: '',
       studentNumber: '',
       studentCategory: '',
-      lastSchoolAttended: '',
-      drugTestDone: '',
       emergencyContacts: [
         { name: '', relationship: '', contactNumber: '', address: '' },
         { name: '', relationship: '', contactNumber: '', address: '' }
