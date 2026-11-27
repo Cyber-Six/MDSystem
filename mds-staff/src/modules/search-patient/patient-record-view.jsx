@@ -258,7 +258,6 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
       self: (medicalHistory?.conditions || [])
         .filter((c) => !c.relationship || c.relationship === 'self')
         .map((c) => c.description || conditionMap[c.conditionId] || `Condition #${c.conditionId}`),
-      notes: medicalHistory?.notes || '',
       family: (medicalHistory?.conditions || [])
         .filter((c) => c.relationship && c.relationship !== 'self')
         .map((c) => ({

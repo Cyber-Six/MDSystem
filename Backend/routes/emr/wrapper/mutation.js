@@ -545,7 +545,7 @@ const Mutation = {
 
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {
-    const profile = await anchor.MedicalHistory(recordId, args.input.notes);
+    await anchor.MedicalHistory(recordId);
     await remove.MedicalCondition(recordId);
 
     const inserted = [];
@@ -574,7 +574,6 @@ const Mutation = {
     return {
       id: recordId,
       conditions: inserted,
-      notes: profile.notes,
       archived_at: null
     };
   },
@@ -673,7 +672,7 @@ const Mutation = {
   },
 
   _ImmunizationProfile: async (_, {args, recordId}, { user, res }) => {
-    const profile = await anchor.Immunization(recordId, args.input.notes);
+    await anchor.Immunization(recordId);
     await remove.ImmunizationRecord(recordId);
 
     const inserted = [];
@@ -700,7 +699,6 @@ const Mutation = {
     return {
       id: recordId,
       immunizations: inserted,
-      notes: profile.notes,
       archived_at: null
     };
   },

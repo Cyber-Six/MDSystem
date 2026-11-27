@@ -34,7 +34,7 @@ const GQL_VITAL_SIGNS = `
 const GQL_MEDICAL_HISTORY = `
   query GetMedHist($userId: ID!) {
     getUserMedicalHistory(userId: $userId, limit: 1) {
-      id notes status created_at
+      id status created_at
       conditions { id conditionId description diagnosedDate relationship }
     }
   }
@@ -52,7 +52,7 @@ const GQL_ALLERGY = `
 const GQL_IMMUNIZATION = `
   query GetImmunization($userId: ID!) {
     getUserImmunizationProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id status created_at
       immunizations { id vaccineTypeId immunizationDate doseNumber }
     }
   }
@@ -144,7 +144,7 @@ const GQL_FULL_RECORD = `
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
     getUserMedicalHistory(userId: $userId, limit: 1) {
-      id notes status created_at
+      id status created_at
       conditions { id conditionId description diagnosedDate relationship }
     }
     getUserAllergyProfile(userId: $userId, limit: 1) {
@@ -152,7 +152,7 @@ const GQL_FULL_RECORD = `
       allergies { id allergenCatalogId status severity notes dateIdentified }
     }
     getUserImmunizationProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id status created_at
       immunizations { id vaccineTypeId immunizationDate doseNumber }
     }
     getUserLifestyle(userId: $userId, limit: 1) {
@@ -394,9 +394,7 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
     },
     medicalHistory: {
       self:         (medicalHistory?.conditions || []).filter(c => !c.relationship || c.relationship === 'self').map(c => c.description || `Condition #${c.conditionId}`),
-      selfDetails:  medicalHistory?.notes || '',
       family:       (medicalHistory?.conditions || []).filter(c => c.relationship && c.relationship !== 'self').map(c => `${c.description || `Condition #${c.conditionId}`} (${c.relationship})`),
-      familyDetails:'',
     },
     medical: {
       vitalSigns: {
@@ -663,9 +661,6 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
                       </span>
                     ))}
                   </div>
-                  {patient.medicalHistory.selfDetails && (
-                    <p className="text-xs text-secondary-600 dark:text-neutral-300 mt-2">{patient.medicalHistory.selfDetails}</p>
-                  )}
                 </div>
                 <div>
                   <p className="text-xs font-medium text-secondary-600 dark:text-neutral-400 mb-1">Family History:</p>
@@ -676,9 +671,6 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
                       </span>
                     ))}
                   </div>
-                  {patient.medicalHistory.familyDetails && (
-                    <p className="text-xs text-secondary-600 dark:text-neutral-300 mt-2">{patient.medicalHistory.familyDetails}</p>
-                  )}
                 </div>
               </div>
             </div>

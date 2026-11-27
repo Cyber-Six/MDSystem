@@ -14,7 +14,7 @@ jest.mock('../core', () => ({
 jest.mock('expo-file-system/legacy', () => ({}));
 
 import { sendGraphQLRequest } from '../services/graphql-client';
-import { buildBatchInputs, createEmptyFormData, fetchRevisionPrefill, type AllCatalogs } from '../services/emr-service';
+import { buildBatchInputs, createEmptyFormData, createInitialMedicalRecord, fetchRevisionPrefill, type AllCatalogs } from '../services/emr-service';
 
 const EMPTY_CATALOGS: AllCatalogs = {
   medicalConditionCatalog: [],
@@ -30,6 +30,32 @@ const EMPTY_CATALOGS: AllCatalogs = {
 
 const NO_PHOTOS = { upperTeethFileId: null, lowerTeethFileId: null };
 
+it('builds notes-free history and vaccine profiles while retaining child details and other notes', () => {
+  const form = createEmptyFormData();
+  form.medicalHistory.self = { '3': true };
+  form.medicalHistory.family = { '4': true };
+  form.medicalHistory.familyWhoHasIt = { '4': 'Mother' };
+  form.medicalBackground.immunizations = { '8': true };
+  form.medicalBackground.immunizationDetails = { '8': { date: '2025-01-02', doseNumber: '2' } };
+  form.medicalBackground.hasMedications = 'Yes';
+  form.medicalBackground.medicationNotes = 'Keep this note';
+  const inputs = buildBatchInputs(form, NO_PHOTOS, { ...EMPTY_CATALOGS, immunizationCatalog: [{ id: '8', name: 'Synthetic vaccine' }] });
+  expect(inputs.medicalHistory).not.toHaveProperty('notes');
+  expect(inputs.medicalHistory.conditions.map((c: any) => [c.conditionId, c.relationship])).toEqual([['3', null], ['4', 'Mother']]);
+  expect(inputs.immunizationProfile).toEqual({ immunizations: [{ vaccineTypeId: '8', immunizationDate: '2025-01-02', doseNumber: 2 }] });
+  expect(inputs.medicationProfile.notes).toBe('Keep this note');
+});
+
+it('stops mobile submission before EMR writes when personal record creation fails', async () => {
+  const send = jest.mocked(sendGraphQLRequest);
+  send.mockReset();
+  const failure = new Error('Failed to create initial personal record');
+  send.mockRejectedValueOnce(failure);
+  await expect(createInitialMedicalRecord(createEmptyFormData())).rejects.toBe(failure);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send.mock.calls[0][0]).toContain('createInitialPersonalRecord');
+});
+
 it.each([3, 0, null])('round-trips saved vaping duration %p during mobile revision', async (yearsVaping) => {
   const send = jest.mocked(sendGraphQLRequest);
   send.mockReset();
@@ -41,6 +67,8 @@ it.each([3, 0, null])('round-trips saved vaping duration %p during mobile revisi
   const formData = await fetchRevisionPrefill('medical');
   const [document] = send.mock.calls.find(([query]) => query.includes('GetRevisionEMRData'))!;
   expect(document).toMatch(/getLifestyle\s*\{[^}]*\byearsVaping\b/);
+  expect(document).toContain('getMedicalHistory { conditions { conditionId relationship } }');
+  expect(document).toContain('getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } }');
   expect(formData?.medicalBackground.yearsVaping).toBe(yearsVaping?.toString() ?? '');
   const { lifestyle } = buildBatchInputs(formData!, NO_PHOTOS, EMPTY_CATALOGS);
   expect(lifestyle).toMatchObject({ vapeUser: true, vapeType: 'Nicotine', vapeFrequency: 'Weekly', yearsVaping, notes: null });

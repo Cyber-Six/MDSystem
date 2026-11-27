@@ -125,7 +125,6 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       // Immunizations — keys are vaccine catalog IDs
       immunizations: {},
       immunizationDates: {},
-      immunizationOther: '',
       // Allergies — keys are allergen catalog IDs
       hasAllergies: '',
       allergies: {},

@@ -731,7 +731,6 @@ export const createAllergenCatalogEntry = async (allergen, type = 'Other') => {
  * formData.medicalHistory.familyWhoHasIt = { [conditionCatalogId]: "Mother / Father / ..." }
  */
 const buildMedicalConditionRecords = (medicalHistory) => {
-  const notes = [];
   const conditions = [
     // Self conditions
     ...Object.entries(medicalHistory?.self || {})
@@ -745,15 +744,7 @@ const buildMedicalConditionRecords = (medicalHistory) => {
         return { conditionId: id, diagnosedDate: null, relationship: who, description: null };
       }),
   ];
-  // Free-text "other" entries (no catalog ID) → append to notes
-  if (medicalHistory?.selfOther) notes.push(`Self: ${medicalHistory.selfOther}`);
-  if (medicalHistory?.familyOther) {
-    const who = medicalHistory.familyOtherWhoHasIt;
-    notes.push(who
-      ? `Family other: ${medicalHistory.familyOther} (${who})`
-      : `Family other: ${medicalHistory.familyOther}`);
-  }
-  return { conditions, notes: notes.length ? notes.join('; ') : null };
+  return { conditions };
 };
 
 /**
@@ -833,19 +824,15 @@ const buildMedicationRecords = (medicalBackground) => {
 const buildImmunizationRecords = (medicalBackground, catalog) => {
   const today = new Date().toISOString().split('T')[0];
   const validIds = new Set(catalog.map(c => c.id));
-  const noteParts = [];
   const immunizationRecords = Object.entries(medicalBackground?.immunizations || {})
     .filter(([, checked]) => checked)
     .flatMap(([id]) => {
-      if (!validIds.has(id)) { noteParts.push(id); return []; }
+      if (!validIds.has(id)) return [];
       const date = medicalBackground?.immunizationDates?.[id] || today;
       const dose = medicalBackground?.immunizationDoses?.[id];
       return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: dose ? parseInt(dose, 10) : 1 }];
     });
-  if (medicalBackground?.immunizationOther?.trim()) {
-    noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
-  }
-  return { immunizationRecords, immunizationNotes: noteParts.length ? noteParts.join('; ') : null };
+  return { immunizationRecords };
 };
 
 /**
@@ -1009,8 +996,8 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   }
 
   // Medical History — self + family conditions via catalog IDs
-  const { conditions: medConditions, notes: medNotes } = buildMedicalConditionRecords(formData.medicalHistory);
-  inputs.medicalHistory = { conditions: medConditions, notes: medNotes };
+  const { conditions: medConditions } = buildMedicalConditionRecords(formData.medicalHistory);
+  inputs.medicalHistory = { conditions: medConditions };
 
   // Allergy Profile — allergen catalog IDs
   const { allergies, notes: allergyNotes } = buildAllergyRecords(formData.medicalBackground);
@@ -1029,11 +1016,11 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   inputs.medicationProfile = { medications, notes: medicalNotes };
 
   // Immunization Profile — vaccine catalog IDs (direct)
-  const { immunizationRecords, immunizationNotes } = buildImmunizationRecords(
+  const { immunizationRecords } = buildImmunizationRecords(
     formData.medicalBackground,
     immunizationCatalog
   );
-  inputs.immunizationProfile = { immunizations: immunizationRecords, notes: immunizationNotes };
+  inputs.immunizationProfile = { immunizations: immunizationRecords };
 
   // Lifestyle
   const yearsVaping = parseInt(formData.medicalBackground.yearsVaping, 10);
@@ -1722,7 +1709,6 @@ export const mapRevisionDataToFormData = (profileData, emrData) => {
     immunizations:             immunMap,
     immunizationDates:         immunDatesMap,
     immunizationDoses:         immunDosesMap,
-    immunizationOther:         emr?.immunizationProfile?.notes || '',
     hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
     allergies:                 allergyMap,
     allergyOther:              (emr?.allergyProfile?.notes || allergies[0]?.notes || '').replace(/^Other: /, ''),
@@ -1845,7 +1831,6 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
     query += `
     medicalHistory: getMedicalHistory {
       conditions { conditionId relationship }
-      notes
     }
     allergyProfile: getAllergyProfile {
       allergies { allergenCatalogId status severity notes dateIdentified }
@@ -1865,7 +1850,6 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
     }
     immunizationProfile: getImmunizationProfile {
       immunizations { vaccineTypeId immunizationDate doseNumber }
-      notes
     }
     lifestyle: getLifestyle {
       smoker numberOfCigarettesPerDay yearsSmoked

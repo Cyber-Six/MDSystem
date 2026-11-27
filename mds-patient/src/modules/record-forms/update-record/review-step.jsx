@@ -49,7 +49,6 @@ const ReviewStep = ({ formData, onEdit, steps = [], recordType, revisionNotes = 
     'Allergy details': formData.allergiesDetail,
     'Allergy notes': formData.allergiesNotes,
     'Immunizations': vaccines.join('; ') || 'None selected',
-    'Immunization notes': formData.immunizationNotes,
     'Hospitalizations': formData.hasHospitalizations,
     'Hospitalization history': hospitals.join('; ') || 'None selected',
     'Hospitalization notes': formData.hospitalizationNotes,

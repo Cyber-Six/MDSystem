@@ -125,7 +125,6 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     medicalBackground: {
       immunizations: {},
       immunizationDates: {},
-      immunizationOther: '',
       hasAllergies: '',
       allergies: {},
       allergyOther: '',

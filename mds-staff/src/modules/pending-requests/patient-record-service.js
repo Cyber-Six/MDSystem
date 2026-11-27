@@ -196,7 +196,6 @@ export const getUserMedicalHistory = async (userId) => {
            diagnosedDate
            relationship
          }
-         notes
          created_at
        }
      }`,
@@ -287,7 +286,6 @@ export const getUserImmunizationProfile = async (userId) => {
            immunizationDate
            doseNumber
          }
-         notes
          created_at
        }
      }`,
@@ -585,7 +583,7 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex =
   // ── Build a single batched /emr/medical query ─────────────────────────────
   const medicalFields = includeMedical ? `
     medicalHistory: getUserMedicalHistory(userId: $userId, limit: 1000) {
-      id conditions { id conditionId description diagnosedDate relationship } notes created_at
+      id conditions { id conditionId description diagnosedDate relationship } created_at
     }
     lifestyle: getUserLifestyle(userId: $userId, limit: 1000) {
       id smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer
@@ -598,7 +596,7 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex =
       id medications { id medicineId description } notes created_at
     }
     immunizationProfile: getUserImmunizationProfile(userId: $userId, limit: 1000) {
-      id immunizations { id vaccineTypeId immunizationDate doseNumber } notes created_at
+      id immunizations { id vaccineTypeId immunizationDate doseNumber } created_at
     }
     hospitalizationProfile: getUserHospitalizationProfile(userId: $userId, limit: 1000) {
       id hospitalizations { id conditionId admissionDate dischargeDate notes } notes created_at
@@ -810,7 +808,7 @@ export const staffUpdateEmergencyContact = async (userId, input) => {
 export const staffUpdateMedicalHistory = async (userId, input) => {
   const data = await sendGraphQL(
     `mutation UpdateMedicalHistory($userId: ID!, $input: MedicalHistoryInput!) {
-       updateMedicalHistory(userId: $userId, input: $input) { id notes }
+       updateMedicalHistory(userId: $userId, input: $input) { id }
      }`,
     { userId, input },
   );
@@ -1043,26 +1041,6 @@ export const submitStaffEdits = async (userId, editedFields, recordData) => {
     mutations.push(
       staffUpdateEmergencyContact(userId, input)
         .catch((e) => { errors.push(`Emergency contacts: ${e.message}`); }),
-    );
-  }
-
-  // ── Medical History (notes only) ───────────────────────────────────────────
-  const mh = editedFields.medicalHistory;
-  if (mh && Object.keys(mh).length > 0) {
-    const origConditions = recordData?.medicalHistory?.conditions ?? [];
-    const input = {
-      conditions: origConditions.map((c) => ({
-        conditionId: c.conditionId,
-        description: c.description || undefined,
-        diagnosedDate: c.diagnosedDate || undefined,
-        relationship: c.relationship || undefined,
-      })),
-      notes: mh.notes ?? recordData?.medicalHistory?.notes ?? null,
-    };
-
-    mutations.push(
-      staffUpdateMedicalHistory(userId, input)
-        .catch((e) => { errors.push(`Medical history: ${e.message}`); }),
     );
   }
 

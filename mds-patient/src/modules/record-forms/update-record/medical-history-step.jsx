@@ -940,12 +940,6 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 )}
               </div>
             </div>
-            <Textarea
-              label="Immunization Notes (Optional)"
-              placeholder="Any additional information about your immunizations, dates, or reactions."
-              value={formData.immunizationNotes || ''}
-              onChange={(e) => handleInputChange('immunizationNotes', e.target.value)}
-            />
           </div>
         </AccordionSection>
 

@@ -20,15 +20,16 @@ beforeEach(() => jest.clearAllMocks());
 test.each([
   ['_MedicalHistory', 'MedicalHistory', 'MedicalCondition', 'conditions', { conditionId: 3 }],
   ['_ImmunizationProfile', 'Immunization', 'ImmunizationRecord', 'immunizations', { vaccineTypeId: 8 }],
-])('%s returns the stored notes with or without child entries', async (method, table, child, field, entry) => {
-  anchor[table] = jest.fn().mockResolvedValue({ id: 12, notes: 'follow-up' });
+])('%s ignores legacy notes with or without child entries', async (method, table, child, field, entry) => {
+  anchor[table] = jest.fn().mockResolvedValue({ id: 12 });
   remove[child] = jest.fn();
   db.queryControlled = jest.fn().mockResolvedValue({ rows: [entry] });
   for (const entries of [[entry], []]) {
     const input = { notes: 'follow-up', [field]: entries };
     const result = await Mutation[method](null, { args: { input }, recordId: 12 }, { user: { id: 7 }, res: {} });
-    expect(anchor[table]).toHaveBeenCalledWith(12, input.notes);
-    expect(result).toMatchObject({ id: 12, notes: input.notes, [field]: entries });
+    expect(anchor[table]).toHaveBeenCalledWith(12);
+    expect(result).toMatchObject({ id: 12, [field]: entries });
+    expect(result).not.toHaveProperty('notes');
   }
 });
 

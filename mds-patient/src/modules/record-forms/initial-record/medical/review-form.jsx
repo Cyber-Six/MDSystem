@@ -119,11 +119,6 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
           ) : (
             <p className="text-secondary-500 text-sm">No conditions reported</p>
           )}
-          {formData.medicalHistory?.selfOtherChecked && formData.medicalHistory?.selfOther && (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-error-100 text-error-800 font-medium">
-              Other: {formData.medicalHistory.selfOther}
-            </span>
-          )}
         </div>
       </div>
 
@@ -140,12 +135,6 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
                   value={formData.medicalHistory?.familyWhoHasIt?.[id] || 'Not specified'}
                 />
               ))}
-            {formData.medicalHistory?.familyOtherChecked && formData.medicalHistory?.familyOther && (
-              <DataRow
-                label={`Other: ${formData.medicalHistory.familyOther}`}
-                value={formData.medicalHistory?.familyOtherWhoHasIt || 'Not specified'}
-              />
-            )}
           </dl>
         ) : (
           <p className="text-secondary-500 text-sm">No family conditions reported</p>

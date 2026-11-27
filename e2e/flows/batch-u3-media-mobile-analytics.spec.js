@@ -189,12 +189,12 @@ test('Expo patient login, revision EMR and appointment requests honor the mobile
       firstContact { contactName relationship contactNumber address }
       secondContact { contactName relationship contactNumber address }
     }
-    medicalHistory: getMedicalHistory { conditions { conditionId relationship } notes }
+    medicalHistory: getMedicalHistory { conditions { conditionId relationship } }
     allergyProfile: getAllergyProfile { allergies { allergenCatalogId status severity } notes }
     hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate dischargeDate notes } notes }
     operationProfile: getOperationProfile { operations { procedureId operationDate notes } notes }
     medicationProfile: getMedicationProfile { medications { medicineId description } notes }
-    immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } notes }
+    immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } }
     lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency }
     visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }
     obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }

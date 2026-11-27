@@ -419,7 +419,7 @@ const Query = {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
     const query = `
-      SELECT im.*, pul.created_at, pul.status
+      SELECT im.id, pul.created_at, pul.status
       FROM "Immunization" im
       JOIN "patientUpdateLog" pul ON pul.id = im.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
@@ -533,7 +533,7 @@ const Query = {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
     const query = `
-      SELECT mh.*, pul.created_at, pul.status
+      SELECT mh.id, pul.created_at, pul.status
       FROM "MedicalHistory" mh
       JOIN "patientUpdateLog" pul ON pul.id = mh.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND

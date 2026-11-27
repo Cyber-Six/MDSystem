@@ -631,13 +631,14 @@ input immunizationRecordInput {
 type ImmunizationProfile {
   id: ID!
   immunizations: [immunizationRecord!]!
-  notes: String
+  notes: String @deprecated(reason: "Retired profile notes; always null")
   archived_at: Date
   created_at: Date
   }
 
 input ImmunizationProfileInput {
   immunizations: [immunizationRecordInput!]!
+  # Legacy mobile input only. Ignored; no notes column is read or written.
   notes: String
   }
 
@@ -689,13 +690,14 @@ input MedicalConditionRecordInput {
 type MedicalHistory {
     id: ID!
     conditions: [MedicalConditionRecord!]!
-    notes: String
+    notes: String @deprecated(reason: "Retired profile notes; always null")
     archived_at: Date
     created_at: Date
 }
 
 input MedicalHistoryInput {
     conditions: [MedicalConditionRecordInput!]!
+    # Legacy mobile input only. Ignored; no notes column is read or written.
     notes: String
 }
 

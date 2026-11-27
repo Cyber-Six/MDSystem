@@ -119,7 +119,6 @@ services:
       ADMIN_PASSWORD_HASH: ${E2E_ADMIN_PASSWORD_HASH}
     volumes:
       - ${E2E_SCHEMA_SQL:?set E2E_SCHEMA_SQL}:/schema/schema.psql:ro
-      - ../schemas/migrations/20261126_emr_profile_notes.psql:/schema/emr_profile_notes.psql:ro
       - ${E2E_POST_BUILD_SQL:?set E2E_POST_BUILD_SQL}:/schema/post_build_setup.sql:ro
       - ${E2E_STARTUP_SQL:?set E2E_STARTUP_SQL}:/schema/startup.sql:ro
     entrypoint: ["sh", "-ec"]
@@ -127,7 +126,6 @@ services:
       - |
         test -s /schema/schema.psql && test -s /schema/post_build_setup.sql && test -s /schema/startup.sql
         psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/schema.psql
-        psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/emr_profile_notes.psql
         psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/post_build_setup.sql
         psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -v ADMIN_EMAIL="$$ADMIN_EMAIL" -v ADMIN_PASSWORD_HASH="$$ADMIN_PASSWORD_HASH" -f /schema/startup.sql
     labels: { com.mdsystem.resource: e2e }

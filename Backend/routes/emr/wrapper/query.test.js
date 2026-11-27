@@ -34,3 +34,21 @@ test('returns the stored custom employee category in readable profile data', asy
     employmentCategoryOther: 'Research officer',
   });
 });
+
+test.each([
+  ['_getUserMedicalHistory', 'MedicalHistory', 'mh', 'MedicalCondition', 'conditions', { conditionId: 3, relationship: 'Mother' }],
+  ['_getUserImmunizationProfile', 'Immunization', 'im', 'ImmunizationRecord', 'immunizations', { vaccineTypeId: 8, doseNumber: 2 }],
+])('%s reads the ticket and child rows without selecting profile notes', async (method, table, alias, childTable, field, child) => {
+  const from = '2025-01-01T00:00:00Z';
+  const anchor = { id: 12, created_at: from, status: 'Pending' };
+  db.query.mockResolvedValueOnce({ rows: [{ ...anchor }] }).mockResolvedValueOnce({ rows: [child] });
+
+  await expect(Query[method](null, { userId: 7, from, limit: 1, statuses: ['Pending'] }, { user: { id: 7 }, res: {} }))
+    .resolves.toEqual([{ ...anchor, [field]: [child] }]);
+  const [[profileSql, profileParams], [childSql, childParams]] = db.query.mock.calls;
+  expect(profileSql).toContain(`SELECT ${alias}.id, pul.created_at, pul.status`);
+  expect(profileSql).toContain(`FROM "${table}"`);
+  expect(profileParams).toEqual([7, 1, 0, new Date(from), ['Pending']]);
+  expect(childSql).toContain(`FROM "${childTable}"`);
+  expect(childParams).toEqual([12]);
+});

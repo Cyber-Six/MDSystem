@@ -1,5 +1,5 @@
 import React from 'react';
-import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
+import SectionWrapper, { DataRow } from './SectionWrapper';
 
 /**
  * MedicalHistorySection
@@ -10,21 +10,8 @@ import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
 const MedicalHistorySection = ({
   medicalHistory,
   catalogs = {},
-  isEditing = false,
-  editedFields = {},
-  onFieldChange,
-  onToggleEdit,
-  isPending = false,
   isLocked = false,
 }) => {
-  const hasEdits = Object.keys(editedFields).length > 0;
-
-  const getVal = (key, fallback) =>
-    editedFields[key] !== undefined ? editedFields[key] : fallback;
-
-  const getOriginal = (key, current) =>
-    editedFields[key] !== undefined ? current : undefined;
-
   const getCatalogName = (catalog, id) => {
     if (!catalog?.length || id === undefined || id === null) return null;
     const item = catalog.find((c) => String(c.id) === String(id));
@@ -50,10 +37,6 @@ const MedicalHistorySection = ({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       }
-      isEditing={isEditing}
-      onToggleEdit={onToggleEdit}
-      hasEdits={hasEdits}
-      isPending={isPending}
     >
       {/* Self-reported conditions */}
       <div>
@@ -104,20 +87,6 @@ const MedicalHistorySection = ({
         )}
       </div>
 
-      {/* Notes */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
-          Notes
-        </h4>
-        <EditableField
-          label="Notes"
-          value={getVal('notes', medicalHistory?.notes ?? '')}
-          originalValue={getOriginal('notes', medicalHistory?.notes ?? '')}
-          isEditing={isEditing}
-          onChange={(v) => onFieldChange?.('notes', v)}
-          type="textarea"
-        />
-      </div>
     </SectionWrapper>
   );
 };

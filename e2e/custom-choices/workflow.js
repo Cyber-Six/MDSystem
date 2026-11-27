@@ -45,7 +45,7 @@ function dataFor(role, mode) {
     medication: label('medication'), employment: label('employment'), appliance: label('appliance'),
     allergyNotes: label('allergy notes'), hospitalizationNotes: label('hospitalization notes'),
     operationNotes: label('operation notes'), medicationNotes: label('medication notes'), reason: label('reason'),
-    immunizationNotes: label('immunization notes'), familyRelation: 'Mother', allergenType: 'Environmental',
+    familyRelation: 'Mother', allergenType: 'Environmental',
     admission: '2025-02-03', discharge: '2025-02-08', operationDate: '2025-03-04', vaccineDate: '2025-01-02',
     dose: 2, arch: 'Upper', identifier: String(10_000_000 + Math.floor(Math.random() * 80_000_000)) };
 }
@@ -192,7 +192,6 @@ async function background(page, state) {
       if (config.key === 'vaccine') {
         await entry.locator('input[type="date"]').fill(state.data.vaccineDate);
         await entry.locator('input[type="number"]').fill(String(state.data.dose));
-        if (update) await scope.getByPlaceholder('Any additional information about your immunizations, dates, or reactions.').fill(state.data.immunizationNotes);
       } else if (config.key === 'allergen') {
         await entry.locator('select').filter({ has: page.locator('option[value="Active"]') }).selectOption('Active');
         await entry.locator('select').filter({ has: page.locator('option[value="Mild"]') }).selectOption('Mild');
@@ -340,12 +339,12 @@ async function probeInvalidSubmit(page, state, name, message) {
 }
 
 const sections = {
-  history: 'getMedicalHistory(pending: true) { id conditions { conditionId relationship description } notes }',
+  history: 'getMedicalHistory(pending: true) { id conditions { conditionId relationship description } }',
   allergies: 'getAllergyProfile(pending: true) { id allergies { allergenCatalogId status severity notes } notes }',
   hospitalization: 'getHospitalizationProfile(pending: true) { id hospitalizations { conditionId admissionDate dischargeDate notes } notes }',
   operation: 'getOperationProfile(pending: true) { id operations { procedureId operationDate notes } notes }',
   medication: 'getMedicationProfile(pending: true) { id medications { medicineId description } notes }',
-  vaccine: 'getImmunizationProfile(pending: true) { id immunizations { vaccineTypeId immunizationDate doseNumber } notes }',
+  vaccine: 'getImmunizationProfile(pending: true) { id immunizations { vaccineTypeId immunizationDate doseNumber } }',
   appliance: 'getOralApplianceProfile(pending: true) { id appliances { tagId arch } notes otherDescription otherArch }',
 };
 

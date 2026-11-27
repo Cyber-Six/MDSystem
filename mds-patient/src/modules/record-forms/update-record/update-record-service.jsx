@@ -220,7 +220,6 @@ export async function fetchUpdateRevisionPrefill() {
       query += `
       medicalHistory: getMedicalHistory {
         conditions { conditionId relationship }
-        notes
       }
       allergyProfile: getAllergyProfile {
         allergies { allergenCatalogId status severity notes }
@@ -240,7 +239,6 @@ export async function fetchUpdateRevisionPrefill() {
       }
       immunizationProfile: getImmunizationProfile {
         immunizations { vaccineTypeId immunizationDate doseNumber }
-        notes
       }
       lifestyle: getLifestyle {
         smoker numberOfCigarettesPerDay yearsSmoked
@@ -424,7 +422,6 @@ export async function mapRevisionDataToFormData(backendData) {
   formData.surgeryNotes = backendData.operationProfile?.notes || backendData.operationProfile?.operations?.[0]?.notes || '';
   formData.medicationNotes = backendData.medicationProfile?.notes || '';
   formData.medicationReason = backendData.medicationProfile?.medications?.[0]?.description || '';
-  formData.immunizationNotes = backendData.immunizationProfile?.notes || '';
 
   // Hospitalization
   console.log('[MapRevisionData] Hospitalization profile data:', backendData.hospitalizationProfile);
@@ -825,68 +822,15 @@ export async function createMedicalHistory(formData) {
     }
   `;
 
-  // Build conditions array from selected conditions
-  const conditions = [];
-  const medicalHistoryNotes = [];
-  
-  // Add self conditions to conditions array
-  if (formData.selfConditions) {
-    const selfConditions = Object.entries(formData.selfConditions)
-      .filter(([_, checked]) => checked)
-      .map(([conditionId, _]) => ({
-        conditionId: parseInt(conditionId),
-        relationship: null // Self conditions have no relationship
-      }));
-    
-    conditions.push(...selfConditions);
-    const selfIds = Object.entries(formData.selfConditions)
-      .filter(([_, checked]) => checked)
-      .map(([conditionId, _]) => conditionId);
-    if (selfIds.length > 0) {
-      medicalHistoryNotes.push(`Self: ${selfIds.join(', ')}`);
-    }
-  }
-  
-  // Add self other notes
-  if (formData.selfOther) {
-    medicalHistoryNotes.push(`Self Other: ${formData.selfOther}`);
-  }
-  
-  // Add family conditions to conditions array with relationship
-  if (formData.familyConditions) {
-    const familyConditions = Object.entries(formData.familyConditions)
-      .filter(([_, val]) => val && val.checked)
-      .map(([conditionId, val]) => ({
-        conditionId: parseInt(conditionId),
-        relationship: val.relationship || 'Family'
-      }));
-    
-    conditions.push(...familyConditions);
-    
-    const familyConditionsDisplay = Object.entries(formData.familyConditions)
-      .filter(([_, val]) => val && val.checked)
-      .map(([conditionId, val]) => {
-        const relationship = val.relationship;
-        return relationship ? `${conditionId} (${relationship})` : conditionId;
-      });
-    if (familyConditionsDisplay.length > 0) {
-      medicalHistoryNotes.push(`Family history: ${familyConditionsDisplay.join(', ')}`);
-    }
-  }
-  
-  // Add family other notes with who has it
-  if (formData.familyOther) {
-    const whoHasIt = formData.familyOtherWhoHasIt;
-    const otherNote = whoHasIt 
-      ? `Family other: ${formData.familyOther} (${whoHasIt})`
-      : `Family other: ${formData.familyOther}`;
-    medicalHistoryNotes.push(otherNote);
-  }
-
-  const input = {
-    conditions, // Now populated with condition objects
-    notes: medicalHistoryNotes.length > 0 ? medicalHistoryNotes.join('; ') : null
-  };
+  const conditions = [
+    ...Object.entries(formData.selfConditions || {})
+      .filter(([, checked]) => checked)
+      .map(([conditionId]) => ({ conditionId: parseInt(conditionId), relationship: null })),
+    ...Object.entries(formData.familyConditions || {})
+      .filter(([, value]) => value?.checked)
+      .map(([conditionId, value]) => ({ conditionId: parseInt(conditionId), relationship: value.relationship || 'Family' })),
+  ];
+  const input = { conditions };
 
   console.log('💊 Creating medical history...', input);
   const response = await sendGraphQLRequest(mutation, { input });
@@ -1068,7 +1012,7 @@ export async function createObgynHistory(formData) {
 
 /**
  * Creates immunization profile
- * Following emr-service.js pattern: empty arrays + notes field
+ * Stores vaccine choices, dates, and doses.
  */
 export async function createImmunizationProfile(formData) {
   const mutation = `
@@ -1101,8 +1045,7 @@ export async function createImmunizationProfile(formData) {
   }
 
   const input = {
-    immunizations, // Now populated with vaccine objects including date and dose
-    notes: formData.immunizationNotes || null
+    immunizations, // Vaccine objects include date and dose
   };
 
   console.log('💉 Creating immunization profile...', input);

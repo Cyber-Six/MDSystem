@@ -20,6 +20,7 @@ const patientSchema = makeExecutableSchema({
     Query: patientResolver.Query,
     Mutation: patientResolver.Mutation,
     UserProfile: patientResolver.UserProfile, // <-- interface resolver
+    ...require('./retired-profile-notes.js'),
   },
 });
 
@@ -29,6 +30,7 @@ const medicalSchema = makeExecutableSchema({
     Query: medicalResolver.Query,
     Mutation: medicalResolver.Mutation,
     UserProfile: medicalResolver.UserProfile, // <-- interface resolver
+    ...require('./retired-profile-notes.js'),
   },
 });
 

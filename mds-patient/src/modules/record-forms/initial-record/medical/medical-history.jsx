@@ -86,11 +86,6 @@ function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name', 
  *    self:               { [conditionCatalogId]: boolean }
  *    family:             { [conditionCatalogId]: boolean }
  *    familyWhoHasIt:     { [conditionCatalogId]: string }  -- "Mother", "Father", etc.
- *    selfOtherChecked:   boolean
- *    selfOther:          string
- *    familyOtherChecked: boolean
- *    familyOther:        string
- *    familyOtherWhoHasIt: string
  *  }
  */
 const MedicalHistoryForm = ({

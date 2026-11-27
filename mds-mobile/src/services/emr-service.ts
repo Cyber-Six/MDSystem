@@ -91,16 +91,10 @@ export interface FormData {
     self: Record<string, boolean>;
     family: Record<string, boolean>;
     familyWhoHasIt: Record<string, string>;
-    selfOther?: string;
-    selfOtherChecked?: boolean;
-    familyOther?: string;
-    familyOtherWhoHasIt?: string;
-    familyOtherChecked?: boolean;
   };
   medicalBackground: {
     immunizations: Record<string, boolean>;
     immunizationDetails: Record<string, { date: string; doseNumber: string }>;
-    immunizationOther: string;
     hasAllergies: string;
     allergies: Record<string, { checked: boolean; severity: string; status: string } | boolean>;
     allergyOther: string;
@@ -182,11 +176,9 @@ export const createEmptyFormData = (): FormData => ({
   },
   medicalHistory: {
     self: {}, family: {}, familyWhoHasIt: {},
-    selfOther: '', selfOtherChecked: false,
-    familyOther: '', familyOtherWhoHasIt: '', familyOtherChecked: false,
   },
   medicalBackground: {
-    immunizations: {}, immunizationDetails: {}, immunizationOther: '',
+    immunizations: {}, immunizationDetails: {},
     hasAllergies: '', allergies: {}, allergyOther: '', allergyNotes: '',
     hasHospitalization: '', hospitalizationConditions: {}, hospitalizationDates: {}, hospitalizationDate: '', hospitalizationDischargeDate: '', hospitalizationNotes: '',
     hasOperation: '', operationConditions: {}, operationDates: {}, operationDate: '', operationNotes: '',
@@ -404,7 +396,6 @@ const registerProfileSetup = async (
 // ─── Record Builder Functions ─────────────────────────────────────────────────
 
 const buildMedicalConditionRecords = (medicalHistory: FormData['medicalHistory']) => {
-  const notes: string[] = [];
   const conditions = [
     ...Object.entries(medicalHistory?.self || {})
       .filter(([, checked]) => checked)
@@ -416,12 +407,7 @@ const buildMedicalConditionRecords = (medicalHistory: FormData['medicalHistory']
         return { conditionId: id, diagnosedDate: null, relationship: who, description: null };
       }),
   ];
-  if (medicalHistory?.selfOther) notes.push(`Self: ${medicalHistory.selfOther}`);
-  if (medicalHistory?.familyOther) {
-    const who = medicalHistory.familyOtherWhoHasIt;
-    notes.push(who ? `Family other: ${medicalHistory.familyOther} (${who})` : `Family other: ${medicalHistory.familyOther}`);
-  }
-  return { conditions, notes: notes.length ? notes.join('; ') : null };
+  return { conditions };
 };
 
 const buildAllergyRecords = (bg: FormData['medicalBackground']) => {
@@ -485,11 +471,10 @@ const buildMedicationRecords = (bg: FormData['medicalBackground']) => {
 const buildImmunizationRecords = (bg: FormData['medicalBackground'], catalog: CatalogItem[]) => {
   const today = new Date().toISOString().split('T')[0];
   const validIds = new Set(catalog.map(c => c.id));
-  const noteParts: string[] = [];
   const immunizationRecords = Object.entries(bg?.immunizations || {})
     .filter(([, checked]) => checked)
     .flatMap(([id]) => {
-      if (!validIds.has(id)) { noteParts.push(id); return []; }
+      if (!validIds.has(id)) return [];
       const details = bg?.immunizationDetails?.[id];
       const immunizationDate = details?.date
         ? new Date(details.date).toISOString().split('T')[0]
@@ -497,8 +482,7 @@ const buildImmunizationRecords = (bg: FormData['medicalBackground'], catalog: Ca
       const doseNumber = details?.doseNumber ? parseInt(details.doseNumber) || 1 : 1;
       return [{ vaccineTypeId: id, immunizationDate, doseNumber }];
     });
-  if (bg?.immunizationOther?.trim()) noteParts.push(`Other: ${bg.immunizationOther.trim()}`);
-  return { immunizationRecords, immunizationNotes: noteParts.length ? noteParts.join('; ') : null };
+  return { immunizationRecords };
 };
 
 const buildOralApplianceRecords = (dh: FormData['dentalHistory'], catalog: OralApplianceCatalogItem[]) => {
@@ -592,8 +576,8 @@ export const buildBatchInputs = (
   }
 
   // Medical history
-  const { conditions: medConditions, notes: medNotes } = buildMedicalConditionRecords(formData.medicalHistory);
-  inputs.medicalHistory = { conditions: medConditions, notes: medNotes };
+  const { conditions: medConditions } = buildMedicalConditionRecords(formData.medicalHistory);
+  inputs.medicalHistory = { conditions: medConditions };
 
   // Allergy profile
   const { allergies, notes: allergyNotes } = buildAllergyRecords(formData.medicalBackground);
@@ -612,10 +596,10 @@ export const buildBatchInputs = (
   inputs.medicationProfile = { medications, notes: medicalNotes };
 
   // Immunization profile
-  const { immunizationRecords, immunizationNotes } = buildImmunizationRecords(
+  const { immunizationRecords } = buildImmunizationRecords(
     formData.medicalBackground, allCatalogs.immunizationCatalog
   );
-  inputs.immunizationProfile = { immunizations: immunizationRecords, notes: immunizationNotes };
+  inputs.immunizationProfile = { immunizations: immunizationRecords };
 
   // Lifestyle
   const yearsVaping = parseInt(formData.medicalBackground.yearsVaping, 10);
@@ -1303,12 +1287,12 @@ export const fetchRevisionPrefill = async (scope: 'medical' | 'dental' | 'both' 
   ];
   if (includeMedical) {
     emrFields.push(
-      `medicalHistory: getMedicalHistory { conditions { conditionId relationship } notes }`,
+      `medicalHistory: getMedicalHistory { conditions { conditionId relationship } }`,
       `allergyProfile: getAllergyProfile { allergies { allergenCatalogId status severity } notes }`,
       `hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate dischargeDate notes } notes }`,
       `operationProfile: getOperationProfile { operations { procedureId operationDate notes } notes }`,
       `medicationProfile: getMedicationProfile { medications { medicineId description } notes }`,
-      `immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } notes }`,
+      `immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate doseNumber } }`,
       `lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency yearsVaping }`,
       `visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }`,
       `obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }`,

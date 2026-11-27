@@ -412,7 +412,6 @@ const MedicalBackgroundSection = ({
         )}
       </div>
       <dl>
-        <DataRow label="Immunization Notes" value={immunizationProfile?.notes} />
         <DataRow label="Hospitalization Notes" value={hospitalizationProfile?.notes} />
         <DataRow label="Operation Notes" value={operationProfile?.notes} />
         <DataRow label="Medication Notes" value={medicationProfile?.notes} />

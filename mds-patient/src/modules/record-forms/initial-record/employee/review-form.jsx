@@ -118,7 +118,6 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
           ) : (
             <p className="text-secondary-500 text-sm">No conditions reported</p>
           )}
-          {formData.medicalHistory?.selfOtherChecked && formData.medicalHistory?.selfOther && <DataRow label="Other condition" value={formData.medicalHistory.selfOther} />}
         </div>
       </div>
 
@@ -138,7 +137,6 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
         ) : (
           <p className="text-secondary-500 text-sm">No family conditions reported</p>
         )}
-        {formData.medicalHistory?.familyOtherChecked && formData.medicalHistory?.familyOther && <DataRow label="Other family condition" value={`${formData.medicalHistory.familyOther}; ${formData.medicalHistory.familyOtherWhoHasIt || 'Relationship not provided'}`} />}
       </div>
 
       {/* Medical Background */}

@@ -4,7 +4,7 @@ const { query } = require('../../../config/query');
 const anchors = require('./anchor');
 const { decodeOralApplianceNotes } = require('../custom-choice-storage');
 beforeEach(() => query.mockReset());
-test.each(['MaintenanceMedication', 'OralAppliance', 'DentalRecord', 'MedicalHistory', 'Immunization'])('creates a %s anchor with optional notes', async table => {
+test.each(['MaintenanceMedication', 'OralAppliance', 'DentalRecord'])('creates a %s anchor with optional notes', async table => {
   const row = { id: 12, notes: 'note' };
   query.mockResolvedValue({ rows: [row] });
   await expect(anchors[table](12, 'note')).resolves.toBe(row);
@@ -16,18 +16,13 @@ test.each(['MaintenanceMedication', 'OralAppliance', 'DentalRecord', 'MedicalHis
   expect(query).toHaveBeenLastCalledWith(expect.stringContaining(`INSERT INTO "${table}"`), [12, null]);
   expect(query.mock.calls.at(-1)[0]).toContain('SET "notes" = EXCLUDED."notes"');
 });
-test.each(['MedicalHistory', 'Immunization'])('returns existing %s notes when omitted on revision', async table => {
-  query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ id: 12, notes: 'existing' }] });
-  await expect(anchors[table](12)).resolves.toEqual({ id: 12, notes: 'existing' });
-  expect(query.mock.calls[0][0]).toContain('DO NOTHING');
-  expect(query).toHaveBeenLastCalledWith(expect.stringContaining(`FROM "${table}" WHERE id = $1`), [12]);
-});
-test.each(['VisualAcuity', 'Hospitalization', 'Operation', 'DentalProcedure', 'Allergy'])('creates a %s anchor without writing an unsupported notes column', async table => {
+test.each(['MedicalHistory', 'Immunization', 'VisualAcuity', 'Hospitalization', 'Operation', 'DentalProcedure', 'Allergy'])('creates a %s anchor without writing an unsupported notes column', async table => {
   query.mockResolvedValue({ rows: [{ id: 12 }] });
   await expect(anchors[table](12, 'ignored profile note')).resolves.toEqual({ id: 12 });
   const [sql, values] = query.mock.calls[0];
   expect(sql).toContain(`INSERT INTO "${table}" ("id")`);
   expect(sql).not.toContain('"notes"');
+  expect(sql).toContain('RETURNING "id"');
   expect(sql).toContain('DO NOTHING');
   expect(values).toEqual([12]);
 });

@@ -47,6 +47,20 @@ describe('patient record service fetchers', () => {
     }));
   });
 
+  it.each(['getUserMedicalHistory', 'getUserImmunizationProfile'])('%s reads child details without retired notes', async method => {
+    axiosRequest.post.mockResolvedValue({ data: { data: {} } });
+    await service[method]('synthetic');
+    expect(axiosRequest.post.mock.lastCall[1].query).not.toMatch(/\bnotes\b/);
+  });
+
+  it('ignores stale history note edits and still saves lifestyle notes', async () => {
+    axiosRequest.post.mockResolvedValue({ data: { data: {} } });
+    await service.submitStaffEdits('synthetic', { medicalHistory: { notes: 'retired' } }, {});
+    expect(axiosRequest.post).not.toHaveBeenCalled();
+    await service.submitStaffEdits('synthetic', { medicalBackground: { lifestyleNotes: 'Keep this note' } }, {});
+    expect(axiosRequest.post.mock.lastCall[1].variables.input.notes).toBe('Keep this note');
+  });
+
   it('batches patient records with stable aliases, partial data, and empty input', async () => {
     await expect(service.getPatientBasicInfoBatch([])).resolves.toEqual(new Map());
     axiosRequest.post.mockResolvedValue({ data: { errors: [{ message: 'partial' }], data: { u_a_b: { id: 'a/b' } } } });
