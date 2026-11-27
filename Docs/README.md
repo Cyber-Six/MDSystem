@@ -4,6 +4,7 @@ This folder contains the current technical guides and a preserved archive of imp
 
 ## Start here
 
+- [System context and agent orchestration](SYSTEM_CONTEXT.md) — runtime map, feature ownership, verification, and handoffs.
 - [Playwright GUI and E2E testing](PLAYWRIGHT_E2E.md) — hosted smoke tests and isolated Pi database-backed workflows.
 
 - [Repository overview](../README.md) — applications, backend, and workspace layout.
