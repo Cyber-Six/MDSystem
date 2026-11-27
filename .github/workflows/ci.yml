@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Action to perform on the Pi use-case environment
+        description: deploy applies tested code and preserves database data. reset-database permanently wipes and recreates the database.
         required: true
         type: choice
         options:
-          - restart
+          - deploy
           - reset-database
-        default: restart
+        default: deploy
       confirm_database_reset:
         description: Type DELETE_DATABASE to authorize permanent database deletion
         required: false
@@ -30,7 +30,6 @@ concurrency:
 jobs:
   gui-smoke:
     name: Patient and staff GUI smoke tests
-    if: github.event_name != 'workflow_dispatch' || inputs.operation != 'reset-database'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -77,6 +76,8 @@ jobs:
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 45
+    outputs:
+      image_id: ${{ steps.build-image.outputs.image_id }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -110,7 +111,15 @@ jobs:
         run: docker compose config --quiet
 
       - name: Build Docker image
-        run: docker build --target runtime --build-arg SOURCE_REVISION="$GITHUB_SHA" --tag mdsystem:ci .
+        id: build-image
+        if: github.event_name != 'workflow_dispatch' || inputs.operation == 'deploy'
+        run: |
+          # Keep the exact ID even if another run replaces the mdsystem:ci tag.
+          image_id_file="$RUNNER_TEMP/mdsystem-ci-image-id"
+          docker build --target runtime --build-arg SOURCE_REVISION="$GITHUB_SHA" \
+            --tag mdsystem:ci --iidfile "$image_id_file" .
+          image_id=$(cat "$image_id_file")
+          echo "image_id=$image_id" >> "$GITHUB_OUTPUT"
 
       - name: Run coverage and disposable Playwright core tests
         if: github.event_name == 'push' || github.event_name == 'pull_request'
@@ -134,103 +143,59 @@ jobs:
           E2E_STATE_DIR: ${{ runner.temp }}/mdsystem-e2e-${{ github.run_id }}-${{ github.run_attempt }}
         run: node scripts/e2e-cleanup.js --registered
 
-      - name: Validate manual operation selection
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          OPERATION: ${{ inputs.operation }}
-          RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
-        run: |
-          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
-            echo "Manual Pi operations must be run from the deployment or development branch." >&2
-            exit 1
-          fi
-          if [ "$OPERATION" = "reset-database" ] && [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
-            echo "Database reset not authorized. Enter DELETE_DATABASE in the confirmation field." >&2
-            exit 1
-          fi
-
-      - name: Reset test database and deploy the tested image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/deployment'
-        working-directory: /srv/projects/MDSystem
-        env:
-          MD_SYSTEM_IMAGE: mdsystem
-          IMAGE_TAG: local
-        run: |
-          # This runs only after the push has passed tests and produced the CI image.
-          docker image inspect mdsystem:ci >/dev/null
-          docker image tag mdsystem:ci mdsystem:local
-          node "$GITHUB_WORKSPACE/scripts/compose.js" down --remove-orphans
-          for volume in mdsystem_postgres-data mdsystem_schema-state; do
-            if docker volume inspect "$volume" >/dev/null 2>&1; then
-              docker volume rm "$volume"
-            fi
-          done
-          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
-          node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
-          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
-          node "$GITHUB_WORKSPACE/scripts/compose.js" ps
-          patient_ok=1
-          staff_ok=1
-          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3000/ >/dev/null || patient_ok=0
-          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3001/ >/dev/null || staff_ok=0
-          if [ "$patient_ok" -eq 0 ] || [ "$staff_ok" -eq 0 ]; then
-            node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
-            exit 1
-          fi
-          node "$GITHUB_WORKSPACE/scripts/verify-image-revision.js" "$GITHUB_SHA" \
-            "patient=$(docker compose ps -q patient)" "staff=$(docker compose ps -q staff)"
-
-      - name: Manually restart the Pi use-case services
-        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'restart'
-        working-directory: /srv/projects/MDSystem
-        env:
-          MD_SYSTEM_IMAGE: mdsystem
-          IMAGE_TAG: local
-        run: |
-          docker image tag mdsystem:ci mdsystem:local
-          node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
-          node "$GITHUB_WORKSPACE/scripts/compose.js" ps
-          patient_ok=1
-          staff_ok=1
-          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3000/ >/dev/null || patient_ok=0
-          curl --fail --silent --show-error --retry-all-errors --retry 12 --retry-delay 5 --retry-max-time 120 http://127.0.0.1:3001/ >/dev/null || staff_ok=0
-          if [ "$patient_ok" -eq 0 ] || [ "$staff_ok" -eq 0 ]; then
-            node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
-            exit 1
-          fi
-          node "$GITHUB_WORKSPACE/scripts/verify-image-revision.js" "$GITHUB_SHA" \
-            "patient=$(docker compose ps -q patient)" "staff=$(docker compose ps -q staff)"
-
-  manual-reset-database:
-    name: Manually reset the Pi database
-    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database'
+  deploy-pi:
+    name: Apply operation on the Pi
+    needs: [gui-smoke, test-and-build]
+    if: >-
+      (github.event_name == 'push' && (github.ref == 'refs/heads/deployment' || github.ref == 'refs/heads/development')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref_type == 'branch' &&
+      (inputs.operation == 'deploy' || inputs.operation == 'reset-database'))
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: /srv/projects/MDSystem
+    env:
+      MD_SYSTEM_IMAGE: mdsystem
+      IMAGE_TAG: local
     steps:
       - name: Check out source
         uses: actions/checkout@v7
 
       - name: Validate manual database reset selection
+        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database'
         env:
           RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
         run: |
-          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
-            echo "Manual Pi operations must be run from the deployment or development branch." >&2
-            exit 1
-          fi
           if [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
             echo "Database reset not authorized. Enter DELETE_DATABASE in the confirmation field." >&2
             exit 1
           fi
 
-      - name: Confirm the existing app image is available
-        run: docker image inspect mdsystem:local >/dev/null
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
 
-      - name: Reset database, rerun SQL, and start services
-        working-directory: /srv/projects/MDSystem
+      - name: Tag the tested image for Pi deployment
+        id: tag-tested-image
+        if: github.event_name == 'push' || inputs.operation == 'deploy'
+        env:
+          CI_IMAGE_ID: ${{ needs.test-and-build.outputs.image_id }}
+        run: docker image tag "$CI_IMAGE_ID" mdsystem:local
+
+      - name: Deploy tested image to Pi (preserve database)
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/development') ||
+          (github.event_name == 'workflow_dispatch' && inputs.operation == 'deploy')
+        run: node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build --no-deps --force-recreate patient staff email-worker
+
+      - name: Reset Pi database, rerun SQL, and start services
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/deployment') ||
+          (github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database')
         run: |
-          # The existing local application image is reused. Resetting the database does not need a rebuild.
-          # Stop and remove containers so Docker releases the database volumes.
+          docker image inspect mdsystem:local >/dev/null
           node "$GITHUB_WORKSPACE/scripts/compose.js" down --remove-orphans
           for volume in mdsystem_postgres-data mdsystem_schema-state; do
             if docker volume inspect "$volume" >/dev/null 2>&1; then
@@ -240,6 +205,9 @@ jobs:
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d postgres redis
           node "$GITHUB_WORKSPACE/scripts/compose.js" --profile setup run --rm schema-init
           node "$GITHUB_WORKSPACE/scripts/compose.js" up -d --no-build patient staff email-worker
+
+      - name: Check Pi service health
+        run: |
           node "$GITHUB_WORKSPACE/scripts/compose.js" ps
           patient_ok=1
           staff_ok=1
@@ -249,3 +217,9 @@ jobs:
             node "$GITHUB_WORKSPACE/scripts/compose.js" logs --tail=100 patient staff email-worker
             exit 1
           fi
+
+      - name: Verify deployed image revision
+        if: steps.tag-tested-image.outcome == 'success'
+        run: |
+          node "$GITHUB_WORKSPACE/scripts/verify-image-revision.js" "$GITHUB_SHA" \
+            "patient=$(docker compose ps -q patient)" "staff=$(docker compose ps -q staff)"
