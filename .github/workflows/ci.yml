@@ -30,6 +30,7 @@ concurrency:
 jobs:
   gui-smoke:
     name: Patient and staff GUI smoke tests
+    if: github.event_name != 'workflow_dispatch' || inputs.operation != 'reset-database'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -146,10 +147,15 @@ jobs:
   deploy-pi:
     name: Apply operation on the Pi
     needs: [gui-smoke, test-and-build]
+    # Manual resets reuse the installed image. All code deployments require successful checks.
     if: >-
-      (github.event_name == 'push' && (github.ref == 'refs/heads/deployment' || github.ref == 'refs/heads/development')) ||
-      (github.event_name == 'workflow_dispatch' && github.ref_type == 'branch' &&
-      (inputs.operation == 'deploy' || inputs.operation == 'reset-database'))
+      !cancelled() && (
+        (github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database') ||
+        (needs.gui-smoke.result == 'success' && needs.test-and-build.result == 'success' && (
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.operation == 'deploy')
+        ))
+      )
     runs-on: [self-hosted, Linux, ARM64]
     timeout-minutes: 20
     defaults:
@@ -162,12 +168,17 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Validate manual database reset selection
-        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-database'
+      - name: Validate manual Pi operation
+        if: github.event_name == 'workflow_dispatch'
         env:
+          OPERATION: ${{ inputs.operation }}
           RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
         run: |
-          if [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
+          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
+            echo "Manual Pi operations must be run from the deployment or development branch." >&2
+            exit 1
+          fi
+          if [ "$OPERATION" = "reset-database" ] && [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
             echo "Database reset not authorized. Enter DELETE_DATABASE in the confirmation field." >&2
             exit 1
           fi
