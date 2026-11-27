@@ -149,6 +149,8 @@ jobs:
 
       - name: Deploy staging image
         env:
+          VITE_PATIENT_BACKEND_URL: ${{ vars.VITE_PATIENT_BACKEND_URL }}
+          VITE_STAFF_BACKEND_URL: ${{ vars.VITE_STAFF_BACKEND_URL }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
@@ -228,6 +230,8 @@ jobs:
 
       - name: Deploy production image
         env:
+          VITE_PATIENT_BACKEND_URL: ${{ vars.VITE_PATIENT_BACKEND_URL }}
+          VITE_STAFF_BACKEND_URL: ${{ vars.VITE_STAFF_BACKEND_URL }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}

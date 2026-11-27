@@ -12,6 +12,7 @@
     "postinstall": "cd Backend && npm install",
     "test": "jest --runInBand",
     "test:coverage": "jest --runInBand --coverage",
+    "test:all": "npm run test:coverage && npm run test:e2e:core",
     "test:backend": "jest --runInBand --selectProjects backend",
     "test:backend:coverage": "jest --runInBand --config Backend/jest.config.js --coverage --coverageReporters=text --coverageReporters=html --coverageReporters=lcov --coverageReporters=json-summary",
     "test:patient": "jest --runInBand --selectProjects patient",

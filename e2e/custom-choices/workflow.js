@@ -33,6 +33,8 @@ async function openSection(page, title, placeholder) {
   const scope = button.locator('..');
   const opened = await scope.locator(':scope > div.max-h-0').count() === 0;
   if (!opened) await button.click();
+  // The panel can still clip radio inputs while its opening transition runs.
+  await expect(scope.locator(':scope > div')).toHaveCSS('opacity', '1');
   return scope;
 }
 function dataFor(role, mode) {

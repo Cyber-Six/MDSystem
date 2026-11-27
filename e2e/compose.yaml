@@ -50,6 +50,8 @@ x-app-base: &app-base
     DEBUG_BYPASS_OTP: "false"
     ALLOW_BOOTSTRAP_ADMIN: "false"
     MEDIA_PATH: /app/media
+    MEDIA_MAX_FILES_STAGING: "5"
+    MEDIA_MAX_FILES_STAGING_EXP: "300"
     ICD_RELEASE: "2026-01"
     LOGGER_DIR: /tmp/mdsystem-logs
     EMAIL_DELAY: 0

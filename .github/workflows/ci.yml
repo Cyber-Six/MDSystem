@@ -46,6 +46,14 @@ jobs:
       - name: Install repository dependencies
         run: npm ci
 
+      - name: Install mobile dependencies for fork coverage
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: npm ci --prefix mds-mobile
+
+      - name: Run coverage on fork pull requests
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: npm run test:coverage
+
       - name: Build patient and staff portals
         run: npm run build
 
@@ -85,17 +93,9 @@ jobs:
       - name: Install mobile dependencies
         run: npm ci --prefix mds-mobile
 
-      - name: Run backend tests
-        run: npm run test:backend
-
-      - name: Run patient portal tests
-        run: npm run test:patient
-
-      - name: Run staff portal tests
-        run: npm run test:staff
-
-      - name: Run mobile tests
-        run: npm run test:mobile
+      - name: Run application tests for manual Pi operations
+        if: github.event_name == 'workflow_dispatch'
+        run: npm test -- --selectProjects backend patient staff mobile
 
       - name: Build patient and staff portals
         run: npm run build
@@ -112,14 +112,15 @@ jobs:
       - name: Build Docker image
         run: docker build --target runtime --build-arg SOURCE_REVISION="$GITHUB_SHA" --tag mdsystem:ci .
 
-      - name: Run disposable database-backed Playwright core suite
-        if: github.event_name == 'push' && github.ref == 'refs/heads/deployment'
+      - name: Run coverage and disposable Playwright core tests
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         env:
           E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
-        run: npm run test:e2e:core
+          E2E_STATE_DIR: ${{ runner.temp }}/mdsystem-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+        run: npm run test:all
 
       - name: Upload disposable Playwright core report
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/deployment'
+        if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
         uses: actions/upload-artifact@v7
         with:
           name: playwright-core-${{ github.sha }}
@@ -128,9 +129,9 @@ jobs:
           retention-days: 7
 
       - name: Remove registered interrupted E2E projects
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/deployment'
+        if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
         env:
-          E2E_CONFIG_PATH: /srv/projects/MDSystem/e2e.private.env
+          E2E_STATE_DIR: ${{ runner.temp }}/mdsystem-e2e-${{ github.run_id }}-${{ github.run_attempt }}
         run: node scripts/e2e-cleanup.js --registered
 
       - name: Validate manual operation selection
