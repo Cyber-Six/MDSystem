@@ -3,10 +3,9 @@ jest.mock('../../config/middleware/jwtProtect.js', () => ({ jwtProtect: jest.fn(
 jest.mock('../../config/query.js', () => ({}));
 jest.mock('../../config/db.js', () => ({ query: jest.fn() }));
 jest.mock('../../services/analytics/analytics-query.js', () => ({
-  getAvailableQueries: jest.fn(() => ['patients']), getFilterOptions: jest.fn(), getAvailableReports: jest.fn(() => ['summary']),
-  hasQuery: jest.fn(), executeQuery: jest.fn(), executeBatchQueries: jest.fn(), hasReport: jest.fn(), getReportData: jest.fn(),
+  getAvailableQueries: jest.fn(() => ['patients']), getFilterOptions: jest.fn(),
+  hasQuery: jest.fn(), executeQuery: jest.fn(), executeBatchQueries: jest.fn(),
 }));
-jest.mock('../../services/doc-generate-module/index.js', () => ({ downloadDocument: jest.fn() }));
 jest.mock('../../services/analytics/analytics-export.js', () => ({ EXPORT_PRESETS: { monthly: { label: 'Monthly' } }, EXPORT_META: { patients: { label: 'Patients' } }, resolveDataTypes: jest.fn(), buildFilename: jest.fn(), fetchExportData: jest.fn(), generatePDF: jest.fn(), generateSingleMetricPDF: jest.fn() }));
 jest.mock('../../services/analytics/analytics-matrix-export.js', () => ({ generateMatrixCsvFiles: jest.fn(), generateMatrixExcelWorkbook: jest.fn() }));
 jest.mock('../../services/authorization/permit.js', () => ({
@@ -95,14 +94,11 @@ test.each([
   expect(permit.getStaffModulePermissions.mock.calls).toEqual([[9], [10]]);
 });
 
-test('serves query, report, and filter metadata and handles service failures', async () => {
+test('serves query and filter metadata and handles service failures', async () => {
   const res = response();
   analytics.getAvailableQueries.mockReturnValueOnce(['patients']);
   await handler('get', '/queries')(req(), res);
   expect(res.json).toHaveBeenCalledWith({ success: true, queries: ['patients'] });
-  analytics.getAvailableReports.mockReturnValueOnce(['summary']);
-  await handler('get', '/reports')(req(), res);
-  expect(res.json).toHaveBeenLastCalledWith({ success: true, reports: ['summary'] });
   analytics.getFilterOptions.mockResolvedValueOnce({ departments: ['Dental'] });
   await handler('get', '/filter-options')(req(), res);
   expect(res.json).toHaveBeenLastCalledWith({ success: true, departments: ['Dental'] });
@@ -111,9 +107,6 @@ test('serves query, report, and filter metadata and handles service failures', a
   expect(res.status).toHaveBeenLastCalledWith(500);
   analytics.getAvailableQueries.mockImplementationOnce(() => { throw new Error('query catalog failed'); });
   await handler('get', '/queries')(req(), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'FETCH_FAILED' });
-  analytics.getAvailableReports.mockImplementationOnce(() => { throw new Error('report catalog failed'); });
-  await handler('get', '/reports')(req(), res);
   expect(res.json).toHaveBeenLastCalledWith({ error: 'FETCH_FAILED' });
   analytics.getAvailableQueries.mockImplementationOnce(() => { throw new Error('query catalog failed'); });
   await handler('get', '/queries')(req(), res);
@@ -194,43 +187,6 @@ test('returns export presets and types from the configured catalog', () => {
   expect(res.json).toHaveBeenCalledWith({ success: true, presets: { monthly: { label: 'Monthly' } } });
   handler('get', '/export/types')(req(), res);
   expect(res.json).toHaveBeenLastCalledWith({ success: true, types: { patients: { label: 'Patients' } } });
-});
-
-test('serves report documents, handles missing reports and converts generation failures', async () => {
-  const run = handler('get', '/report/:reportType');
-  const res = response();
-  const body = { branch: 'Manila', startDate: '2026-01-01', endDate: '2026-01-31' };
-  await run(req({ params: { reportType: 'monthly' }, query: {} }), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'BRANCH_REQUIRED' });
-  await run(req({ params: { reportType: 'monthly' }, query: { branch: 'Manila', startDate: body.startDate } }), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'DATE_RANGE_REQUIRED' });
-  await run(req({ params: { reportType: 'monthly' }, query: { ...body, branch: 'bad' } }), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'INVALID_BRANCH' });
-  analytics.hasReport.mockReturnValueOnce(false);
-  await run(req({ params: { reportType: 'missing' }, query: body }), res);
-  expect(res.status).toHaveBeenLastCalledWith(404);
-  analytics.hasReport.mockReturnValue(true);
-  permit.getStaffBranch.mockResolvedValueOnce('QuezonCity');
-  await run(req({ params: { reportType: 'monthly' }, query: body }), res);
-  expect(res.status).toHaveBeenLastCalledWith(403);
-  permit.getStaffBranch.mockResolvedValue('Both');
-  analytics.getReportData.mockResolvedValue({ description: 'Monthly report', sections: [], summary: {} });
-  db.query.mockResolvedValueOnce({ rows: [{ first_name: 'Ada', last_name: 'Lovelace', title: 'MD' }] });
-  const responseWithSend = response();
-  await run(req({ params: { reportType: 'monthly' }, query: { ...body, title: 'Custom' } }), responseWithSend);
-  expect(require('../../services/doc-generate-module/index.js').downloadDocument).toHaveBeenCalledWith('staff-report', expect.objectContaining({ report: expect.objectContaining({ title: 'Custom' }), physician: expect.objectContaining({ firstName: 'Ada' }) }), responseWithSend);
-  analytics.getReportData.mockResolvedValueOnce({});
-  db.query.mockResolvedValueOnce({ rows: [] });
-  const fallbackReport = response();
-  await run(req({ params: { reportType: 'monthly' }, query: { ...body, branch: 'QuezonCity' } }), fallbackReport);
-  expect(require('../../services/doc-generate-module/index.js').downloadDocument).toHaveBeenLastCalledWith('staff-report', expect.objectContaining({ report: expect.objectContaining({ title: 'Analytics Report' }), sections: [], summary: {}, clinic: expect.objectContaining({ address: 'Quezon City Campus, Philippines' }) }), fallbackReport);
-  analytics.getReportData.mockRejectedValueOnce(new Error('render failed'));
-  const failed = response();
-  await run(req({ params: { reportType: 'monthly' }, query: body }), failed);
-  expect(failed.json).toHaveBeenLastCalledWith({ error: 'REPORT_FAILED', message: 'render failed' });
-  const sent = response(); sent.headersSent = true;
-  await run(req({ params: { reportType: 'monthly' }, query: body }), sent);
-  expect(sent.status).not.toHaveBeenCalled();
 });
 
 test('validates export requests and exercises CSV, Excel, PDF, and failure paths', async () => {

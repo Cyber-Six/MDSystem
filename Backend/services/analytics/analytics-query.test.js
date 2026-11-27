@@ -8,8 +8,6 @@ test('exposes query metadata and distinguishes registered queries from unknown o
   expect(analytics.getAvailableQueries().length).toBeGreaterThan(0);
   expect(analytics.hasQuery('consultations-by-type')).toBe(true);
   expect(analytics.hasQuery('not-registered')).toBe(false);
-  expect(analytics.getAvailableReports()).toEqual([]);
-  expect(analytics.hasReport('not-registered')).toBe(false);
   await expect(analytics.executeQuery('not-registered', 'Both', 'a', 'b')).rejects.toThrow('Unknown query type');
 });
 

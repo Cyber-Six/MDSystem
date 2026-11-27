@@ -2386,42 +2386,6 @@ function buildChartContext(dataType, options = {}, result = {}) {
 }
 
 // ============================================================
-// REPORT QUERY FUNCTIONS - For PDF report generation
-// ============================================================
-
-/**
- * Example report data fetcher
- * @param {string} branch
- * @param {string} startDate
- * @param {string} endDate
- * @returns {Promise<object>} Report data object
- */
-async function exampleReportData(branch, startDate, endDate) {
-  // TODO: Fetch and compile data for report
-  return {
-    sections: [],
-    summary: {},
-  };
-}
-
-// ============================================================
-// REPORT REGISTRY - Register your report types here
-// ============================================================
-
-/**
- * Map of reportType -> { handler, description, template }
- * Add entries here to expose new report types
- */
-const REPORT_HANDLERS = {
-  // Example entry (uncomment and modify):
-  // 'monthly-summary': {
-  //   handler: monthlySummaryReport,
-  //   description: 'Monthly summary report',
-  //   template: 'staff-report',
-  // },
-};
-
-// ============================================================
 // MODULE EXPORTS
 // ============================================================
 
@@ -2430,16 +2394,6 @@ const REPORT_HANDLERS = {
  */
 function getAvailableQueries() {
   return Object.entries(QUERY_HANDLERS).map(([name, config]) => ({
-    name,
-    description: config.description,
-  }));
-}
-
-/**
- * Get list of available report types
- */
-function getAvailableReports() {
-  return Object.entries(REPORT_HANDLERS).map(([name, config]) => ({
     name,
     description: config.description,
   }));
@@ -2504,36 +2458,10 @@ async function executeBatchQueries(dataTypes, branch, startDate, endDate, option
 }
 
 /**
- * Get report data by reportType
- */
-async function getReportData(reportType, branch, startDate, endDate) {
-  const config = REPORT_HANDLERS[reportType];
-  if (!config) {
-    throw new Error(`Unknown report type: ${reportType}`);
-  }
-
-  logger.debug(`Fetching report data: ${reportType}`, { branch, startDate, endDate });
-  const data = await config.handler(branch, startDate, endDate);
-
-  return {
-    ...data,
-    template: config.template,
-    description: config.description,
-  };
-}
-
-/**
  * Check if query type exists
  */
 function hasQuery(dataType) {
   return dataType in QUERY_HANDLERS;
-}
-
-/**
- * Check if report type exists
- */
-function hasReport(reportType) {
-  return reportType in REPORT_HANDLERS;
 }
 
 /**
@@ -2629,20 +2557,16 @@ async function getFilterOptions(branch = 'Both') {
 module.exports = {
   // Registry access
   QUERY_HANDLERS,
-  REPORT_HANDLERS,
   VALID_GROUP_BY,
 
   // List available types
   getAvailableQueries,
-  getAvailableReports,
 
   // Execute
   executeQuery,
   executeBatchQueries,
-  getReportData,
 
   // Utilities
   hasQuery,
-  hasReport,
   getFilterOptions,
 };

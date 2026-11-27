@@ -7,10 +7,8 @@ This guide describes the current staff analytics API and document routes. Analyt
 | Method and path | Purpose |
 | --- | --- |
 | `GET /analytics/queries` | List registered analytics query keys. |
-| `GET /analytics/reports` | List registered report types. |
 | `GET /analytics/query/:dataType` | Fetch one metric. Requires `branch`, `startDate`, and `endDate`; supports additional filters such as `groupBy`, `sex`, `department`, and `ageGroup`. |
 | `POST /analytics/batch` | Fetch multiple metrics for the same filter set. |
-| `GET /analytics/report/:reportType` | Generate a PDF report. |
 | `GET /analytics/export/presets` | List export presets. |
 | `GET /analytics/export/types` | List exportable metrics and metadata. |
 | `POST /analytics/export` | Export selected metrics or a preset as CSV, Excel, or PDF. |
