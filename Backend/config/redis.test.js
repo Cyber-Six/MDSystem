@@ -13,7 +13,7 @@ function scan(items) {
 beforeEach(() => {
   jest.resetModules();
   restore = withEnvironment({ ...Object.fromEntries(settings.map(key => [key, undefined])), DEBUG_BYPASS_OTP: undefined, MEDIA_MAX_FILES_STAGING: '3', MEDIA_MAX_FILES_STAGING_EXP: '60', DATA_CONSENT_VERSION: 'v2' });
-  client = Object.fromEntries(['connect', 'on', 'set', 'get', 'del', 'sAdd', 'sMembers', 'sRem', 'sCard', 'rPush', 'lRange', 'lTrim', 'lLen', 'incr', 'expire', 'ttl', 'exists', 'hSet', 'hGet', 'hGetAll', 'decr', 'keys', 'scanIterator', 'mGet'].map(name => [name, jest.fn()]));
+  client = Object.fromEntries(['connect', 'on', 'set', 'get', 'del', 'sAdd', 'sMembers', 'sRem', 'sCard', 'rPush', 'lRange', 'lTrim', 'lLen', 'incr', 'expire', 'ttl', 'exists', 'hSet', 'hGet', 'hGetAll', 'decr', 'keys', 'scanIterator', 'mGet', 'eval'].map(name => [name, jest.fn()]));
   pipeline = { exec: jest.fn() };
   for (const name of ['sAdd', 'expire', 'lRange', 'del', 'ttl']) pipeline[name] = jest.fn(() => pipeline);
   client.multi = jest.fn(() => pipeline);
@@ -258,17 +258,36 @@ test.each([
   await store[record]('ip');
   expect(client.set).toHaveBeenLastCalledWith(`${prefix}:lock:ip`, '1', { EX: 30 });
 });
-test('enforces media staging quotas and clears exhausted counts', async () => {
+test('reserves and releases media staging slots with one atomic Redis call each', async () => {
   await store.initRedis();
-  client.incr.mockResolvedValueOnce(1).mockResolvedValueOnce(4);
+  client.eval.mockResolvedValueOnce(1).mockResolvedValueOnce(0).mockResolvedValueOnce(2).mockResolvedValueOnce(0);
   await expect(store.incrementMediaStagingCount(12)).resolves.toBe(true);
   await expect(store.incrementMediaStagingCount(12)).resolves.toBe(false);
-  expect(client.expire).toHaveBeenCalledWith('media:staging:12', 60);
-  client.get.mockResolvedValueOnce(null).mockResolvedValueOnce('1').mockResolvedValueOnce('3');
-  client.decr.mockResolvedValue(2);
-  await expect(store.decrementMediaStagingCount(12)).resolves.toBe(0);
-  await expect(store.decrementMediaStagingCount(12)).resolves.toBe(0);
   await expect(store.decrementMediaStagingCount(12)).resolves.toBe(2);
+  await expect(store.decrementMediaStagingCount(12)).resolves.toBe(0);
+
+  const keys = ['media:staging:12'];
+  expect(client.eval.mock.calls).toEqual([
+    [expect.any(String), { keys, arguments: ['3', '60'] }],
+    [expect.any(String), { keys, arguments: ['3', '60'] }],
+    [expect.any(String), { keys, arguments: [] }],
+    [expect.any(String), { keys, arguments: [] }],
+  ]);
+  for (const command of ['get', 'incr', 'ttl', 'expire', 'decr', 'del']) {
+    expect(client[command]).not.toHaveBeenCalled();
+  }
+});
+
+test('uses default media staging limits for invalid settings', async () => {
+  await store.initRedis();
+  process.env.MEDIA_MAX_FILES_STAGING = '0';
+  process.env.MEDIA_MAX_FILES_STAGING_EXP = '1.5';
+  client.eval.mockResolvedValue(1);
+  await expect(store.incrementMediaStagingCount(13)).resolves.toBe(true);
+  expect(client.eval).toHaveBeenCalledWith(expect.any(String), {
+    keys: ['media:staging:13'],
+    arguments: ['5', '300'],
+  });
 });
 test('creates, loads, and deletes short-lived admin transfers', async () => {
   await store.initRedis();
@@ -358,7 +377,7 @@ test('blacklist lookups reflect expiring token keys without persistent membershi
 
 test('revocation returns every blacklisted JWT ID and tolerates expired sessions', async () => {
   await store.initRedis();
-  client.eval = jest.fn().mockResolvedValueOnce(['before-refresh', 'after-refresh']).mockResolvedValueOnce([]);
+  client.eval.mockResolvedValueOnce(['before-refresh', 'after-refresh']).mockResolvedValueOnce([]);
   await expect(store.revokeRefreshSession('12', 'phone')).resolves.toEqual([
     { tokenId: 'before-refresh', blacklisted: true }, { tokenId: 'after-refresh', blacklisted: true },
   ]);
@@ -368,7 +387,7 @@ test('revocation returns every blacklisted JWT ID and tolerates expired sessions
 
 test('refresh persistence reports an atomic conflict instead of overwriting a revoked session', async () => {
   await store.initRedis();
-  client.eval = jest.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+  client.eval.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
   await expect(store.saveRotatedRefreshSession('12', 'phone', 'old', { refreshToken: 'new' }, 120)).resolves.toBe(false);
   await expect(store.saveRotatedRefreshSession('12', 'phone', 'old', { refreshToken: 'new' }, 120)).resolves.toBe(true);
 });

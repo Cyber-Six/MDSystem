@@ -19,12 +19,12 @@ npm run test:backend:coverage
 The backend suite uses `Backend/jest.config.js`. Eligible backend JavaScript
 sources require a same-directory `filename.test.js` or
 `__tests__/filename.test.js` counterpart. The inventory in
-`Backend/test-support/source-inventory.cjs` drives both this guard and coverage
-collection; generated output, dependencies, test infrastructure, and the
-manual `test-patient-management.js` diagnostic are excluded.
+`Backend/test-support/source-inventory.cjs` drives the counterpart guard.
 
-Coverage thresholds are 100% for statements, branches, functions, and lines
-for each eligible source file. Reports are written under `Backend/coverage/`.
+Backend coverage collects application JavaScript and applies global floors of
+29% statements, 20% branches, 21% functions, and 30% lines. The auth routes
+have a separate 90% floor on all four metrics. Reports are written under
+`Backend/coverage/`.
 
 ## Playwright
 
@@ -43,16 +43,9 @@ npm run test:mobile
 Use `npm test` to run the root Jest projects together. See each workspace's
 README or `package.json` for additional commands and local test prerequisites.
 
-Every eligible Backend JavaScript source is expected to have a same-directory
-`filename.test.js` or `__tests__/filename.test.js` counterpart. The inventory
-used by both the counterpart guard and coverage collection is
-`Backend/test-support/source-inventory.cjs`; it excludes dependencies, generated
-output, coverage output, test infrastructure, Jest configuration, and the
-manual `test-patient-management.js` diagnostic.
-
-Coverage thresholds are 100% for statements, branches, functions, and lines on
-each eligible source file. Reports are emitted as text, HTML, LCOV, and JSON
-under `Backend/coverage/`.
+Use `npm run test:coverage` to run the root coverage gate. It uses the same
+global floors and backend auth threshold, plus shared core thresholds from
+90% to 100%. Reports are written under `coverage/`.
 
 The counterpart guard lists missing files in a failing test, making newly added
 backend source impossible to omit silently. To inspect uncovered branches after

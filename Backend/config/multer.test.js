@@ -1,12 +1,15 @@
 jest.mock('multer', () => Object.assign(jest.fn(() => 'upload-middleware'), { memoryStorage: jest.fn(() => 'memory-storage') }));
 // file-type exposes ESM-only conditions; isolate the detector at the boundary.
 jest.mock('file-type', () => ({ fileTypeFromBuffer: jest.fn() }), { virtual: true });
-jest.mock('uuid', () => ({ v4: jest.fn(() => 'new-id') }));
+jest.mock('uuid', () => ({ v4: jest.fn(() => mockNewId) }));
 jest.mock('fs', () => ({ promises: Object.fromEntries(['mkdir', 'writeFile', 'readdir', 'unlink', 'rename'].map(key => [key, jest.fn()])) }));
 jest.mock('./redis', () => ({ incrementMediaStagingCount: jest.fn(), decrementMediaStagingCount: jest.fn() }));
 jest.mock('../utils/logger', () => require('../test-support/fixtures.cjs').loggerMock());
 const path = require('path');
 const { withEnvironment } = require('../test-support/fixtures.cjs');
+const mockNewId = '9a0b1c2d-3e4f-4567-89ab-cdef01234567';
+const stagedId = '01234567-89ab-4cde-8f01-23456789abcd';
+const missingId = '23456789-abcd-4012-8e34-56789abcdef0';
 let restore, media, fs, redis, types;
 beforeEach(() => {
   jest.resetModules();
@@ -41,41 +44,65 @@ test.each([null, { mime: 'application/javascript' }])('rejects unsupported file 
 });
 test('stages a file only when quota is available', async () => {
   const buffer = Buffer.from('file');
-  await expect(media.stageFile(12, buffer, '.pdf')).resolves.toBe('new-id');
-  expect(fs.writeFile).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.staging, 'new-id.pdf'), buffer);
+  const ownerDirectory = path.join(media.MEDIA_PATH.staging, '12');
+  await expect(media.stageFile(12, buffer, '.pdf')).resolves.toBe(mockNewId);
+  expect(fs.mkdir).toHaveBeenCalledWith(ownerDirectory, { recursive: true });
+  expect(redis.incrementMediaStagingCount).toHaveBeenCalledWith(12);
+  expect(fs.writeFile).toHaveBeenCalledWith(path.join(ownerDirectory, `${mockNewId}.pdf`), buffer);
   redis.incrementMediaStagingCount.mockResolvedValue(false);
   await expect(media.stageFile(12, buffer, '.pdf')).rejects.toThrow('MAX_FILES_STAGING_EXCEEDED');
   expect(fs.writeFile).toHaveBeenCalledTimes(1);
 });
-test('unstages a matching file and updates the quota', async () => {
-  fs.readdir.mockResolvedValue(['other.pdf', 'old-id.pdf']);
-  await expect(media.unstageFile(12, 'old-id')).resolves.toBe(true);
-  expect(fs.unlink).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.staging, 'old-id.pdf'));
+test('releases the staging slot when writing fails', async () => {
+  const error = new Error('write failed');
+  fs.writeFile.mockRejectedValue(error);
+  await expect(media.stageFile(12, Buffer.from('file'), '.pdf')).rejects.toBe(error);
   expect(redis.decrementMediaStagingCount).toHaveBeenCalledWith(12);
-  await expect(media.unstageFile(12, 'missing')).rejects.toThrow('FILE_NOT_FOUND');
+});
+test('unstages a matching file and updates the quota', async () => {
+  const ownerDirectory = path.join(media.MEDIA_PATH.staging, '12');
+  fs.readdir.mockResolvedValue([`${stagedId}-other.pdf`, `${stagedId}.pdf`]);
+  await expect(media.unstageFile(12, stagedId)).resolves.toBe(true);
+  expect(fs.readdir).toHaveBeenCalledWith(ownerDirectory);
+  expect(fs.unlink).toHaveBeenCalledWith(path.join(ownerDirectory, `${stagedId}.pdf`));
+  expect(redis.decrementMediaStagingCount).toHaveBeenCalledWith(12);
+  await expect(media.unstageFile(12, missingId)).rejects.toThrow('FILE_NOT_FOUND');
+  expect(redis.decrementMediaStagingCount).toHaveBeenCalledTimes(1);
 });
 test('promotes a staged file preserving its extension', async () => {
-  fs.readdir.mockResolvedValue(['old-id.pdf']);
-  await expect(media.promoteFile(12, 'old-id', 'documents')).resolves.toBe('new-id');
-  expect(fs.rename).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.staging, 'old-id.pdf'), path.join(media.MEDIA_PATH.documents, 'new-id.pdf'));
+  const ownerDirectory = path.join(media.MEDIA_PATH.staging, '12');
+  fs.readdir.mockResolvedValue([`${stagedId}.pdf`]);
+  await expect(media.promoteFile(12, stagedId, 'documents')).resolves.toBe(mockNewId);
+  expect(fs.readdir).toHaveBeenCalledWith(ownerDirectory);
+  expect(fs.rename).toHaveBeenCalledWith(
+    path.join(ownerDirectory, `${stagedId}.pdf`),
+    path.join(media.MEDIA_PATH.documents, `${mockNewId}.pdf`),
+  );
   expect(redis.decrementMediaStagingCount).toHaveBeenCalledWith(12);
-  await expect(media.promoteFile(12, 'missing', 'documents')).rejects.toThrow('FILE_NOT_FOUND');
-  await expect(media.promoteFile(12, 'old-id', 'invalid')).rejects.toThrow('INVALID_TYPE');
+  await expect(media.promoteFile(12, missingId, 'documents')).rejects.toThrow('FILE_NOT_FOUND');
+  await expect(media.promoteFile(12, stagedId, 'invalid')).rejects.toThrow('INVALID_TYPE');
+});
+test('treats a missing owner directory as a missing staged file', async () => {
+  fs.readdir.mockRejectedValue(Object.assign(new Error('missing directory'), { code: 'ENOENT' }));
+  await expect(media.unstageFile(13, stagedId)).rejects.toThrow('FILE_NOT_FOUND');
+  expect(fs.readdir).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.staging, '13'));
+  expect(fs.unlink).not.toHaveBeenCalled();
+  expect(redis.decrementMediaStagingCount).not.toHaveBeenCalled();
 });
 test('validates search types and propagates filesystem errors', async () => {
-  await expect(media.checkFileByUuid('invalid', 'id')).rejects.toThrow('INVALID_TYPE');
+  await expect(media.checkFileByUuid('invalid', stagedId)).rejects.toThrow('INVALID_TYPE');
   fs.readdir.mockRejectedValue(new Error('read failed'));
-  await expect(media.checkFileByUuid('documents', 'id')).rejects.toThrow('read failed');
+  await expect(media.checkFileByUuid('documents', stagedId)).rejects.toThrow('read failed');
 });
 test('deletes existing files and reports missing files on request', async () => {
-  fs.readdir.mockResolvedValue(['old-id.pdf']);
-  await expect(media.deleteFile('documents', 'old-id')).resolves.toBe(true);
-  expect(fs.unlink).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.documents, 'old-id.pdf'));
-  await expect(media.deleteFile('invalid', 'id')).rejects.toThrow('INVALID_TYPE');
-  await expect(media.deleteFile('documents', 'missing', true)).rejects.toThrow('FILE_NOT_FOUND');
+  fs.readdir.mockResolvedValue([`${stagedId}.pdf`]);
+  await expect(media.deleteFile('documents', stagedId)).resolves.toBe(true);
+  expect(fs.unlink).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.documents, `${stagedId}.pdf`));
+  await expect(media.deleteFile('invalid', stagedId)).rejects.toThrow('INVALID_TYPE');
+  await expect(media.deleteFile('documents', missingId, true)).rejects.toThrow('FILE_NOT_FOUND');
 });
-test('rejects a path traversal before writing', async () => {
-  require('uuid').v4.mockReturnValue('../../escape');
-  await expect(media.stageFile(12, Buffer.from('file'), '.pdf')).rejects.toThrow('INVALID_PATH');
+test('rejects an invalid staging owner before reserving quota or writing', async () => {
+  await expect(media.stageFile('../13', Buffer.from('file'), '.pdf')).rejects.toThrow('INVALID_USER_ID');
+  expect(redis.incrementMediaStagingCount).not.toHaveBeenCalled();
   expect(fs.writeFile).not.toHaveBeenCalled();
 });
