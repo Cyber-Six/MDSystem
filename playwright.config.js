@@ -72,7 +72,7 @@ module.exports = defineConfig({
     { name: 'smoke', testMatch: ['login-smoke.spec.js', 'smoke/**/*.spec.js'] },
     {
       name: 'core',
-      testMatch: 'core/**/*.spec.js',
+      testMatch: ['core/**/*.spec.js', 'flows/appointments.spec.js', 'flows/medicine-requests.spec.js'],
       use: { trace: 'off', screenshot: 'off', video: recordE2EVideo ? 'on' : 'off' },
     },
     {

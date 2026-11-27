@@ -4,7 +4,7 @@ MDSystem keeps a fast, mocked GUI smoke suite separate from database-backed brow
 
 ## Current coverage
 
-The foundation currently automates five database-backed checks. Appointment capacity/approval and medicine request flows from the agreed Phase 1 remain to be added before Phase 1 can be considered complete.
+The core suite covers authentication, appointment booking through attendance, and medicine requests through dispensing. Appointment cancellation and capacity rejection are outside the core suite.
 
 | ID | Actors and prerequisites | Browser action and expected result | Status |
 | --- | --- | --- | --- |
@@ -15,12 +15,12 @@ The foundation currently automates five database-backed checks. Appointment capa
 | CORE-AUTH-05 | No saved session | Open the protected staff role-management route directly; browser redirects to login | Automated |
 | CORE-RECORD-01 | Student with no initial record | Submit initial record; staff sees the pending record | Planned |
 | CORE-RECORD-02 | Pending initial record and authorized staff account | Review and approve it; patient sees approved status after refresh | Planned |
-| CORE-APPT-01 | Patient and available seeded appointment slot | Book appointment; staff sees the new pending booking | Planned |
-| CORE-APPT-02 | Pending appointment and authorized staff account | Approve appointment; patient sees approved status after refresh | Planned |
+| CORE-APPT-01 | Patient and available seeded appointment slot | Book an appointment and verify branch staff can open the pending request | Automated |
+| CORE-APPT-02 | Pending appointment and authorized staff account | Approve the appointment, record attendance, and verify both status changes from the patient portal after refresh | Automated |
 | CORE-APPT-03 | Patient with cancellable appointment | Cancel it; patient and staff see the cancelled state | Planned |
 | CORE-APPT-04 | Slot with zero remaining capacity | Attempt booking; application rejects it and no booking is persisted | Planned |
-| CORE-MED-01 | Patient, active inventory item, and authorized staff | Submit a medicine request; staff sees the request | Planned |
-| CORE-MED-02 | Pending request and sufficient inventory | Approve request; patient sees the result and available stock changes by the expected amount | Planned |
+| CORE-MED-01 | Patient, active inventory item, and authorized staff | Submit a medicine request and verify it appears in the staff dispense queue | Automated |
+| CORE-MED-02 | Pending request and sufficient inventory | Approve and dispense two units, then verify completed status and the stock decrease after refresh | Automated |
 | CORE-AUTH-06 | Valid patient, staff, and administrator accounts | Log out each portal session; protected pages redirect to login | Planned |
 | CORE-AUTH-07 | Restricted staff account without a required module grant | Attempt to submit an unauthorized staff operation; server rejects the mutation and data remains unchanged | Planned |
 
@@ -200,7 +200,7 @@ npm run test:e2e:core
 npm run test:e2e:full
 ```
 
-`core` is the Phase 1 deployment gate as its cross-portal scenarios are completed. `full` runs all database-backed specs under `e2e/core` and `e2e/flows`; it currently runs the same automated core specs and will grow with later phases. Both commands build an isolated application image whose frontends point only at the private Compose services. The browser container is pinned to Playwright 1.63.0, matching the repository's `@playwright/test` lockfile version.
+`core` is the Phase 1 deployment gate and runs authentication, appointments, and medicine requests. `full` runs all database-backed specs under `e2e/core` and `e2e/flows`, including additional scenarios beyond those three flows. Both commands build an isolated application image whose frontends point only at the private Compose services. The browser container is pinned to Playwright 1.63.0, matching the repository's `@playwright/test` lockfile version.
 
 The runner uses a unique `mdse2e-<run>` Compose project and dedicated network and volumes. Setup creates the database from empty storage; cleanup removes only resources labeled with that exact Compose project. Do not use the deployed workflow's `reset-database` operation for E2E. If a runner is terminated before cleanup, rerun the registered-project cleanup from the same repository checkout:
 

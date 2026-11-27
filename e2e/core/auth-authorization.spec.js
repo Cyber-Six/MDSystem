@@ -33,7 +33,8 @@ test('CORE-AUTH-01,02 rejects invalid credentials and OTP, then authenticates th
 test('CORE-AUTH-03 startup administrator can authenticate and open role management', async ({ page }) => {
   await signIn(page, staffUrl, process.env.E2E_ADMIN_EMAIL);
   await page.goto(`${staffUrl}/settings/roles`);
-  await expect(page.getByRole('heading', { name: 'Administration' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Administration', exact: true }))
+    .toBeVisible({ timeout: 20_000 });
 });
 
 test('CORE-AUTH-04 branch staff authenticate but cannot access administrator role management', async ({ page }) => {
