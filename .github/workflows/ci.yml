@@ -174,8 +174,8 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           RESET_CONFIRMATION: ${{ inputs.confirm_database_reset }}
         run: |
-          if [ "$GITHUB_REF" != "refs/heads/deployment" ] && [ "$GITHUB_REF" != "refs/heads/development" ]; then
-            echo "Manual Pi operations must be run from the deployment or development branch." >&2
+          if [[ "$GITHUB_REF" != refs/heads/* ]]; then
+            echo "Select a branch under Use workflow from to run a manual Pi operation." >&2
             exit 1
           fi
           if [ "$OPERATION" = "reset-database" ] && [ "$RESET_CONFIRMATION" != "DELETE_DATABASE" ]; then
