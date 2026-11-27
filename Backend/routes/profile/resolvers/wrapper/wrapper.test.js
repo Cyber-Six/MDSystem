@@ -26,7 +26,7 @@ afterEach(() => { jest.restoreAllMocks(); });
 
 test.each([
   ['_getUserCredentialStatus', { status: 'Active' }, 'Active'],
-  ['_getUserPersonalRecord', { id: 7 }, { id: 7 }],
+  ['_getUserPersonalRecord', { id: 7, first_name: 'Ada' }, { id: 7, first_name: 'Ada' }],
   ['_getBranchIdentifier', { identifier: 'P1', branch: 'Manila' }, { identifier: 'P1', branch: 'Manila' }],
   ['_getUserLoginCredentials', { email: 'a@b.test' }, { email: 'a@b.test' }],
 ])('queries %s and returns its first row', async (method, row, expected) => {
@@ -45,6 +45,14 @@ test('query methods return nulls and empty logs for absent rows', async () => {
     await expect(Query[method](null, { userId: 7 }, context)).resolves.toBeNull();
   }
   await expect(Query._getUserPersonalRecordLog(null, { userId: 7 }, context)).resolves.toEqual([]);
+});
+
+test('approved personal reads return null for a registration placeholder until personal details are approved', async () => {
+  db.query.mockResolvedValueOnce(result({ id: 7, branch: 'Manila', identifier: '70010001', first_name: null }));
+  await expect(Query._getUserPersonalRecord(null, { userId: 7 }, context)).resolves.toBeNull();
+  const approved = { id: 7, ...recordInput(), first_name: 'Ada' };
+  db.query.mockResolvedValueOnce(result(approved));
+  await expect(Query._getUserPersonalRecord(null, { userId: 7 }, context)).resolves.toEqual(approved);
 });
 
 test('personal log status handles pending, expired, unvalidated, and final statuses', async () => {
@@ -66,6 +74,8 @@ test('personal record log applies date, offset and limit defaults and explicit v
   db.query.mockResolvedValueOnce(result({ id: 1 }));
   await expect(Query._getUserPersonalRecordLog(null, { userId: 7 }, context)).resolves.toEqual([{ id: 1 }]);
   expect(db.query.mock.calls[0][1]).toEqual([7, new Date('1970-01-01T00:00:00Z'), 0, 10]);
+  expect(db.query.mock.calls[0][0]).toMatch(/SELECT upl\.\*, up\.branch, up\.identifier/);
+  expect(db.query.mock.calls[0][0]).toMatch(/JOIN "UsersPersonal" AS up ON up\.id = upl\.user_id/);
   db.query.mockResolvedValueOnce(result());
   await Query._getUserPersonalRecordLog(null, { userId: 7, from: '2024-02-01', offset: 3, limit: 5 }, context);
   expect(db.query.mock.calls[1][1]).toEqual([7, new Date('2024-02-01'), 3, 5]);
@@ -93,7 +103,7 @@ test('uses the configured database client when mutation client arguments are omi
 test('_UpdatePersonalRecordLog updates provided fields and rejects empty or missing updates', async () => {
   db.queryClient.mockResolvedValueOnce(result({ id: 4 }));
   await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { first_name: 'Grace', optional: null } }, context)).resolves.toEqual({ id: 4 });
-  expect(db.queryClient.mock.calls[0][2]).toEqual(['Grace', 'RevisionSubmitted', 7, 4]);
+  expect(db.queryClient.mock.calls[0][2]).toEqual(['Grace', 'Pending', 7, 4]);
   await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { a: null } }, context)).rejects.toThrow('GraphQL 400: No fields to update.');
   db.queryClient.mockResolvedValueOnce(result());
   await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { a: 1 } }, context)).rejects.toThrow('GraphQL 500: Database error');

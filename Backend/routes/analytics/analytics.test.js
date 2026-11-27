@@ -3,13 +3,16 @@ jest.mock('../../config/middleware/jwtProtect.js', () => ({ jwtProtect: jest.fn(
 jest.mock('../../config/query.js', () => ({}));
 jest.mock('../../config/db.js', () => ({ query: jest.fn() }));
 jest.mock('../../services/analytics/analytics-query.js', () => ({
-  getAvailableQueries: jest.fn(() => ['patients']), getFilterOptions: jest.fn(), getAvailableReports: jest.fn(() => ['summary']),
-  hasQuery: jest.fn(), executeQuery: jest.fn(), executeBatchQueries: jest.fn(), hasReport: jest.fn(), getReportData: jest.fn(),
+  getAvailableQueries: jest.fn(() => ['patients']), getFilterOptions: jest.fn(),
+  hasQuery: jest.fn(), executeQuery: jest.fn(), executeBatchQueries: jest.fn(),
 }));
-jest.mock('../../services/doc-generate-module/index.js', () => ({ downloadDocument: jest.fn() }));
 jest.mock('../../services/analytics/analytics-export.js', () => ({ EXPORT_PRESETS: { monthly: { label: 'Monthly' } }, EXPORT_META: { patients: { label: 'Patients' } }, resolveDataTypes: jest.fn(), buildFilename: jest.fn(), fetchExportData: jest.fn(), generatePDF: jest.fn(), generateSingleMetricPDF: jest.fn() }));
 jest.mock('../../services/analytics/analytics-matrix-export.js', () => ({ generateMatrixCsvFiles: jest.fn(), generateMatrixExcelWorkbook: jest.fn() }));
-jest.mock('../../services/authorization/permit.js', () => ({ getStaffBranch: jest.fn(), isMedicalPermitted: jest.fn(), permissions: {} }));
+jest.mock('../../services/authorization/permit.js', () => ({
+  getStaffBranch: jest.fn(),
+  getStaffModulePermissions: jest.fn(),
+  isMedicalAdmin: jest.fn(),
+}));
 jest.mock('archiver', () => jest.fn());
 
 const router = require('./analytics.js');
@@ -32,14 +35,70 @@ const req = (overrides = {}) => ({ user: { id: 9 }, params: {}, query: {}, body:
 
 beforeEach(() => jest.clearAllMocks());
 
-test('serves query, report, and filter metadata and handles service failures', async () => {
+test.each([
+  ['post', '/batch'],
+  ['post', '/export'],
+  ['post', '/export/single'],
+  ['get', '/export/presets'],
+  ['get', '/export/types'],
+])('%s %s enforces Analytics module access for staff', async (method, path) => {
+  const route = router.stack.find(layer => layer.route?.path === path && layer.route.methods[method]).route;
+  const body = {
+    branch: 'Manila', startDate: '2026-01-01', endDate: '2026-01-02',
+    dataTypes: ['patients'], dataType: 'patients', format: 'pdf',
+  };
+  const pdf = Buffer.from('report');
+  permit.isMedicalAdmin.mockResolvedValue(false);
+  permit.getStaffModulePermissions.mockImplementation(async staffId => ({
+    modules: [
+      { moduleId: 'appointments', enabled: true },
+      { moduleId: 'analytics', enabled: staffId === 10 },
+    ],
+  }));
+  if (method === 'post') permit.getStaffBranch.mockResolvedValueOnce('Manila');
+  if (path === '/batch') {
+    analytics.hasQuery.mockReturnValueOnce(true);
+    analytics.executeBatchQueries.mockResolvedValueOnce({ patients: { success: true } });
+  }
+  if (path === '/export' || path === '/export/single') {
+    exportService.fetchExportData.mockResolvedValueOnce({ patients: [{ count: 1 }] });
+    db.query.mockResolvedValueOnce({ rows: [] });
+  }
+  if (path === '/export') {
+    exportService.resolveDataTypes.mockReturnValueOnce(['patients']);
+    exportService.generatePDF.mockResolvedValueOnce({ buffer: pdf, filename: 'report.pdf' });
+  }
+  if (path === '/export/single') {
+    exportService.generateSingleMetricPDF.mockResolvedValueOnce({ buffer: pdf, filename: 'report.pdf' });
+  }
+
+  function dispatch(staffId) {
+    return new Promise((resolve, reject) => {
+      const res = response();
+      let status = 200;
+      res.status.mockImplementation(code => {
+        status = code;
+        return res;
+      });
+      res.json.mockImplementation(payload => resolve({ status, payload }));
+      res.send.mockImplementation(payload => resolve({ status, payload }));
+      route.dispatch(req({ method: method.toUpperCase(), user: { id: staffId }, body }), res, reject);
+    });
+  }
+
+  await expect(dispatch(9)).resolves.toEqual({
+    status: 403, payload: { error: 'ANALYTICS_ACCESS_DENIED' },
+  });
+  expect(permit.getStaffBranch).not.toHaveBeenCalled();
+  await expect(dispatch(10)).resolves.toMatchObject({ status: 200 });
+  expect(permit.getStaffModulePermissions.mock.calls).toEqual([[9], [10]]);
+});
+
+test('serves query and filter metadata and handles service failures', async () => {
   const res = response();
   analytics.getAvailableQueries.mockReturnValueOnce(['patients']);
   await handler('get', '/queries')(req(), res);
   expect(res.json).toHaveBeenCalledWith({ success: true, queries: ['patients'] });
-  analytics.getAvailableReports.mockReturnValueOnce(['summary']);
-  await handler('get', '/reports')(req(), res);
-  expect(res.json).toHaveBeenLastCalledWith({ success: true, reports: ['summary'] });
   analytics.getFilterOptions.mockResolvedValueOnce({ departments: ['Dental'] });
   await handler('get', '/filter-options')(req(), res);
   expect(res.json).toHaveBeenLastCalledWith({ success: true, departments: ['Dental'] });
@@ -48,9 +107,6 @@ test('serves query, report, and filter metadata and handles service failures', a
   expect(res.status).toHaveBeenLastCalledWith(500);
   analytics.getAvailableQueries.mockImplementationOnce(() => { throw new Error('query catalog failed'); });
   await handler('get', '/queries')(req(), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'FETCH_FAILED' });
-  analytics.getAvailableReports.mockImplementationOnce(() => { throw new Error('report catalog failed'); });
-  await handler('get', '/reports')(req(), res);
   expect(res.json).toHaveBeenLastCalledWith({ error: 'FETCH_FAILED' });
   analytics.getAvailableQueries.mockImplementationOnce(() => { throw new Error('query catalog failed'); });
   await handler('get', '/queries')(req(), res);
@@ -131,43 +187,6 @@ test('returns export presets and types from the configured catalog', () => {
   expect(res.json).toHaveBeenCalledWith({ success: true, presets: { monthly: { label: 'Monthly' } } });
   handler('get', '/export/types')(req(), res);
   expect(res.json).toHaveBeenLastCalledWith({ success: true, types: { patients: { label: 'Patients' } } });
-});
-
-test('serves report documents, handles missing reports and converts generation failures', async () => {
-  const run = handler('get', '/report/:reportType');
-  const res = response();
-  const body = { branch: 'Manila', startDate: '2026-01-01', endDate: '2026-01-31' };
-  await run(req({ params: { reportType: 'monthly' }, query: {} }), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'BRANCH_REQUIRED' });
-  await run(req({ params: { reportType: 'monthly' }, query: { branch: 'Manila', startDate: body.startDate } }), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'DATE_RANGE_REQUIRED' });
-  await run(req({ params: { reportType: 'monthly' }, query: { ...body, branch: 'bad' } }), res);
-  expect(res.json).toHaveBeenLastCalledWith({ error: 'INVALID_BRANCH' });
-  analytics.hasReport.mockReturnValueOnce(false);
-  await run(req({ params: { reportType: 'missing' }, query: body }), res);
-  expect(res.status).toHaveBeenLastCalledWith(404);
-  analytics.hasReport.mockReturnValue(true);
-  permit.getStaffBranch.mockResolvedValueOnce('QuezonCity');
-  await run(req({ params: { reportType: 'monthly' }, query: body }), res);
-  expect(res.status).toHaveBeenLastCalledWith(403);
-  permit.getStaffBranch.mockResolvedValue('Both');
-  analytics.getReportData.mockResolvedValue({ description: 'Monthly report', sections: [], summary: {} });
-  db.query.mockResolvedValueOnce({ rows: [{ first_name: 'Ada', last_name: 'Lovelace', title: 'MD' }] });
-  const responseWithSend = response();
-  await run(req({ params: { reportType: 'monthly' }, query: { ...body, title: 'Custom' } }), responseWithSend);
-  expect(require('../../services/doc-generate-module/index.js').downloadDocument).toHaveBeenCalledWith('staff-report', expect.objectContaining({ report: expect.objectContaining({ title: 'Custom' }), physician: expect.objectContaining({ firstName: 'Ada' }) }), responseWithSend);
-  analytics.getReportData.mockResolvedValueOnce({});
-  db.query.mockResolvedValueOnce({ rows: [] });
-  const fallbackReport = response();
-  await run(req({ params: { reportType: 'monthly' }, query: { ...body, branch: 'QuezonCity' } }), fallbackReport);
-  expect(require('../../services/doc-generate-module/index.js').downloadDocument).toHaveBeenLastCalledWith('staff-report', expect.objectContaining({ report: expect.objectContaining({ title: 'Analytics Report' }), sections: [], summary: {}, clinic: expect.objectContaining({ address: 'Quezon City Campus, Philippines' }) }), fallbackReport);
-  analytics.getReportData.mockRejectedValueOnce(new Error('render failed'));
-  const failed = response();
-  await run(req({ params: { reportType: 'monthly' }, query: body }), failed);
-  expect(failed.json).toHaveBeenLastCalledWith({ error: 'REPORT_FAILED', message: 'render failed' });
-  const sent = response(); sent.headersSent = true;
-  await run(req({ params: { reportType: 'monthly' }, query: body }), sent);
-  expect(sent.status).not.toHaveBeenCalled();
 });
 
 test('validates export requests and exercises CSV, Excel, PDF, and failure paths', async () => {

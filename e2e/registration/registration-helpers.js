@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { inspectBatchSubmission } = require('./submission-result');
+const { prepareOtp } = require('../core/auth');
 
 const enabled = process.env.E2E_REGISTRATION_ENABLED === '1';
 const patientUrl = process.env.E2E_PATIENT_URL;
@@ -38,11 +39,13 @@ async function registerAndOpenRecord(page, profile, index, hooks = {}) {
   await registrationForm.locator('input[name="email"]').fill(email);
   await registrationForm.locator('input[name="password"]').fill(password);
   await registrationForm.getByLabel('Confirm Password').fill(password);
+  const readOtp = await prepareOtp(email, testOtp);
   await page.getByRole('button', { name: 'Create Account' }).click();
 
   const otpInputs = page.locator('input[inputmode="numeric"]');
   await expect(otpInputs).toHaveCount(6, { timeout: 30_000 });
-  for (let i = 0; i < 6; i += 1) await otpInputs.nth(i).fill(testOtp[i]);
+  const otp = await readOtp();
+  for (let i = 0; i < 6; i += 1) await otpInputs.nth(i).fill(otp[i]);
   await page.getByRole('button', { name: 'Verify code' }).click();
 
   const consentScroll = page.locator('.overflow-y-auto.px-6');
@@ -67,7 +70,7 @@ async function registerAndOpenRecord(page, profile, index, hooks = {}) {
 
 async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
   const variant = index % 5;
-  const recordIdentifier = String(1_000_000 + Number(runId.slice(-6))) + index;
+  const recordIdentifier = String(1_000_000 + Number(runId.slice(-6))) + (hooks.identifierIndex ?? index);
   const choose = async (label, value) => {
     await page.locator('label').filter({ hasText: new RegExp('^' + label + '[\\s*]*$') }).locator('..').locator('select').selectOption(value);
   };
@@ -102,6 +105,7 @@ async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
     await page.getByPlaceholder("Contact's home address").nth(contact).fill('25 Sample Road, Cavite');
   }
   if (hooks.personal) await hooks.personal();
+  await hooks.captureSection?.('personal');
   await next();
   await expect(page.getByRole('button', { name: 'Family', exact: true })).toBeVisible();
   if (hooks.history) await hooks.history();
@@ -125,6 +129,7 @@ async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
       await page.locator(`input[name="${name}"][value="no"]`).check();
     }
   }
+  await hooks.captureSection?.('background');
   await next();
   await page.locator('input[name="firstTimeDentist"][value="no"]').check();
   await page.locator('input[type="month"]').fill('2025-06');
@@ -137,12 +142,14 @@ async function fillAndSubmitRecord(page, profile, index, account, hooks = {}) {
     await expect(page.getByText(`synthetic-dental-${photo}.png`, { exact: true })).toBeVisible();
   }
   if (hooks.dental) await hooks.dental();
+  await hooks.captureSection?.('dental');
   await next();
   if (profile.gender === 'Female') {
     const lastPeriod = new Date();
     lastPeriod.setUTCDate(lastPeriod.getUTCDate() - 10 - variant);
     await page.locator('input[type="date"]').fill(lastPeriod.toISOString().slice(0, 10));
     await page.getByPlaceholder('Your answer').first().fill(String(4 + variant % 3));
+    await hooks.captureSection?.('obgyn');
     await next();
   }
   if (hooks.review) await hooks.review();

@@ -39,8 +39,17 @@ async function MaintenanceMedication(id, notes) {
   return queryAnchor("MaintenanceMedication", id, notes);
 }
 
-async function MedicalHistory (id, notes) {
-  return queryAnchor("MedicalHistory", id);}
+async function profileWithNotes(tableName, id, notes) {
+  const row = await queryAnchor(tableName, id, notes);
+  if (row) return row;
+  // Omitting notes on an existing anchor preserves the stored value.
+  const existing = await query(`SELECT * FROM "${tableName}" WHERE id = $1`, [id]);
+  return existing.rows[0];
+}
+
+async function MedicalHistory(id, notes) {
+  return profileWithNotes("MedicalHistory", id, notes);
+}
 
 async function Hospitalization(id, notes) {
   return queryAnchor("Hospitalization", id);
@@ -51,7 +60,7 @@ async function Operation(id, notes) {
 }
 
 async function Immunization(id, notes) {
-  return queryAnchor("Immunization", id);
+  return profileWithNotes("Immunization", id, notes);
 }
 
 async function DentalProcedure(id, notes) {

@@ -217,3 +217,7 @@ export const approveInitialRecord = async (userId) => {
   // Step 2 — EMR ticket approval (medical + dental records)
   return staffUpdateTicket(userId, TICKET_STATUS.APPROVED);
 };
+
+export const approveReviewedRecord = (userId, isInitial = true) => isInitial
+  ? approveInitialRecord(userId)
+  : staffUpdateTicket(userId, TICKET_STATUS.APPROVED);

@@ -43,18 +43,23 @@ x-app-base: &app-base
     JWT_ISSUER: mdsystem-e2e
     TOTP_ENCRYPTION_KEY: ${E2E_TOTP_ENCRYPTION_KEY}
     DATA_CONSENT_VERSION: v1.0
-    RESET_PASSWORD_DOMAIN_ROUTE: http://patient:3000/reset-password
+    RESET_PASSWORD_DOMAIN_ROUTE: e2e.invalid/auth/password/reset-password
+    RECAPTCHA_MOBILE_SECRET: ${E2E_RECAPTCHA_TOKEN}
     RECAPTCHA_TEST_MODE: "true"
     GOOGLE_OAUTH_ENABLED: "false"
     DEBUG_BYPASS_OTP: "false"
     ALLOW_BOOTSTRAP_ADMIN: "false"
     MEDIA_PATH: /app/media
+    MEDIA_MAX_FILES_STAGING: "5"
+    MEDIA_MAX_FILES_STAGING_EXP: "300"
+    ICD_RELEASE: "2026-01"
     LOGGER_DIR: /tmp/mdsystem-logs
     EMAIL_DELAY: 0
     # All browser tests share one runner IP and Redis rate-limit counter.
     # Allow the suite's login, OTP, and completion requests within one minute.
     PATIENT_AUTH_RATE_LIMIT_MAX_REQUESTS: 100
     STAFF_AUTH_RATE_LIMIT_MAX_REQUESTS: 100
+    STRICT_RATE_LIMIT_MAX_REQUESTS: 100
   volumes:
     - e2e-media:/app/media
   depends_on:
@@ -114,6 +119,7 @@ services:
       ADMIN_PASSWORD_HASH: ${E2E_ADMIN_PASSWORD_HASH}
     volumes:
       - ${E2E_SCHEMA_SQL:?set E2E_SCHEMA_SQL}:/schema/schema.psql:ro
+      - ../schemas/migrations/20261126_emr_profile_notes.psql:/schema/emr_profile_notes.psql:ro
       - ${E2E_POST_BUILD_SQL:?set E2E_POST_BUILD_SQL}:/schema/post_build_setup.sql:ro
       - ${E2E_STARTUP_SQL:?set E2E_STARTUP_SQL}:/schema/startup.sql:ro
     entrypoint: ["sh", "-ec"]
@@ -121,6 +127,7 @@ services:
       - |
         test -s /schema/schema.psql && test -s /schema/post_build_setup.sql && test -s /schema/startup.sql
         psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/schema.psql
+        psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/emr_profile_notes.psql
         psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -f /schema/post_build_setup.sql
         psql -h postgres -U "$$POSTGRES_USER" -d mdsystem_e2e -v ON_ERROR_STOP=1 -v ADMIN_EMAIL="$$ADMIN_EMAIL" -v ADMIN_PASSWORD_HASH="$$ADMIN_PASSWORD_HASH" -f /schema/startup.sql
     labels: { com.mdsystem.resource: e2e }
@@ -158,12 +165,14 @@ services:
       <<: *app-env
       E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
       E2E_PATIENT_EMAIL: ${E2E_PATIENT_EMAIL}
+      E2E_U2_PATIENT_EMAIL: muclinic${E2E_PATIENT_EMAIL}
       E2E_ALT_PATIENT_EMAIL: ${E2E_ALT_PATIENT_EMAIL}
       E2E_STAFF_EMAIL: ${E2E_STAFF_EMAIL}
       E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
     volumes:
       - ./seed.js:/e2e/seed.js:ro
+      - ./core/db.js:/e2e/core/db.js:ro
     depends_on:
       postgres: { condition: service_healthy }
       schema-init: { condition: service_completed_successfully }
@@ -183,10 +192,15 @@ services:
       E2E_PATIENT_URL: http://patient:3000
       E2E_STAFF_URL: http://staff:3001
       E2E_ADMIN_EMAIL: ${E2E_ADMIN_EMAIL}
+      E2E_REVIEW_STAFF_EMAIL: ${E2E_ADMIN_EMAIL}
+      E2E_REVIEW_STAFF_PASSWORD: ${E2E_ADMIN_PASSWORD}
       E2E_PATIENT_EMAIL: ${E2E_PATIENT_EMAIL}
+      E2E_U2_PATIENT_EMAIL: muclinic${E2E_PATIENT_EMAIL}
       E2E_STAFF_EMAIL: ${E2E_STAFF_EMAIL}
+      E2E_ALT_PATIENT_EMAIL: ${E2E_ALT_PATIENT_EMAIL}
       E2E_RESTRICTED_STAFF_EMAIL: ${E2E_RESTRICTED_STAFF_EMAIL}
       E2E_ACCOUNT_PASSWORD: ${E2E_ACCOUNT_PASSWORD}
+      E2E_RECAPTCHA_TOKEN: ${E2E_RECAPTCHA_TOKEN}
       MAILPIT_URL: http://smtp:8025
       HOME: /tmp
     depends_on:
@@ -196,6 +210,8 @@ services:
       smtp: { condition: service_started }
     init: true
     shm_size: 1gb
+    tmpfs:
+      - /tests/.e2e-private:mode=1777
     volumes:
       - ${E2E_ARTIFACT_DIR:?run via scripts/e2e.js}:/tests/e2e-results
 

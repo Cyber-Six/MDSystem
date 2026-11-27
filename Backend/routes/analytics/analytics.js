@@ -4,12 +4,31 @@ const archiver = require('archiver');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 const query = require('../../config/query.js');
 const analytics = require('../../services/analytics/analytics-query.js');
-const docGen = require('../../services/doc-generate-module/index.js');
 const analyticsExport = require('../../services/analytics/analytics-export.js');
 const analyticsMatrixExport = require('../../services/analytics/analytics-matrix-export.js');
-const { getStaffBranch, isMedicalPermitted, permissions: permKeys } = require('../../services/authorization/permit.js');
+const { getStaffBranch, getStaffModulePermissions, isMedicalAdmin } = require('../../services/authorization/permit.js');
 
 const router = express.Router();
+
+async function requireAnalyticsAccess(req, res, next) {
+  try {
+    const staffId = req.user.id;
+    if (!(await isMedicalAdmin(staffId))) {
+      const { modules } = await getStaffModulePermissions(staffId);
+      if (!modules.some(({ moduleId, enabled }) => moduleId === 'analytics' && enabled)) {
+        return res.status(403).json({ error: 'ANALYTICS_ACCESS_DENIED' });
+      }
+    }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function canAccessBranch(staffId, branch) {
+  const staffBranch = await getStaffBranch(staffId);
+  return staffBranch === 'Both' || staffBranch === branch;
+}
 
 // Backward-compatible aliases for analytics dataType keys.
 const DATA_TYPE_ALIASES = Object.freeze({
@@ -91,7 +110,7 @@ function resolveAnalyticsFilters(primary, secondary = {}) {
  * GET /analytics/queries
  * List available query types
  */
-router.get('/queries', jwtProtect('medical'), async (req, res) => {
+router.get('/queries', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const queries = analytics.getAvailableQueries();
     res.json({ success: true, queries });
@@ -105,26 +124,12 @@ router.get('/queries', jwtProtect('medical'), async (req, res) => {
  * GET /analytics/filter-options
  * Returns distinct departments and sex values for filter dropdowns
  */
-router.get('/filter-options', jwtProtect('medical'), async (req, res) => {
+router.get('/filter-options', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
-    const data = await analytics.getFilterOptions();
+    const data = await analytics.getFilterOptions(await getStaffBranch(req.user.id));
     res.json({ success: true, ...data });
   } catch (err) {
     logger.error('Error fetching filter options', { error: err.message });
-    res.status(500).json({ error: 'FETCH_FAILED' });
-  }
-});
-
-/**
- * GET /analytics/reports
- * List available report types
- */
-router.get('/reports', jwtProtect('medical'), async (req, res) => {
-  try {
-    const reports = analytics.getAvailableReports();
-    res.json({ success: true, reports });
-  } catch (err) {
-    logger.error('Error fetching report types', { error: err.message });
     res.status(500).json({ error: 'FETCH_FAILED' });
   }
 });
@@ -138,7 +143,7 @@ router.get('/reports', jwtProtect('medical'), async (req, res) => {
  *   - startDate: ISO date (YYYY-MM-DD)
  *   - endDate: ISO date (YYYY-MM-DD)
  */
-router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
+router.get('/query/:dataType', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const { dataType } = req.params;
     const { branch, startDate, endDate } = req.query;
@@ -179,8 +184,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 
@@ -223,7 +227,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
  *
  * Body: { dataTypes: string[], branch, startDate, endDate }
  */
-router.post('/batch', jwtProtect('medical'), async (req, res) => {
+router.post('/batch', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const { dataTypes, branch, startDate, endDate } = req.body;
     const { groupBy, department, sex, ageGroup } = resolveAnalyticsFilters(req.body, req.query);
@@ -261,8 +265,7 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
     const normalizedDataTypes = Array.from(new Set(dataTypeMappings.map((entry) => entry.normalized)));
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 
@@ -300,102 +303,6 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
   } catch (err) {
     logger.error('Analytics batch query failed', { error: err.message });
     res.status(500).json({ error: 'BATCH_QUERY_FAILED', message: err.message });
-  }
-});
-
-/**
- * GET /analytics/report/:reportType
- * Generate and download PDF report
- *
- * Query params:
- *   - branch: 'Manila' | 'QuezonCity' | 'Both'
- *   - startDate: ISO date (YYYY-MM-DD)
- *   - endDate: ISO date (YYYY-MM-DD)
- *   - title: (optional) Report title
- */
-router.get('/report/:reportType', jwtProtect('medical'), async (req, res) => {
-  try {
-    const { reportType } = req.params;
-    const { branch, startDate, endDate, title } = req.query;
-
-    // Validate required params
-    if (!branch) {
-      return res.status(400).json({ error: 'BRANCH_REQUIRED' });
-    }
-    if (!startDate || !endDate) {
-      return res.status(400).json({ error: 'DATE_RANGE_REQUIRED' });
-    }
-
-    // Validate branch
-    const validBranches = ['Manila', 'QuezonCity', 'Both'];
-    if (!validBranches.includes(branch)) {
-      return res.status(400).json({ error: 'INVALID_BRANCH' });
-    }
-
-    // Check report type exists
-    if (!analytics.hasReport(reportType)) {
-      return res.status(404).json({ error: 'REPORT_NOT_FOUND' });
-    }
-
-    // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
-      return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
-    }
-
-    // Fetch report data
-    const reportData = await analytics.getReportData(reportType, branch, startDate, endDate);
-
-    // Fetch physician info
-    const physicianResult = await require('../../config/db.js').query(
-      `SELECT up.first_name, up.last_name, mp.title
-       FROM "UsersPersonal" up
-       LEFT JOIN "MedicalPersonnel" mp ON up.id = mp.id
-       WHERE up.id = $1`,
-      [req.user.id]
-    );
-    const physician = physicianResult.rows[0] || {};
-
-    // Build document data
-    const docData = {
-      report: {
-        title: title || reportData.description || 'Analytics Report',
-        subtitle: `${startDate} to ${endDate}`,
-        branch,
-        dateRange: { startDate, endDate },
-        generatedAt: new Date().toISOString(),
-      },
-      sections: reportData.sections || [],
-      summary: reportData.summary || {},
-      physician: {
-        id: req.user.id,
-        firstName: physician.first_name,
-        lastName: physician.last_name,
-        title: physician.title || '',
-      },
-      clinic: {
-        name: 'MDSystem Medical Clinic',
-        address: branch === 'QuezonCity'
-          ? 'Quezon City Campus, Philippines'
-          : 'Manila Campus, Philippines',
-      },
-    };
-
-    logger.info('Analytics report requested', {
-      reportType,
-      branch,
-      startDate,
-      endDate,
-      userId: req.user.id,
-    });
-
-    // Generate and stream the report
-    await docGen.downloadDocument(reportData.template || 'staff-report', docData, res);
-  } catch (err) {
-    logger.error('Analytics report failed', { error: err.message });
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'REPORT_FAILED', message: err.message });
-    }
   }
 });
 
@@ -440,7 +347,7 @@ function validateExportParams(req, res) {
  * GET /analytics/export/presets
  * Get available export presets
  */
-router.get('/export/presets', jwtProtect('medical'), (req, res) => {
+router.get('/export/presets', jwtProtect('medical'), requireAnalyticsAccess, (req, res) => {
   res.json({ success: true, presets: analyticsExport.EXPORT_PRESETS });
 });
 
@@ -448,7 +355,7 @@ router.get('/export/presets', jwtProtect('medical'), (req, res) => {
  * GET /analytics/export/types
  * Get available export data types with metadata
  */
-router.get('/export/types', jwtProtect('medical'), (req, res) => {
+router.get('/export/types', jwtProtect('medical'), requireAnalyticsAccess, (req, res) => {
   res.json({ success: true, types: analyticsExport.EXPORT_META });
 });
 
@@ -464,7 +371,7 @@ router.get('/export/types', jwtProtect('medical'), (req, res) => {
  *   - dataTypes?: string[]     (specific queries to include)
  *   - preset?: string          (preset name, overrides dataTypes)
  */
-router.post('/export', jwtProtect('medical'), async (req, res) => {
+router.post('/export', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const params = validateExportParams(req, res);
     if (!params) return;
@@ -485,8 +392,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 
@@ -611,7 +517,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
  *   - startDate: YYYY-MM-DD
  *   - endDate: YYYY-MM-DD
  */
-router.post('/export/single', jwtProtect('medical'), async (req, res) => {
+router.post('/export/single', jwtProtect('medical'), requireAnalyticsAccess, async (req, res) => {
   try {
     const { dataType, branch, startDate, endDate } = req.body;
     const { groupBy, sex, department, ageGroup } = resolveAnalyticsFilters(req.body, req.query);
@@ -634,8 +540,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await getStaffBranch(req.user.id);
-    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+    if (!(await canAccessBranch(req.user.id, branch))) {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
 

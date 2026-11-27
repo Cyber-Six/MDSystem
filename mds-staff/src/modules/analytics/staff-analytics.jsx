@@ -291,7 +291,7 @@ const StaffAnalytics = () => {
   // Fetch on tab switch or initial mount
   useEffect(() => {
     loadActiveCategory();
-  }, [activeCategory, demographicDimension]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [queryCatalogReady, activeCategory, demographicDimension]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear cache + re-fetch when filters change
   const prevFiltersRef = useRef({ branch, startDate, endDate, groupBy, selectedDepartment, selectedSex });

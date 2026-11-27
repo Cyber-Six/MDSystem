@@ -208,7 +208,7 @@ export async function fetchUpdateRevisionPrefill() {
     query += `
       emrProfile: getProfile {
         ... on StudentProfile { program year }
-        ... on EmployeeProfile { department role }
+        ... on EmployeeProfile { department role position employmentCategoryOther }
       }
       emergencyContact: getEmergencyContact {
         firstContact { contactName relationship contactNumber address }
@@ -245,6 +245,7 @@ export async function fetchUpdateRevisionPrefill() {
       lifestyle: getLifestyle {
         smoker numberOfCigarettesPerDay yearsSmoked
         alcoholConsumer frequencyOfAlcoholConsumption
+        vapeUser vapeType vapeFrequency yearsVaping
         notes
       }
       visualAcuityProfile: getVisualAcuityProfile {
@@ -300,7 +301,7 @@ export async function fetchUpdateRevisionPrefill() {
  * @param {object} backendData - Data from GraphQL query (see fetchUpdateRevisionPrefill)
  * @returns {Promise<object>} Form data with all fields properly renamed and structured
  */
-async function mapRevisionDataToFormData(backendData) {
+export async function mapRevisionDataToFormData(backendData) {
   const formData = {};
 
   console.log('[MapRevisionData] ========== STARTING DATA TRANSFORMATION ==========');
@@ -365,7 +366,9 @@ async function mapRevisionDataToFormData(backendData) {
   }
   if (backendData.emrProfile?.department) {
     formData.employeeDepartment = backendData.emrProfile.department || '';
-    formData.employeeRole = backendData.emrProfile.role || '';
+    formData.employeeRole = ({ NonStaff: 'Teaching', NonStaffOfficer: 'Teaching (Officer)', Staff: 'Non-Teaching', StaffOfficer: 'Non-Teaching (Officer)' })[backendData.emrProfile.role] || backendData.emrProfile.role || '';
+    formData.employeeCategoryOther = backendData.emrProfile.employmentCategoryOther || '';
+    formData.employeePosition = backendData.emrProfile.position || '';
   }
 
   // ======== MEDICAL HISTORY ========
@@ -400,7 +403,7 @@ async function mapRevisionDataToFormData(backendData) {
 
   // Allergies
   console.log('[MapRevisionData] Allergy profile data:', backendData.allergyProfile);
-  if (backendData.allergyProfile?.allergies && Array.isArray(backendData.allergyProfile.allergies)) {
+  if (Array.isArray(backendData.allergyProfile?.allergies) && backendData.allergyProfile.allergies.length > 0) {
     formData.hasAllergies = 'yes';
     formData.selectedAllergies = [];
     formData.allergyDetails = {};
@@ -415,6 +418,13 @@ async function mapRevisionDataToFormData(backendData) {
   } else {
     formData.hasAllergies = 'no';
   }
+
+  formData.allergiesNotes = (backendData.allergyProfile?.notes || backendData.allergyProfile?.allergies?.[0]?.notes || '').replace(/^Other: /, '');
+  formData.hospitalizationNotes = backendData.hospitalizationProfile?.notes || backendData.hospitalizationProfile?.hospitalizations?.[0]?.notes || '';
+  formData.surgeryNotes = backendData.operationProfile?.notes || backendData.operationProfile?.operations?.[0]?.notes || '';
+  formData.medicationNotes = backendData.medicationProfile?.notes || '';
+  formData.medicationReason = backendData.medicationProfile?.medications?.[0]?.description || '';
+  formData.immunizationNotes = backendData.immunizationProfile?.notes || '';
 
   // Hospitalization
   console.log('[MapRevisionData] Hospitalization profile data:', backendData.hospitalizationProfile);
@@ -498,8 +508,8 @@ async function mapRevisionDataToFormData(backendData) {
   // Lifestyle
   if (backendData.lifestyle) {
     formData.smoker = backendData.lifestyle.smoker ? 'yes' : 'no';
-    formData.smokerSticksPerDay = backendData.lifestyle.numberOfCigarettesPerDay || null;
-    formData.smokerYears = backendData.lifestyle.yearsSmoked || null;
+    formData.smokerSticksPerDay = backendData.lifestyle.numberOfCigarettesPerDay ?? null;
+    formData.smokerYears = backendData.lifestyle.yearsSmoked ?? null;
 
     formData.alcoholDrinker = backendData.lifestyle.alcoholConsumer ? 'yes' : 'no';
     formData.alcoholFrequency = backendData.lifestyle.frequencyOfAlcoholConsumption || null;
@@ -507,6 +517,7 @@ async function mapRevisionDataToFormData(backendData) {
     formData.vaper = backendData.lifestyle.vapeUser ? 'yes' : 'no';
     formData.vapeType = backendData.lifestyle.vapeType || null;
     formData.vapeFrequency = backendData.lifestyle.vapeFrequency || null;
+    formData.yearsVaping = backendData.lifestyle.yearsVaping ?? null;
   }
 
   // Visual Acuity
@@ -552,6 +563,9 @@ async function mapRevisionDataToFormData(backendData) {
     console.log('[MapRevisionData] No dental procedures to prefill - array is empty or missing');
     formData.dentalProcedures = [];
   }
+  if (backendData.dentalProcedureProfile) {
+    formData.hasDentalProcedures = formData.dentalProcedures.length > 0;
+  }
 
   // Oral Appliances
   console.log('[MapRevisionData] Oral appliance profile data:', backendData.oralApplianceProfile);
@@ -570,6 +584,9 @@ async function mapRevisionDataToFormData(backendData) {
   } else {
     console.log('[MapRevisionData] No oral appliances to prefill - array is empty or missing');
     formData.oralAppliances = [];
+  }
+  if (backendData.oralApplianceProfile) {
+    formData.hasOralAppliances = formData.oralAppliances.length > 0;
   }
 
   // Dental Photos - Convert file IDs to preview URLs
@@ -1068,7 +1085,6 @@ export async function createImmunizationProfile(formData) {
 
   // Build immunizations array with required fields
   const immunizations = [];
-  const immunizationList = [];
   
   // Get selected immunizations with their details (dates, dose numbers)
   if (Array.isArray(formData.immunizations) && formData.immunizations.length > 0) {
@@ -1081,38 +1097,12 @@ export async function createImmunizationProfile(formData) {
         immunizationDate: detail.date || new Date().toISOString().split('T')[0], // Use today's date if not provided
         doseNumber: detail.doseNumber ? parseInt(detail.doseNumber) : 1 // Default to dose 1 if not provided
       });
-      
-      immunizationList.push(vaccineId);
     }
-  }
-
-  // Add immunization details to notes
-  if (formData.immunizationDetails) {
-    const details = Object.entries(formData.immunizationDetails)
-      .map(([vaccineId, detail]) => {
-        const parts = [vaccineId];
-        if (detail.date) parts.push(`date: ${detail.date}`);
-        if (detail.doseNumber) parts.push(`dose: ${detail.doseNumber}`);
-        return parts.join(' ');
-      });
-    if (details.length > 0) {
-      immunizationList.push(`Details: ${details.join(', ')}`);
-    }
-  }
-
-  // Add immunization notes
-  let immunizationNotes = null;
-  if (formData.immunizationNotes) {
-    immunizationList.push(formData.immunizationNotes);
-  }
-  
-  if (immunizationList.length > 0) {
-    immunizationNotes = immunizationList.join('; ');
   }
 
   const input = {
     immunizations, // Now populated with vaccine objects including date and dose
-    notes: immunizationNotes
+    notes: formData.immunizationNotes || null
   };
 
   console.log('💉 Creating immunization profile...', input);

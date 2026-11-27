@@ -35,7 +35,7 @@ const EmergencyContactSection = ({
     }
 
     return (
-      <div className="mb-3 pb-3 border-b border-neutral-100 dark:border-neutral-700/50 last:border-0 last:mb-0 last:pb-0">
+      <div data-review-contact={index === 1 ? 'firstContact' : 'secondContact'} className="mb-3 pb-3 border-b border-neutral-100 dark:border-neutral-700/50 last:border-0 last:mb-0 last:pb-0">
         <h5 className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
           Contact {index}
         </h5>
@@ -64,6 +64,7 @@ const EmergencyContactSection = ({
           {contact.isVerified !== null && contact.isVerified !== undefined && (
             <DataRow label="Verified" value={contact.isVerified ? 'Yes' : 'No'} />
           )}
+          <DataRow label="Address" value={contact.address} />
         </dl>
       </div>
     );

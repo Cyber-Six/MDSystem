@@ -5,11 +5,18 @@ jest.mock('express', () => ({ Router: () => mockRouter }));
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 jest.mock('../../utils/logger.js', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../config/middleware/jwtProtect.js', () => ({ jwtProtect: jest.fn(() => 'auth') }));
-jest.mock('../../config/multer.js', () => ({ upload: mockUpload, MEDIA_PATH: { staging: 'C:\\media\\staging', dentalPhoto: 'C:\\media\\dental', appointmentRequirement: 'C:\\media\\requirements', announcement: 'C:\\media\\announcement', eConsultation: 'C:\\media\\chat', documents: 'C:\\media\\documents' }, validateFileType: jest.fn(), stageFile: jest.fn(), unstageFile: jest.fn(), checkFileByUuid: jest.fn() }));
+jest.mock('../../config/query.js', () => ({ query: jest.fn() }));
+jest.mock('../../services/authorization/permit.js', () => ({
+  permissions: {},
+  isMedicalAdmin: jest.fn(),
+  isMedicalPermittedPatientBased: jest.fn(),
+}));
+jest.mock('../../config/multer.js', () => ({ upload: mockUpload, MEDIA_PATH: { staging: 'C:\\media\\staging', dentalPhoto: 'C:\\media\\dental', appointmentRequirement: 'C:\\media\\requirements', announcement: 'C:\\media\\announcement', eConsultation: 'C:\\media\\chat', documents: 'C:\\media\\documents' }, validateFileType: jest.fn(), stageFile: jest.fn(), unstageFile: jest.fn(), checkFileByUuid: jest.fn(), getStagedFile: jest.fn(), isMediaId: jest.fn(() => true) }));
 const media = require('../../config/multer.js');
+const db = require('../../config/query.js');
 require('./media');
 const stage = mockRouter.post.mock.calls[0][3]; const unstage = mockRouter.delete.mock.calls[0][2]; const record = mockRouter.get.mock.calls[0][2];
-const response = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn(), sendFile: jest.fn((file, callback) => { response.file = file; response.callback = callback; }) });
+const response = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn(), set: jest.fn(), sendFile: jest.fn() });
 const err = message => new Error(message);
 beforeEach(() => { jest.clearAllMocks(); });
 
@@ -42,19 +49,25 @@ test('unstages an owned file and maps missing or unexpected failures', async () 
   expect(failure.status).toHaveBeenCalledWith(500); expect(failure.json).toHaveBeenCalledWith({ error: 'MEDIA_DELETION_FAILED' });
 });
 
-test('validates category, missing records, safe file paths, and send errors', async () => {
+test('validates category, staged ownership, private records, and send errors', async () => {
+  const user = { id: 5, role: 'patient' };
   let res = response(); await record({ params: { category: 'unknown', fileId: 'x' } }, res);
   expect(res.status).toHaveBeenCalledWith(400); expect(res.json).toHaveBeenCalledWith({ error: 'INVALID_CATEGORY' });
-  media.checkFileByUuid.mockResolvedValueOnce(null); res = response(); await record({ params: { category: 'staging', fileId: 'x' } }, res);
+  media.getStagedFile.mockResolvedValueOnce(null);
+  res = response(); await record({ params: { category: 'staging', fileId: 'x' }, user }, res);
+  expect(media.getStagedFile).toHaveBeenCalledWith(user.id, 'x');
   expect(res.status).toHaveBeenCalledWith(404);
-  media.checkFileByUuid.mockResolvedValueOnce('../../secret'); res = response(); await record({ params: { category: 'staging', fileId: 'x' } }, res);
-  expect(res.status).toHaveBeenCalledWith(400); expect(res.json).toHaveBeenCalledWith({ error: 'INVALID_FILE_PATH' });
-  media.checkFileByUuid.mockResolvedValueOnce('file.png'); res = response(); await record({ params: { category: 'documents', fileId: 'x' } }, res);
+  db.query.mockResolvedValueOnce({ rows: [{ patientId: 6 }] });
+  res = response(); await record({ params: { category: 'documents', fileId: 'x' }, user }, res);
+  expect(res.status).toHaveBeenCalledWith(404);
+  expect(media.checkFileByUuid).not.toHaveBeenCalled();
+  db.query.mockResolvedValueOnce({ rows: [{ patientId: 5 }] });
+  media.checkFileByUuid.mockResolvedValueOnce('file.png'); res = response();
+  await record({ params: { category: 'documents', fileId: 'x' }, user }, res);
+  expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
   expect(res.sendFile).toHaveBeenCalledWith(path.join(media.MEDIA_PATH.documents, 'file.png'), expect.any(Function));
   res.sendFile.mock.calls[0][1](err('gone'));
   expect(res.status).toHaveBeenCalledWith(404);
-  media.checkFileByUuid.mockResolvedValueOnce('ready.png'); res = response(); await record({ params: { category: 'documents', fileId: 'x' } }, res);
-  res.sendFile.mock.calls[0][1]();
   media.checkFileByUuid.mockRejectedValueOnce(err('redis down')); res = response(); await record({ params: { category: 'announcement', fileId: 'x' } }, res);
   expect(res.status).toHaveBeenCalledWith(500); expect(res.json).toHaveBeenLastCalledWith({ error: 'MEDIA_RETRIEVAL_FAILED' });
 });

@@ -3,6 +3,10 @@
 .kiro
 .agents
 .codex
+.e2e-private
+e2e-results
+e2e.private.env
+e2e/.run-record.env
 node_modules
 **/node_modules
 **/dist

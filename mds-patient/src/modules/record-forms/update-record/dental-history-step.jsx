@@ -12,15 +12,7 @@ const DentalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {
     isLoading: true,
     error: null
   });
-  const [hasDentalProcedures, setHasDentalProcedures] = useState(() => (formData.dentalProcedures?.length > 0 ? true : null));
-
-  // Sync local state with formData when pre-fill data arrives (e.g., during revision)
-  useEffect(() => {
-    // Update hasDentalProcedures when formData changes
-    if (formData.dentalProcedures?.length > 0) {
-      setHasDentalProcedures(true);
-    }
-  }, [formData.dentalProcedures]);
+  const hasDentalProcedures = formData.hasDentalProcedures ?? (formData.dentalProcedures?.length > 0 ? true : null);
 
   // Fetch catalogs on mount
   useEffect(() => {
@@ -136,7 +128,7 @@ const DentalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {
               onChange={(e) => handleInputChange('lastDentalCleaning', e.target.value)}
             />
 
-            {formData.seenByDentist === false && (
+            {formData.seenByDentist === true && (
               <Input
                 label="When was your last dental consultation?"
                 type="month"
@@ -285,7 +277,7 @@ const DentalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {
                   type="radio"
                   name="hasDentalProcedures"
                   checked={hasDentalProcedures === true}
-                  onChange={() => setHasDentalProcedures(true)}
+                  onChange={() => handleInputChange('hasDentalProcedures', true)}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
                 <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
@@ -295,10 +287,7 @@ const DentalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {
                   type="radio"
                   name="hasDentalProcedures"
                   checked={hasDentalProcedures === false}
-                  onChange={() => {
-                    setHasDentalProcedures(false);
-                    handleInputChange('dentalProcedures', []);
-                  }}
+                  onChange={() => onChange({ ...formData, hasDentalProcedures: false, dentalProcedures: [] })}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
                 <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>

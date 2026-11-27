@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(DEPLOY_HOST DEPLOY_USER DEPLOY_PATH SSH_PRIVATE_KEY SSH_KNOWN_HOSTS IMAGE_NAME IMAGE_TAG SOURCE_REVISION)
+required=(DEPLOY_HOST DEPLOY_USER DEPLOY_PATH SSH_PRIVATE_KEY SSH_KNOWN_HOSTS IMAGE_NAME IMAGE_TAG SOURCE_REVISION
+  VITE_PATIENT_BACKEND_URL VITE_STAFF_BACKEND_URL)
 for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then
     echo "Missing required deployment setting: $name" >&2
@@ -46,3 +47,22 @@ ssh \
   -o StrictHostKeyChecking=yes \
   "$DEPLOY_USER@$DEPLOY_HOST" \
   "$remote"
+
+check_http_health() {
+  local name="$1" attempt status
+  for attempt in {1..8}; do
+    if status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+      --connect-timeout 3 --max-time 5 --proto '=http,https' --globoff --url "${!name}") && [[ "$status" == 200 ]]; then
+      echo "$name returned HTTP 200."
+      return 0
+    fi
+    if (( attempt < 8 )); then sleep 3; fi
+  done
+  echo "$name did not return HTTP 200 after 8 attempts (last status: ${status:-unavailable})." >&2
+  return 1
+}
+
+health_failed=0
+check_http_health VITE_PATIENT_BACKEND_URL || health_failed=1
+check_http_health VITE_STAFF_BACKEND_URL || health_failed=1
+exit "$health_failed"

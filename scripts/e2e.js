@@ -17,8 +17,12 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 const suite = process.argv[2] || 'core';
-if (!['core', 'full'].includes(suite)) {
-  process.stderr.write('Usage: node scripts/e2e.js <core|full>\n');
+const documentDownloadAuth = process.argv.includes('--document-download-auth', 3);
+const authRbacSecurity = process.argv.includes('--auth-rbac-security', 3);
+const testFilters = process.argv.slice(3).filter(arg => !['--document-download-auth', '--auth-rbac-security'].includes(arg));
+if (!['core', 'full', 'lifecycle'].includes(suite)
+    || (suite === 'lifecycle' && (documentDownloadAuth || authRbacSecurity))) {
+  process.stderr.write('Usage: node scripts/e2e.js <core|full|lifecycle> [suite options] [test filters...]\n');
   process.exit(2);
 }
 
@@ -100,6 +104,7 @@ async function main() {
     E2E_JWT_SECRET: crypto.randomBytes(48).toString('hex'),
     E2E_TOTP_ENCRYPTION_KEY: crypto.randomBytes(32).toString('hex'),
     E2E_ACCOUNT_PASSWORD: password,
+    E2E_RECAPTCHA_TOKEN: crypto.randomBytes(32).toString('hex'),
     E2E_ADMIN_PASSWORD: adminPassword,
     E2E_ADMIN_PASSWORD_HASH: adminHash,
     E2E_ADMIN_EMAIL: adminEmail,
@@ -121,7 +126,7 @@ async function main() {
   fs.writeFileSync(generatedEnv, Object.entries(generated).map(([key, value]) => `${key}=${dotenvValue(String(value))}`).join('\n'), { mode: 0o600 });
 
   const envFiles = [configPath, generatedEnv];
-  const compose = args => run('docker', composeArgs(project, envFiles, args));
+  const compose = (args, options) => run('docker', composeArgs(project, envFiles, args), options);
   const stateDir = process.env.E2E_STATE_DIR || path.join(path.dirname(configPath), 'e2e-state');
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const stateFile = path.join(stateDir, `${runId}.project`);
@@ -138,7 +143,41 @@ async function main() {
     await compose(['up', '--no-deps', '--exit-code-from', 'schema-init', 'schema-init']);
     await compose(['run', '--rm', '--no-deps', 'seed']);
     await compose(['up', '-d', '--wait', '--no-deps', 'patient', 'staff', 'email-worker']);
-    await compose(['run', '--rm', '--no-deps', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`]);
+    const runBrowserTests = () => compose(suite === 'lifecycle'
+      ? ['run', '--rm', '--no-deps', '-e', 'E2E_LIFECYCLE_ENABLED=1',
+        'test-runner', 'node', 'scripts/e2e-lifecycle.js', ...testFilters]
+      : ['run', '--rm', '--no-deps', 'test-runner', 'npx', 'playwright', 'test', `--project=${suite}`, ...testFilters]);
+    const runJestTest = (testPath, environment) => {
+      const hostTestPath = path.join(root, testPath).replaceAll('\\', '/');
+      return compose([
+        'run', '--rm', '--no-deps',
+        ...Object.keys(environment).flatMap(name => ['-e', name]),
+        '-v', `${hostTestPath}:/tests/${testPath}:ro`,
+        'test-runner', 'node', 'node_modules/jest/bin/jest.js',
+        '--config={}', '--runInBand', '--runTestsByPath', testPath,
+      ], { env: { ...process.env, ...environment } });
+    };
+    if (documentDownloadAuth || authRbacSecurity) {
+      const browserResult = await runBrowserTests().catch(error => error);
+      if (documentDownloadAuth) {
+        await runJestTest(
+          'Backend/routes/documents/document/__tests__/document-download-authorization.integration.test.js',
+          { DOCUMENT_DOWNLOAD_TEST_E2E: '1' },
+        );
+      }
+      if (authRbacSecurity) {
+        await runJestTest('Backend/routes/auth/rbac-branch-isolation.integration.test.js', {
+          E2E_AUTH_RBAC_INTEGRATION: '1',
+          POSTGRES_HOST: 'postgres',
+          POSTGRES_DB: 'mdsystem_e2e',
+          POSTGRES_USER: generated.E2E_POSTGRES_USER,
+          POSTGRES_PASSWORD: generated.E2E_POSTGRES_PASSWORD,
+        });
+      }
+      if (browserResult instanceof Error) throw browserResult;
+    } else {
+      await runBrowserTests();
+    }
     passed = true;
   } catch (error) {
     process.stderr.write(`${receivedSignal ? `Interrupted by ${receivedSignal}. ` : ''}${error.message}\n`);
@@ -151,7 +190,7 @@ async function main() {
         child.on('exit', () => resolve(output));
         child.on('error', () => resolve(output));
       });
-      fs.writeFileSync(path.join(artifactDir, 'services.log'), redact(result, [password, adminPassword, adminHash, generated.E2E_POSTGRES_PASSWORD, generated.E2E_REDIS_PASSWORD, generated.E2E_JWT_SECRET]));
+      fs.writeFileSync(path.join(artifactDir, 'services.log'), redact(result, [password, adminPassword, adminHash, generated.E2E_POSTGRES_PASSWORD, generated.E2E_REDIS_PASSWORD, generated.E2E_JWT_SECRET, generated.E2E_RECAPTCHA_TOKEN]));
     } catch { /* Preserve the original test failure. */ }
   } finally {
     metadata.finishedAt = new Date().toISOString();

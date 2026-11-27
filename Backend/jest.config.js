@@ -1,5 +1,6 @@
+const path = require('path');
+
 /** @type {import('jest').Config} */
-const { listSources, coverageThresholds } = require('./test-support/source-inventory.cjs');
 module.exports = {
   displayName: 'backend',
   testEnvironment: 'node',
@@ -12,8 +13,21 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
   ],
-  collectCoverageFrom: listSources(),
-  coverageThreshold: coverageThresholds(),
-  coverageReporters: ['text', 'html', 'lcov', 'json-summary'],
+  collectCoverageFrom: [
+    '{config,routes,services,utils}/**/*.js',
+    'server.js',
+    'staff.js',
+    '!**/__tests__/**',
+    '!**/__mocks__/**',
+    '!**/*.{test,spec}.js',
+  ],
+  coverageThreshold: {
+    global: {
+      statements: 29, branches: 20, functions: 21, lines: 30,
+    },
+    [path.join(__dirname, 'routes', 'auth') + path.sep]: {
+      branches: 90, functions: 90, lines: 90, statements: 90,
+    },
+  },
   coverageDirectory: 'coverage',
 };

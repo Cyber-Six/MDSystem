@@ -2,7 +2,7 @@
 
 function inspectBatchSubmission(status, body) {
   const errors = Array.isArray(body?.errors) ? body.errors : [];
-  const ticketStatus = body?.data?.submitTicket ?? null;
+  const ticketStatus = body?.data?.submitTicket ?? body?.data?.submitUpdateTicket ?? null;
   const ok = status >= 200 && status < 300 && errors.length === 0 && ticketStatus === 'Pending';
   const details = [
     `HTTP ${status}`,

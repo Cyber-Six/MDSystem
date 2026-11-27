@@ -116,6 +116,8 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
+              aria-label="Notifications"
+              aria-expanded={showNotifications}
               className="relative p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-neutral-800"
             >
               <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">

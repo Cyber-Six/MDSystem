@@ -23,3 +23,9 @@ test('accepts a complete submission whose ticket is Pending', () => {
   assert.equal(result.ok, true);
   assert.equal(result.ticketStatus, 'Pending');
 });
+
+test('accepts a Pending update returned by the standalone submission mutation', () => {
+  const result = inspectBatchSubmission(200, { data: { submitUpdateTicket: 'Pending' } });
+  assert.equal(result.ok, true);
+  assert.equal(result.ticketStatus, 'Pending');
+});

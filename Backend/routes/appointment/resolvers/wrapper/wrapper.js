@@ -1,6 +1,6 @@
 const db  = require("../../../../config/query.js");
 
-const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
+const { throwGraphQLError, GraphQLError } = require("../../../../utils/graphql-helper.js");
 const logger = require("../../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -249,10 +249,13 @@ const Query = {
     // Fetch the patient slots (with identifier + name from UsersPersonal)
     const querySlots = `
       SELECT ps.*,
+        ss.label AS "schedulerLabel",
         up."identifier" AS "patientIdentifier",
         CONCAT(up.first_name, ' ', up.last_name) AS "patientName",
         CONCAT(staff.first_name, ' ', staff.last_name) AS "approvedBy"
       FROM "patientSlot" ps
+      LEFT JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+      LEFT JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
       WHERE ps."patientId" = $1
@@ -298,7 +301,7 @@ const Query = {
     return records;
   },
 
-  _getUserAppointmentStatus: async (_, { userId }, { user, res }) => {
+  _getUserAppointmentStatus: async (_, { userId }, { user, res, client = db }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -311,7 +314,7 @@ const Query = {
       LIMIT 1;
     `;
 
-    const result = await db.query(query, [userId]);
+    const result = await client.query(query, [userId]);
     if (result.rowCount === 0) {
       return null; // No appointments found
     }
@@ -622,13 +625,19 @@ const Mutation = {
     try {
       await client.query('BEGIN');
 
+      // Serialize bookings by patient even when they target different sessions or dates.
+      await client.query('SELECT id FROM "Patients" WHERE id = $1 FOR NO KEY UPDATE;', [user.id]);
+      const activeStatus = await Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res, client });
+      if (["Pending", "Scheduled", "InProgress"].includes(activeStatus)) {
+        throwGraphQLError(res).message("User already has an active appointment").status(400).throw();
+      }
+
       // Get or create schedule within transaction with lock
-      let scheduleData = await client.query(
-        `SELECT sde.* FROM "ScheduleDateEntity" sde
-         WHERE sde."slotId" = $1 AND sde."scheduledDate" = $2
-         LIMIT 1 FOR UPDATE;`,
-        [schedulerId, date]
-      );
+      const lockSchedule = () => client.query(
+        `SELECT * FROM "ScheduleDateEntity"
+         WHERE "slotId" = $1 AND "scheduledDate" = $2
+         FOR UPDATE;`, [schedulerId, date]);
+      let scheduleData = await lockSchedule();
 
       if (scheduleData.rowCount === 0) {
         // Fetch defaults to create new schedule
@@ -638,7 +647,6 @@ const Mutation = {
         );
 
         if (schedulerResult.rowCount === 0) {
-          await client.query('ROLLBACK');
           throwGraphQLError(res).message("Scheduler not found").status(404).throw();
         }
 
@@ -647,9 +655,12 @@ const Mutation = {
         scheduleData = await client.query(
           `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
            VALUES ($1, $2, $3, $4)
+           ON CONFLICT ("slotId", "scheduledDate") DO NOTHING
            RETURNING *;`,
           [schedulerId, date, morningAllowed, afternoonAllowed]
         );
+        // Another booking may have created this date while our insert waited.
+        if (scheduleData.rowCount === 0) scheduleData = await lockSchedule();
       }
 
       const schedule = scheduleData.rows[0];
@@ -666,10 +677,8 @@ const Mutation = {
       const { morningUsed, afternoonUsed } = countResult.rows[0];
 
       if (session === "Morning" && schedule.morningAllowed <= morningUsed) {
-        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
       } else if (session === "Afternoon" && schedule.afternoonAllowed <= afternoonUsed) {
-        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
       }
 
@@ -740,6 +749,7 @@ const Mutation = {
       return { ...psResult.rows[0], requirements: reqResult.rows, location: allowedScheduler[0].location };
     } catch (err) {
       await client.query('ROLLBACK');
+      if (err instanceof GraphQLError) throw err;
       // Attempt to clean up promoted files
       if (requirements && requirements.length > 0) {
         for (const requirement of requirements) {

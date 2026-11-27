@@ -125,6 +125,15 @@ const PersonalInfoSection = ({
             </>
           )}
         </dl>
+        <dl>
+          <DataRow label="Birthday" value={basicInfo?.date_of_birth?.slice(0, 10)} />
+          <DataRow label="Civil Status" value={basicInfo?.civil_status} />
+          <DataRow label="Nationality" value={basicInfo?.nationality} />
+          <DataRow label="Religion" value={basicInfo?.religion} />
+          <DataRow label="Contact Number" value={basicInfo?.contactNumber} />
+          <DataRow label="Present Address" value={basicInfo?.present_address} />
+          <DataRow label="Province Address" value={basicInfo?.province_address} />
+        </dl>
       </div>
 
       {/* School / Work Info */}
@@ -159,6 +168,7 @@ const PersonalInfoSection = ({
 
       {isEmployee && (
         <div className="space-y-1 mt-4">
+          {profile?.role === 'Other' && <DataRow label="Employment Category Description" value={profile?.employmentCategoryOther ?? basicInfo?.employmentCategoryOther} />}
           <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
             Employment Information
           </h4>

@@ -2386,42 +2386,6 @@ function buildChartContext(dataType, options = {}, result = {}) {
 }
 
 // ============================================================
-// REPORT QUERY FUNCTIONS - For PDF report generation
-// ============================================================
-
-/**
- * Example report data fetcher
- * @param {string} branch
- * @param {string} startDate
- * @param {string} endDate
- * @returns {Promise<object>} Report data object
- */
-async function exampleReportData(branch, startDate, endDate) {
-  // TODO: Fetch and compile data for report
-  return {
-    sections: [],
-    summary: {},
-  };
-}
-
-// ============================================================
-// REPORT REGISTRY - Register your report types here
-// ============================================================
-
-/**
- * Map of reportType -> { handler, description, template }
- * Add entries here to expose new report types
- */
-const REPORT_HANDLERS = {
-  // Example entry (uncomment and modify):
-  // 'monthly-summary': {
-  //   handler: monthlySummaryReport,
-  //   description: 'Monthly summary report',
-  //   template: 'staff-report',
-  // },
-};
-
-// ============================================================
 // MODULE EXPORTS
 // ============================================================
 
@@ -2430,16 +2394,6 @@ const REPORT_HANDLERS = {
  */
 function getAvailableQueries() {
   return Object.entries(QUERY_HANDLERS).map(([name, config]) => ({
-    name,
-    description: config.description,
-  }));
-}
-
-/**
- * Get list of available report types
- */
-function getAvailableReports() {
-  return Object.entries(REPORT_HANDLERS).map(([name, config]) => ({
     name,
     description: config.description,
   }));
@@ -2504,25 +2458,6 @@ async function executeBatchQueries(dataTypes, branch, startDate, endDate, option
 }
 
 /**
- * Get report data by reportType
- */
-async function getReportData(reportType, branch, startDate, endDate) {
-  const config = REPORT_HANDLERS[reportType];
-  if (!config) {
-    throw new Error(`Unknown report type: ${reportType}`);
-  }
-
-  logger.debug(`Fetching report data: ${reportType}`, { branch, startDate, endDate });
-  const data = await config.handler(branch, startDate, endDate);
-
-  return {
-    ...data,
-    template: config.template,
-    description: config.description,
-  };
-}
-
-/**
  * Check if query type exists
  */
 function hasQuery(dataType) {
@@ -2530,17 +2465,10 @@ function hasQuery(dataType) {
 }
 
 /**
- * Check if report type exists
- */
-function hasReport(reportType) {
-  return reportType in REPORT_HANDLERS;
-}
-
-/**
  * Get distinct departments and sex values for filter dropdowns
  */
-async function getFilterOptions() {
-  const cacheKey = `${CACHE_PREFIX}filter-options:v4`;
+async function getFilterOptions(branch = 'Both') {
+  const cacheKey = `${CACHE_PREFIX}filter-options:v5:${branch}`;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
@@ -2551,19 +2479,23 @@ async function getFilterOptions() {
       FROM "employee_profile" ep
       INNER JOIN "profileRecord" pr ON ep."profileId" = pr.id AND pr.profile_type = 'Employee'
       INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
+      INNER JOIN "UsersPersonal" up ON up.id = pul."patientId"
       WHERE ep.department IS NOT NULL AND ep.department <> ''
+        AND ($1 = 'Both' OR up.branch::text = $1)
       ORDER BY ep.department
-    `),
+    `, [branch]),
     // Fetch all programs
     db.query(`
       SELECT DISTINCT spg.label AS program
       FROM "student_profile" sp
       INNER JOIN "profileRecord" pr ON sp."profileId" = pr.id AND pr.profile_type = 'Student'
       INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
+      INNER JOIN "UsersPersonal" up ON up.id = pul."patientId"
       INNER JOIN "student_programs" spg ON spg.id = sp."programId"
       WHERE spg.label IS NOT NULL AND spg.label <> ''
+        AND ($1 = 'Both' OR up.branch::text = $1)
       ORDER BY spg.label
-    `),
+    `, [branch]),
   ]);
 
   // Combine departments and programs for the departments filter
@@ -2625,20 +2557,16 @@ async function getFilterOptions() {
 module.exports = {
   // Registry access
   QUERY_HANDLERS,
-  REPORT_HANDLERS,
   VALID_GROUP_BY,
 
   // List available types
   getAvailableQueries,
-  getAvailableReports,
 
   // Execute
   executeQuery,
   executeBatchQueries,
-  getReportData,
 
   // Utilities
   hasQuery,
-  hasReport,
   getFilterOptions,
 };

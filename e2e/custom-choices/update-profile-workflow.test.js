@@ -15,6 +15,7 @@ function mockedPage() {
     actions,
     getByPlaceholder: name => locator(name),
     getByLabel: name => locator(name),
+    getByRole: (role, options) => locator([role, options.name]),
   };
 }
 
@@ -33,7 +34,7 @@ test('mocked Employee update uses department, employment category, and position 
   await fillUpdateProfileFields(page, 'Employee', { department: 'Facilities QA' });
   assert.deepEqual(page.actions, [
     ['fill', 'Department', 'Facilities QA'],
-    ['select', 'Employment Category', 'Non-Teaching'],
+    ['select', ['combobox', /^Employment Category\b/], 'Non-Teaching'],
     ['fill', 'Position', 'Consultant'],
   ]);
 });

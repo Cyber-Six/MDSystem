@@ -13,8 +13,37 @@ const Mutation = require('./mutation.js');
 const db = require('../../../config/query.js');
 const anchor = require('../query/anchor.js');
 const remove = require('../query/delete.js');
+const { promoteFile, deleteFile } = require('../../../config/multer.js');
 
 beforeEach(() => jest.clearAllMocks());
+
+test.each([
+  ['_MedicalHistory', 'MedicalHistory', 'MedicalCondition', 'conditions', { conditionId: 3 }],
+  ['_ImmunizationProfile', 'Immunization', 'ImmunizationRecord', 'immunizations', { vaccineTypeId: 8 }],
+])('%s returns the stored notes with or without child entries', async (method, table, child, field, entry) => {
+  anchor[table] = jest.fn().mockResolvedValue({ id: 12, notes: 'follow-up' });
+  remove[child] = jest.fn();
+  db.queryControlled = jest.fn().mockResolvedValue({ rows: [entry] });
+  for (const entries of [[entry], []]) {
+    const input = { notes: 'follow-up', [field]: entries };
+    const result = await Mutation[method](null, { args: { input }, recordId: 12 }, { user: { id: 7 }, res: {} });
+    expect(anchor[table]).toHaveBeenCalledWith(12, input.notes);
+    expect(result).toMatchObject({ id: 12, notes: input.notes, [field]: entries });
+  }
+});
+
+test('retains unchanged photos on a ticket and still requires both on a new record', async () => {
+  const photos = { id: 13, upperTeeth: 'upper', lowerTeeth: 'lower' };
+  const context = { user: { id: 4 }, res: {} };
+  const request = { args: { input: { upperTeeth: null, lowerTeeth: null } }, recordId: 13 };
+  db.query.mockResolvedValueOnce({ rows: [photos] }).mockResolvedValueOnce({ rows: [photos] });
+  await expect(Mutation._DentalPhotoRecord(null, request, context)).resolves.toMatchObject(photos);
+  expect(db.query.mock.calls[1][1]).toEqual([13, null, null]);
+  expect(promoteFile).not.toHaveBeenCalled();
+  expect(deleteFile).not.toHaveBeenCalled();
+  db.query.mockResolvedValueOnce({ rows: [] });
+  await expect(Mutation._DentalPhotoRecord(null, request, context)).rejects.toThrow('400:Both upper and lower teeth photos are required.');
+});
 
 test('rejects invalid staff ticket statuses before opening a database transaction', async () => {
   await expect(Mutation._StaffUpdateTicket(null, { args: { status: 'Pending' }, recordId: 1, scope: 'Both' }, { user: { id: 3 }, res: {} })).rejects.toThrow("400:Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.");

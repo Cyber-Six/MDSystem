@@ -95,6 +95,7 @@ const Query = {
         return {
           __typename: "EmployeeProfile",
           id: row.id,
+          profile_type: row.profile_type,
           department: row.department,
           role: row.role,
           position: row.position,
@@ -328,7 +329,7 @@ const Query = {
       const catalogQuery = `
         SELECT *
         FROM "AllergyRecord"
-        WHERE "allergyId" = $1;
+        WHERE "allergyId" = $1 ORDER BY id;
       `;
       const AllergenCatalog = await db.query(catalogQuery, [row.id]);
       row.allergies = AllergenCatalog.rows || [];

@@ -41,7 +41,7 @@ const Query = {
       SELECT mtl.*,
         COALESCE(
           json_agg(
-            json_build_object('id', me.id, 'batchId', me."batchId", me."transactionId")
+            json_build_object('id', me.id, 'batchId', me."batchId", 'transactionId', me."transactionId")
           ) FILTER (WHERE me.id IS NOT NULL),
           '[]'
         ) AS items
@@ -109,7 +109,7 @@ const Mutation = {
           `SELECT *
            FROM "MedicineRequestLog"
            WHERE id = $1
-           LIMIT 1`,
+           LIMIT 1 FOR UPDATE`,
           [input.requestId],
         );
 
@@ -134,9 +134,10 @@ const Mutation = {
       ]);
       transaction = txResult.rows[0];
 
-      const items = [];
-      for (const item of mergedItems) {
-        // Assign existing unassigned entities (FEFO: First-Expiry-First-Out)
+      const itemsByBatch = new Map();
+      const lockOrder = [...mergedItems].sort((first, second) => first.batchId - second.batchId);
+      for (const item of lockOrder) {
+        // Lock units in a consistent order and recheck availability after competing transactions.
         const assignSql = `
           WITH selected AS (
             SELECT me.id
@@ -144,11 +145,12 @@ const Mutation = {
             WHERE me."batchId" = $2 AND me."transactionId" IS NULL
             ORDER BY me.id ASC
             LIMIT $3
+            FOR UPDATE
           )
           UPDATE "MedicineEntity" me
           SET "transactionId" = $1
           FROM selected
-          WHERE me.id = selected.id
+          WHERE me.id = selected.id AND me."transactionId" IS NULL
           RETURNING me.id, me."batchId", me."transactionId"
         `;
         const assignResult = await client.query(assignSql, [transaction.id, item.batchId, item.quantity]);
@@ -158,10 +160,10 @@ const Mutation = {
             .status(400)
             .throw();
         }
-        items.push(...assignResult.rows);
+        itemsByBatch.set(item.batchId, assignResult.rows);
       }
 
-      transaction.items = items;
+      transaction.items = mergedItems.flatMap(item => itemsByBatch.get(item.batchId));
 
       if (!linkedRequest) {
         // Health-chat direct prescription — mirror into MedicineRequestLog so it appears in the dispense queue
