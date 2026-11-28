@@ -1,3 +1,4 @@
+import PatientTypeBadge from '../../patient-type-badge';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePermissions } from '../../../../../context/permissions-context';
 import { useStaffNotifications } from '../../../../notification/notification-context';
@@ -385,14 +386,17 @@ const RecordUpdateList = ({
                           #{ticket.id}
                         </td>
                         <td className="px-4 py-3 text-xs text-secondary-700 dark:text-neutral-300">
-                          {ticket.first_name || ticket.last_name
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="min-w-0 break-words">{ticket.first_name || ticket.last_name
                             ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
                             : (
                               <span className="italic text-secondary-400 dark:text-neutral-500">
                                 ID&nbsp;{ticket.patientId}
                               </span>
-                            )}
-                        </td>
+                            )}</span>
+                          <PatientTypeBadge profileType={ticket.profile_type} />
+                        </div>
+                      </td>
                         <td className="px-4 py-3">
                           {ticket.scope && (
                             <span

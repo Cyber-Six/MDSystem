@@ -52,3 +52,17 @@ test.each([
   expect(childSql).toContain(`FROM "${childTable}"`);
   expect(childParams).toEqual([12]);
 });
+
+test('ticket lists include the authoritative patient type without dropping legacy patients', async () => {
+  const rows = [
+    { id: 1, patientId: 7, profile_type: 'Student' },
+    { id: 2, patientId: 8, profile_type: 'Employee' },
+    { id: 3, patientId: 9, profile_type: null },
+  ];
+  db.query.mockResolvedValueOnce({ rows });
+  await expect(Query._getStatusUpdateTickets(null, { statuses: ['Pending'], branch: 'Both', offset: 0, limit: 20 }, { user: { id: 1 }, res: {} })).resolves.toEqual(rows);
+  const [sql, values] = db.query.mock.calls[0];
+  expect(sql).toContain('p.profile::text   AS profile_type');
+  expect(sql).toContain('LEFT JOIN "Patients" p ON p.id = pul."patientId"');
+  expect(values).toEqual(['Both', ['Pending'], 20, 0]);
+});

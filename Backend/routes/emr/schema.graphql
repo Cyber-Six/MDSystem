@@ -726,6 +726,7 @@ type UpdateTicket {
   scope: UpdateScope
   first_name: String
   last_name: String
+  profile_type: String
   notes: String
   branch: DesignationBranch
   created_at: Date

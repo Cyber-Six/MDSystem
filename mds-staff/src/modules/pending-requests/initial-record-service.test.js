@@ -67,3 +67,10 @@ describe('initial record service', () => {
     expect(axiosRequest.post.mock.calls[0][0]).toBe('/emr/medical');
   });
 });
+
+test('requests and preserves patient types in ticket lists', async () => {
+  const tickets = [{ id: 'synthetic-student', profile_type: 'Student' }, { id: 'synthetic-employee', profile_type: 'Employee' }];
+  axiosRequest.post.mockResolvedValueOnce({ data: { data: { getStatusUpdateTickets: tickets } } });
+  await expect(getStatusUpdateTickets(['Pending'], BRANCH.BOTH, 0, 20, { force: true })).resolves.toEqual(tickets);
+  expect(axiosRequest.post.mock.lastCall[1].query).toContain('profile_type');
+});

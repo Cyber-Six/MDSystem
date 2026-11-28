@@ -164,3 +164,28 @@ test('returns basic info rows and nulls for empty results', async () => {
   await expect(Query.getPatientBasicInfo(null, { userId: 8 }, { user: { id: 3 }, res: {} })).resolves.toBeNull();
   await expect(Query.getPatientBasicInfo(null, { userId: 8 }, { user: { id: 3 }, res: {} })).resolves.toMatchObject({ id: 8 });
 });
+
+test.each(['Student', 'Employee', null])('real ticket schema returns profile_type %p for staff', async profileType => {
+  const { graphql } = require('graphql');
+  const { makeExecutableSchema } = require('@graphql-tools/schema');
+  const path = require('path');
+  const fs = require('fs');
+  const schema = makeExecutableSchema({
+    typeDefs: fs.readFileSync(path.join(__dirname, '../../schema.graphql'), 'utf8'),
+    resolvers: { Query: { getStatusUpdateTickets: Query.getStatusUpdateTickets } },
+  });
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: true, branch: 'Manila' });
+  Wrapper._getStatusUpdateTickets.mockResolvedValueOnce([
+    { id: '9001', patientId: '7001', status: 'Pending', profile_type: profileType },
+  ]);
+  const result = await graphql({
+    schema,
+    source: 'query { getStatusUpdateTickets(statuses: [Pending], branch: Both) { id patientId status profile_type } }',
+    contextValue: { user: { id: 3 }, res: {} },
+  });
+  expect(result.errors).toBeUndefined();
+  expect(result.data.getStatusUpdateTickets[0].profile_type).toBe(profileType);
+  expect(Wrapper._getStatusUpdateTickets).toHaveBeenLastCalledWith(
+    undefined, expect.objectContaining({ branch: 'Manila' }), { user: { id: 3 }, res: {} },
+  );
+});
