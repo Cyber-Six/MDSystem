@@ -1,6 +1,6 @@
 import React from 'react';
 import { Checkbox, Input } from './form-elements';
-import { ReviewSectionHeader, ReviewDataRow, resolveCatalogLabel, formatReviewDate, collectUnresolvedCatalogSelections } from '../review-components';
+import { ReviewSectionHeader, ReviewDataRow, ReviewNote, resolveCatalogLabel, formatReviewDate, collectUnresolvedCatalogSelections } from '../review-components';
 
 const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, catalogs = {}, fieldErrors = {}, onClearFieldError = () => {} }) => {
   const handleCertificationChange = (field, value) => {
@@ -78,13 +78,6 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
             value={formData.personalInfo?.program} 
           />
           <DataRow label="Student Number" value={formData.personalInfo?.studentNumber} />
-        </dl>
-      </div>
-
-      {/* Student Status */}
-      <div className="form-section">
-        <SectionHeader title="Student Status" onEditClick={() => onEdit(0)} />
-        <dl className="space-y-1">
           <DataRow label="Student Category" value={formData.personalInfo?.studentCategory} />
         </dl>
       </div>
@@ -93,7 +86,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
       <div className="form-section">
         <SectionHeader title="Emergency Contacts" onEditClick={() => onEdit(0)} />
         {formData.personalInfo?.emergencyContacts?.map((contact, index) => (
-          <div key={index} className="mb-4 pb-4 border-b last:border-b-0">
+          <div key={index} className="medical-review-group mb-3">
             <h5 className="text-sm font-semibold text-secondary-700 mb-2">Contact {index + 1}</h5>
             <dl className="space-y-1">
               <DataRow label="Name" value={contact.name} />
@@ -105,9 +98,12 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
         ))}
       </div>
 
-      {/* Medical History - Self */}
+      {/* Medical History */}
       <div className="form-section">
-        <SectionHeader title="Medical History (Yourself)" onEditClick={() => onEdit(1)} />
+        <SectionHeader title="Medical History" onEditClick={() => onEdit(1)} />
+        <div className="medical-review-groups">
+        <div className="medical-review-group">
+        <h5>Yourself</h5>
         <div className="flex flex-wrap gap-2">
           {selectedConditions(formData.medicalHistory?.self).length > 0 ? (
             selectedConditions(formData.medicalHistory?.self)
@@ -120,25 +116,27 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
             <p className="text-secondary-500 text-sm">No conditions reported</p>
           )}
         </div>
-      </div>
-
-      {/* Medical History - Family */}
-      <div className="form-section">
-        <SectionHeader title="Medical History (Family)" onEditClick={() => onEdit(1)} />
+        </div>
+        <div className="medical-review-group">
+        <h5>Family</h5>
         {selectedConditions(formData.medicalHistory?.family).length > 0 ? (
-          <dl className="space-y-2">
+          <div className="flex flex-wrap gap-2">
             {selectedConditions(formData.medicalHistory?.family)
               .map(([id]) => (
-                <DataRow
+                <div
                   key={id}
-                  label={getCatalogName(catalogs?.medicalConditionCatalog, id)}
-                  value={formData.medicalHistory?.familyWhoHasIt?.[id] || 'Not specified'}
-                />
+                  className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-error-200 bg-error-50 px-3 py-1 text-sm text-error-800 dark:border-error-900 dark:bg-error-900/30 dark:text-error-200"
+                >
+                  <span className="font-medium">{getCatalogName(catalogs?.medicalConditionCatalog, id)}</span>
+                  <span className="text-xs opacity-80">{formData.medicalHistory?.familyWhoHasIt?.[id] || 'Relative not specified'}</span>
+                </div>
               ))}
-          </dl>
+          </div>
         ) : (
           <p className="text-secondary-500 text-sm">No family conditions reported</p>
         )}
+        </div>
+        </div>
       </div>
 
       {/* Medical Background */}
@@ -146,7 +144,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
         <SectionHeader title="Medical Background" onEditClick={() => onEdit(2)} />
         
         {/* Immunizations */}
-        <div className="mb-4">
+        <div className="medical-review-group mb-3">
           <h5 className="text-sm font-semibold text-secondary-700 mb-2">Immunizations</h5>
           <div className="flex flex-wrap gap-2">
             {formData.medicalBackground?.immunizations && Object.entries(formData.medicalBackground.immunizations).filter(([_, value]) => value).length > 0 ? (
@@ -164,7 +162,8 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
           </div>
         </div>
 
-        <dl className="space-y-1">
+        <dl className="medical-review-groups">
+          <div className="medical-review-group"><h5>Allergies</h5>
           <DataRow label="Has Allergies" value={formData.medicalBackground?.hasAllergies} />
           {formData.medicalBackground?.hasAllergies === 'Yes' &&
             formData.medicalBackground?.allergies &&
@@ -187,7 +186,9 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
               </dd>
             </div>
           )}
-          <DataRow label="Allergy Notes" value={formData.medicalBackground?.allergyOther} />
+          <ReviewNote label="Allergy Notes" value={formData.medicalBackground?.allergyOther} />
+          </div>
+          <div className="medical-review-group"><h5>Hospitalizations</h5>
           <DataRow label="Hospitalization" value={formData.medicalBackground?.hasHospitalization} />
           {formData.medicalBackground?.hasHospitalization === 'Yes' &&
             Object.entries(formData.medicalBackground?.hospitalizationConditions || {})
@@ -207,7 +208,9 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
                 />
               ))
           }
-          <DataRow label="Hospitalization Notes" value={formData.medicalBackground?.hospitalizationNotes} />
+          <ReviewNote label="Hospitalization Notes" value={formData.medicalBackground?.hospitalizationNotes} />
+          </div>
+          <div className="medical-review-group"><h5>Surgery and operations</h5>
           <DataRow label="Surgery/Operation" value={formData.medicalBackground?.hasOperation} />
           {formData.medicalBackground?.hasOperation === 'Yes' &&
             Object.entries(formData.medicalBackground?.operationConditions || {})
@@ -222,13 +225,17 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
                 />
               ))
           }
-          <DataRow label="Operation Notes" value={formData.medicalBackground?.operationNotes} />
+          <ReviewNote label="Operation Notes" value={formData.medicalBackground?.operationNotes} />
+          </div>
+          <div className="medical-review-group"><h5>Medications</h5>
           <DataRow label="Maintenance Medications" value={formData.medicalBackground?.hasMedications} />
           <DataRow label="Medication Reason" value={formData.medicalBackground?.medicationReason} />
-          <DataRow label="Medication Notes" value={formData.medicalBackground?.medicationNotes} />
           {formData.medicalBackground?.hasMedications === 'Yes' && Object.entries(formData.medicalBackground?.selectedMedications || {}).filter(([, selected]) => selected).map(([id]) => (
             <DataRow key={`medication-${id}`} label="Medication" value={getCatalogName(catalogs?.medicationCatalog, id)} />
           ))}
+          <ReviewNote label="Medication Notes" value={formData.medicalBackground?.medicationNotes} />
+          </div>
+          <div className="medical-review-group"><h5>Daily habits and vision</h5>
           <DataRow label="Smoker" value={formData.medicalBackground?.smoker === 'yes' ? `Yes (${formData.medicalBackground?.smokerSticksPerDay ?? 'Not provided'} sticks/day, ${formData.medicalBackground?.smokerYears ?? 'Not provided'} years)` : formData.medicalBackground?.smoker === 'no' ? 'No' : undefined} />
           <DataRow label="Alcohol Drinker" value={formData.medicalBackground?.alcoholDrinker === 'yes' ? `Yes (${formData.medicalBackground?.alcoholFrequency || 'Not specified'})` : formData.medicalBackground?.alcoholDrinker === 'no' ? 'No' : undefined} />
           <DataRow label="Vaper" value={formData.medicalBackground?.vaper === 'yes' ? `Yes (${formData.medicalBackground?.vapeType || 'Not specified'}, ${formData.medicalBackground?.vapeFrequency || 'Not specified'})` : formData.medicalBackground?.vaper === 'no' ? 'No' : undefined} />
@@ -248,6 +255,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
               <DataRow label="Contact Lenses Grade OS" value={formData.medicalBackground?.gradeOSContactLenses ?? formData.medicalBackground?.gradeOS} />
             </>
           )}
+          </div>
         </dl>
       </div>
 

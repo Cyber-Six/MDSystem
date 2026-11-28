@@ -96,7 +96,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const handleProgramSearch = useCallback((value: string) => {
     setProgramSearch(value);
     if (programTimerRef.current) clearTimeout(programTimerRef.current);
-    if (value.trim().length < 2) { setProgramSuggestions([]); return; }
+    if (value.trim().length < 3) { setProgramSuggestions([]); setProgramSearching(false); return; }
     programTimerRef.current = setTimeout(async () => {
       setProgramSearching(true);
       try {
@@ -531,7 +531,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
                     {programSuggestions.length > 0 ? (
                       <FlatList
-                        data={programSuggestions}
+                        data={programSuggestions.slice(0, 5)}
                         keyExtractor={item => item.id}
                         keyboardShouldPersistTaps="handled"
                         style={{ flex: 1 }}
@@ -551,10 +551,10 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
                     ) : (
                       <View style={{ paddingVertical: 32, alignItems: 'center' }}>
                         <Text style={{ fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
-                          {!programSearchFocused && programSearch.trim().length < 2
+                          {!programSearchFocused && programSearch.trim().length < 3
                             ? 'Tap search to start'
-                            : programSearch.trim().length < 2
-                            ? 'Type at least 2 characters to search'
+                            : programSearch.trim().length < 3
+                            ? 'Type at least 3 characters to search'
                             : programSearching
                             ? 'Searching...'
                             : 'No programs found'}

@@ -13,6 +13,7 @@ import { Button } from '../medical/form-elements';
 import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
 import { createInitialEmployeeRecord, fetchAllCatalogs } from '@core/services/emr-service';
 import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer';
+import { clearRecordFormDraft, readRecordFormDraft, saveRecordFormDraft } from '../../record-form-draft-storage';
 
 /**
  * Initial Employee Medical Record Form Component
@@ -25,7 +26,13 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
 const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false }) => {
   const navigate = useNavigate();
   const formContentRef = useRef(null);
-  const [currentStep, setCurrentStep] = useState(0);
+  const draftFlow = isRevision ? 'initial-employee-revision' : 'initial-employee';
+  const [cachedDraft] = useState(() => readRecordFormDraft(draftFlow));
+  const [currentStep, setCurrentStep] = useState(() => Number.isInteger(cachedDraft?.data?.currentStep) ? Math.max(0, Math.min(cachedDraft.data.currentStep, 5)) : 0);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(Boolean(cachedDraft?.data?.formData || revisionData));
+  const [needsPhotoReupload, setNeedsPhotoReupload] = useState(Boolean(cachedDraft?.data?.requiresPhotoReupload));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -76,8 +83,9 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
 
   // When revision pre-fill data arrives, merge it into the form state
   useEffect(() => {
-    if (!revisionData) return;
+    if (!revisionData || cachedDraft?.data?.formData) return;
     console.log('[Employee Record Form] Applying revision pre-fill data...');
+    setDraftDirty(true);
     setFormData((prev) => ({
       ...prev,
       personalInfo:      { ...prev.personalInfo,      ...revisionData.personalInfo },
@@ -185,27 +193,67 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     }
   });
 
+  useEffect(() => {
+    const savedData = cachedDraft?.data?.formData;
+    if (savedData && typeof savedData === 'object') {
+      setFormData((previous) => {
+        const restored = { ...previous };
+        for (const section of ['personalInfo', 'medicalHistory', 'medicalBackground', 'dentalHistory', 'obgyne', 'certification']) {
+          const savedSection = savedData[section];
+          if (savedSection && typeof savedSection === 'object' && !Array.isArray(savedSection)) {
+            restored[section] = { ...previous[section], ...savedSection };
+          }
+        }
+        restored.dentalHistory = { ...restored.dentalHistory, upperTeethPhoto: null, lowerTeethPhoto: null };
+        restored.certification = { ...restored.certification, verified: false, signature: '', date: '' };
+        return restored;
+      });
+      setDraftRestored(true);
+      setNeedsPhotoReupload(Boolean(cachedDraft.data.requiresPhotoReupload));
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || !draftDirty) return;
+    const dentalHistory = formData.dentalHistory || {};
+    const photoReminder = needsPhotoReupload || Boolean(dentalHistory.upperTeethPhoto || dentalHistory.lowerTeethPhoto);
+    const persistedFormData = {
+      ...formData,
+      dentalHistory: { ...dentalHistory, upperTeethPhoto: null, lowerTeethPhoto: null },
+      certification: { ...formData.certification, verified: false, signature: '', date: '' },
+    };
+    saveRecordFormDraft(draftFlow, { formData: persistedFormData, currentStep, requiresPhotoReupload: photoReminder });
+  }, [draftFlow, draftReady, draftDirty, formData, currentStep, needsPhotoReupload]);
+
   const handlePersonalInfoChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, personalInfo: data });
   };
 
   const handleMedicalHistoryChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, medicalHistory: data });
   };
 
   const handleMedicalBackgroundChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, medicalBackground: data });
   };
 
   const handleDentalHistoryChange = (data) => {
+    setDraftDirty(true);
+    if (data.upperTeethPhoto && data.lowerTeethPhoto) setNeedsPhotoReupload(false);
     setFormData({ ...formData, dentalHistory: data });
   };
 
   const handleOBGYNEChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, obgyne: data });
   };
 
   const handleCertificationChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, certification: data });
   };
 
@@ -481,6 +529,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
       console.log('[Employee Record Form] Submitting to backend...');
       const result = await createInitialEmployeeRecord(sanitizedData, { isRevision });
       console.log('[Employee Record Form] Submission successful!', result);
+      clearRecordFormDraft(draftFlow);
       setSubmittedRecord(result);
       setShowSuccessModal(true);
     } catch (error) {
@@ -655,6 +704,13 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
               <p className="text-secondary-600 dark:text-neutral-300">
                 Please complete your medical information to access the system
               </p>
+            </div>
+          )}
+
+          {draftRestored && (
+            <div role="status" className="mb-4 rounded-lg border border-primary-300 bg-primary-50 p-3 text-sm text-secondary-800 dark:border-primary-800 dark:bg-primary-950/40 dark:text-neutral-100">
+              <strong>Saved draft restored.</strong> Your entries were recovered from this browser tab.
+              {needsPhotoReupload && <span className="block mt-1">Please upload your dental photos again and reconfirm the certification before submitting.</span>}
             </div>
           )}
 

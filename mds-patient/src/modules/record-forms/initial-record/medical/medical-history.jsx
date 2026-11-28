@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import useCatalogSearch from '../../use-catalog-search';
+import React, { useState } from 'react';
 import { Checkbox, Input } from './form-elements';
 import { searchDomainCatalog, createDomainCatalog } from '@core/services/emr-service';
 import { additionalCatalogItems } from '../review-components';
@@ -7,81 +8,6 @@ import CatalogActivityOverlay from '../../catalog-activity-overlay';
 
 const isValidCatalogId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
 
-function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name', onItemSelected }) {
-  const [dynamicItems, setDynamicItems] = useState([]);
-  const [input, setInput] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [creating, setCreating] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const wrapperRef = useRef(null);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setFocused(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const handleInputChange = (value) => {
-    setInput(value);
-    if (!value.trim()) { setSuggestions([]); return; }
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const query = value.trim().toLowerCase();
-        const localMatches = [...catalog, ...dynamicItems].filter(item =>
-          String(item?.[nameKey] || '').toLowerCase().includes(query));
-        const results = await searchFn(value.trim());
-        const merged = new Map();
-        [...localMatches, ...(results || [])].forEach(item => {
-          if (item?.id && !merged.has(item.id)) merged.set(item.id, item);
-        });
-        setSuggestions([...merged.values()]);
-      } catch { setSuggestions([]); }
-      setSearching(false);
-    }, 300);
-  };
-
-  const selectItem = (item) => {
-    if (!isValidCatalogId(item?.id)) return null;
-    setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
-    onItemSelected?.(item);
-    setInput('');
-    setSuggestions([]);
-    setFocused(false);
-    return item;
-  };
-
-  const createItem = async (name, extra) => {
-    if (!name) return null;
-    setCreating(true);
-    try {
-      const created = await createFn(name, extra);
-      // Catalog mutations return an array, while the search UI consumes one
-      // catalog item. Keep the same shape whether the caller returns an array
-      // or a single item.
-      const item = Array.isArray(created) ? created[0] : created;
-      if (!isValidCatalogId(item?.id)) return null;
-      if (item) {
-        setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
-        onItemSelected?.(item);
-        setInput('');
-        setSuggestions([]);
-        setFocused(false);
-      }
-      return item;
-    } catch { return null; }
-    finally { setCreating(false); }
-  };
-
-  return { dynamicItems, input, suggestions, creating, searching, focused, wrapperRef, setFocused, handleInputChange, selectItem, createItem };
-}
 
 /**
  * MedicalHistoryForm
@@ -235,19 +161,19 @@ const MedicalHistoryForm = ({
                 onFocus={() => conditionOthers.setFocused(true)}
                 onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
               />
-              {conditionOthers.focused && conditionOthers.input.trim() && (
+              {conditionOthers.focused && conditionOthers.input.trim().length >= 3 && (
                 <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm max-h-60 overflow-y-auto">
                   {conditionOthers.searching && (
                     <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
                   {conditionOthers.suggestions.length > 0 ? (
                     <>
-                      {conditionOthers.suggestions.map(result => (
+                      {conditionOthers.suggestions.slice(0, 5).map(result => (
                         <button
                           key={result.id}
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                          onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
+                          onClick={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
                         >
                           {result.name}
                           {data.self?.[result.id] && (
@@ -258,20 +184,20 @@ const MedicalHistoryForm = ({
                       <button
                         type="button"
                         className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                        disabled={conditionOthers.creating}
-                        onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                        disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                        onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                       >
-                        {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                        {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                      disabled={conditionOthers.creating}
-                      onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                      disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                      onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                     >
-                      {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                      {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                     </button>
                   )}
                 </div>
@@ -357,19 +283,19 @@ const MedicalHistoryForm = ({
                 onFocus={() => conditionOthers.setFocused(true)}
                 onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
               />
-              {conditionOthers.focused && conditionOthers.input.trim() && (
+              {conditionOthers.focused && conditionOthers.input.trim().length >= 3 && (
                 <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm max-h-60 overflow-y-auto">
                   {conditionOthers.searching && (
                     <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
                   {conditionOthers.suggestions.length > 0 ? (
                     <>
-                      {conditionOthers.suggestions.map(result => (
+                      {conditionOthers.suggestions.slice(0, 5).map(result => (
                         <button
                           key={result.id}
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                          onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
+                          onClick={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
                         >
                           {result.name}
                           {data.family?.[result.id] && (
@@ -380,20 +306,20 @@ const MedicalHistoryForm = ({
                       <button
                         type="button"
                         className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                        disabled={conditionOthers.creating}
-                        onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                        disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                        onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                       >
-                        {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                        {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                      disabled={conditionOthers.creating}
-                      onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                      disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                      onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                     >
-                      {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                      {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                     </button>
                   )}
                 </div>

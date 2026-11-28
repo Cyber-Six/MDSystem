@@ -1,4 +1,11 @@
 ﻿/* Shared presentation for initial, revision, and update patient web forms. */
+.record-form-ui .allergy-option-group { border: 1px solid var(--color-border-light); border-radius: 0.625rem; color: var(--color-text-primary); }
+.record-form-ui .allergy-option-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+.record-form-ui .allergy-option-card { min-width: 0; padding: 0.75rem; border: 1px solid var(--color-border-light); border-radius: 0.5rem; }
+.record-form-ui .allergy-option-card.is-selected { border-color: var(--color-primary-500); background: var(--color-primary-50); }
+.dark .record-form-ui .allergy-option-card.is-selected { background: var(--color-primary-900); }
+.record-form-ui .allergy-option-card select { min-width: 0; flex: 1; }
+@media (min-width: 640px) { .record-form-ui .allergy-option-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .record-form-ui {
   color: var(--color-text-primary);
   line-height: 1.6;
@@ -16,6 +23,54 @@
   padding: clamp(1rem, 3vw, 1.75rem);
   box-shadow: 0 1px 3px rgb(28 25 23 / 0.04);
   border-top: 3px solid var(--color-primary-200);
+}
+.record-form-ui .medical-review-groups { display: grid; gap: 0.875rem; }
+.record-form-ui .medical-review-group { min-width: 0; padding: 0.75rem 1rem; border: 1px solid var(--color-border-light); border-radius: 0.75rem; background: var(--color-surface, transparent); }
+.record-form-ui .medical-review-group > h5 { margin: 0 0 0.5rem; color: var(--color-primary-700); font-size: 0.875rem; font-weight: 700; }
+.dark .record-form-ui .medical-review-group > h5 { color: var(--color-primary-300); }
+.record-form-ui .dental-option-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.625rem;
+}
+.record-form-ui .dental-option-card {
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border-light);
+  border-radius: 0.625rem;
+  background: var(--color-surface, transparent);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.record-form-ui .dental-option-card:hover {
+  border-color: var(--color-primary-400);
+}
+.record-form-ui .dental-option-card.is-selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-50);
+}
+.record-form-ui .dental-option-card > label {
+  align-items: flex-start;
+  margin: 0;
+}
+.record-form-ui .dental-option-card > label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.record-form-ui .dental-option-details {
+  padding-left: 1.75rem;
+}
+.dark .record-form-ui .dental-option-card {
+  background: var(--color-gray-900);
+}
+.dark .record-form-ui .dental-option-card.is-selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-900);
+}
+@media (min-width: 480px) {
+  .record-form-ui .dental-option-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .record-form-ui .dental-option-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .dark .record-form-ui .form-section {
   background-color: var(--color-gray-800);

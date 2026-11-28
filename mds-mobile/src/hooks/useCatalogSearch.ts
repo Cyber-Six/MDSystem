@@ -26,6 +26,8 @@ interface CatalogSearchResult<T> {
   input: string;
   /** Current search suggestions */
   suggestions: T[];
+  /** Exact name already exists in the loaded catalog or current results. */
+  hasExactMatch: boolean;
   /** Whether a search is in progress */
   searching: boolean;
   /** Whether a create is in progress */
@@ -58,19 +60,20 @@ export function useCatalogSearch<T extends { id: string }>({
   const [focused, setFocused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const existingIds = useMemo(
-    () => new Set([
-      ...catalog.map(c => c.id),
-      ...dynamicItems.map(c => c.id),
-    ]),
-    [catalog, dynamicItems],
-  );
+  const normalize = useCallback((value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(), []);
+  const hasExactMatch = useMemo(() => {
+    const query = normalize(input);
+    return query.length >= 3 && [...catalog, ...dynamicItems, ...suggestions].some(
+      item => normalize(item[nameKey]) === query,
+    );
+  }, [catalog, dynamicItems, input, nameKey, normalize, suggestions]);
 
   const handleInputChange = useCallback((value: string) => {
     setInput(value);
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (value.trim().length < 2) {
+    if (value.trim().length < 3) {
       setSuggestions([]);
+      setSearching(false);
       return;
     }
 
@@ -78,15 +81,19 @@ export function useCatalogSearch<T extends { id: string }>({
       setSearching(true);
       try {
         const results = await searchFn(value.trim());
-        // Filter out items already in catalog or dynamic
-        const filtered = results.filter(r => !existingIds.has(r.id));
-        setSuggestions(filtered);
+        // Keep existing items visible so users can select them, but never treat
+        // an exact existing name as a new item.
+        const merged = new Map<string, T>();
+        [...results, ...catalog, ...dynamicItems].forEach(item => {
+          if (normalize(item[nameKey]).includes(normalize(value)) && !merged.has(item.id)) merged.set(item.id, item);
+        });
+        setSuggestions([...merged.values()]);
       } catch {
         setSuggestions([]);
       }
       setSearching(false);
     }, 300);
-  }, [searchFn, existingIds]);
+  }, [searchFn, catalog, dynamicItems, nameKey, normalize]);
 
   useEffect(() => {
     return () => {
@@ -99,17 +106,35 @@ export function useCatalogSearch<T extends { id: string }>({
 
   const selectItem = useCallback((item: T) => {
     setDynamicItems(prev => {
-      if (prev.some(d => d.id === item.id)) return prev;
+      if (catalog.some(c => c.id === item.id) || prev.some(d => d.id === item.id)) return prev;
       return [...prev, item];
     });
     setInput('');
     setSuggestions([]);
     setFocused(false);
-  }, []);
+  }, [catalog]);
 
   const createItem = useCallback(async (...args: any[]) => {
+    const requestedName = String(args[0] ?? input).trim();
+    if (requestedName.length < 3) return;
     setCreating(true);
     try {
+      const localMatch = [...catalog, ...dynamicItems, ...suggestions].find(
+        item => normalize(item[nameKey]) === normalize(requestedName),
+      );
+      if (localMatch) {
+        selectItem(localMatch);
+        return;
+      }
+      // Search again at action time to close the stale-search race. The server
+      // also enforces uniqueness for requests that race this check.
+      let latestMatches: T[] = [];
+      try { latestMatches = await searchFn(requestedName); } catch { /* Backend create still enforces uniqueness. */ }
+      const existing = latestMatches.find(item => normalize(item[nameKey]) === normalize(requestedName));
+      if (existing) {
+        selectItem(existing);
+        return;
+      }
       const created = await createFn(...args);
       if (created.length > 0) {
         const newItem = created[0];
@@ -124,12 +149,13 @@ export function useCatalogSearch<T extends { id: string }>({
     } finally {
       setCreating(false);
     }
-  }, [createFn]);
+  }, [catalog, createFn, dynamicItems, input, nameKey, normalize, searchFn, selectItem, suggestions]);
 
   return {
     dynamicItems,
     input,
     suggestions,
+    hasExactMatch,
     searching,
     creating,
     focused,

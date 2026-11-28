@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import AllergyOptionGroup from '../../allergy-option-group';
+import useCatalogSearch from '../../use-catalog-search';
+import React, { useState } from 'react';
 import { Checkbox, Input, Textarea, AccordionSection, Select } from './form-elements';
 import {
   createImmunizationCatalog,
@@ -41,101 +43,6 @@ const ALLERGEN_TYPE_OPTIONS = [
 
 // ─── Reusable search+create "Others" hook ─────────────────────────────────────
 
-function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name', onItemSelected }) {
-  const [dynamicItems, setDynamicItems] = useState([]);
-  const [input, setInput] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [creating, setCreating] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const wrapperRef = useRef(null);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setFocused(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleInputChange = (value) => {
-    setInput(value);
-    const trimmed = value.trim().toLowerCase();
-    if (!trimmed) {
-      setSuggestions([]);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      return;
-    }
-    const allLoaded = [...catalog, ...dynamicItems];
-    const seen = new Set();
-    const localMatches = allLoaded.filter((v) => {
-      if (seen.has(v.id)) return false;
-      seen.add(v.id);
-      return (v[nameKey] || '').toLowerCase().includes(trimmed);
-    });
-    setSuggestions(localMatches);
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const dbResults = await searchFn(value.trim());
-        const mergedMap = new Map();
-        dbResults.forEach((v) => mergedMap.set(v.id, v));
-        localMatches.forEach((v) => { if (!mergedMap.has(v.id)) mergedMap.set(v.id, v); });
-        setSuggestions(Array.from(mergedMap.values()));
-      } catch {
-        // Keep local matches on error
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-  };
-
-  const selectItem = (item) => {
-    const alreadyInMain = catalog.some((v) => v.id === item.id);
-    const alreadyInDynamic = dynamicItems.some((v) => v.id === item.id);
-    if (!alreadyInMain && !alreadyInDynamic) {
-      setDynamicItems((prev) => [...prev, item]);
-    }
-    onItemSelected?.(item);
-    setInput('');
-    setSuggestions([]);
-    setFocused(false);
-    return item;
-  };
-
-  const createItem = async (...args) => {
-    setCreating(true);
-    try {
-      const created = await createFn(...args);
-      // Catalog creation can return one row or a list of rows depending on
-      // the service. Normalize the shape before adding it to the form.
-      const newItem = Array.isArray(created) ? created[0] : created;
-      if (newItem?.id != null) {
-        setDynamicItems((prev) => [...prev, newItem]);
-        onItemSelected?.(newItem);
-        setInput('');
-        setSuggestions([]);
-        setFocused(false);
-        return newItem;
-      }
-    } catch (err) {
-      console.error('[CatalogSearch] Failed to create catalog entry:', err.message);
-    } finally {
-      setCreating(false);
-    }
-    return null;
-  };
-
-  return {
-    dynamicItems, input, suggestions, creating, searching, focused,
-    wrapperRef, setFocused, handleInputChange, selectItem, createItem,
-  };
-}
 
 /**
  * MedicalBackgroundForm
@@ -374,25 +281,25 @@ const MedicalBackgroundForm = ({
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                placeholder="Type to search for a vaccine..."
+                placeholder="Type at least 3 characters to search..."
                 value={immunizationOthers.input}
                 autoComplete="off"
                 onFocus={() => immunizationOthers.setFocused(true)}
                 onChange={(e) => immunizationOthers.handleInputChange(e.target.value)}
               />
-              {immunizationOthers.focused && immunizationOthers.input.trim() && (
+              {immunizationOthers.focused && immunizationOthers.input.trim().length >= 3 && (
                 <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm">
                   {immunizationOthers.searching && (
                     <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
                   {immunizationOthers.suggestions.length > 0 ? (
                     <>
-                      {immunizationOthers.suggestions.map(result => (
+                      {immunizationOthers.suggestions.slice(0, 5).map(result => (
                         <button
                           key={result.id}
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                          onMouseDown={(e) => { e.preventDefault(); const item = immunizationOthers.selectItem(result); onChange({ ...data, immunizations: { ...data.immunizations, [item.id]: true } }); }}
+                          onClick={(e) => { e.preventDefault(); const item = immunizationOthers.selectItem(result); onChange({ ...data, immunizations: { ...data.immunizations, [item.id]: true } }); }}
                         >
                           {result.name}
                           {data.immunizations?.[result.id] && (
@@ -403,20 +310,20 @@ const MedicalBackgroundForm = ({
                       <button
                         type="button"
                         className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                        disabled={immunizationOthers.creating}
-                        onMouseDown={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) onChange({ ...data, immunizations: { ...data.immunizations, [item.id]: true } }); }}
+                        disabled={immunizationOthers.creating || immunizationOthers.searching || immunizationOthers.hasExactMatch}
+                        onClick={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) onChange({ ...data, immunizations: { ...data.immunizations, [item.id]: true } }); }}
                       >
-                        {immunizationOthers.creating ? 'Adding...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
+                        {immunizationOthers.creating ? 'Adding...' : immunizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : immunizationOthers.searching ? 'Checking for existing options...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                      disabled={immunizationOthers.creating}
-                      onMouseDown={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) onChange({ ...data, immunizations: { ...data.immunizations, [item.id]: true } }); }}
+                      disabled={immunizationOthers.creating || immunizationOthers.searching || immunizationOthers.hasExactMatch}
+                      onClick={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) onChange({ ...data, immunizations: { ...data.immunizations, [item.id]: true } }); }}
                     >
-                      {immunizationOthers.creating ? 'Adding...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
+                      {immunizationOthers.creating ? 'Adding...' : immunizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : immunizationOthers.searching ? 'Checking for existing options...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
                     </button>
                   )}
                 </div>
@@ -477,9 +384,9 @@ const MedicalBackgroundForm = ({
                   {ALLERGEN_TYPE_ORDER.filter(type =>
                     allergenCatalog.some(a => a.type === type)
                   ).map((type) => (
-                    <div key={type}>
-                      <p className="text-xs font-semibold text-secondary-500 uppercase tracking-wide mb-2">{type}</p>
-                      <div className="space-y-2 ml-2">
+                    <AllergyOptionGroup key={type} label={type} selectedCount={allergenCatalog.filter(a => a.type === type && (typeof data.allergies?.[a.id] === 'object' ? !!data.allergies?.[a.id]?.checked : !!data.allergies?.[a.id])).length}>
+
+                      <div className="contents">
                         {allergenCatalog
                           .filter(a => a.type === type)
                           .map((allergen) => {
@@ -488,7 +395,7 @@ const MedicalBackgroundForm = ({
                             const severity = typeof allergyVal === 'object' ? (allergyVal?.severity || 'Unknown') : 'Unknown';
                             const status = typeof allergyVal === 'object' ? (allergyVal?.status || 'Active') : 'Active';
                             return (
-                              <div key={allergen.id}>
+                              <div key={allergen.id} className={`allergy-option-card ${isChecked ? 'is-selected' : ''}`}>
                                 <Checkbox
                                   label={allergen.allergen}
                                   checked={isChecked}
@@ -521,12 +428,12 @@ const MedicalBackgroundForm = ({
                             );
                           })}
                       </div>
-                    </div>
+                    </AllergyOptionGroup>
                   ))}
                 </div>
               )}
               {/* Dynamically added allergens from "Others" search */}
-              {allergenOthers.dynamicItems.length > 0 && (
+              {additionalCatalogItems(allergenCatalog, allergenOthers.dynamicItems).length > 0 && (
                 <div className="space-y-4 mt-4">
                   <p className="text-xs font-semibold text-secondary-500 uppercase tracking-wide mb-2">Added by you</p>
                   <div className="space-y-2 ml-2">
@@ -578,25 +485,25 @@ const MedicalBackgroundForm = ({
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    placeholder="Type to search for an allergen..."
+                    placeholder="Type at least 3 characters to search..."
                     value={allergenOthers.input}
                     autoComplete="off"
                     onFocus={() => allergenOthers.setFocused(true)}
                     onChange={(e) => allergenOthers.handleInputChange(e.target.value)}
                   />
-                  {allergenOthers.focused && allergenOthers.input.trim() && (
+                  {allergenOthers.focused && allergenOthers.input.trim().length >= 3 && (
                     <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm">
                       {allergenOthers.searching && (
                         <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                       )}
                       {allergenOthers.suggestions.length > 0 ? (
                         <>
-                          {allergenOthers.suggestions.map(result => (
+                          {allergenOthers.suggestions.slice(0, 5).map(result => (
                             <button
                               key={result.id}
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                              onMouseDown={(e) => { e.preventDefault(); const item = allergenOthers.selectItem(result); handleAllergyToggle(item.id, true); }}
+                              onClick={(e) => { e.preventDefault(); const item = allergenOthers.selectItem(result); handleAllergyToggle(item.id, true); }}
                             >
                               {result.allergen} <span className="text-xs text-secondary-400">({result.type})</span>
                               {data.allergies?.[result.id] && (
@@ -621,10 +528,10 @@ const MedicalBackgroundForm = ({
                             <button
                               type="button"
                               className="w-full text-left text-sm text-primary-600 hover:bg-primary-50 focus:outline-none disabled:opacity-50"
-                              disabled={allergenOthers.creating}
-                              onMouseDown={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleAllergyToggle(item.id, true); }}
+                              disabled={allergenOthers.creating || allergenOthers.searching || allergenOthers.hasExactMatch}
+                              onClick={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleAllergyToggle(item.id, true); }}
                             >
-                              {allergenOthers.creating ? 'Adding...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
+                              {allergenOthers.creating ? 'Adding...' : allergenOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : allergenOthers.searching ? 'Checking for existing options...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
                             </button>
                           </div>
                         </>
@@ -646,10 +553,10 @@ const MedicalBackgroundForm = ({
                           <button
                             type="button"
                             className="w-full text-left text-sm text-primary-600 hover:bg-primary-50 focus:outline-none disabled:opacity-50"
-                            disabled={allergenOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleAllergyToggle(item.id, true); }}
+                            disabled={allergenOthers.creating || allergenOthers.searching || allergenOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleAllergyToggle(item.id, true); }}
                           >
-                            {allergenOthers.creating ? 'Adding...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
+                            {allergenOthers.creating ? 'Adding...' : allergenOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : allergenOthers.searching ? 'Checking for existing options...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
                           </button>
                         </div>
                       )}
@@ -722,7 +629,7 @@ const MedicalBackgroundForm = ({
                 ) : hospitalizationCatalog.length === 0 ? (
                   <p className="text-sm text-secondary-400 italic">No conditions available.</p>
                 ) : (
-                  <ExpandableOptionList items={hospitalizationCatalog} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(condition) => (
+                  <ExpandableOptionList items={hospitalizationCatalog} isSelected={item => !!data.hospitalizationConditions?.[item.id]} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(condition) => (
                       <div key={condition.id} className="space-y-2">
                         <Checkbox
                           label={condition.name}
@@ -786,25 +693,25 @@ const MedicalBackgroundForm = ({
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    placeholder="Type to search for a condition..."
+                    placeholder="Type at least 3 characters to search..."
                     value={hospitalizationOthers.input}
                     autoComplete="off"
                     onFocus={() => hospitalizationOthers.setFocused(true)}
                     onChange={(e) => hospitalizationOthers.handleInputChange(e.target.value)}
                   />
-                  {hospitalizationOthers.focused && hospitalizationOthers.input.trim() && (
+                  {hospitalizationOthers.focused && hospitalizationOthers.input.trim().length >= 3 && (
                     <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm">
                       {hospitalizationOthers.searching && (
                         <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                       )}
                       {hospitalizationOthers.suggestions.length > 0 ? (
                         <>
-                          {hospitalizationOthers.suggestions.map(result => (
+                          {hospitalizationOthers.suggestions.slice(0, 5).map(result => (
                             <button
                               key={result.id}
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                              onMouseDown={(e) => { e.preventDefault(); const item = hospitalizationOthers.selectItem(result); onChange({ ...data, hospitalizationConditions: { ...data.hospitalizationConditions, [item.id]: true } }); }}
+                              onClick={(e) => { e.preventDefault(); const item = hospitalizationOthers.selectItem(result); onChange({ ...data, hospitalizationConditions: { ...data.hospitalizationConditions, [item.id]: true } }); }}
                             >
                               {result.name}
                               {data.hospitalizationConditions?.[result.id] && (
@@ -815,20 +722,20 @@ const MedicalBackgroundForm = ({
                           <button
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                            disabled={hospitalizationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) onChange({ ...data, hospitalizationConditions: { ...data.hospitalizationConditions, [item.id]: true } }); }}
+                            disabled={hospitalizationOthers.creating || hospitalizationOthers.searching || hospitalizationOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) onChange({ ...data, hospitalizationConditions: { ...data.hospitalizationConditions, [item.id]: true } }); }}
                           >
-                            {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
+                            {hospitalizationOthers.creating ? 'Adding...' : hospitalizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : hospitalizationOthers.searching ? 'Checking for existing options...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
                           </button>
                         </>
                       ) : (
                         <button
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                          disabled={hospitalizationOthers.creating}
-                          onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) onChange({ ...data, hospitalizationConditions: { ...data.hospitalizationConditions, [item.id]: true } }); }}
+                          disabled={hospitalizationOthers.creating || hospitalizationOthers.searching || hospitalizationOthers.hasExactMatch}
+                          onClick={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) onChange({ ...data, hospitalizationConditions: { ...data.hospitalizationConditions, [item.id]: true } }); }}
                         >
-                          {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
+                          {hospitalizationOthers.creating ? 'Adding...' : hospitalizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : hospitalizationOthers.searching ? 'Checking for existing options...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
                         </button>
                       )}
                     </div>
@@ -901,7 +808,7 @@ const MedicalBackgroundForm = ({
                 ) : operationCatalog.length === 0 ? (
                   <p className="text-sm text-secondary-400 italic">No procedures available.</p>
                 ) : (
-                  <ExpandableOptionList items={operationCatalog} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(procedure) => (
+                  <ExpandableOptionList items={operationCatalog} isSelected={item => !!data.operationConditions?.[item.id]} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(procedure) => (
                       <div key={procedure.id} className="space-y-2">
                         <Checkbox
                           label={procedure.name}
@@ -953,25 +860,25 @@ const MedicalBackgroundForm = ({
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    placeholder="Type to search for a procedure..."
+                    placeholder="Type at least 3 characters to search..."
                     value={operationOthers.input}
                     autoComplete="off"
                     onFocus={() => operationOthers.setFocused(true)}
                     onChange={(e) => operationOthers.handleInputChange(e.target.value)}
                   />
-                  {operationOthers.focused && operationOthers.input.trim() && (
+                  {operationOthers.focused && operationOthers.input.trim().length >= 3 && (
                     <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm">
                       {operationOthers.searching && (
                         <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                       )}
                       {operationOthers.suggestions.length > 0 ? (
                         <>
-                          {operationOthers.suggestions.map(result => (
+                          {operationOthers.suggestions.slice(0, 5).map(result => (
                             <button
                               key={result.id}
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                              onMouseDown={(e) => { e.preventDefault(); const item = operationOthers.selectItem(result); onChange({ ...data, operationConditions: { ...data.operationConditions, [item.id]: true } }); }}
+                              onClick={(e) => { e.preventDefault(); const item = operationOthers.selectItem(result); onChange({ ...data, operationConditions: { ...data.operationConditions, [item.id]: true } }); }}
                             >
                               {result.name}
                               {data.operationConditions?.[result.id] && (
@@ -982,20 +889,20 @@ const MedicalBackgroundForm = ({
                           <button
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                            disabled={operationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) onChange({ ...data, operationConditions: { ...data.operationConditions, [item.id]: true } }); }}
+                            disabled={operationOthers.creating || operationOthers.searching || operationOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) onChange({ ...data, operationConditions: { ...data.operationConditions, [item.id]: true } }); }}
                           >
-                            {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
+                            {operationOthers.creating ? 'Adding...' : operationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : operationOthers.searching ? 'Checking for existing options...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
                           </button>
                         </>
                       ) : (
                         <button
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                          disabled={operationOthers.creating}
-                          onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) onChange({ ...data, operationConditions: { ...data.operationConditions, [item.id]: true } }); }}
+                          disabled={operationOthers.creating || operationOthers.searching || operationOthers.hasExactMatch}
+                          onClick={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) onChange({ ...data, operationConditions: { ...data.operationConditions, [item.id]: true } }); }}
                         >
-                          {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
+                          {operationOthers.creating ? 'Adding...' : operationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : operationOthers.searching ? 'Checking for existing options...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
                         </button>
                       )}
                     </div>
@@ -1064,7 +971,7 @@ const MedicalBackgroundForm = ({
                 ) : medicationCatalog.length === 0 ? (
                   <p className="text-sm text-secondary-400 italic">No medications available.</p>
                 ) : (
-                  <ExpandableOptionList items={medicationCatalog} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(medicine) => (
+                  <ExpandableOptionList items={medicationCatalog} isSelected={item => !!data.selectedMedications?.[item.id]} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(medicine) => (
                       <Checkbox
                         key={medicine.id}
                         label={medicine.name}
@@ -1094,25 +1001,25 @@ const MedicalBackgroundForm = ({
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    placeholder="Type to search for a medication..."
+                    placeholder="Type at least 3 characters to search..."
                     value={medicationOthers.input}
                     autoComplete="off"
                     onFocus={() => medicationOthers.setFocused(true)}
                     onChange={(e) => medicationOthers.handleInputChange(e.target.value)}
                   />
-                  {medicationOthers.focused && medicationOthers.input.trim() && (
+                  {medicationOthers.focused && medicationOthers.input.trim().length >= 3 && (
                     <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm">
                       {medicationOthers.searching && (
                         <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                       )}
                       {medicationOthers.suggestions.length > 0 ? (
                         <>
-                          {medicationOthers.suggestions.map(result => (
+                          {medicationOthers.suggestions.slice(0, 5).map(result => (
                             <button
                               key={result.id}
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                              onMouseDown={(e) => { e.preventDefault(); const item = medicationOthers.selectItem(result); onChange({ ...data, selectedMedications: { ...data.selectedMedications, [item.id]: true } }); }}
+                              onClick={(e) => { e.preventDefault(); const item = medicationOthers.selectItem(result); onChange({ ...data, selectedMedications: { ...data.selectedMedications, [item.id]: true } }); }}
                             >
                               {result.name}
                               {data.selectedMedications?.[result.id] && (
@@ -1123,20 +1030,20 @@ const MedicalBackgroundForm = ({
                           <button
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                            disabled={medicationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) onChange({ ...data, selectedMedications: { ...data.selectedMedications, [item.id]: true } }); }}
+                            disabled={medicationOthers.creating || medicationOthers.searching || medicationOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) onChange({ ...data, selectedMedications: { ...data.selectedMedications, [item.id]: true } }); }}
                           >
-                            {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
+                            {medicationOthers.creating ? 'Adding...' : medicationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicationOthers.searching ? 'Checking for existing options...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
                           </button>
                         </>
                       ) : (
                         <button
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                          disabled={medicationOthers.creating}
-                          onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) onChange({ ...data, selectedMedications: { ...data.selectedMedications, [item.id]: true } }); }}
+                          disabled={medicationOthers.creating || medicationOthers.searching || medicationOthers.hasExactMatch}
+                          onClick={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) onChange({ ...data, selectedMedications: { ...data.selectedMedications, [item.id]: true } }); }}
                         >
-                          {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
+                          {medicationOthers.creating ? 'Adding...' : medicationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicationOthers.searching ? 'Checking for existing options...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
                         </button>
                       )}
                     </div>

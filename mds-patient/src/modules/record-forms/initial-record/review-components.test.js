@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server.node';
 import ReviewForm from './medical/review-form';
 import EmployeeReviewForm from './employee/review-form';
 import UpdateReview from '../update-record/review-step';
-import { ReviewDataRow, additionalCatalogItems, collectUnresolvedCatalogSelections, isResolvableCatalogSelection, resolveCatalogLabel } from './review-components';
+import { ReviewDataRow, ReviewNote, additionalCatalogItems, collectUnresolvedCatalogSelections, isResolvableCatalogSelection, resolveCatalogLabel } from './review-components';
 
 const catalog = (id, name, extra = {}) => ({ id, name, ...extra });
 const catalogs = {
@@ -55,6 +55,19 @@ describe('patient review summaries', () => {
     expect(html).toContain('line one\nline two');
   });
 
+  test('renders notes as full-width blocks with line breaks and safe wrapping', () => {
+    const html = renderToStaticMarkup(<ReviewNote label="Hospitalization Notes" value={'First line\nA long follow-up note that should wrap instead of stretching the review row'} />);
+    expect(html).toContain('Hospitalization Notes');
+    expect(html).toContain('whitespace-pre-wrap');
+    expect(html).toContain('break-words');
+    expect(html).toContain('First line\nA long follow-up note');
+  });
+
+  test('hides empty optional notes from review summaries', () => {
+    expect(renderToStaticMarkup(<ReviewNote label="Medication Notes" value="  " />)).toBe('');
+    expect(renderToStaticMarkup(<ReviewNote label="Medication Notes" value={null} />)).toBe('');
+  });
+
   test('shows Student initial values, custom choices, details, photos, and female fields', () => {
     const html = renderToStaticMarkup(<ReviewForm {...initialProps(initialFixture())} />);
     for (const value of ['QA asthma', 'Mother', 'QA vaccine', '2025', 'QA pollen', 'Environmental', 'Mild', 'Active', 'QA hospitalization', 'Admitted:', 'QA operation', 'QA medication', 'Pain relief', '0 sticks/day', 'Custom guard', 'Upper', 'upper.png', 'Menarche Year/Age']) expect(html).toContain(value);
@@ -102,6 +115,8 @@ describe('patient review summaries', () => {
     };
     const html = renderToStaticMarkup(<UpdateReview formData={update} recordType="both" steps={['Personal Info', 'Medical History', 'Dental History', 'Review & Submit']} onEdit={() => {}} />);
     for (const value of ['QA asthma', 'Mother', 'QA pollen', 'QA vaccine', 'Dose:', 'QA hospitalization', 'QA operation', 'QA medication', 'Two lines', 'Right eye', 'QA cleaning', 'Upper', 'update-upper.png']) expect(html).toContain(value);
+    for (const group of ['Basic details', 'Contact information', 'Conditions', 'Allergies &amp; immunizations', 'Hospitalizations &amp; operations', 'Daily habits &amp; vision', 'Dental visits', 'Appliances &amp; procedures']) expect(html).toContain(group);
+    expect(html).toContain('rounded-lg border border-neutral-200 bg-neutral-50/70 p-3');
     expect(html).not.toContain('undefined');
   });
 });

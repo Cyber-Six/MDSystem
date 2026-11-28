@@ -16,6 +16,7 @@ import {
   clampStepIndex,
   getBackButtonState,
 } from './step-navigation-utils';
+import { clearRecordFormDraft, readRecordFormDraft, saveRecordFormDraft } from '../record-form-draft-storage';
 
 const RecordUpdateForm = ({
   forceRecordType = null,
@@ -26,14 +27,21 @@ const RecordUpdateForm = ({
   isInactiveMode = false,
 }) => {
   const { subscribe } = usePatientNotifications();
-  const [currentStep, setCurrentStep] = useState(0);
+  const draftFlowBase = forceRecordType ? `record-update-${forceRecordType}` : 'record-update';
+  const [draftFlow, setDraftFlow] = useState(draftFlowBase);
+  const [cachedDraft] = useState(() => readRecordFormDraft(draftFlow));
+  const restoredRecordDraft = cachedDraft?.data?.formData && typeof cachedDraft.data.formData === 'object' && !Array.isArray(cachedDraft.data.formData) ? cachedDraft.data.formData : {};
+  const [currentStep, setCurrentStep] = useState(() => Number.isInteger(cachedDraft?.data?.currentStep) ? Math.max(0, Math.min(cachedDraft.data.currentStep, 3)) : 0);
   const [patientDefaults, setPatientDefaults] = useState({});
   const [profileLoadStatus, setProfileLoadStatus] = useState('loading');
-  const [recordDraft, setRecordDraft] = useState({});
+  const [recordDraft, setRecordDraft] = useState(() => restoredRecordDraft);
   const formData = useMemo(() => ({ ...patientDefaults, ...recordDraft }), [patientDefaults, recordDraft]);
+  const [draftRestored, setDraftRestored] = useState(Boolean(Object.keys(restoredRecordDraft).length || cachedDraft?.data?.recordType));
+  const [revisionDraftRestored, setRevisionDraftRestored] = useState(false);
+  const [needsPhotoReupload, setNeedsPhotoReupload] = useState(Boolean(cachedDraft?.data?.requiresPhotoReupload));
   const [reviewHasUnresolvedChoices, setReviewHasUnresolvedChoices] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
+  const [recordType, setRecordType] = useState(() => cachedDraft?.data?.recordType || null); // 'medical', 'dental', or 'both'
   const effectiveRecordType = forceRecordType || recordType;
   const shouldShowRecordChoice = !effectiveRecordType && !hideRecordChoice;
   const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
@@ -56,6 +64,28 @@ const RecordUpdateForm = ({
   const [validationErrors, setValidationErrors] = useState([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
+  useEffect(() => {
+    if (!Object.keys(recordDraft).length && !recordType) return;
+    const dentalPhotos = {
+      upperTeethPhoto: recordDraft.upperTeethPhoto,
+      lowerTeethPhoto: recordDraft.lowerTeethPhoto,
+    };
+    const hasAnyPhoto = Boolean(dentalPhotos.upperTeethPhoto || dentalPhotos.lowerTeethPhoto);
+    const photoReminder = needsPhotoReupload || hasAnyPhoto;
+    const persistedDraft = { ...recordDraft, upperTeethPhoto: null, lowerTeethPhoto: null };
+    saveRecordFormDraft(draftFlow, {
+      formData: persistedDraft,
+      currentStep,
+      recordType: forceRecordType || recordType,
+      requiresPhotoReupload: photoReminder,
+    });
+  }, [draftFlow, forceRecordType, recordDraft, recordType, currentStep, needsPhotoReupload]);
+
+  useEffect(() => {
+    if (recordDraft.upperTeethPhoto && recordDraft.lowerTeethPhoto) setNeedsPhotoReupload(false);
+    else if (recordDraft.upperTeethPhoto || recordDraft.lowerTeethPhoto) setNeedsPhotoReupload(true);
+  }, [recordDraft.upperTeethPhoto, recordDraft.lowerTeethPhoto]);
+
   const syncRevisionStatus = useCallback(async (source = 'mount') => {
     try {
       console.log(`[RecordUpdateForm] Syncing revision status from ${source}...`);
@@ -66,6 +96,26 @@ const RecordUpdateForm = ({
         setRevisionStatus(ticket);
         setShowRevisionBanner(true);
         setIsLoadingRevisionPrefill(true);
+
+        const revisionFlow = `${draftFlowBase}-revision`;
+        const revisionDraft = readRecordFormDraft(revisionFlow);
+        setDraftFlow(revisionFlow);
+        if (revisionDraft?.data) {
+          const savedRevisionData = revisionDraft.data.formData;
+          setRecordDraft(savedRevisionData && typeof savedRevisionData === 'object' && !Array.isArray(savedRevisionData) ? savedRevisionData : {});
+          setCurrentStep(Number.isInteger(revisionDraft.data.currentStep) ? Math.max(0, Math.min(revisionDraft.data.currentStep, 3)) : 0);
+          setRecordType(revisionDraft.data.recordType || null);
+          setDraftRestored(Boolean(revisionDraft.data.formData || revisionDraft.data.recordType));
+          setRevisionDraftRestored(true);
+          setNeedsPhotoReupload(Boolean(revisionDraft.data.requiresPhotoReupload));
+        } else {
+          setRecordDraft({});
+          setCurrentStep(0);
+          setRecordType(null);
+          setDraftRestored(false);
+          setRevisionDraftRestored(false);
+          setNeedsPhotoReupload(false);
+        }
 
         // Pre-fetch previous data for revision
         try {
@@ -85,11 +135,12 @@ const RecordUpdateForm = ({
       setRevisionStatus(ticket || null);
       setShowRevisionBanner(false);
       setRevisionPrefillData(null);
+      clearRecordFormDraft(`${draftFlowBase}-revision`);
       console.log('[RecordUpdateForm] No revision pending');
     } catch (error) {
       console.error('[RecordUpdateForm] Error checking revision status:', error.message);
     }
-  }, []);
+  }, [draftFlowBase]);
 
   // Check for pending revision request on mount
   useEffect(() => {
@@ -454,6 +505,7 @@ const RecordUpdateForm = ({
         skipPersonalUpdate: Boolean(skipPersonalSubmit || skipPersonalStep),
       });
       console.log('[RecordUpdateForm] ✅ Records submitted successfully:', results);
+      clearRecordFormDraft(draftFlow);
       
       // Show success modal!
       const recordTypeLabel = resolvedRecordType === 'both' ? 'Medical and Dental' : resolvedRecordType === 'medical' ? 'Medical' : 'Dental';
@@ -474,6 +526,7 @@ const RecordUpdateForm = ({
   const handleSuccessModalClose = () => {
     const submittedRecordType = effectiveRecordType || recordType || null;
     setShowSuccessModal(false);
+    clearRecordFormDraft(draftFlow);
     setRecordDraft({});
     setCurrentStep(0);
     setRecordType(null);
@@ -520,6 +573,9 @@ const RecordUpdateForm = ({
   const handleChoiceSelect = (choice) => {
     if (hideRecordChoice) return;
     if (forceRecordType && choice !== forceRecordType) return; // only allow the forced type
+    clearRecordFormDraft(draftFlow);
+    setDraftRestored(false);
+    setNeedsPhotoReupload(false);
     setRecordType(choice);
     setCurrentStep(0);
     setRecordDraft({});
@@ -527,6 +583,9 @@ const RecordUpdateForm = ({
 
   const handleChangeType = () => {
     if (forceRecordType || hideRecordChoice) return;
+    clearRecordFormDraft(draftFlow);
+    setDraftRestored(false);
+    setNeedsPhotoReupload(false);
     setRecordType(null);
     setCurrentStep(0);
     setRecordDraft({});
@@ -683,7 +742,7 @@ const RecordUpdateForm = ({
                   const recordTypeForRevision = scopeMap[revisionStatus?.scope] || 'medical';
                   
                   // Merge pre-filled revision data into form
-                  if (revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
+                  if (!revisionDraftRestored && revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
                     console.log('[RecordUpdateForm] Merging pre-fill data into form');
                     setRecordDraft(prev => {
                       // Ensure toggle states match pre-filled data presence
@@ -703,7 +762,7 @@ const RecordUpdateForm = ({
                   if (!forceRecordType) {
                     setRecordType(recordTypeForRevision);
                   }
-                  setCurrentStep(0);
+                  if (!revisionDraftRestored) setCurrentStep(0);
                 }}
                 className="px-5 py-2.5 rounded-lg font-semibold bg-primary-500 hover:bg-primary-600 text-white transition-colors"
               >
@@ -795,6 +854,13 @@ const RecordUpdateForm = ({
               )}
             </div>
           </div>
+
+          {draftRestored && (
+            <div role="status" className="mb-4 rounded-lg border border-primary-300 bg-primary-50 p-3 text-sm text-secondary-800 dark:border-primary-800 dark:bg-primary-950/40 dark:text-neutral-100">
+              <strong>Saved draft restored.</strong> Your entries were recovered from this browser tab.
+              {needsPhotoReupload && <span className="block mt-1">Please upload dental photos again if you had added them before refreshing.</span>}
+            </div>
+          )}
 
           {/* Progress Stepper */}
           <div className="sticky top-0 z-10 mb-6 bg-primary-50/40 pb-2 dark:bg-neutral-950">

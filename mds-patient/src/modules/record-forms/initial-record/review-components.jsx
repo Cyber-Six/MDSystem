@@ -21,6 +21,19 @@ export const ReviewDataRow = ({ label, value, className = '' }) => {
   );
 };
 
+export const ReviewNote = ({ label, value }) => {
+  const hasValue = value !== undefined && value !== null && String(value).trim() !== '';
+  if (!hasValue) return null;
+  return (
+    <dl className="my-2 min-w-0 border-b border-neutral-200 py-2 dark:border-neutral-700">
+      <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400">{label}</dt>
+      <dd className="break-words whitespace-pre-wrap text-base leading-relaxed text-secondary-900 dark:text-neutral-100">
+        {value}
+      </dd>
+    </dl>
+  );
+};
+
 export const resolveCatalogLabel = (catalog, id, registry = {}) => {
   if (id === undefined || id === null || String(id) === 'undefined') return null;
   const item = (catalog || []).find((entry) => String(entry.id) === String(id));

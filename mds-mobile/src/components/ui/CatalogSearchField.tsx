@@ -57,6 +57,10 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
   placeholder,
 }) => {
   const [keyboardOpen, setKeyboardOpen] = React.useState(false);
+  const normalizedInput = input.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const exactMatch = normalizedInput.length >= 3 && suggestions.some(
+    item => String(item[displayKey] || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase() === normalizedInput,
+  );
 
   React.useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
@@ -95,7 +99,11 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
           )}
         </View>
 
-        {focused && (suggestions.length > 0 || (input.trim().length >= 2 && !searching)) && (
+        {focused && input.trim().length > 0 && input.trim().length < 3 && (
+          <Text style={styles.noResults}>Type at least 3 characters to search or add.</Text>
+        )}
+
+        {focused && (suggestions.length > 0 || (input.trim().length >= 3 && !searching)) && (
           <View
             style={[
               styles.dropdown,
@@ -106,7 +114,7 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
               },
             ]}
           >
-            {suggestions.map(item => (
+            {suggestions.slice(0, 5).map(item => (
               <TouchableOpacity
                 key={item.id}
                 style={[styles.dropdownItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
@@ -118,7 +126,10 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
                 </Text>
               </TouchableOpacity>
             ))}
-            {input.trim().length >= 2 && suggestions.length === 0 && !searching && onCreate && (
+            {input.trim().length >= 3 && exactMatch && !searching && (
+              <Text style={styles.noResults}>This item already exists. Select it above.</Text>
+            )}
+            {input.trim().length >= 3 && suggestions.length === 0 && !searching && onCreate && (
               <TouchableOpacity
                 style={[styles.dropdownItem, { borderBottomWidth: 0 }]}
                 onPress={onCreate}
@@ -134,7 +145,7 @@ export const CatalogSearchField: React.FC<CatalogSearchFieldProps> = ({
                 </Text>
               </TouchableOpacity>
             )}
-            {input.trim().length >= 2 && suggestions.length === 0 && !searching && !onCreate && (
+            {input.trim().length >= 3 && suggestions.length === 0 && !searching && !onCreate && (
               <Text style={styles.noResults}>
                 No results found
               </Text>

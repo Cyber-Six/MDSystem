@@ -1,5 +1,27 @@
 import React, { useEffect } from 'react';
-import { ReviewSectionHeader, ReviewDataRow, resolveCatalogLabel, formatReviewDate } from '../initial-record/review-components';
+import { ReviewSectionHeader, ReviewNote, resolveCatalogLabel, formatReviewDate } from '../initial-record/review-components';
+
+const ReviewField = ({ label, value, wide = false }) => {
+  const hasValue = value !== undefined && value !== null && value !== '' && value !== 'undefined';
+  const normalized = typeof value === 'string' ? value.toLowerCase() : value;
+  const displayValue = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : normalized === 'yes' ? 'Yes' : normalized === 'no' ? 'No' : value;
+
+  return (
+    <div className={`min-w-0 rounded-lg border border-neutral-200 bg-neutral-50/70 p-3 dark:border-neutral-700 dark:bg-neutral-800/70${wide ? ' sm:col-span-2' : ''}`}>
+      <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400">{label}</dt>
+      <dd className="break-words whitespace-pre-wrap text-sm leading-relaxed text-secondary-900 dark:text-neutral-100">
+        {hasValue ? displayValue : <span className="italic text-secondary-400 dark:text-neutral-500">Not provided</span>}
+      </dd>
+    </div>
+  );
+};
+
+const ReviewGroup = ({ title, children }) => (
+  <div className="mt-5 first:mt-0">
+    <h5 className="mb-2 text-sm font-semibold text-secondary-700 dark:text-neutral-200">{title}</h5>
+    <dl className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">{children}</dl>
+  </div>
+);
 
 const ReviewStep = ({ formData, onEdit, steps = [], recordType, revisionNotes = null, isRevision = false, onValidationStateChange = () => {} }) => {
   const registry = formData.catalogRegistry || {};
@@ -42,7 +64,7 @@ const ReviewStep = ({ formData, onEdit, steps = [], recordType, revisionNotes = 
   const operations = Object.entries(formData.operationConditions || {}).filter(([, selected]) => selected).map(([id]) => `${getCatalogName('operations', id)} (${formatReviewDate(formData.operationDates?.[id]) || 'Date not provided'})`);
   const medications = selectedMap(formData.selectedMedications, 'medications');
   const medicalRows = {
-    'Yourself — medical conditions': selfConditions.join(', ') || 'None reported',
+    'Your medical conditions': selfConditions.join(', ') || 'None reported',
     'Family medical conditions': familyConditions.join('; ') || 'None reported',
     'Allergies': formData.hasAllergies,
     'Selected allergies': allergies.join('; ') || 'None selected',
@@ -100,15 +122,29 @@ const ReviewStep = ({ formData, onEdit, steps = [], recordType, revisionNotes = 
     'Lower teeth photo': formData.lowerTeethPhoto?.name || (formData.lowerTeethPhoto ? 'Uploaded' : 'Not uploaded'),
   };
   const stepIndex = (name) => steps.indexOf(name);
-  const renderRows = (rows) => Object.entries(rows).map(([label, value]) => <ReviewDataRow key={label} label={label} value={value} />);
+  const renderRows = (rows, labels) => labels.map((label) => (
+    <ReviewField key={label} label={label} value={rows[label]} wide={['Emergency Contact 1', 'Emergency Contact 2', 'Selected allergies', 'Allergy details', 'Immunizations', 'Hospitalization history', 'Operations', 'Selected medications', 'Dental procedures', 'Appliances'].includes(label)} />
+  ));
 
   return (
     <div className="space-y-6">
       {isRevision && revisionNotes && <div className="rounded-xl border-l-4 border-accent-500 bg-accent-50 p-4"><strong>Staff feedback</strong><p className="whitespace-pre-wrap">{revisionNotes}</p></div>}
-      {steps.includes('Personal Info') && <section className="rounded-xl border border-neutral-200 bg-white p-6"><ReviewSectionHeader title="Personal Information" onEditClick={() => onEdit(stepIndex('Personal Info'))} /><dl>{renderRows(personalRows)}</dl></section>}
+      {steps.includes('Personal Info') && <section className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900 sm:p-6"><ReviewSectionHeader title="Personal Information" onEditClick={() => onEdit(stepIndex('Personal Info'))} />
+        <ReviewGroup title="Basic details">{renderRows(personalRows, ['First Name', 'Last Name', 'Middle Initial', 'Student ID', 'Program', 'Age', 'School Year', 'Sex'])}</ReviewGroup>
+        <ReviewGroup title="Contact information">{renderRows(personalRows, ['Home Address', 'Boarding Address', 'Contact Number', 'Email', 'Civil Status', 'Emergency Contact 1', 'Emergency Contact 2'])}</ReviewGroup>
+      </section>}
       {unresolvedSelections.length > 0 && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800">Some selected catalog choices cannot be identified. Edit the affected section before submitting.<div className="mt-2 flex gap-3">{unresolvedSelections.some(([domain]) => domain === 'medicalConditions' || domain === 'allergens' || domain === 'immunizations' || domain === 'hospitalizations' || domain === 'operations' || domain === 'medications') && <button type="button" className="underline font-semibold" onClick={() => onEdit(stepIndex('Medical History'))}>Edit Medical History</button>}{unresolvedSelections.some(([domain]) => domain === 'dentalProcedures' || domain === 'oralAppliances') && <button type="button" className="underline font-semibold" onClick={() => onEdit(stepIndex('Dental History'))}>Edit Dental History</button>}</div></div>}
-      {(recordType === 'medical' || recordType === 'both') && <section className="rounded-xl border border-neutral-200 bg-white p-6"><ReviewSectionHeader title="Medical History" onEditClick={() => onEdit(stepIndex('Medical History'))} /><dl>{renderRows(medicalRows)}</dl></section>}
-      {(recordType === 'dental' || recordType === 'both') && <section className="rounded-xl border border-neutral-200 bg-white p-6"><ReviewSectionHeader title="Dental History" onEditClick={() => onEdit(stepIndex('Dental History'))} /><dl>{renderRows(dentalRows)}</dl>
+      {(recordType === 'medical' || recordType === 'both') && <section className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900 sm:p-6"><ReviewSectionHeader title="Medical History" onEditClick={() => onEdit(stepIndex('Medical History'))} />
+        <ReviewGroup title="Conditions">{renderRows(medicalRows, ['Your medical conditions', 'Family medical conditions'])}</ReviewGroup>
+        <ReviewGroup title="Allergies & immunizations">{renderRows(medicalRows, ['Allergies', 'Selected allergies', 'Allergy details', 'Immunizations'])}<ReviewNote label="Allergy notes" value={formData.allergiesNotes} /></ReviewGroup>
+        <ReviewGroup title="Hospitalizations & operations">{renderRows(medicalRows, ['Hospitalizations', 'Hospitalization history', 'Surgeries', 'Operations'])}<ReviewNote label="Hospitalization notes" value={formData.hospitalizationNotes} /><ReviewNote label="Surgery notes" value={formData.surgeryNotes} /></ReviewGroup>
+        <ReviewGroup title="Medications">{renderRows(medicalRows, ['Medications', 'Selected medications'])}<ReviewNote label="Medication notes" value={formData.medicationNotes} /></ReviewGroup>
+        <ReviewGroup title="Daily habits & vision">{renderRows(medicalRows, ['Smoker', 'Cigarettes per day', 'Years smoking', 'Alcohol use', 'Alcohol frequency', 'Vaping', 'Vape type', 'Vape frequency', 'Visual acuity', 'Right eye', 'Left eye', 'Last menstrual period', 'Dysmenorrhea'])}<ReviewNote label="Visual acuity notes" value={formData.visualAcuityNotes} /></ReviewGroup>
+      </section>}
+      {(recordType === 'dental' || recordType === 'both') && <section className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900 sm:p-6"><ReviewSectionHeader title="Dental History" onEditClick={() => onEdit(stepIndex('Dental History'))} />
+        <ReviewGroup title="Dental visits">{renderRows(dentalRows, ['Visited a dentist', 'Last dental cleaning', 'Last visit date', 'Purpose of last visit'])}</ReviewGroup>
+        <ReviewGroup title="Appliances & procedures">{renderRows(dentalRows, ['Intraoral appliances', 'Appliances', 'Dental procedures'])}</ReviewGroup>
+        <ReviewGroup title="Photos">{renderRows(dentalRows, ['Upper teeth photo', 'Lower teeth photo'])}</ReviewGroup>
         {formData.upperTeethPhoto?.preview && <img className="mt-3 max-w-xs rounded border" src={formData.upperTeethPhoto.preview} alt="Upper teeth preview" />}
         {formData.lowerTeethPhoto?.preview && <img className="mt-3 max-w-xs rounded border" src={formData.lowerTeethPhoto.preview} alt="Lower teeth preview" />}
       </section>}

@@ -34,7 +34,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
       onChange({ ...formData, program: '', programId: '' });
     }
     if (programDebounceRef.current) clearTimeout(programDebounceRef.current);
-    if (!value.trim()) { setProgramSuggestions([]); return; }
+    if (value.trim().length < 3) { setProgramSuggestions([]); setProgramSearching(false); return; }
     programDebounceRef.current = setTimeout(async () => {
       setProgramSearching(true);
       try {
@@ -145,10 +145,13 @@ const PersonalInfoStep = ({ formData, onChange }) => {
                 {programSearching && (
                   <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                 )}
-                {!programSearching && programSuggestions.length === 0 && (
+                {!programSearching && programInput.trim().length > 0 && programInput.trim().length < 3 && (
+                  <div className="px-3 py-2 text-xs text-secondary-500">Type at least 3 characters to search.</div>
+                )}
+                {!programSearching && programInput.trim().length >= 3 && programSuggestions.length === 0 && (
                   <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">No programs found.</div>
                 )}
-                {programSuggestions.map(item => (
+                {programSuggestions.slice(0, 5).map(item => (
                   <button
                     key={item.id}
                     type="button"

@@ -14,6 +14,7 @@ const db = require('../../../config/query.js');
 const anchor = require('../query/anchor.js');
 const remove = require('../query/delete.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
+const { normalizeName } = require('../../../utils/validator.js');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -87,4 +88,76 @@ test('stores allergy profile notes in the existing allergy record notes field', 
   expect(anchor.Allergy).toHaveBeenCalledWith(14);
   expect(db.queryControlled.mock.calls[0][1]).toEqual([14, 8, 'Active', 'Mild', 'Other: seasonal reactions', null]);
   expect(result.allergies[0].notes).toBe('Other: seasonal reactions');
+});
+
+test('domain catalog creation deduplicates case and whitespace variants in a batch', async () => {
+  normalizeName.mockImplementation(value => String(value).trim().replace(/\s+/g, ' '));
+  const existing = { id: 31, domain: 'Medication', name: 'Vitamin C', isValid: true };
+  const client = {
+    query: jest.fn(async sql => {
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK' || sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+      if (sql.includes('SELECT * FROM "DomainTypeCatalog"')) return { rows: [existing] };
+      if (sql.includes('UPDATE "DomainTypeCatalog"')) return { rows: [existing] };
+      if (sql.includes('INSERT INTO "DomainTypeCatalog"')) throw new Error('duplicate insert attempted');
+      throw new Error(`Unexpected SQL: ${sql}`);
+    }),
+    release: jest.fn(),
+  };
+  db.connect.mockResolvedValue(client);
+  const result = await Mutation._DomainCatalog(null, {
+    domain: 'Medication', names: ['Vitamin C', ' vitamin   c '],
+  }, { user: { id: 8 }, res: {} });
+
+  expect(client.query.mock.calls.filter(([sql]) => sql.includes('SELECT * FROM "DomainTypeCatalog"'))).toHaveLength(1);
+  expect(client.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO "DomainTypeCatalog"'))).toBe(false);
+  expect(result).toEqual([existing]);
+  expect(client.release).toHaveBeenCalled();
+});
+
+test('allergen catalog returns an existing normalized name instead of inserting a duplicate', async () => {
+  normalizeName.mockImplementation(value => String(value).trim().replace(/\s+/g, ' '));
+  const existing = { id: 44, allergen: 'Bleach', type: 'Chemical', isValid: true };
+  const client = {
+    query: jest.fn(async (sql, params) => {
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK' || sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+      if (sql.includes('SELECT * FROM "AllergenCatalog"')) return { rows: [existing] };
+      if (sql.includes('UPDATE "AllergenCatalog"')) return { rows: [existing] };
+      if (sql.includes('INSERT INTO "AllergenCatalog"')) throw new Error('duplicate insert attempted');
+      throw new Error(`Unexpected SQL: ${sql}`);
+    }),
+    release: jest.fn(),
+  };
+  db.connect.mockResolvedValue(client);
+
+  const result = await Mutation._AllergenCatalogs(null, {
+    allergens: [{ allergen: ' bleach  ', type: 'Other' }],
+  }, { user: { id: 8 }, res: {} });
+
+  expect(result).toEqual([existing]);
+  expect(client.query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtext($1))', ['allergen:bleach']);
+  expect(client.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO "AllergenCatalog"'))).toBe(false);
+  expect(client.query).toHaveBeenCalledWith('COMMIT');
+  expect(client.release).toHaveBeenCalled();
+});
+
+test('allergen catalog deduplicates repeated names within one request before writing', async () => {
+  normalizeName.mockImplementation(value => String(value).trim().replace(/\s+/g, ' '));
+  const client = {
+    query: jest.fn(async sql => {
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK' || sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+      if (sql.includes('SELECT * FROM "AllergenCatalog"')) return { rows: [] };
+      if (sql.includes('INSERT INTO "AllergenCatalog"')) return { rows: [{ id: 49, allergen: 'Dust', type: 'Other' }] };
+      throw new Error(`Unexpected SQL: ${sql}`);
+    }),
+    release: jest.fn(),
+  };
+  db.connect.mockResolvedValue(client);
+
+  const result = await Mutation._AllergenCatalogs(null, {
+    allergens: [{ allergen: 'Dust', type: 'Other' }, { allergen: ' dust ', type: 'Food' }],
+  }, { user: { id: 8 }, res: {} });
+
+  expect(result).toHaveLength(1);
+  expect(client.query.mock.calls.filter(([sql]) => sql.includes('INSERT INTO "AllergenCatalog"'))).toHaveLength(1);
+  expect(client.release).toHaveBeenCalled();
 });

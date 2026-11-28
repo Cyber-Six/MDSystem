@@ -1,6 +1,6 @@
 import React from 'react';
 import { Checkbox, Input } from '../medical/form-elements';
-import { ReviewSectionHeader, ReviewDataRow, resolveCatalogLabel, formatReviewDate, collectUnresolvedCatalogSelections } from '../review-components';
+import { ReviewSectionHeader, ReviewDataRow, ReviewNote, resolveCatalogLabel, formatReviewDate, collectUnresolvedCatalogSelections } from '../review-components';
 
 const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationChange, catalogs = {}, fieldErrors = {}, onClearFieldError = () => {} }) => {
   const handleCertificationChange = (field, value) => {
@@ -88,10 +88,8 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
         {formData.personalInfo?.emergencyContacts?.map((contact, index) => {
           if (!contact?.name?.trim()) return null; // skip empty optional contacts
           return (
-            <div key={index} className="mb-4 pb-4 border-b last:border-b-0">
-              {index === 1 && (
-                <p className="text-xs font-semibold text-secondary-500 mb-2">Additional Contact</p>
-              )}
+          <div key={index} className="medical-review-group mb-3">
+              <h5 className="mb-2">Contact {index + 1}</h5>
               <dl className="space-y-1">
                 <DataRow label="Person/s to be Contacted" value={contact.name} />
                 <DataRow label="Relationship" value={contact.relationship} />
@@ -103,9 +101,12 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
         })}
       </div>
 
-      {/* Medical History - Self */}
+      {/* Medical History */}
       <div className="form-section">
-        <SectionHeader title="Medical History (Yourself)" onEditClick={() => onEdit(1)} />
+        <SectionHeader title="Medical History" onEditClick={() => onEdit(1)} />
+        <div className="medical-review-groups">
+        <div className="medical-review-group">
+        <h5>Yourself</h5>
         <div className="flex flex-wrap gap-2">
           {formData.medicalHistory?.self && Object.entries(formData.medicalHistory.self).filter(([_, value]) => value).length > 0 ? (
             Object.entries(formData.medicalHistory.self)
@@ -119,24 +120,26 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
             <p className="text-secondary-500 text-sm">No conditions reported</p>
           )}
         </div>
-      </div>
-
-      {/* Medical History - Family */}
-      <div className="form-section">
-        <SectionHeader title="Medical History (Family)" onEditClick={() => onEdit(1)} />
+        </div>
+        <div className="medical-review-group">
+        <h5>Family</h5>
         {formData.medicalHistory?.family && Object.entries(formData.medicalHistory.family).some(([, value]) => value) ? (
-          <dl className="space-y-2">
+          <div className="flex flex-wrap gap-2">
             {Object.entries(formData.medicalHistory.family).filter(([, value]) => value).map(([condition]) => (
-              <DataRow
+              <div
                 key={condition}
-                label={getCatalogName(catalogs?.medicalConditionCatalog, condition)}
-                value={formData.medicalHistory?.familyWhoHasIt?.[condition] || 'Not specified'}
-              />
+                className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-error-200 bg-error-50 px-3 py-1 text-sm text-error-800 dark:border-error-900 dark:bg-error-900/30 dark:text-error-200"
+              >
+                <span className="font-medium">{getCatalogName(catalogs?.medicalConditionCatalog, condition)}</span>
+                <span className="text-xs opacity-80">{formData.medicalHistory?.familyWhoHasIt?.[condition] || 'Relative not specified'}</span>
+              </div>
             ))}
-          </dl>
+          </div>
         ) : (
           <p className="text-secondary-500 text-sm">No family conditions reported</p>
         )}
+        </div>
+        </div>
       </div>
 
       {/* Medical Background */}
@@ -144,7 +147,7 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
         <SectionHeader title="Medical Background" onEditClick={() => onEdit(2)} />
         
         {/* Immunizations */}
-        <div className="mb-4">
+        <div className="medical-review-group mb-3">
           <h5 className="text-sm font-semibold text-secondary-700 mb-2">Immunizations</h5>
           <div className="flex flex-wrap gap-2">
             {formData.medicalBackground?.immunizations && Object.entries(formData.medicalBackground.immunizations).filter(([_, value]) => value).length > 0 ? (
@@ -162,12 +165,15 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
           </div>
         </div>
 
-        <dl className="space-y-1">
+        <dl className="medical-review-groups">
+          <div className="medical-review-group"><h5>Allergies</h5>
           <DataRow label="Allergies" value={formData.medicalBackground?.hasAllergies} />
           {formData.medicalBackground?.hasAllergies === 'Yes' && Object.entries(formData.medicalBackground?.allergies || {}).filter(([, entry]) => typeof entry === 'object' ? entry?.checked : entry).map(([id, entry]) => (
             <DataRow key={`allergy-${id}`} label={getCatalogName(catalogs?.allergenCatalog, id)} value={`${catalogs?.allergenCatalog?.find((item) => String(item.id) === String(id))?.type || 'Type not provided'}; severity: ${entry?.severity || 'Unknown'}; status: ${entry?.status || 'Active'}`} />
           ))}
-          <DataRow label="Allergy Notes" value={formData.medicalBackground?.allergyOther} />
+          <ReviewNote label="Allergy Notes" value={formData.medicalBackground?.allergyOther} />
+          </div>
+          <div className="medical-review-group"><h5>Hospitalizations</h5>
           <DataRow label="Hospitalizations" value={formData.medicalBackground?.hasHospitalization} />
           {formData.medicalBackground?.hasHospitalization === 'Yes' &&
             Object.entries(formData.medicalBackground?.hospitalizationConditions || {})
@@ -187,6 +193,8 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
                 />
               ))
           }
+          </div>
+          <div className="medical-review-group"><h5>Operations</h5>
           <DataRow label="Operations" value={formData.medicalBackground?.hasOperation} />
           {formData.medicalBackground?.hasOperation === 'Yes' &&
             Object.entries(formData.medicalBackground?.operationConditions || {})
@@ -201,12 +209,16 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
                 />
               ))
           }
+          </div>
+          <div className="medical-review-group"><h5>Medications</h5>
           <DataRow label="Medications" value={formData.medicalBackground?.hasMedications} />
           <DataRow label="Medication Reason" value={formData.medicalBackground?.medicationReason} />
-          <DataRow label="Medication Notes" value={formData.medicalBackground?.medicationNotes} />
           {formData.medicalBackground?.hasMedications === 'Yes' && Object.entries(formData.medicalBackground?.selectedMedications || {}).filter(([, selected]) => selected).map(([id]) => (
             <DataRow key={`medication-${id}`} label="Medication" value={getCatalogName(catalogs?.medicationCatalog, id)} />
           ))}
+          <ReviewNote label="Medication Notes" value={formData.medicalBackground?.medicationNotes} />
+          </div>
+          <div className="medical-review-group"><h5>Daily habits and vision</h5>
           <DataRow label="Smoker" value={formData.medicalBackground?.smoker === 'yes' ? `Yes (${formData.medicalBackground?.smokerSticksPerDay ?? 'Not provided'} sticks/day, ${formData.medicalBackground?.smokerYears ?? 'Not provided'} years)` : formData.medicalBackground?.smoker === 'no' ? 'No' : undefined} />
           <DataRow label="Alcohol Drinker" value={formData.medicalBackground?.alcoholDrinker === 'yes' ? `Yes (${formData.medicalBackground?.alcoholFrequency || 'Not specified'})` : formData.medicalBackground?.alcoholDrinker === 'no' ? 'No' : undefined} />
           <DataRow label="Vaper" value={formData.medicalBackground?.vaper === 'yes' ? `Yes (${formData.medicalBackground?.vapeType || 'Not specified'}, ${formData.medicalBackground?.vapeFrequency || 'Not specified'})` : formData.medicalBackground?.vaper === 'no' ? 'No' : undefined} />
@@ -226,6 +238,7 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
               <DataRow label="Contact Lenses Grade OS" value={formData.medicalBackground?.gradeOSContactLenses ?? formData.medicalBackground?.gradeOS} />
             </>
           )}
+          </div>
         </dl>
       </div>
 

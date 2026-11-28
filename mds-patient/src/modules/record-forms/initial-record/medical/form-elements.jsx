@@ -138,7 +138,7 @@ export const AccordionSection = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
     </button>
-    <div className={`transition-all duration-300 ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+    <div className={isOpen ? 'opacity-100' : 'hidden'}>
       <div className="p-6 bg-white">
         {children}
       </div>

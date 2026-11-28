@@ -857,25 +857,61 @@ const Mutation = {
     }
 
     // Normalize names to Title Case before storing so display is consistent
-    const normalizedNames = (names || []).map(n => normalizeName(n));
+    const normalizedNamesByKey = new Map();
+    (names || []).map(n => normalizeName(n)).filter(Boolean).forEach(name => {
+      const key = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+      if (!normalizedNamesByKey.has(key)) normalizedNamesByKey.set(key, name);
+    });
+    const normalizedNames = [...normalizedNamesByKey.values()];
+    if (!normalizedNames.length) {
+      throwGraphQLError(res).status(400).message("No catalog names provided").throw();
+    }
 
-    // Upsert that:
-    // 1. Inserts with isValid = true so new entries appear in searches (filterIsValid: true)
-    // 2. On case-insensitive duplicate (uniq_domain_name_lower), sets isValid = true on the
-    //    existing row — fixing entries that were previously created with isValid = false
-    // 3. Returns the row in all cases (new or existing), preventing 500 errors on duplicates
-    const query = `
-      INSERT INTO "DomainTypeCatalog" (domain, name, "isValid", created_by, code)
-      SELECT $1, UNNEST($2::text[]), true, $3, UNNEST($4::text[])
-      ON CONFLICT (domain, LOWER(name)) DO UPDATE
-        SET "isValid" = true,
-            name = EXCLUDED.name
-      RETURNING *;
-    `;
+    // Existing unique indexes cover case but not repeated internal whitespace.
+    // A transaction-scoped lock on each normalized domain/name lets us reuse an
+    // existing row or insert once without changing the database schema.
+    const codes = generateDomainCodes(normalizedNames, domain) || [];
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const keys = normalizedNames.map(name => `${domain}:${String(name).trim().replace(/\s+/g, ' ').toLowerCase()}`);
+      for (const key of [...new Set(keys)].sort()) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`domain-catalog:${key}`]);
+      }
 
-    const result = await db.query(query, [domain, normalizedNames, user.id, generateDomainCodes(normalizedNames, domain)]);
-    logger.debug("Inserted DomainTypeCatalogs:", result.rows);
-    return result.rows;
+      const rows = [];
+      for (let i = 0; i < normalizedNames.length; i += 1) {
+        const name = normalizedNames[i];
+        const key = String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+        const existing = await client.query(`
+          SELECT * FROM "DomainTypeCatalog"
+          WHERE domain = $1
+            AND LOWER(REGEXP_REPLACE(BTRIM(name), '\\s+', ' ', 'g')) = $2
+          ORDER BY id ASC LIMIT 1;
+        `, [domain, key]);
+        if (existing.rows[0]) {
+          const reactivated = await client.query(`
+            UPDATE "DomainTypeCatalog" SET "isValid" = true
+            WHERE id = $1 RETURNING *;
+          `, [existing.rows[0].id]);
+          rows.push(reactivated.rows[0] || existing.rows[0]);
+          continue;
+        }
+        const inserted = await client.query(`
+          INSERT INTO "DomainTypeCatalog" (domain, name, "isValid", created_by, code)
+          VALUES ($1, $2, true, $3, $4) RETURNING *;
+        `, [domain, name, user.id, codes[i] ?? null]);
+        rows.push(inserted.rows[0]);
+      }
+      await client.query('COMMIT');
+      logger.debug("Resolved DomainTypeCatalogs:", rows);
+      return rows;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   _AllergenCatalogs: async (_, { allergens }, { user, res }) => {
@@ -887,24 +923,58 @@ const Mutation = {
       throwGraphQLError(res).status(400).message("No allergens provided").throw();
     }
 
-    // Build VALUES placeholders dynamically
-    const values = allergens
-      .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
-      .join(", ");
+    // Serialize writes by normalized allergen name. The existing schema only
+    // has a case-sensitive (allergen, type) unique index, so this transaction
+    // lock also prevents case/spacing and cross-type duplicates without a DDL
+    // change. Reuse an existing row where possible, preserving its type.
+    const uniqueAllergens = [...new Map(allergens.map(entry => {
+      const allergen = normalizeName(entry?.allergen);
+      const key = String(allergen || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      return [key, { allergen, type: entry?.type, key }];
+    }).filter(([key, entry]) => key && entry.allergen)).values()];
+    if (!uniqueAllergens.length) {
+      throwGraphQLError(res).status(400).message("No valid allergens provided").throw();
+    }
 
-    // Flatten params [allergen, type, allergen, type, ...]
-    const params = allergens.flatMap(a => [a.allergen, a.type, user.id]);
-    const query = `
-      INSERT INTO "AllergenCatalog" (allergen, type, created_by)
-      VALUES ${values}
-      ON CONFLICT (allergen, type) DO UPDATE
-        SET "isValid" = true
-      RETURNING *;
-    `;
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      for (const key of [...new Set(uniqueAllergens.map(entry => entry.key))].sort()) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`allergen:${key}`]);
+      }
 
-    const result = await db.queryControlled(query, params);
-    logger.debug("Inserted AllergenCatalogs:", result.rows);
-    return result.rows;
+      const rows = [];
+      for (const entry of uniqueAllergens) {
+        const existing = await client.query(`
+          SELECT * FROM "AllergenCatalog"
+          WHERE LOWER(REGEXP_REPLACE(BTRIM(allergen), '\\s+', ' ', 'g')) = $1
+          ORDER BY (type::text = $2) DESC, id ASC
+          LIMIT 1;
+        `, [entry.key, entry.type]);
+        if (existing.rows[0]) {
+          const reactivated = await client.query(`
+            UPDATE "AllergenCatalog" SET "isValid" = true
+            WHERE id = $1 RETURNING *;
+          `, [existing.rows[0].id]);
+          rows.push(reactivated.rows[0] || existing.rows[0]);
+          continue;
+        }
+
+        const inserted = await client.query(`
+          INSERT INTO "AllergenCatalog" (allergen, type, created_by)
+          VALUES ($1, $2, $3) RETURNING *;
+        `, [entry.allergen, entry.type, user.id]);
+        rows.push(inserted.rows[0]);
+      }
+      await client.query('COMMIT');
+      logger.debug("Resolved AllergenCatalogs:", rows);
+      return rows;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   _OralApplianceCatalogs: async (_, { appliances }, { user, res }) => {

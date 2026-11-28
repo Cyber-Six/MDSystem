@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { axiosRequest } from '../../../../packages-core-adapter';
 import RecordUpdateForm from '../record-update-form';
 import { fetchUpdateRevisionPrefill, getUpdateRevisionStatus } from '../update-record-service';
+import { saveRecordFormDraft } from '../../record-form-draft-storage';
 
 jest.mock('../../../../packages-core-adapter', () => ({ axiosRequest: Object.assign(jest.fn(), { post: jest.fn() }) }));
 jest.mock('@core/services/emr-service', () => ({ searchStudentProgram: jest.fn() }), { virtual: true });
@@ -30,6 +31,8 @@ describe('approved patient opening an update', () => {
 
   afterEach(() => {
     act(() => root.unmount());
+    localStorage.removeItem('patient_refreshToken');
+    sessionStorage.clear();
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;
   });
 
@@ -97,5 +100,38 @@ describe('approved patient opening an update', () => {
     expect(start.disabled).toBe(false);
     act(() => start.click());
     expect(container.querySelector('[placeholder="Contact Name"]').value).toBe('Saved Contact');
+  });
+
+  it('restores an update draft and its selected record scope', async () => {
+    localStorage.setItem('patient_refreshToken', 'synthetic-user:device:token');
+    saveRecordFormDraft('record-update', {
+      currentStep: 0,
+      recordType: 'medical',
+      formData: { emergencyContact1Name: 'Synthetic saved contact' },
+    });
+    axiosRequest.post.mockResolvedValueOnce({ data: { data: { getMyProfile: employee } } });
+
+    await act(async () => root.render(<RecordUpdateForm />));
+    expect(container.textContent).toContain('Saved draft restored.');
+    expect(container.textContent).toContain('Update Medical Record');
+    expect(container.querySelector('[placeholder="Contact Name"]').value).toBe('Synthetic saved contact');
+  });
+
+  it('restores a revision draft without replacing it with the older prefill', async () => {
+    localStorage.setItem('patient_refreshToken', 'synthetic-user:device:token');
+    getUpdateRevisionStatus.mockResolvedValueOnce({ id: '12', status: 'Revision', scope: 'Medical', notes: 'Please update your contact.' });
+    fetchUpdateRevisionPrefill.mockResolvedValueOnce({ emergencyContact1Name: 'Old server contact' });
+    saveRecordFormDraft('record-update-revision', {
+      currentStep: 0,
+      recordType: 'medical',
+      formData: { emergencyContact1Name: 'Synthetic revised contact' },
+    });
+    axiosRequest.post.mockResolvedValueOnce({ data: { data: { getMyProfile: employee } } });
+
+    await act(async () => root.render(<RecordUpdateForm />));
+    const start = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Start Revision'));
+    act(() => start.click());
+    expect(container.querySelector('[placeholder="Contact Name"]').value).toBe('Synthetic revised contact');
+    expect(container.textContent).toContain('Saved draft restored.');
   });
 });
