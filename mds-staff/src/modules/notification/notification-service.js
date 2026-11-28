@@ -83,3 +83,18 @@ export const notifyPatients = async (message, recipientIds = null) => {
   const response = await axiosRequest.post('/staff/notify-patients', payload);
   return response.data;
 };
+
+export async function fetchPatientNotificationGroups() {
+  const response = await axiosRequest.get('/staff/notify-patient-groups');
+  if (!Array.isArray(response.data?.branches) || !Array.isArray(response.data?.groups)) {
+    throw new Error('Patient group service returned an unexpected response.');
+  }
+  return response.data;
+}
+
+export async function sendPatientGroupNotification(message, { profile, branch, count }) {
+  const response = await axiosRequest.post('/staff/notify-patient-groups', {
+    message, profile, branch, expectedCount: count,
+  });
+  return response.data;
+}

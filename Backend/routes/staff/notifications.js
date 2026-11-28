@@ -3,15 +3,69 @@ const router = express.Router();
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
 const logger = require('../../utils/logger');
 const { notifyStaffs } = require('../../services/notifications/notifyStaffs');
-const { notifyPatients } = require('../../services/notifications/notifyPatients');
+const {
+  notifyPatients, listPatientNotificationGroups, notifyPatientGroup, PATIENT_GROUPS, GROUP_BRANCHES,
+} = require('../../services/notifications/notifyPatients');
 const permit = require('../../services/authorization/permit');
-const { verifyUserIdentities, getUserIdentitiesDetailed, getPatientBranches, resolveUnionBranch } = require('../../config/query');
+const { verifyUserIdentities, getUserIdentitiesDetailed, getPatientBranches } = require('../../config/query');
 const {
   acknowledgeNotification,
   getNotificationStatus,
   getSentNotifications,
   getReceivedNotifications
 } = require('../../config/sockets/notification-acknowledgement');
+
+async function getPatientNotificationScope(staffUserId) {
+  const { permitted, branch } = await permit.isMedicalPermitted(
+    staffUserId, permit.permissions.notification_allow_send_to_patients,
+  );
+  return permitted && GROUP_BRANCHES.includes(branch) ? branch : null;
+}
+
+router.get('/notify-patient-groups', jwtProtect('medical'), async (req, res) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
+    const scope = await getPatientNotificationScope(req.user.id);
+    if (!scope) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Permission required to send patient notifications.' });
+    }
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json(await listPatientNotificationGroups(scope));
+  } catch (err) {
+    logger.error(`[NOTIFY_PATIENT_GROUPS] Could not load groups: ${err.message}`);
+    return res.status(500).json({ error: 'GROUPS_UNAVAILABLE', message: 'Could not load patient groups.' });
+  }
+});
+
+router.post('/notify-patient-groups', jwtProtect('medical'), async (req, res) => {
+  try {
+    const staffUserId = req.user?.id;
+    if (!staffUserId) return res.status(401).json({ error: 'INVALID_TOKEN' });
+    const { message, profile, branch, expectedCount } = req.body ?? {};
+    if (typeof message !== 'string' || !message.trim() || message.length > 2000 ||
+        !PATIENT_GROUPS.includes(profile) || !GROUP_BRANCHES.includes(branch) ||
+        !Number.isSafeInteger(expectedCount) || expectedCount < 1) {
+      return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Select a patient group and campus, review the recipient count, and enter a message.' });
+    }
+
+    const scope = await getPatientNotificationScope(staffUserId);
+    if (!scope || (scope !== 'Both' && branch !== scope)) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'You do not have permission to send to this campus.' });
+    }
+
+    const result = await notifyPatientGroup(staffUserId, message, { profile, branch, expectedCount });
+    if (result.audienceChanged) {
+      return res.status(409).json({
+        error: 'AUDIENCE_CHANGED',
+        message: 'The recipient count changed. Review the updated group before sending.',
+      });
+    }
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    logger.error(`[NOTIFY_PATIENT_GROUPS] Group delivery failed: ${err.message}`);
+    return res.status(500).json({ error: 'GROUP_NOTIFICATION_FAILED', message: 'Could not send the group notification.' });
+  }
+});
 
 /**
  * POST /notify-staffs
@@ -173,6 +227,11 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
       });
     }
 
+    const scope = await getPatientNotificationScope(staffUserId);
+    if (!scope) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Permission required to send patient notifications.' });
+    }
+
     // Validate recipientIds if provided
     if (recipientIds !== undefined) {
       if (!Array.isArray(recipientIds) || recipientIds.some(id => typeof id !== 'string' && typeof id !== 'number')) {
@@ -197,38 +256,19 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
       const foundIds = new Set(identityCheck.map(u => String(u.id)));
       const invalidIds = recipientIds.filter(id => !foundIds.has(String(id)));
       if (invalidIds.length > 0) {
-        logger.warn(`[NOTIFY_PATIENTS_ROUTE] Some invalid recipient IDs: ${invalidIds.join(',')}`);
-        // Log warning but allow sending to valid recipients
-        logger.info(`[NOTIFY_PATIENTS_ROUTE] Proceeding with ${identityCheck.length} valid recipients`);
+        logger.warn(`[NOTIFY_PATIENTS_ROUTE] Skipping ${invalidIds.length} invalid recipient IDs`);
+      }
+
+      const patientBranches = await getPatientBranches(recipientIds);
+      if (scope !== 'Both' && patientBranches.some(({ branch }) => branch !== 'Both' && branch !== scope)) {
+        return res.status(403).json({
+          error: 'FORBIDDEN',
+          message: 'Some recipients are outside your patient notification scope.',
+        });
       }
     }
 
-    const targetCount = recipientIds?.length;
-    logger.info(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} sending notification to ${targetCount ? targetCount + ' specific patients' : 'all patients in branch'}`);
-
-    // Get union branch for permission check
-    let checkBranch = null;
-    if (recipientIds && recipientIds.length > 0) {
-      const patientBranches = await getPatientBranches(recipientIds);
-      checkBranch = resolveUnionBranch(patientBranches);
-      logger.info(`[NOTIFY_PATIENTS_ROUTE] Resolved union branch: ${checkBranch} for patients [${recipientIds.join(',')}]`);
-    } else {
-      // If no specific patients, get staff's own branch
-      checkBranch = await permit.getStaffBranch(staffUserId);
-      logger.info(`[NOTIFY_PATIENTS_ROUTE] Using staff branch for all patients: ${checkBranch}`);
-    }
-
-    // Check permission with resolved branch
-    const isPermitted = await permit.isMedicalPermittedLocationBased(staffUserId, permit.permissions.notification_allow_send_to_patients, checkBranch);
-    if (!isPermitted) {
-      logger.warn(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} attempted to send patient notifications without permission for branch: ${checkBranch}`);
-      return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: `Permission required to send patient notifications for branch: ${checkBranch}`
-      });
-    }
-
-    const results = await notifyPatients(staffUserId, message, recipientIds?.length ? recipientIds : null);
+    const results = await notifyPatients(staffUserId, message, recipientIds?.length ? recipientIds : null, scope);
 
     return res.status(200).json({
       success: true,

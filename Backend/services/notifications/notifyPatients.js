@@ -1,12 +1,100 @@
 const logger = require('../../utils/logger');
 const db = require('../../config/query.js');
 const { ValidateUserBranchbyUserBranch } = require('../../utils/validator');
-const { notifyUsers } = require('../../config/sockets');
+const { notifyUser, notifyUsers } = require('../../config/sockets');
 const { trackNotification } = require('../../config/sockets/notification-acknowledgement');
 const { v4: uuidv4 } = require('uuid');
 
+const PATIENT_GROUPS = ['Student', 'Employee'];
+const GROUP_BRANCHES = ['Manila', 'QuezonCity', 'Both'];
+const GROUP_BATCH_SIZE = 50;
+const groupPatientSource = `
+  FROM "Patients" p
+  JOIN "UserCredentials" uc ON uc.id = p.id
+  JOIN "UsersPersonal" up ON up.id = p.id
+  WHERE uc.credentials_status = 'Active'
+    AND p.profile::text = ANY($1::text[])
+    AND up.branch::text = ANY($2::text[])
+`;
+
+function getGroupPatientBranches(branch) {
+  return branch === 'Both' ? GROUP_BRANCHES : [branch, 'Both'];
+}
+
+async function listPatientNotificationGroups(scope) {
+  const { rows } = await db.query(`
+    SELECT p.profile::text AS profile, up.branch::text AS branch, COUNT(*) AS count
+    ${groupPatientSource}
+    GROUP BY 1, 2
+  `, [PATIENT_GROUPS, getGroupPatientBranches(scope)]);
+
+  const branches = scope === 'Both' ? GROUP_BRANCHES : [scope];
+  return {
+    branches,
+    groups: PATIENT_GROUPS.flatMap(profile => branches.map(branch => ({
+      profile,
+      branch,
+      count: rows.reduce((count, row) => (
+        row.profile === profile && getGroupPatientBranches(branch).includes(row.branch)
+          ? count + Number(row.count)
+          : count
+      ), 0),
+    }))),
+  };
+}
+
+async function createNotificationData(notificationId, staffUserId, message, staffBranch) {
+  const { rows: [sender] } = await db.query(`
+    SELECT up.first_name, up.last_name
+    FROM "UsersPersonal" up
+    WHERE up.id = $1
+  `, [staffUserId]);
+  return {
+    id: notificationId,
+    type: 'staff_broadcast',
+    message: message.trim(),
+    timestamp: new Date().toISOString(),
+    from: staffUserId,
+    fromName: sender ? `${sender.first_name} ${sender.last_name}`.trim() : 'Staff Member',
+    staffBranch,
+  };
+}
+
+async function notifyPatientGroup(staffUserId, message, { profile, branch, expectedCount }) {
+  const { rows } = await db.query(`
+    SELECT p.id AS "userId"
+    ${groupPatientSource}
+    ORDER BY p.id
+  `, [[profile], getGroupPatientBranches(branch)]);
+
+  if (rows.length !== expectedCount) return { audienceChanged: true };
+
+  const notificationId = `notif_staff_${uuidv4()}`;
+  const data = await createNotificationData(notificationId, staffUserId, message, branch);
+  const deliveryCounts = { delivered: 0, queued: 0, suppressed: 0, unconfirmed: 0 };
+
+  for (let start = 0; start < rows.length; start += GROUP_BATCH_SIZE) {
+    const batch = rows.slice(start, start + GROUP_BATCH_SIZE);
+    const results = await Promise.allSettled(batch.map(async ({ userId }) => {
+      const id = String(userId);
+      const outcome = await notifyUser(id, 'staff:notification', data);
+      if (outcome === 'delivered' || outcome === 'queued') {
+        await trackNotification(notificationId, id, staffUserId, outcome === 'delivered' ? 'socket' : 'email');
+      }
+      return outcome;
+    }));
+    for (const result of results) {
+      if (result.status === 'fulfilled') deliveryCounts[result.value]++;
+      else deliveryCounts.unconfirmed++;
+    }
+  }
+
+  logger.info(`[NOTIFY_PATIENT_GROUP] ${notificationId} targeted ${rows.length} patients. Unconfirmed: ${deliveryCounts.unconfirmed}`);
+  return { notificationId, totalRecipients: rows.length, deliveryCounts };
+}
+
 /**
- * Notify patients under the staff member's location and branch
+ * Notify patients within the sender's authorized scope
  *
  * FIXED:
  * - Added null checks for branch/location
@@ -27,10 +115,10 @@ const { v4: uuidv4 } = require('uuid');
  * @param {string} staffUserId
  * @param {string} message
  * @param {Array<string|number>|null} [recipientIds] - Optional. If provided, notify only these patient IDs.
- *   Each ID is still validated against the staff member's branch/location — out-of-scope patients are skipped.
- *   If null/empty, all patients in the staff's branch/location are notified.
+ *   If null/empty, all in-scope patients are notified.
+ * @param {string|null} [permissionScope] - Branch from the sender's patient notification permission.
  */
-async function notifyPatients(staffUserId, message, recipientIds = null) {
+async function notifyPatients(staffUserId, message, recipientIds = null, permissionScope = null) {
   if (!message || typeof message !== 'string' || !message.trim()) {
     throw new Error('Message is required and must be a non-empty string');
   }
@@ -53,6 +141,9 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
     }
 
     const staffBranch = staffMember.branch;
+    const isInScope = permissionScope
+      ? patient => getGroupPatientBranches(permissionScope).includes(patient.branch)
+      : patient => ValidateUserBranchbyUserBranch(staffBranch, patient.branch);
 
     logger.debug(`[NOTIFY_PATIENTS] Staff ${staffUserId} branch=${staffBranch}`);
 
@@ -69,12 +160,10 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
         ORDER BY uc.id
       `;
       const filteredResult = await db.query(filteredQuery, [recipientIds.map(String)]);
-      validPatients = filteredResult.rows.filter(patient =>
-        ValidateUserBranchbyUserBranch(staffBranch, patient.branch)
-      );
+      validPatients = filteredResult.rows.filter(isInScope);
       logger.debug(`[NOTIFY_PATIENTS] Filtered to ${validPatients.length} valid patients from ${recipientIds.length} requested IDs`);
     } else {
-      // Get all patients, then filter by branch in JS via ValidateUserBranchbyUserBranch
+      // Existing callers can omit recipient IDs for an in-scope send.
       const patientQuery = `
         SELECT DISTINCT uc.id as "userId", up.branch
         FROM "UserCredentials" uc
@@ -83,9 +172,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
         ORDER BY uc.id
       `;
       const patientResult = await db.query(patientQuery);
-      validPatients = patientResult.rows.filter(patient =>
-        ValidateUserBranchbyUserBranch(staffBranch, patient.branch)
-      );
+      validPatients = patientResult.rows.filter(isInScope);
     }
 
     if (!validPatients || validPatients.length === 0) {
@@ -99,28 +186,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
 
     const patientIds = validPatients.map(p => String(p.userId));
 
-    // Get staff member's name for the notification
-    const staffNameQuery = `
-      SELECT up.first_name, up.last_name
-      FROM "UsersPersonal" up
-      WHERE up.id = $1
-    `;
-    const staffNameResult = await db.query(staffNameQuery, [staffUserId]);
-    const staffName = staffNameResult.rows[0] 
-      ? `${staffNameResult.rows[0].first_name} ${staffNameResult.rows[0].last_name}`.trim()
-      : 'Staff Member';
-
-    // Use the socket notification system to notify all patients
-    // If socket active, deliver immediately; else queue for next login
-    const notificationData = {
-      id: notificationId,
-      type: 'staff_broadcast',
-      message: message.trim(),
-      timestamp: new Date().toISOString(),
-      from: staffUserId,
-      fromName: staffName,
-      staffBranch: staffBranch
-    };
+    const notificationData = await createNotificationData(notificationId, staffUserId, message, staffBranch);
 
     logger.info(`[NOTIFY_PATIENTS] Sending notification ${notificationId} to ${patientIds.length} patients from staff:${staffUserId}`);
 
@@ -163,4 +229,4 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
   }
 }
 
-module.exports = { notifyPatients };
+module.exports = { notifyPatients, listPatientNotificationGroups, notifyPatientGroup, PATIENT_GROUPS, GROUP_BRANCHES };
