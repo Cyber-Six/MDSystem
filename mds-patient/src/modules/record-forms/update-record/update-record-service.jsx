@@ -111,7 +111,7 @@ async function sendGraphQLRequest(query, variables = {}, { strict = false } = {}
  * Gets the current active update ticket status
  * @returns {Promise<object>} Ticket details {id, status} or null if no active ticket
  */
-export async function getUpdateTicketStatus() {
+export async function getUpdateTicketStatus({ strict = false } = {}) {
   const query = `
     query GetUpdateTicketStatus {
       getUpdateTicket {
@@ -124,7 +124,7 @@ export async function getUpdateTicketStatus() {
 
   try {
 
-    const response = await sendGraphQLRequest(query, {});
+    const response = await sendGraphQLRequest(query, {}, { strict });
 
     if (response.getUpdateTicket) {
 
@@ -133,7 +133,7 @@ export async function getUpdateTicketStatus() {
 
     return null;
   } catch (error) {
-
+    if (strict) throw error;
     return null;
   }
 }
@@ -1458,29 +1458,30 @@ export async function submitUpdateRecord(formData, recordType, options = {}) {
   const skipPersonalUpdate = Boolean(options?.skipPersonalUpdate);
 
   let ticketId = null;
+  let createdTicket = false;
 
   try {
     // Step 1: Check for existing update ticket
 
-    const existingTicket = await getUpdateTicketStatus();
+    const existingTicket = await getUpdateTicketStatus({ strict: true });
 
-    if (existingTicket?.status === 'Revision') {
+    if (existingTicket?.status === 'Revision' && options.revisionTicketId && String(existingTicket.id) === String(options.revisionTicketId)) {
       // Special case: Patient is resubmitting after a revision request
       // Reuse the existing Revision ticket instead of creating a new one
 
       ticketId = existingTicket.id;
+      const scopeMap = { medical: 'Medical', dental: 'Dental', both: 'Both' };
+      if (scopeMap[recordType] !== existingTicket.scope) throw new Error('The revision scope has changed. Reload the form before submitting.');
     } else {
-      // Normal case: No active ticket or ticket is in other state - cancel and create new
-      const canProceed = await ensureNoActiveTicket();
-
-      if (!canProceed) {
-        throw new Error('An update ticket is already in progress. Please cancel it or wait for it to be processed.');
+      if (existingTicket && !['Approved', 'Cancelled', 'Rejected', 'Expired'].includes(existingTicket.status)) {
+        throw new Error('An update ticket is already in progress. Please wait for it to be resolved.');
       }
 
       // Step 2: Map recordType to backend scope
       const scopeMap = { medical: 'Medical', dental: 'Dental', both: 'Both' };
       const scope = scopeMap[recordType] || 'Both';
       ticketId = await createUpdateTicket(scope);
+      createdTicket = true;
     }
 
     const results = { ticketId };
@@ -1512,7 +1513,7 @@ export async function submitUpdateRecord(formData, recordType, options = {}) {
   } catch (error) {
 
     // Try to cancel the ticket if it was created
-    if (ticketId) {
+    if (createdTicket) {
       try {
         await cancelUpdateTicket();
       } catch (cancelError) {

@@ -1,7 +1,8 @@
 import React from 'react';
 import RecordChoiceInfoSection from './record-choice-info-section';
 
-const RecordChoicePage = ({ onSelect, disabledChoiceIds = [] }) => {
+const RecordChoicePage = ({ onSelect, disabledChoiceIds = [], activeTicket = null, statusLoading = false, statusError = false, onRetryStatus }) => {
+  const activeStatus = ['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(activeTicket?.status);
   const choices = [
     {
       id: 'medical',
@@ -73,10 +74,21 @@ const RecordChoicePage = ({ onSelect, disabledChoiceIds = [] }) => {
         </div>
       </div>
 
+      {(activeStatus || statusLoading || statusError) && (
+        <div role="status" className="mb-6 rounded-xl border border-primary-400 bg-primary-50 p-4 text-secondary-900 dark:border-primary-700 dark:bg-neutral-800 dark:text-neutral-100">
+          {statusLoading ? <p>Checking your update request status...</p> : statusError ? <>
+            <p>We could not check your update request status. Try again before starting another update.</p>
+            <button type="button" onClick={onRetryStatus} className="mt-2 rounded-lg bg-primary-500 px-4 py-2 font-semibold text-neutral-900">Retry</button>
+          </> : <>
+            <p className="font-semibold">Your {activeTicket.scope?.toLowerCase() || 'record'} update is {activeTicket.status === 'Revision' ? 'awaiting your corrections' : activeTicket.status === 'Pending' || activeTicket.status === 'RevisionSubmitted' ? 'awaiting staff review' : 'in progress'}.</p>
+            <p className="mt-1 text-sm">{activeTicket.status === 'Revision' ? 'Use Start Revision to continue the existing request.' : 'You can start a new update after this request is resolved.'}</p>
+          </>}
+        </div>
+      )}
       {/* Choices Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
         {choices.map((choice) => {
-          const isDisabled = disabledChoiceIds.includes(choice.id);
+          const isDisabled = activeStatus || statusLoading || statusError || disabledChoiceIds.includes(choice.id);
           return isDisabled ? (
             <div
               key={choice.id}

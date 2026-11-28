@@ -55,10 +55,24 @@ const RecordUpdateForm = ({
     const scrollTarget = getRecordScrollContainer(formRef.current) || window;
     scrollTarget.scrollTo?.({ top: 0, behavior: 'instant' });
   };
-  const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
 
   // Revision tracking
   const [revisionStatus, setRevisionStatus] = useState(null); // { id, status, notes }
+  const [activeTicket, setActiveTicket] = useState(null);
+  const [ticketStatusLoading, setTicketStatusLoading] = useState(true);
+  const [ticketStatusError, setTicketStatusError] = useState(false);
+  const refreshTicketStatus = useCallback(async () => {
+    setTicketStatusLoading(true);
+    setTicketStatusError(false);
+    try {
+      const ticket = await getUpdateTicketStatus({ strict: true });
+      if (isCurrentPatientSession()) setActiveTicket(ticket);
+    } catch {
+      if (isCurrentPatientSession()) setTicketStatusError(true);
+    } finally {
+      if (isCurrentPatientSession()) setTicketStatusLoading(false);
+    }
+  }, [isCurrentPatientSession]);
   const [showRevisionBanner, setShowRevisionBanner] = useState(false);
   const [revisionPrefillData, setRevisionPrefillData] = useState(null); // Pre-fetched form data for revision
   const [isLoadingRevisionPrefill, setIsLoadingRevisionPrefill] = useState(false);
@@ -164,14 +178,23 @@ const RecordUpdateForm = ({
     syncRevisionStatus('mount');
   }, [syncRevisionStatus]);
 
+  useEffect(() => { refreshTicketStatus(); }, [refreshTicketStatus]);
+
+  useEffect(() => {
+    if (!forceRecordType && ['Pending', 'InProgress', 'RevisionSubmitted'].includes(activeTicket?.status)) {
+      setRecordType(null);
+    }
+  }, [activeTicket?.status, forceRecordType]);
+
   // Keep revision modal in sync with live update-ticket status changes.
   useEffect(() => {
     const unsubscribe = subscribe('updateTicket:statusChanged', () => {
       syncRevisionStatus('notification');
+      refreshTicketStatus();
     });
 
     return () => unsubscribe();
-  }, [subscribe, syncRevisionStatus]);
+  }, [subscribe, syncRevisionStatus, refreshTicketStatus]);
 
   // Load the stored personal profile for review and to determine OB-GYN visibility.
   useEffect(() => {
@@ -462,15 +485,19 @@ const RecordUpdateForm = ({
         return;
       }
     }
-    // Check for an existing Pending ticket first and warn the patient before cancelling it
+    // Recheck because another request may have started while this form was open.
     try {
-      const existing = await getUpdateTicketStatus();
-      if (existing?.status === 'Pending') {
-        setPendingWarning({ scope: existing.scope });
-        return; // stop here — wait for patient to confirm or cancel
+      const existing = await getUpdateTicketStatus({ strict: true });
+      if (['Pending', 'RevisionSubmitted', 'InProgress'].includes(existing?.status) ||
+          (existing?.status === 'Revision' && String(existing.id) !== String(revisionStatus?.id))) {
+        setActiveTicket(existing);
+        setRecordType(null);
+        return;
       }
     } catch {
-      // If we can't check, just proceed — ensureNoActiveTicket will handle it
+      setTicketStatusError(true);
+      setRecordType(null);
+      return;
     }
     await doSubmit();
   };
@@ -539,6 +566,7 @@ const RecordUpdateForm = ({
 
       const results = await submitUpdateRecord(formData, resolvedRecordType, {
         skipPersonalUpdate: Boolean(skipPersonalSubmit || skipPersonalStep),
+        revisionTicketId: revisionStatus?.status === 'Revision' ? revisionStatus.id : null,
       });
 
       clearRecordFormDraft(draftFlow);
@@ -610,9 +638,20 @@ const RecordUpdateForm = ({
     }
   };
 
-  const handleChoiceSelect = (choice) => {
+  const handleChoiceSelect = async (choice) => {
     if (hideRecordChoice) return;
     if (forceRecordType && choice !== forceRecordType) return; // only allow the forced type
+    if (ticketStatusLoading || ticketStatusError || ['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(activeTicket?.status)) return;
+    try {
+      const existing = await getUpdateTicketStatus({ strict: true });
+      if (['Pending', 'Revision', 'InProgress', 'RevisionSubmitted'].includes(existing?.status)) {
+        setActiveTicket(existing);
+        return;
+      }
+    } catch {
+      setTicketStatusError(true);
+      return;
+    }
     clearRecordFormDraft(draftFlow);
     setDraftRestored(false);
     setNeedsPhotoReupload(false);
@@ -813,50 +852,14 @@ const RecordUpdateForm = ({
         </div>
       )}
 
-      {/* Pending Warning Modal (existing) */}
-      {pendingWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-xl max-w-md w-full p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-10 h-10 rounded-full bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-secondary-800 dark:text-white mb-1">
-                  Existing Request Found
-                </h3>
-                <p className="text-sm text-secondary-600 dark:text-neutral-300">
-                  You already have a <strong>{pendingWarning.scope}</strong> update request that is currently pending staff review.
-                </p>
-                <p className="text-sm text-secondary-600 dark:text-neutral-300 mt-2">
-                  If you continue, your existing <strong>{pendingWarning.scope}</strong> request will be <span className="text-error-600 dark:text-error-400 font-semibold">cancelled</span> and replaced with this new submission.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end mt-6">
-              <button
-                onClick={() => setPendingWarning(null)}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
-              >
-                Keep Old Request
-              </button>
-              <button
-                onClick={() => { setPendingWarning(null); doSubmit(); }}
-                className="px-4 py-2 rounded-lg text-sm font-semibold bg-error-500 hover:bg-error-600 text-white transition-colors"
-              >
-                Cancel Old &amp; Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {shouldShowRecordChoice ? (
         <RecordChoicePage
           onSelect={handleChoiceSelect}
           disabledChoiceIds={forceRecordType === 'both' ? ['medical', 'dental'] : []}
+          activeTicket={activeTicket}
+          statusLoading={ticketStatusLoading}
+          statusError={ticketStatusError}
+          onRetryStatus={refreshTicketStatus}
         />
       ) : (
         <div className="max-w-5xl mx-auto px-4">

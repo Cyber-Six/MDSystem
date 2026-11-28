@@ -1,10 +1,15 @@
 import { axiosRequest } from '../../../../packages-core-adapter';
-import { createImmunizationProfile, fetchUpdateRecordPrefill, mapRevisionDataToFormData, submitDentalUpdate } from '../update-record-service';
+import { createImmunizationProfile, fetchUpdateRecordPrefill, getUpdateTicketStatus, mapRevisionDataToFormData, submitDentalUpdate } from '../update-record-service';
 import fs from 'fs';
 import path from 'path';
 
 const { buildSchema, parse, validate } = require('../../../../../../Backend/node_modules/graphql');
 const emrSchema = buildSchema(fs.readFileSync(path.resolve(__dirname, '../../../../../../Backend/routes/emr/schema.graphql'), 'utf8'));
+
+it('fails closed when the active ticket status read has GraphQL errors', async () => {
+  axiosRequest.mockResolvedValue({ data: { data: { getUpdateTicket: null }, errors: [{ message: 'Synthetic failure' }] } });
+  await expect(getUpdateTicketStatus({ strict: true })).rejects.toThrow('Stored records could not be loaded');
+});
 
 it.each(['medical', 'dental', 'both'])('loads approved records for %s updates', async scope => {
   axiosRequest.mockReset().mockResolvedValue({ data: { data: {

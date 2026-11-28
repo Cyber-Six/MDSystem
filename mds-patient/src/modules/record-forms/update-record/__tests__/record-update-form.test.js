@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { axiosRequest } from '../../../../packages-core-adapter';
 import RecordUpdateForm from '../record-update-form';
-import { fetchUpdateRevisionPrefill, fetchUpdateRecordPrefill, getUpdateRevisionStatus } from '../update-record-service';
+import { fetchUpdateRevisionPrefill, fetchUpdateRecordPrefill, getUpdateRevisionStatus, getUpdateTicketStatus } from '../update-record-service';
 import { saveRecordFormDraft } from '../../record-form-draft-storage';
 
 jest.mock('../../../../packages-core-adapter', () => ({ axiosRequest: Object.assign(jest.fn(), { post: jest.fn() }) }));
@@ -13,6 +13,7 @@ jest.mock('../../../notification/notification-context', () => {
 });
 jest.mock('../update-record-service', () => ({
   getUpdateRevisionStatus: jest.fn().mockResolvedValue(null),
+  getUpdateTicketStatus: jest.fn().mockResolvedValue(null),
   fetchUpdateRevisionPrefill: jest.fn(),
   fetchUpdateRecordPrefill: jest.fn(),
 }));
@@ -28,6 +29,7 @@ describe('approved patient opening an update', () => {
     container = document.createElement('div');
     root = createRoot(container);
     fetchUpdateRecordPrefill.mockReset().mockResolvedValue({ profileType: 'Employee', employeeDepartment: 'Facilities', employeeRole: 'Other', employeePosition: 'Consultant', employeeCategoryOther: 'Research officer' });
+    getUpdateTicketStatus.mockReset().mockResolvedValue(null);
     axiosRequest.mockResolvedValue({ data: { data: { getPersonalRecord: { sex: 'Female' } } } });
   });
 
@@ -47,6 +49,29 @@ describe('approved patient opening an update', () => {
     __typename: 'EmployeeProfile', department: 'Facilities', role: 'Other',
     position: 'Consultant', employmentCategoryOther: 'Research officer',
   };
+
+  it.each(['Pending', 'Revision', 'InProgress'])('shows the %s ticket and blocks new choices', async status => {
+    getUpdateTicketStatus.mockResolvedValue({ id: '42', status, scope: 'Dental' });
+    await act(async () => root.render(<RecordUpdateForm />));
+    expect(container.textContent).toContain('Your dental update is');
+    expect(container.querySelectorAll('button')).toBeTruthy();
+    expect([...container.querySelectorAll('button')].some(button => button.textContent.includes('Medical Update'))).toBe(false);
+    expect(fetchUpdateRecordPrefill).not.toHaveBeenCalled();
+  });
+
+  it('keeps choices unavailable when the ticket status cannot be checked', async () => {
+    getUpdateTicketStatus.mockRejectedValue(new Error('Synthetic status failure'));
+    await act(async () => root.render(<RecordUpdateForm />));
+    expect(container.textContent).toContain('could not check your update request status');
+    expect([...container.querySelectorAll('button')].some(button => button.textContent.includes('Medical Update'))).toBe(false);
+  });
+
+  it('allows a new choice after the previous ticket is approved', async () => {
+    getUpdateTicketStatus.mockResolvedValue({ id: '41', status: 'Approved', scope: 'Medical' });
+    await act(async () => root.render(<RecordUpdateForm />));
+    await clickButton('Dental Update');
+    expect(fetchUpdateRecordPrefill).toHaveBeenCalledWith('dental');
+  });
 
   it('requests only the chosen scope and clears the form after another account signs in', async () => {
     localStorage.setItem('patient_refreshToken', 'patient-a:device:token');
