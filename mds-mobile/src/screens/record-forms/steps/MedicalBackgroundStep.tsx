@@ -4,8 +4,8 @@
  * Aligned with mds-patient update record medical-history-step.jsx
  */
 
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, View, Text, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import { DatePickerInput } from '../../../components/ui/DatePickerInput';
@@ -34,15 +34,25 @@ const STATUS_OPTIONS = ['Active', 'Resolved', 'Suspected'];
 
 const AccordionSection: React.FC<{
   title: string; isOpen: boolean; onToggle: () => void; isDark: boolean; children: React.ReactNode;
-}> = ({ title, isOpen, onToggle, isDark, children }) => (
+}> = ({ title, isOpen, onToggle, isDark, children }) => {
+  const progress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(progress, { toValue: isOpen ? 1 : 0, duration: 240, useNativeDriver: false }).start();
+  }, [isOpen, progress]);
+  const height = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1000] });
+  const opacity = progress.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0, 0, 1] });
+  return (
   <View style={[styles.accordion, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-    <TouchableOpacity style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
+    <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: isOpen }} style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
       <Text style={[styles.accordionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{title}</Text>
       <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
     </TouchableOpacity>
-    {isOpen && <View style={styles.accordionBody}>{children}</View>}
+    <Animated.View pointerEvents={isOpen ? 'auto' : 'none'} style={{ height, opacity, overflow: 'hidden' }}>
+      <View style={styles.accordionBody}>{children}</View>
+    </Animated.View>
   </View>
-);
+  );
+};
 
 export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, isDark, catalogs }) => {
   const bg = formData.medicalBackground;

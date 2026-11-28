@@ -1104,10 +1104,6 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       const noteParts = [];
       if (formData.obgyne.menstruationDuration)
         noteParts.push(`Duration: ${formData.obgyne.menstruationDuration} days`);
-      if (formData.obgyne.menarcheYearAge)
-        noteParts.push(`Menarche: ${formData.obgyne.menarcheYearAge}`);
-      if (formData.obgyne.padsPerDay)
-        noteParts.push(`Pads/day: ${formData.obgyne.padsPerDay}`);
       inputs.obgynHistory = {
         lastMenstrualPeriod: lmpDate,
         hasDysmenorrhea: formData.obgyne.dysmenorrhea === 'Yes',

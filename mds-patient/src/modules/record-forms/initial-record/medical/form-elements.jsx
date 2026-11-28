@@ -112,15 +112,16 @@ export const AccordionSection = ({
   onToggle,
   children
 }) => (
-  <div className={`border-2 rounded-xl overflow-hidden transition-all duration-300 mb-4
+  <div className={`border-2 rounded-xl overflow-hidden transition-colors duration-300 mb-4
                   ${isOpen
                     ? 'border-primary-500'
                     : 'border-neutral-200 hover:border-primary-300'}`}>
     <button
       type="button"
+      aria-expanded={isOpen}
       onClick={() => onToggle(id)}
-      className={`w-full flex items-center justify-between px-6 py-4 text-left
-                 transition-all duration-200
+      className={`w-full min-h-13 flex items-center justify-between px-6 py-4 text-left
+                 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset
                  ${isOpen
                    ? 'bg-primary-50'
                    : 'bg-neutral-50 hover:bg-primary-50/50'}`}
@@ -138,9 +139,11 @@ export const AccordionSection = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
     </button>
-    <div className={isOpen ? 'opacity-100' : 'hidden'}>
+    <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+      <div className="min-h-0 overflow-hidden">
       <div className="p-6 bg-white">
         {children}
+      </div>
       </div>
     </div>
   </div>

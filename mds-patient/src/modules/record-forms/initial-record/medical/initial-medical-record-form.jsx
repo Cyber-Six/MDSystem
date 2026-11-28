@@ -23,7 +23,7 @@ import { clearRecordFormDraft, readRecordFormDraft, saveRecordFormDraft } from '
  * @param {Function} props.onComplete - Optional callback when form is successfully submitted
  * @param {boolean} props.isModal - Whether the form is displayed in a modal (affects styling)
  */
-const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false, staffNote = null }) => {
+const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false, staffNote = null, onProgressChange }) => {
   const navigate = useNavigate();
   const formContentRef = useRef(null);
   const draftFlow = isRevision ? 'initial-student-revision' : 'initial-student';
@@ -768,25 +768,26 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
           )}
 
           {/* Progress Stepper */}
+          <ProgressStepper
+            scrollContainerRef={formContentRef}
+            onProgressChange={onProgressChange}
+            hideVisual={isModal}
+            currentStep={
+              formData.personalInfo.gender !== 'Female' && currentStep >= 5
+                ? currentStep - 1
+                : currentStep
+            }
+            steps={formData.personalInfo.gender !== 'Female'
+              ? steps.filter((_, idx) => idx !== 4)
+              : steps
+            }
+          />
           {draftRestored && (
-            <div role="status" className="mb-4 rounded-lg border border-primary-300 bg-primary-50 p-3 text-sm text-secondary-800 dark:border-primary-800 dark:bg-primary-950/40 dark:text-neutral-100">
-              <strong>Saved draft restored.</strong> Your entries were recovered from this browser tab.
+            <p role="status" className="-mt-3 mb-4 text-sm text-secondary-600 dark:text-neutral-300">
+              <strong className="text-primary-700 dark:text-primary-300">Saved draft restored.</strong> Your entries were recovered from this browser tab.
               {needsPhotoReupload && <span className="block mt-1">Please upload your dental photos again and reconfirm the certification before submitting.</span>}
-            </div>
+            </p>
           )}
-          <div className="sticky top-0 z-10 mb-6 bg-primary-50/40 dark:bg-neutral-950 pb-2">
-            <ProgressStepper
-              currentStep={
-                formData.personalInfo.gender !== 'Female' && currentStep >= 5
-                  ? currentStep - 1
-                  : currentStep
-              }
-              steps={formData.personalInfo.gender !== 'Female'
-                ? steps.filter((_, idx) => idx !== 4)
-                : steps
-              }
-            />
-          </div>
 
           {/* Form Content */}
           <div className="mb-6">

@@ -30,6 +30,18 @@ const EMPTY_CATALOGS: AllCatalogs = {
 
 const NO_PHOTOS = { upperTeethFileId: null, lowerTeethFileId: null };
 
+it.each(['student', 'employee'])('ignores retired OB-GYN values in restored %s data', patientType => {
+  const form = createEmptyFormData();
+  expect(form.obgyne).not.toHaveProperty('menarcheYearAge');
+  expect(form.obgyne).not.toHaveProperty('padsPerDay');
+  form.personalInfo.gender = 'Female';
+  if (patientType === 'employee') form.personalInfo.department = 'Science';
+  const legacyObgyne = { lastMenstrualPeriod: '2026-11-12', menstruationDuration: '5', dysmenorrhea: 'Yes', menarcheYearAge: '12', padsPerDay: '3' };
+  form.obgyne = legacyObgyne;
+  const inputs = buildBatchInputs(form, NO_PHOTOS, EMPTY_CATALOGS);
+  expect(inputs.obgynHistory).toEqual({ lastMenstrualPeriod: '2026-11-12', hasDysmenorrhea: true, notes: 'Duration: 5 days' });
+});
+
 it('builds notes-free history and vaccine profiles while retaining child details and other notes', () => {
   const form = createEmptyFormData();
   form.medicalHistory.self = { '3': true };

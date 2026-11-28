@@ -1,5 +1,24 @@
 # Electronic Medical Record (EMR) - Patient Endpoint
 
+## OB-GYN form fields
+
+Student and employee initial forms, their requested revisions, and the mobile
+record form no longer collect or display Menarche Year/Age or Pads Per Day.
+The initial and mobile submission builders ignore these values in restored
+legacy drafts. Last menstrual period, menstruation duration, and dysmenorrhea
+remain in those forms. Web update forms and their revisions already omit the
+two retired fields; staff record views have no dedicated fields for them either.
+
+The shared `/emr/patient` and `/emr/medical` schema and SQL writer store only
+`lastMenstrualPeriod`, `hasDysmenorrhea`, and general `notes` alongside the
+`ObGynHistory` record ID. The configured initial SQL schema has no separate
+menarche or pads columns. Duration is still encoded as `Duration: N days` in
+notes. No database migration or historical-note deletion is needed for this
+form change. Existing notes can still contain the retired values and remain
+available to staff; older installed clients can also send them as free text.
+The configured local database refused the read-only metadata connection, so
+its running schema was not independently verified.
+
 ## Initial patient submission and failure diagnosis
 
 The active patient intake uses two GraphQL endpoints. The patient server mounts

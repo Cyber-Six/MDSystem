@@ -28,6 +28,24 @@ it.each([createInitialMedicalRecord, createInitialEmployeeRecord])('stops before
   expect(axiosRequest.post).not.toHaveBeenCalled();
 });
 
+it.each([
+  ['student initial', createInitialMedicalRecord, false],
+  ['employee initial', createInitialEmployeeRecord, false],
+  ['student revision', createInitialMedicalRecord, true],
+  ['employee revision', createInitialEmployeeRecord, true],
+])('ignores retired OB-GYN values from a legacy draft during %s submission', async (_, submit, isRevision) => {
+  sendGraphQLRequest.mockImplementation(async document => {
+    if (document.includes('GetCurrentUpdateTicket')) return { getUpdateTicket: { id: '12', status: isRevision ? 'Revision' : 'InProgress' } };
+    return {};
+  });
+  const fixture = form();
+  fixture.personalInfo.gender = 'Female';
+  fixture.obgyne = { lastMenstrualPeriod: '2026-11-12', menstruationDuration: '5', dysmenorrhea: 'Yes', menarcheYearAge: '12', padsPerDay: '3' };
+  await expect(submit(fixture, { isRevision })).resolves.toMatchObject({ success: true });
+  const [, variables] = sendGraphQLRequest.mock.calls.find(([document]) => document.includes('BatchCreateInitialRecords'));
+  expect(variables.obgynInput).toEqual({ lastMenstrualPeriod: '2026-11-12', hasDysmenorrhea: true, notes: 'Duration: 5 days' });
+});
+
 it('sends child records without retired notes, then submits last and cleans up after batch failure', async () => {
   const failure = new Error('synthetic batch failure');
   sendGraphQLRequest.mockImplementation(async (document, variables) => {

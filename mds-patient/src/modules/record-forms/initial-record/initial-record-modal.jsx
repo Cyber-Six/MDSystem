@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import ProgressStepper from './medical/progress-stepper';
 
 /**
  * Modal overlay for Initial Medical Record
@@ -15,6 +16,19 @@ const InitialRecordModal = ({
   onLogout = null
 }) => {
   const modalRef = useRef(null);
+  const [recordProgress, setRecordProgress] = useState(null);
+
+  const handleProgressChange = useCallback((nextProgress) => {
+    setRecordProgress((previous) => {
+      const roundedProgress = Math.round(nextProgress.scrollProgress * 100) / 100;
+      if (
+        previous?.currentStep === nextProgress.currentStep &&
+        previous?.scrollProgress === roundedProgress &&
+        previous?.steps?.join('|') === nextProgress.steps.join('|')
+      ) return previous;
+      return { ...nextProgress, scrollProgress: roundedProgress };
+    });
+  }, []);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -67,7 +81,7 @@ const InitialRecordModal = ({
       >
         {/* Header Banner */}
         <div className={`record-form-header shrink-0 rounded-t-2xl border-t-4 border-primary-400 bg-primary-500 dark:border-primary-500 dark:bg-primary-950`}>
-          <div className="px-4 py-4 sm:px-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="px-4 py-3 sm:px-6 sm:py-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-3 flex-1">
               <div className="p-2 bg-primary-100 dark:bg-primary-800 rounded-xl">
                 {isRevision ? (
@@ -111,8 +125,18 @@ const InitialRecordModal = ({
           </div>
 
           {/* Staff Note — attached flush to the bottom of the header, no gap */}
+          {recordProgress?.steps?.length > 0 && (
+            <ProgressStepper
+              currentStep={recordProgress.currentStep}
+              steps={recordProgress.steps}
+              scrollProgress={recordProgress.scrollProgress}
+              trackScroll={false}
+              compact
+            />
+          )}
+
           {isRevision && revisionNote && (
-            <div className="mx-4 sm:mx-6 mb-4 px-4 py-3 border border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800 rounded-xl flex items-start gap-3">
+            <div className="mx-4 sm:mx-6 mb-2 px-3 py-2 border border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800 rounded-xl flex items-start gap-3">
               <svg className="w-4 h-4 text-secondary-800 dark:text-primary-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
@@ -122,11 +146,14 @@ const InitialRecordModal = ({
               </div>
             </div>
           )}
+
         </div>
 
         {/* Content */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-          {children}
+          {React.isValidElement(children)
+            ? React.cloneElement(children, { onProgressChange: handleProgressChange })
+            : children}
         </div>
       </div>
     </div>

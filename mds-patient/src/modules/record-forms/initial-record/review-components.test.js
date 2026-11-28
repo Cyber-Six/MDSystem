@@ -2,6 +2,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server.node';
 import ReviewForm from './medical/review-form';
 import EmployeeReviewForm from './employee/review-form';
+import OBGYNEForm from './medical/obygyne';
+import EmployeeOBGYNEForm from './employee/obygyne';
 import UpdateReview from '../update-record/review-step';
 import { ReviewDataRow, ReviewNote, additionalCatalogItems, collectUnresolvedCatalogSelections, isResolvableCatalogSelection, resolveCatalogLabel } from './review-components';
 
@@ -70,8 +72,23 @@ describe('patient review summaries', () => {
 
   test('shows Student initial values, custom choices, details, photos, and female fields', () => {
     const html = renderToStaticMarkup(<ReviewForm {...initialProps(initialFixture())} />);
-    for (const value of ['QA asthma', 'Mother', 'QA vaccine', '2025', 'QA pollen', 'Environmental', 'Mild', 'Active', 'QA hospitalization', 'Admitted:', 'QA operation', 'QA medication', 'Pain relief', '0 sticks/day', 'Custom guard', 'Upper', 'upper.png', 'Menarche Year/Age']) expect(html).toContain(value);
+    for (const value of ['QA asthma', 'Mother', 'QA vaccine', '2025', 'QA pollen', 'Environmental', 'Mild', 'Active', 'QA hospitalization', 'Admitted:', 'QA operation', 'QA medication', 'Pain relief', '0 sticks/day', 'Custom guard', 'Upper', 'upper.png', 'Menstruation Duration']) expect(html).toContain(value);
     expect(html).not.toContain('undefined');
+  });
+
+  test.each([
+    ['Student', OBGYNEForm, ReviewForm],
+    ['Employee', EmployeeOBGYNEForm, EmployeeReviewForm],
+  ])('omits retired OB-GYN fields from %s entry and review even with a legacy draft', (_, Entry, Review) => {
+    const fixture = initialFixture();
+    const entry = renderToStaticMarkup(<Entry data={fixture.obgyne} onChange={() => {}} />);
+    const review = renderToStaticMarkup(<Review {...initialProps(fixture)} />);
+    for (const html of [entry, review]) {
+      expect(html).not.toMatch(/menarche|pads|pad\/s/i);
+      expect(html).toContain('Menstruation Duration');
+      expect(html).toContain('Dysmenorrhea');
+    }
+    expect(review).toContain('5 days');
   });
 
   test('omits unsupported fields from Student initial review', () => {

@@ -254,6 +254,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
         <TabGroup tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
         {/* Yourself Tab Content */}
         {activeTab === 'yourself' && (
+          <div role="tabpanel" className="animate-in fade-in slide-in-from-right-2 duration-200 motion-reduce:animate-none">
           <>
             <div className="space-y-4 mb-8">
               <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Check any conditions that apply to you:</p>
@@ -1263,11 +1264,12 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
         </AccordionSection>
       </div>
           </>
+          </div>
         )}
 
         {/* Family Tab Content - Matching Initial Record Format */}
         {activeTab === 'family' && (
-          <div className="space-y-4">
+          <div role="tabpanel" className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-200 motion-reduce:animate-none">
             <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">
               Check any conditions that apply to your immediate family members and specify the relationship:
             </p>

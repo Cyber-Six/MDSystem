@@ -47,7 +47,7 @@ jest.mock('../services/emr-service', () => ({
     medicalHistory: { self: {}, family: {}, familyWhoHasIt: {} },
     medicalBackground: { immunizations: {}, immunizationDetails: {}, hasAllergies: '', allergies: {}, allergyOther: '', allergyNotes: '', hasHospitalization: '', hospitalizationConditions: {}, hospitalizationDates: {}, hospitalizationDate: '', hospitalizationDischargeDate: '', hospitalizationNotes: '', hasOperation: '', operationConditions: {}, operationDates: {}, operationDate: '', operationNotes: '', hasMedications: '', selectedMedications: {}, medicationReason: '', medicationNotes: '', medicationDescription: '', smoker: 'no', smokerSticksPerDay: '', smokerYears: '', alcoholDrinker: 'no', alcoholFrequency: '', vaper: 'no', vapeType: '', vapeFrequency: '', yearsVaping: '', eyeglasses: false, contactLenses: false, gradeOD: '', gradeOS: '', visualAcuityDate: '' },
     dentalHistory: { firstTimeDentist: '', lastDentalConsultation: '', lastDentalCleaning: '', purpose: '', hasIntraOralAppliance: '', intraOralAppliances: {}, applianceOther: '', applianceLocation: '', selectedDentalProcedures: {}, procedureDates: {}, upperTeethPhoto: null, lowerTeethPhoto: null },
-    obgyne: { lastMenstrualPeriod: '', menstruationDuration: '', menarcheYearAge: '', padsPerDay: '', dysmenorrhea: '' },
+    obgyne: { lastMenstrualPeriod: '', menstruationDuration: '', dysmenorrhea: '' },
     certification: { verified: false, fullName: '', date: '' },
   }),
   fetchAllCatalogs: jest.fn().mockResolvedValue({}),

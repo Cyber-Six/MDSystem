@@ -364,9 +364,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
           <SectionHeader title="OB-GYNE History" onEditClick={() => onEdit(4)} />
           <dl className="space-y-1">
             <DataRow label="Last Menstrual Period" value={formatDate(formData.obgyne?.lastMenstrualPeriod)} />
-            <DataRow label="Menarche Year/Age" value={formData.obgyne?.menarcheYearAge} />
             <DataRow label="Menstruation Duration" value={formData.obgyne?.menstruationDuration === undefined || formData.obgyne?.menstruationDuration === null || formData.obgyne?.menstruationDuration === '' ? undefined : `${formData.obgyne.menstruationDuration} days`} />
-            <DataRow label="Pads Per Day" value={formData.obgyne?.padsPerDay} />
             <DataRow label="Dysmenorrhea" value={formData.obgyne?.dysmenorrhea ? (formData.obgyne.dysmenorrhea.toLowerCase() === 'yes' ? 'Yes' : 'No') : ''} />
           </dl>
         </div>

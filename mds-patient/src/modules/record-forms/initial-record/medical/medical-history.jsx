@@ -81,13 +81,16 @@ const MedicalHistoryForm = ({
       </h3>
 
       {/* Tabs */}
-      <div className="flex border-b-2 border-neutral-200 mb-6">
+      <div role="tablist" aria-label="Medical history category" className="relative flex border-b border-neutral-200 dark:border-neutral-700 mb-6">
+        <span aria-hidden="true" className={`absolute bottom-0 h-0.5 rounded-full bg-primary-500 transition-all duration-300 ease-out ${activeTab === 'self' ? 'left-0 w-24' : 'left-24 w-24'}`} />
         <button
           type="button"
-          className={`py-3 px-6 font-medium transition-colors duration-200 border-b-2 ${
+          role="tab"
+          aria-selected={activeTab === 'self'}
+          className={`min-h-11 px-6 font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset ${
             activeTab === 'self'
-              ? 'border-primary-600 text-primary-700'
-              : 'border-transparent text-secondary-500 hover:text-secondary-700'
+              ? 'text-primary-700 dark:text-primary-400'
+              : 'text-secondary-500 hover:text-secondary-700 dark:text-neutral-400 dark:hover:text-neutral-200'
           }`}
           onClick={() => setActiveTab('self')}
         >
@@ -95,10 +98,12 @@ const MedicalHistoryForm = ({
         </button>
         <button
           type="button"
-          className={`py-3 px-6 font-medium transition-colors duration-200 border-b-2 ${
+          role="tab"
+          aria-selected={activeTab === 'family'}
+          className={`min-h-11 px-6 font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset ${
             activeTab === 'family'
-              ? 'border-primary-600 text-primary-700'
-              : 'border-transparent text-secondary-500 hover:text-secondary-700'
+              ? 'text-primary-700 dark:text-primary-400'
+              : 'text-secondary-500 hover:text-secondary-700 dark:text-neutral-400 dark:hover:text-neutral-200'
           }`}
           onClick={() => setActiveTab('family')}
         >
@@ -108,7 +113,7 @@ const MedicalHistoryForm = ({
 
       {/* Self Medical History */}
       {activeTab === 'self' && (
-        <div>
+        <div role="tabpanel" className="animate-in fade-in slide-in-from-right-2 duration-200 motion-reduce:animate-none">
           <p className="text-sm text-secondary-600 mb-4">
             Check any conditions that apply to you:
           </p>
@@ -210,7 +215,7 @@ const MedicalHistoryForm = ({
 
       {/* Family Medical History */}
       {activeTab === 'family' && (
-        <div>
+        <div role="tabpanel" className="animate-in fade-in slide-in-from-left-2 duration-200 motion-reduce:animate-none">
           <p className="text-sm text-secondary-600 mb-4">
             Check any conditions that apply to your immediate family members and specify who has it:
           </p>

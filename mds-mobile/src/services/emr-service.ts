@@ -147,8 +147,6 @@ export interface FormData {
   obgyne?: {
     lastMenstrualPeriod: string;
     menstruationDuration: string;
-    menarcheYearAge: string;
-    padsPerDay: string;
     dysmenorrhea: string;
   };
   certification?: {
@@ -197,7 +195,7 @@ export const createEmptyFormData = (): FormData => ({
   },
   obgyne: {
     lastMenstrualPeriod: '', menstruationDuration: '',
-    menarcheYearAge: '', padsPerDay: '', dysmenorrhea: '',
+    dysmenorrhea: '',
   },
   certification: { verified: false, fullName: '', date: '' },
 });
@@ -683,8 +681,6 @@ export const buildBatchInputs = (
       : new Date().toISOString().split('T')[0];
     const noteParts: string[] = [];
     if (formData.obgyne.menstruationDuration) noteParts.push(`Duration: ${formData.obgyne.menstruationDuration} days`);
-    if (formData.obgyne.menarcheYearAge) noteParts.push(`Menarche: ${formData.obgyne.menarcheYearAge}`);
-    if (formData.obgyne.padsPerDay) noteParts.push(`Pads/day: ${formData.obgyne.padsPerDay}`);
     inputs.obgynHistory = {
       lastMenstrualPeriod: lmpDate,
       hasDysmenorrhea: formData.obgyne.dysmenorrhea === 'Yes',

@@ -829,15 +829,15 @@ const RecordUpdateForm = ({
             </div>
           )}
           {/* Header Section */}
-          <div className="record-form-header rounded-2xl p-6 mb-6 bg-primary-500 dark:bg-primary-950">
-            <div className="flex items-center gap-4">
+          <div className="record-form-header sticky top-0 z-20 rounded-2xl px-4 py-3 sm:px-5 sm:py-4 mb-5 bg-primary-500 dark:bg-primary-950 shadow-sm">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>
+                <h1 className="text-2xl font-heading font-bold text-white" style={{ margin: 0 }}>
                   Update {effectiveRecordType === 'medical' ? 'Medical Record' : effectiveRecordType === 'dental' ? 'Dental Record' : 'Medical & Dental Record'}
                 </h1>
                 <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>
@@ -853,19 +853,15 @@ const RecordUpdateForm = ({
                 </button>
               )}
             </div>
+            <ProgressStepper currentStep={safeCurrentStep} steps={steps} compact />
           </div>
 
           {draftRestored && (
-            <div role="status" className="mb-4 rounded-lg border border-primary-300 bg-primary-50 p-3 text-sm text-secondary-800 dark:border-primary-800 dark:bg-primary-950/40 dark:text-neutral-100">
-              <strong>Saved draft restored.</strong> Your entries were recovered from this browser tab.
+            <p role="status" className="-mt-3 mb-4 text-sm text-secondary-600 dark:text-neutral-300">
+              <strong className="text-primary-700 dark:text-primary-300">Saved draft restored.</strong> Your entries were recovered from this browser tab.
               {needsPhotoReupload && <span className="block mt-1">Please upload dental photos again if you had added them before refreshing.</span>}
-            </div>
+            </p>
           )}
-
-          {/* Progress Stepper */}
-          <div className="sticky top-0 z-10 mb-6 bg-primary-50/40 pb-2 dark:bg-neutral-950">
-            <ProgressStepper currentStep={safeCurrentStep} steps={steps} />
-          </div>
 
           {/* Form Content */}
           <div className="mb-6">
