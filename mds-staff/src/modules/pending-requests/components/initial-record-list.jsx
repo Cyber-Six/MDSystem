@@ -3,6 +3,7 @@ import { matchesRequestSearch, normalizeStatuses, STATUS_OPTIONS } from './reque
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePermissions } from '../../../context/permissions-context';
 import { useStaffNotifications } from '../../notification/notification-context';
+import useRequestRefresh from './use-request-refresh';
 import {
   BRANCH,
   ALL_BRANCHES,
@@ -55,13 +56,14 @@ const InitialRecordList = ({
   // ── Fetch ----------------------------------------------------------------
 
   const fetchTickets = useCallback(async (options = {}) => {
-    setLoading(true);
+    if (!options.silent) setLoading(true);
     setError('');
     try {
       const result = await getStatusUpdateTickets(queryStatuses, branch, 0, 20, options);
       const enriched = await enrichWithInitialFlag(result);
       setTickets(enriched.filter((t) => t.is_initial));
     } catch (err) {
+      if (!options.retried && err.message === 'Staff session changed. Reload requests.') return fetchTickets({ force: true, retried: true });
       setError(err.message || 'Failed to load tickets.');
     } finally {
       setLoading(false);
@@ -81,6 +83,7 @@ const InitialRecordList = ({
 
     return () => unsubscribe();
   }, [subscribe, fetchTickets]);
+  useRequestRefresh(fetchTickets);
 
   // ── After approve / revision ─────────────────────────────────────────────
 

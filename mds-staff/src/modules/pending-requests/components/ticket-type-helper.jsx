@@ -30,6 +30,7 @@
  */
 
 import { axiosRequest } from '../../../packages-core-adapter';
+import { onRequestCacheInvalidated, requestCacheGeneration, requestCacheVersion } from '../request-cache-session';
 
 /**
  * Calls /profile/medical → getUserCredentialStatus(userId).
@@ -129,6 +130,8 @@ const _credStore = new Map(); // userId → { val: any, ts: number }
 const _logStore  = new Map(); // userId → { val: any, ts: number }
 const _CRED_TTL  = 5 * 60_000; // 5 min
 const _LOG_TTL   = 2 * 60_000; // 2 min
+let enrichedCache = new WeakMap();
+onRequestCacheInvalidated(() => { _credStore.clear(); _logStore.clear(); enrichedCache = new WeakMap(); });
 
 const normalizeCredentialStatus = (status) => (
   typeof status === 'string' ? status.trim().toLowerCase() : null
@@ -213,6 +216,9 @@ const _batchGetPersonalRecordLogs = async (userIds) => {
  * @returns {Promise<Array<{...ticket, is_initial: boolean}>>}
  */
 export const enrichWithInitialFlag = async (tickets) => {
+  const generation = requestCacheGeneration();
+  const version = requestCacheVersion();
+  if (enrichedCache.has(tickets)) return enrichedCache.get(tickets);
   if (tickets.length === 0) return [];
 
   // Tickets whose scope already determines the answer need no API calls.
@@ -235,6 +241,8 @@ export const enrichWithInitialFlag = async (tickets) => {
 
   if (staleCreds.length > 0) {
     const fetched = await _batchGetCredentialStatuses(staleCreds);
+    if (generation !== requestCacheGeneration()) throw new Error('Staff session changed. Reload requests.');
+    if (version !== requestCacheVersion()) return enrichWithInitialFlag(tickets);
     const fetchTs = Date.now();
     for (const [id, val] of Object.entries(fetched)) {
       _credStore.set(id, { val, ts: fetchTs });
@@ -265,6 +273,8 @@ export const enrichWithInitialFlag = async (tickets) => {
 
   if (staleLogs.length > 0) {
     const fetched = await _batchGetPersonalRecordLogs(staleLogs);
+    if (generation !== requestCacheGeneration()) throw new Error('Staff session changed. Reload requests.');
+    if (version !== requestCacheVersion()) return enrichWithInitialFlag(tickets);
     const fetchTs = Date.now();
     for (const [id, val] of Object.entries(fetched)) {
       _logStore.set(id, { val, ts: fetchTs });
@@ -284,6 +294,8 @@ export const enrichWithInitialFlag = async (tickets) => {
         query: 'query ApprovedTicketHistory($userId: ID!, $offset: Int!) { getUserTicketIds(userId: $userId, offset: $offset, limit: 1000) { id created_at } }',
         variables: { userId, offset },
       });
+      if (generation !== requestCacheGeneration()) throw new Error('Staff session changed. Reload requests.');
+      if (version !== requestCacheVersion()) return enrichWithInitialFlag(tickets);
       if (response.data?.errors?.length) throw new Error(response.data.errors[0].message);
       page = response.data?.data?.getUserTicketIds || [];
       if (page.length && rows.some(row => String(row.id) === String(page[0].id))) throw new Error('Approved ticket history pagination did not advance.');
@@ -293,7 +305,7 @@ export const enrichWithInitialFlag = async (tickets) => {
     firstApproved[userId] = rows[0]?.id;
   }
 
-  return tickets.map((ticket) => {
+  const enriched = tickets.map((ticket) => {
     // Step 1: partial scope → always UPDATE
     if (ticket.scope === 'Medical' || ticket.scope === 'Dental') {
       return { ...ticket, is_initial: false };
@@ -336,4 +348,6 @@ export const enrichWithInitialFlag = async (tickets) => {
 
     return { ...ticket, is_initial: false };
   });
+  enrichedCache.set(tickets, enriched);
+  return enriched;
 };

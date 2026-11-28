@@ -1,10 +1,26 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ListFilter } from 'lucide-react';
 import { STATUS_OPTIONS } from './request-list-utils';
 import './requests.css';
 
 export default function StatusFilter({ value, onChange }) {
   const [open, setOpen] = useState(false);
+  const pickerRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOutside = (event) => {
+      if (!pickerRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
   const summary = useMemo(() => {
     if (value.length === STATUS_OPTIONS.length) return 'All statuses';
     if (!value.length) return 'No statuses';
@@ -17,7 +33,7 @@ export default function StatusFilter({ value, onChange }) {
     } else onChange([...value, status]);
   };
 
-  return <div className="request-status-picker">
+  return <div className="request-status-picker" ref={pickerRef}>
     <span className="request-picker-label">Status</span>
     <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary aria-label={`Statuses: ${summary}`}>

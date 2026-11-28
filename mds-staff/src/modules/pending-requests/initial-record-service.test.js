@@ -30,6 +30,19 @@ describe('initial record service', () => {
     expect(axiosRequest.post).toHaveBeenCalledTimes(2);
   });
 
+  it('discards an in-flight response after the staff session changes', async () => {
+    localStorage.setItem('staff_refreshToken', 'synthetic-session-a');
+    let resolveRequest;
+    axiosRequest.post.mockImplementationOnce(() => new Promise(resolve => { resolveRequest = resolve; }));
+    const pending = getStatusUpdateTickets(['Pending'], BRANCH.MANILA);
+    localStorage.setItem('staff_refreshToken', 'synthetic-session-b');
+    resolveRequest({ data: { data: { getStatusUpdateTickets: [{ id: 'old-ticket' }] } } });
+    await expect(pending).rejects.toThrow('Staff session changed');
+    axiosRequest.post.mockResolvedValueOnce({ data: { data: { getStatusUpdateTickets: [{ id: 'new-ticket' }] } } });
+    await expect(getStatusUpdateTickets(['Pending'], BRANCH.MANILA)).resolves.toEqual([{ id: 'new-ticket' }]);
+    localStorage.removeItem('staff_refreshToken');
+  });
+
   it('returns individual tickets and uses null default', async () => {
     axiosRequest.post.mockResolvedValueOnce({ data: { data: { getUserUpdateTicket: { id: 't1' } } } });
     await expect(getUserUpdateTicket('p1')).resolves.toEqual({ id: 't1' });

@@ -7,6 +7,7 @@ import RecordReviewModal from './record-review-modal';
 import RequestListPanel from './request-list-panel';
 import { matchesRequestSearch, normalizeStatuses, STATUS_OPTIONS } from './request-list-utils';
 import { formatBranchLabel } from '../../../utils/branch-utils';
+import useRequestRefresh from './use-request-refresh';
 
 const EXPIRY_DAYS = 7;
 const isAgeExpired = (ticket) => ticket.created_at
@@ -28,7 +29,7 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
   useEffect(() => { if (permittedBranch) setBranch(permittedBranch); }, [permittedBranch]);
 
   const refresh = useCallback(async (options = {}) => {
-    setLoading(true);
+    if (!options.silent) setLoading(true);
     setError('');
     try {
       const result = await getStatusUpdateTickets(statuses, branch, 0, 20, options);
@@ -43,6 +44,7 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
       });
       setTickets(combined);
     } catch (fetchError) {
+      if (!options.retried && fetchError.message === 'Staff session changed. Reload requests.') return refresh({ force: true, retried: true });
       setError(fetchError.message || 'Failed to load requests.');
     } finally {
       setLoading(false);
@@ -51,6 +53,7 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => subscribe('updateTicket', () => refresh({ force: true })), [subscribe, refresh]);
+  useRequestRefresh(refresh);
 
   const visibleTickets = tickets.filter((ticket) =>
     (scope === 'All' || ticket.scope === scope) && matchesRequestSearch(ticket, searchQuery));

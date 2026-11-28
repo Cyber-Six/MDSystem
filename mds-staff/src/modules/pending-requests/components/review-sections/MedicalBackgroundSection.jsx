@@ -206,6 +206,10 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
+            {isEditing && getVal('smoker', yesNo(lifestyle?.smoker)) === 'Yes' && <>
+              <EditableField label="Cigarettes per day" value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))} originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))} isEditing onChange={v => onFieldChange?.('cigarettesPerDay', v)} type="number" />
+              <EditableField label="Years smoked" value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))} originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))} isEditing onChange={v => onFieldChange?.('yearsSmoked', v)} type="number" />
+            </>}
             <EditableField
               label="Alcohol Drinker"
               value={isEditing ? getVal('alcoholConsumer', yesNo(lifestyle?.alcoholConsumer)) : alcoholDisplay}
@@ -215,6 +219,7 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
+            {isEditing && getVal('alcoholConsumer', yesNo(lifestyle?.alcoholConsumer)) === 'Yes' && <EditableField label="Alcohol frequency" value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')} originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')} isEditing onChange={v => onFieldChange?.('alcoholFrequency', v)} />}
             <EditableField
               label="Vaper"
               value={isEditing ? getVal('vaper', yesNo(lifestyle?.vapeUser)) : vaperDisplay}
@@ -224,6 +229,10 @@ const MedicalBackgroundSection = ({
               type="select"
               options={['Yes', 'No']}
             />
+            {isEditing && getVal('vaper', yesNo(lifestyle?.vapeUser)) === 'Yes' && <>
+              <EditableField label="Vape type" value={getVal('vapeType', lifestyle?.vapeType ?? '')} originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')} isEditing onChange={v => onFieldChange?.('vapeType', v)} />
+              <EditableField label="Vape frequency" value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')} originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')} isEditing onChange={v => onFieldChange?.('vapeFrequency', v)} />
+            </>}
             {showVapingDetails && <DataRow label="Years Vaping" value={lifestyle?.yearsVaping} />}
             <EditableField
               label="Lifestyle Notes"

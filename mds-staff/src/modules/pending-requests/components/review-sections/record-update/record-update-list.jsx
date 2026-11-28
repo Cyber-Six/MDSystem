@@ -4,6 +4,7 @@ import { formatBranchLabel } from '../../../../../utils/branch-utils';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePermissions } from '../../../../../context/permissions-context';
 import { useStaffNotifications } from '../../../../notification/notification-context';
+import useRequestRefresh from '../../use-request-refresh';
 import { BRANCH, ALL_BRANCHES, TICKET_STATUS, getStatusUpdateTickets } from '../../../initial-record-service';
 import { enrichWithInitialFlag } from '../../ticket-type-helper';
 import RecordReviewModal from '../../record-review-modal';
@@ -15,7 +16,7 @@ const isExpiredByAge = (ticket) => ticket.created_at
 const RecordUpdateList = ({ staffRole = 'both', externalStatusFilter = null, showStatusFilter = true, searchQuery = '' }) => {
   const { subscribe } = useStaffNotifications();
   const { branch: permBranch, allowedBranches } = usePermissions();
-  const [branch, setBranch] = useState(() => permBranch || BRANCH.MANILA);
+  const [branch, setBranch] = useState(() => permBranch || BRANCH.BOTH);
   const [scopeFilter, setScopeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
   const [tickets, setTickets] = useState([]);
@@ -30,7 +31,7 @@ const RecordUpdateList = ({ staffRole = 'both', externalStatusFilter = null, sho
   useEffect(() => { if (permBranch) setBranch(permBranch); }, [permBranch]);
 
   const fetchTickets = useCallback(async (options = {}) => {
-    setLoading(true);
+    if (!options.silent) setLoading(true);
     setError('');
     try {
       const result = await getStatusUpdateTickets(queryStatuses, branch, 0, 20, options);
@@ -40,6 +41,7 @@ const RecordUpdateList = ({ staffRole = 'both', externalStatusFilter = null, sho
         .filter((ticket) => selectedStatuses.includes(ticket._displayStatus || ticket.status));
       setTickets(processed);
     } catch (fetchError) {
+      if (!options.retried && fetchError.message === 'Staff session changed. Reload requests.') return fetchTickets({ force: true, retried: true });
       setError(fetchError.message || 'Failed to load update requests.');
     } finally {
       setLoading(false);
@@ -48,6 +50,7 @@ const RecordUpdateList = ({ staffRole = 'both', externalStatusFilter = null, sho
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
   useEffect(() => subscribe('updateTicket', () => fetchTickets({ force: true })), [subscribe, fetchTickets]);
+  useRequestRefresh(fetchTickets);
   const handleAction = (updatedTicket) => setTickets((current) => current.filter((ticket) => ticket.id !== updatedTicket.id));
   const visibleTickets = tickets.filter((ticket) =>
     (scopeFilter === 'All' || ticket.scope === scopeFilter) && matchesRequestSearch(ticket, searchQuery));

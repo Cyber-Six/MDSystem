@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useId, useRef } from 'react';
 import { LockKeyhole, Pencil } from 'lucide-react';
 
 export const hasReviewValue = (value) =>
@@ -22,8 +22,25 @@ export default function SectionWrapper({
   isPending = false,
 }) {
   const headingId = useId();
+  const sectionRef = useRef(null);
+  const beginEditing = () => {
+    onToggleEdit();
+    if (isEditing) return;
+    requestAnimationFrame(() => {
+      const section = sectionRef.current;
+      const field = section?.querySelector('.record-review-input');
+      const scrollContainer = section?.closest('.overflow-y-auto');
+      if (!field || !scrollContainer) return;
+      const target = title === 'Medical Background' ? field : section;
+      const offset = title === 'Medical Background' ? 32 : 16;
+      const top = scrollContainer.scrollTop + target.getBoundingClientRect().top - scrollContainer.getBoundingClientRect().top - offset;
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      scrollContainer.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? 'auto' : 'smooth' });
+      field.focus({ preventScroll: true });
+    });
+  };
   return (
-    <section data-review-section={title} aria-labelledby={headingId} className="record-review-card">
+    <section ref={sectionRef} data-review-section={title} aria-labelledby={headingId} className="record-review-card">
       <div className="record-review-card-header">
         <h3 id={headingId}>{title}</h3>
         {isLocked ? (
@@ -33,9 +50,9 @@ export default function SectionWrapper({
           </span>
         ) : (
           <div className="flex flex-wrap items-center justify-end gap-x-2">
-            {hasEdits && <span className="text-xs font-medium text-warning-700 dark:text-warning-300">Modified by Staff</span>}
+            {hasEdits && <span className="text-xs font-medium text-warning-700 dark:text-warning-300">Edits pending approval</span>}
             {isPending && onToggleEdit && (
-              <button type="button" onClick={onToggleEdit} className="record-review-edit" aria-label={`${isEditing ? 'Done editing' : 'Edit'} ${title}`}>
+              <button type="button" onClick={beginEditing} className="record-review-edit" aria-label={`${isEditing ? 'Done editing' : 'Edit'} ${title}`}>
                 {!isEditing && <Pencil size={14} aria-hidden="true" />}
                 {isEditing ? 'Done' : 'Edit'}
               </button>
@@ -45,10 +62,11 @@ export default function SectionWrapper({
       </div>
       {!isLocked && (
         <div className="record-review-card-body">
+          {isEditing && <p className="m-0 rounded-lg border border-primary-300 bg-primary-50 px-3 py-2 text-sm text-secondary-900 dark:border-primary-700 dark:bg-primary-900/20 dark:text-neutral-100">Edit the fields below. Changes are saved when you approve the record.</p>}
           {children}
           {isPending && onToggleEdit && isEditing && (
             <div className="flex justify-end">
-              <button type="button" onClick={onToggleEdit} className="record-review-edit">OK</button>
+              <button type="button" onClick={onToggleEdit} className="record-review-edit" aria-label={`Done editing ${title}`}>Done editing</button>
             </div>
           )}
         </div>
