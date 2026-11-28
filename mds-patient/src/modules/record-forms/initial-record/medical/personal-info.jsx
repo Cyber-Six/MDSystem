@@ -379,7 +379,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 value={data.emergencyContacts[index]?.contactNumber || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', handlePhone(e.target.value))}
                 placeholder="Contact Number"
-                error={fieldErrors.emergencyContact2ContactNumber)}
+                error={index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber}
               />
             </div>
             <div className="mt-2">
