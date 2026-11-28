@@ -173,19 +173,26 @@ const RecordUpdateForm = ({
     return () => unsubscribe();
   }, [subscribe, syncRevisionStatus]);
 
-  // Fetch patient sex on mount so OB-GYN section shows correctly for female patients
+  // Load the stored personal profile for review and to determine OB-GYN visibility.
   useEffect(() => {
     const fetchUserSex = async () => {
       try {
         const response = await axiosRequest({
           method: 'POST',
           url: '/profile/patient',
-          data: { query: '{ getPersonalRecord { sex } }' }
+          data: { query: '{ getPersonalRecord { first_name middle_name last_name suffix date_of_birth sex civil_status nationality religion contactNumber present_address province_address email branch } }' }
         });
-        const sex = response.data?.data?.getPersonalRecord?.sex;
+        const profile = response.data?.data?.getPersonalRecord;
         if (!isCurrentPatientSession()) return;
-        if (sex) {
-          setPatientDefaults(prev => ({ ...prev, sex }));
+        if (profile) {
+          const birthday = profile.date_of_birth || '';
+          const age = birthday ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear() - (new Date() < new Date(new Date().getFullYear(), new Date(birthday).getMonth(), new Date(birthday).getDate()) ? 1 : 0)) : '';
+          setPatientDefaults(prev => ({ ...prev, sex: profile.sex || prev.sex, personalInfo: {
+            firstName: profile.first_name, middleName: profile.middle_name, lastName: profile.last_name,
+            suffix: profile.suffix, birthday, age, sex: profile.sex, civilStatus: profile.civil_status,
+            nationality: profile.nationality, religion: profile.religion, contactNumber: profile.contactNumber,
+            address: profile.present_address, provinceAddress: profile.province_address, email: profile.email, branch: profile.branch,
+          } }));
         }
       } catch (error) {
 
@@ -862,7 +869,7 @@ const RecordUpdateForm = ({
             </div>
           )}
           {/* Header Section */}
-          <div className="record-form-header sticky top-0 z-20 rounded-2xl mb-5">
+          <div className="record-form-header sticky top-0 z-30 rounded-2xl mb-5 pb-2">
             <div className="px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-2">
               <div className="p-2 bg-primary-100 dark:bg-primary-800 rounded-xl">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -888,6 +895,17 @@ const RecordUpdateForm = ({
               )}
             </div>
             <ProgressStepper currentStep={safeCurrentStep} steps={steps} scrollContainerRef={formRef} compact />
+            {revisionStatus?.status === 'Revision' && revisionStatus?.notes && (
+              <div className="mx-4 sm:mx-6 mb-2 px-3 py-2 border border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800 rounded-xl flex items-start gap-3">
+                <svg className="w-4 h-4 text-secondary-800 dark:text-primary-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-secondary-900 dark:text-primary-200 uppercase tracking-wide">Staff Note</p>
+                  <p className="text-sm text-secondary-800 dark:text-neutral-200 mt-1 whitespace-pre-wrap break-words max-h-28 overflow-y-auto">{revisionStatus.notes}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {draftRestored && (

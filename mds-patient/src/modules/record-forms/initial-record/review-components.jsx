@@ -3,9 +3,9 @@ import React from 'react';
 export const ReviewSectionHeader = ({ title, onEditClick }) => (
   <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-primary-400">
     <h4 className="text-lg font-heading font-semibold text-secondary-900">{title}</h4>
-    <button type="button" onClick={onEditClick} className="text-sm text-primary-700 hover:text-primary-800 font-semibold flex items-center transition-colors">
+    {onEditClick && <button type="button" onClick={onEditClick} className="text-sm text-primary-700 hover:text-primary-800 font-semibold flex items-center transition-colors">
       <span aria-hidden="true" className="mr-1">✎</span>Edit
-    </button>
+    </button>}
   </div>
 );
 

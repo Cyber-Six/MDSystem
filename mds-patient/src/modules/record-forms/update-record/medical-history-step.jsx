@@ -228,6 +228,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
       hospitalizations: [...catalogs.hospitalizations, ...hospitalizationOthers.dynamicItems],
       operations: [...catalogs.operations, ...operationOthers.dynamicItems],
       medications: [...catalogs.medications, ...medicationOthers.dynamicItems],
+      visualAcuity: catalogs.visualAcuity,
     };
     Object.entries(catalogsByDomain).forEach(([domain, items]) => items.forEach((item) => onCatalogItemSelected(domain, item)));
   }, [catalogs, medicalConditionOthers.dynamicItems, immunizationOthers.dynamicItems, allergenOthers.dynamicItems, hospitalizationOthers.dynamicItems, operationOthers.dynamicItems, medicationOthers.dynamicItems, onCatalogItemSelected]);
@@ -877,7 +878,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.hospitalizations.length > 0 ? (
                   <div className="space-y-2">
-                    {[...catalogs.hospitalizations].sort((a, b) => Number(!!formData.hospitalizationConditions?.[b.id]) - Number(!!formData.hospitalizationConditions?.[a.id])).slice(0, 12).map((condition) => {
+                    {[...catalogs.hospitalizations].sort((a, b) => Number(!!formData.hospitalizationConditions?.[b.id]) - Number(!!formData.hospitalizationConditions?.[a.id])).slice(0, 6).map((condition) => {
                       const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
                       return (
                         <div key={condition.id}>
@@ -1028,7 +1029,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.operations.length > 0 ? (
                   <div className="space-y-2">
-                    {[...catalogs.operations].sort((a, b) => Number(!!formData.operationConditions?.[b.id]) - Number(!!formData.operationConditions?.[a.id])).slice(0, 12).map((procedure) => {
+                    {[...catalogs.operations].sort((a, b) => Number(!!formData.operationConditions?.[b.id]) - Number(!!formData.operationConditions?.[a.id])).slice(0, 6).map((procedure) => {
                       const isChecked = formData.operationConditions?.[procedure.id] || false;
                       return (
                         <div key={procedure.id}>
@@ -1165,7 +1166,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <div className="space-y-4">
                 {catalogs.medications.length > 0 ? (
                   <div className="space-y-2">
-                    {[...catalogs.medications].sort((a, b) => Number(!!formData.selectedMedications?.[b.id]) - Number(!!formData.selectedMedications?.[a.id])).slice(0, 12).map((medicine) => {
+                    {[...catalogs.medications].sort((a, b) => Number(!!formData.selectedMedications?.[b.id]) - Number(!!formData.selectedMedications?.[a.id])).slice(0, 6).map((medicine) => {
                       const isChecked = formData.selectedMedications?.[medicine.id] || false;
                       return (
                         <div key={medicine.id}>

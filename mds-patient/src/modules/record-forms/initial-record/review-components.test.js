@@ -132,8 +132,9 @@ describe('patient review summaries', () => {
     };
     const html = renderToStaticMarkup(<UpdateReview formData={update} recordType="both" steps={['Personal Info', 'Medical History', 'Dental History', 'Review & Submit']} onEdit={() => {}} />);
     for (const value of ['QA asthma', 'Mother', 'QA pollen', 'QA vaccine', 'Dose:', 'QA hospitalization', 'QA operation', 'QA medication', 'Two lines', 'Right eye', 'QA cleaning', 'Upper', 'update-upper.png']) expect(html).toContain(value);
-    for (const group of ['Basic details', 'Contact information', 'Conditions', 'Allergies &amp; immunizations', 'Hospitalizations &amp; operations', 'Daily habits &amp; vision', 'Dental visits', 'Appliances &amp; procedures']) expect(html).toContain(group);
-    expect(html).toContain('rounded-lg border border-neutral-200 bg-neutral-50/70 p-3');
+    for (const group of ['School Information', 'Emergency Contact Information', 'Medical History', 'Medical Background', 'History of Allergies', 'Lifestyle', 'OB-GYNE History', 'Dental visits', 'Intra-Oral Appliances']) expect(html).toContain(group);
+    expect(html).toContain('medical-review-groups');
+    expect(html).not.toContain('sm:grid-cols-2');
     expect(html).not.toContain('undefined');
   });
 });
@@ -171,4 +172,24 @@ test('shows a correction action and blocks certification for unresolved selectio
 
 test('resolves revision allergen registries using their actual response labels', () => {
   expect(resolveCatalogLabel(null, 11, { 11: { id: '11', allergen: 'QA pollen', type: 'Environmental' } })).toBe('QA pollen');
+});
+
+
+test.each(['medical', 'dental', 'both'])('update review shows employee fields, contacts and only the %s scope', recordType => {
+  const html = renderToStaticMarkup(<UpdateReview formData={{
+    profileType: 'Employee', employeeDepartment: 'QA department', employeeRole: 'Other', employeeCategoryOther: 'QA researcher', employeePosition: 'QA analyst',
+    emergencyContact1Name: 'QA contact', emergencyContact1Relationship: 'Parent', emergencyContact1Number: '09170000000', emergencyContact1Address: 'QA address',
+    sex: 'Female', menstruationDuration: '5', vaper: 'yes', yearsVaping: 0,
+    oralApplianceOtherDescription: 'QA guard', oralApplianceOtherArch: 'Upper', oralApplianceNotes: 'QA appliance note', dentalProcedureNotes: 'QA procedure note',
+  }} recordType={recordType} steps={['Personal Info', 'Medical History', 'Dental History', 'Review & Submit']} onEdit={() => {}} />);
+  for (const value of ['Employment Information', 'QA department', 'QA researcher', 'QA analyst', 'QA contact', 'Parent', 'QA address']) expect(html).toContain(value);
+  expect(html).not.toContain('Student Category');
+  expect(html).not.toContain('First Name');
+  if (recordType !== 'dental') {
+    expect(html).toContain('5 days');
+    expect(html).toContain('Years vaping');
+    expect(html).toContain('>0<');
+  } else expect(html).not.toContain('OB-GYNE History');
+  if (recordType !== 'medical') for (const value of ['QA guard', 'QA appliance note', 'QA procedure note']) expect(html).toContain(value);
+  else expect(html).not.toContain('Dental History');
 });

@@ -85,7 +85,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
   return (
     <div className="space-y-4">
       {formData.profileType === 'Employee' ? (
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
+      <div className="form-section rounded-xl">
         <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white mb-5 pb-4 border-b border-neutral-200 dark:border-neutral-700">Employment Information</h3>
         <Input maxLength={personalInfoLimits.department} label="Department" required placeholder="Enter department" value={formData.employeeDepartment || ''} onChange={(event) => onChange({ ...formData, employeeDepartment: event.target.value })} />
         <Select
@@ -107,7 +107,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
       ) : (
       <>
       {/* School Information Card */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
+      <div className="form-section rounded-xl">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
           <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-500/20 flex items-center justify-center">
             <svg className="w-5 h-5 text-primary-600 dark:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +188,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
       )}
 
       {/* Emergency Contact Card */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-4 shadow-lg border border-neutral-200 dark:border-neutral-700">
+      <div className="form-section rounded-xl">
         <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-neutral-200 dark:border-neutral-700">
           <div className="w-9 h-9 rounded-lg bg-error-100 dark:bg-error-500/20 flex items-center justify-center">
             <svg className="w-5 h-5 text-error-600 dark:text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
