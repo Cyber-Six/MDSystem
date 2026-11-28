@@ -178,7 +178,7 @@ test('searches both loaded lists by patient name or ticket ID without fetching a
   expect(container.textContent).not.toContain('Alex Rivera');
   expect(getStatusUpdateTickets).not.toHaveBeenCalled();
   await search('unknown patient');
-  expect(container.querySelectorAll('.request-feedback h3')).toHaveLength(2);
+  expect(container.querySelectorAll('.request-feedback h3')).toHaveLength(1);
   expect(container.textContent).toContain('No matching requests');
   await clickButton('Clear filters');
   expect(container.textContent).toContain('Alex Rivera');

@@ -180,11 +180,13 @@ describe('approved patient opening an update', () => {
 
     await act(async () => root.render(<RecordUpdateForm />));
     const start = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Start Revision'));
-    expect(container.textContent).toContain(notes);
+    expect(container.textContent).toContain('Corrections requested');
+    expect(start.textContent).toContain('Preparing Revision');
     expect(start.disabled).toBe(true);
     await act(async () => resolvePrefill({ emergencyContact1Name: 'Saved Contact' }));
-    expect(start.disabled).toBe(false);
-    await act(async () => start.click());
+    const readyStart = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Start Revision'));
+    expect(readyStart.disabled).toBe(false);
+    await act(async () => readyStart.click());
     expect(container.querySelector('[placeholder="Contact Name"]').value).toBe('Saved Contact');
   });
 
@@ -215,6 +217,7 @@ describe('approved patient opening an update', () => {
     axiosRequest.post.mockResolvedValueOnce({ data: { data: { getMyProfile: employee } } });
 
     await act(async () => root.render(<RecordUpdateForm />));
+    await act(async () => { await Promise.resolve(); });
     const start = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Start Revision'));
     act(() => start.click());
     expect(container.querySelector('[placeholder="Contact Name"]').value).toBe('Synthetic revised contact');

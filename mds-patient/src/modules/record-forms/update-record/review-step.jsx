@@ -62,7 +62,7 @@ const ReviewStep = ({ formData, onEdit, steps = [], recordType, revisionNotes = 
     ? `Yes${formData.alcoholFrequency ? ` (${formData.alcoholFrequency})` : ''}`
     : formData.alcoholDrinker === 'no' ? 'No' : undefined;
   const vapingDetails = formData.vaper === 'yes'
-    ? `Yes${[formData.vapeType, formData.vapeFrequency].filter(Boolean).length ? ` (${[formData.vapeType, formData.vapeFrequency].filter(Boolean).join(', ')})` : ''}`
+    ? `Yes${[formData.vapeType, formData.vapeFrequency, formData.yearsVaping != null && formData.yearsVaping !== '' ? `${formData.yearsVaping} ${Number(formData.yearsVaping) === 1 ? 'year' : 'years'}` : null].filter(Boolean).length ? ` (${[formData.vapeType, formData.vapeFrequency, formData.yearsVaping != null && formData.yearsVaping !== '' ? `${formData.yearsVaping} ${Number(formData.yearsVaping) === 1 ? 'year' : 'years'}` : null].filter(Boolean).join(', ')})` : ''}`
     : formData.vaper === 'no' ? 'No' : undefined;
   const medicalRows = {
     'Your medical conditions': <ReviewList items={selfConditions} tone="medical" />,

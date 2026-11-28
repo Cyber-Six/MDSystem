@@ -187,7 +187,7 @@ test.each(['medical', 'dental', 'both'])('update review shows employee fields, c
   expect(html).not.toContain('First Name');
   if (recordType !== 'dental') {
     expect(html).toContain('5 days');
-    expect(html).toContain('Years vaping');
+    expect(html).toContain('0 years');
     expect(html).toContain('>0<');
   } else expect(html).not.toContain('OB-GYNE History');
   if (recordType !== 'medical') for (const value of ['QA guard', 'QA appliance note', 'QA procedure note']) expect(html).toContain(value);
