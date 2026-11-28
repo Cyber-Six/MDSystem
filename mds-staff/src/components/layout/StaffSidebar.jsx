@@ -9,12 +9,12 @@ import { useStaffProfile } from '../../hooks/use-staff-profile';
 const ALL_NAV_ITEMS = [
   { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
   { path: '/search', icon: 'search', label: 'Search Patient', requiresSearchPatientAccess: true },
-  { path: '/pending', icon: 'pending', label: 'Pending Requests', moduleId: 'pendingRequests' },
+  { path: '/pending', icon: 'pending', label: 'Record Requests', moduleId: 'pendingRequests' },
   { path: '/appointments', icon: 'calendar', label: 'Appointments', moduleId: 'appointments' },
   { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
   { path: '/announcements', icon: 'announcements', label: 'Announcements', moduleId: 'announcements' },
   { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
-  { path: '/notifications', icon: 'notifications', label: 'Send Notification', moduleId: 'sendNotification' },
+  { path: '/notifications', icon: 'notifications', label: 'Notice Center', moduleId: 'sendNotification' },
   { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
   { path: '/settings/roles', icon: 'roles', label: 'Administration', adminOnly: true },
 ];

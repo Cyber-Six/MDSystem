@@ -292,7 +292,7 @@ export default function SendNotificationView() {
           <Send aria-hidden="true" className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <h1 className="mb-0 text-2xl font-bold tracking-tight text-neutral-900 dark:text-white sm:text-3xl">Send Notification</h1>
+          <h1 className="mb-0 text-2xl font-bold tracking-tight text-neutral-900 dark:text-white sm:text-3xl">Notice Center</h1>
           <p className={`mb-0 mt-1 text-sm leading-relaxed ${mutedClass}`}>Send a notification to individuals or a patient group.</p>
         </div>
       </header>

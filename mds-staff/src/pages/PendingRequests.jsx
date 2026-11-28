@@ -25,7 +25,7 @@ const PendingRequests = () => {
         <span className="request-page-icon"><ClipboardList size={24} aria-hidden="true" /></span>
         <div>
           <p className="request-eyebrow">Patient records</p>
-          <h1>Pending requests</h1>
+          <h1>Record requests</h1>
           <p className="request-description">Review initial submissions and patient record updates.</p>
         </div>
       </header>

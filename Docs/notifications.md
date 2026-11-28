@@ -28,7 +28,7 @@ The staff router mounts these paths under `/staff`:
 
 These routes enforce authentication and role or permission checks. Socket acknowledgements are also available for supported client event handlers.
 
-Patient group notifications use the branch set on **Send Notification to Patients** in Role Management. Admins have both-campus access. Group recipients must have an active account, a matching Student or Employee patient profile, and a campus within the chosen scope. Patients assigned to both campuses are included in either campus group and counted once for a both-campus send.
+The staff portal's **Notice Center** patient groups use the branch set on **Send Notification to Patients** in Role Management. Admins have both-campus access. Group recipients must have an active account, a matching Student or Employee patient profile, and a campus within the chosen scope. Patients assigned to both campuses are included in either campus group and counted once for a both-campus send.
 
 A group send accepts `message`, `profile`, `branch`, and the reviewed `expectedCount`. The server checks the sender's current permission and rebuilds the recipient list before sending. If the count changes, it returns HTTP 409 so the sender can review a new count. Group results include aggregate delivery outcomes.
 

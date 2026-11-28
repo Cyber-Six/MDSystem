@@ -73,7 +73,7 @@ const StaffTopBar = ({ onMenuClick }) => {
     if (path === '/' || path === '') return 'Staff Portal';
     if (path.includes('/search')) return 'Search Patient';
     if (path.includes('/patient')) return 'Patient Record';
-    if (path.includes('/pending')) return 'Pending Requests';
+    if (path.includes('/pending')) return 'Record Requests';
     if (path.includes('/appointments')) return 'Appointments';
     if (path.includes('/analytics')) return 'Analytics';
     if (path.includes('/inventory')) return 'Inventory';
