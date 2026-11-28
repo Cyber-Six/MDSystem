@@ -19,7 +19,7 @@ const { Query, Mutation } = require('./wrapper.js');
 
 const context = { user: { id: 7 }, res: {} };
 const result = (...rows) => ({ rows });
-const recordInput = (values = {}) => ({ first_name: 'Ada', middle_name: null, last_name: 'Lovelace', suffix: null, date_of_birth: '1815-12-10', sex: 'Female', civil_status: 'Single', nationality: 'British', religion: 'None', contactNumber: '123', present_address: '1', province_address: 'B', ...values });
+const recordInput = (values = {}) => ({ first_name: 'Ada', middle_name: null, last_name: 'Lovelace', suffix: null, date_of_birth: '2000-12-10', sex: 'Female', civil_status: 'Single', nationality: 'British', religion: 'None', contactNumber: '123', present_address: '1', province_address: 'B', ...values });
 
 beforeEach(() => { jest.clearAllMocks(); jest.spyOn(console, 'log').mockImplementation(() => {}); });
 afterEach(() => { jest.restoreAllMocks(); });
@@ -84,7 +84,7 @@ test('personal record log applies date, offset and limit defaults and explicit v
 test('_PersonalRecordLog inserts pending input and translates database failures', async () => {
   db.queryClient.mockResolvedValueOnce(result({ id: 9, status: 'Pending' }));
   await expect(Mutation._PersonalRecordLog(null, { client: {}, userId: 7, input: recordInput() }, context)).resolves.toEqual({ id: 9, status: 'Pending' });
-  expect(db.queryClient.mock.calls[0][2]).toEqual([7, 'Ada', null, 'Lovelace', null, '1815-12-10', 'Female', 'Single', 'British', 'None', '123', '1', 'B', 'Pending']);
+  expect(db.queryClient.mock.calls[0][2]).toEqual([7, 'Ada', null, 'Lovelace', null, '2000-12-10', 'Female', 'Single', 'British', 'None', '123', '1', 'B', 'Pending']);
   db.queryClient.mockRejectedValueOnce(new Error('db'));
   await expect(Mutation._PersonalRecordLog(null, { client: {}, userId: 7, input: recordInput() }, context)).rejects.toThrow('GraphQL 500: Database error');
   expect(logger.error).toHaveBeenCalled();

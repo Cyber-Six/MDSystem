@@ -1,3 +1,4 @@
+@import '../modules/record-forms/record-form.css';
 /* Tailwind CSS Directives */
 @tailwind base;
 @tailwind components;

@@ -11,6 +11,7 @@ interface Props {
   isDark: boolean;
   placeholder?: string;
   required?: boolean;
+  minimumDate?: Date;
   maximumDate?: Date;
 }
 
@@ -34,6 +35,7 @@ export const DatePickerInput: React.FC<Props> = ({
   isDark,
   placeholder = 'Select date',
   required = false,
+  minimumDate,
   maximumDate,
 }) => {
   const [show, setShow] = useState(false);
@@ -74,6 +76,7 @@ export const DatePickerInput: React.FC<Props> = ({
       {show && Platform.OS === 'android' && (
         <DateTimePicker
           value={dateValue}
+          minimumDate={minimumDate}
           maximumDate={maximumDate}
           mode="date"
           display="default"
@@ -95,6 +98,7 @@ export const DatePickerInput: React.FC<Props> = ({
               </View>
               <DateTimePicker
                 value={dateValue}
+                minimumDate={minimumDate}
                 maximumDate={maximumDate}
                 mode="date"
                 display="spinner"
@@ -111,6 +115,8 @@ export const DatePickerInput: React.FC<Props> = ({
           <input
             type="date"
             value={value}
+            min={minimumDate ? formatDate(minimumDate) : undefined}
+            max={maximumDate ? formatDate(maximumDate) : undefined}
             onChange={(e: any) => { onChange(e.target.value); setShow(false); }}
             style={{
               padding: 10,

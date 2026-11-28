@@ -1,40 +1,23 @@
-import React from 'react';
+﻿import React from 'react';
 
-const ProgressStepper = ({ currentStep, steps }) => {
-  return (
-    <div className="max-w-4xl mx-auto flex items-start">
+const ProgressStepper = ({ currentStep, steps }) => (
+  <nav aria-label="Record progress" className="record-progress rounded-xl border border-primary-200 bg-primary-50 p-4 dark:border-primary-800 dark:bg-primary-950/40">
+    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <p className="text-base font-semibold text-secondary-900 dark:text-primary-100">{steps[currentStep]}</p>
+      <p className="text-sm text-secondary-600 dark:text-primary-200">Step {currentStep + 1} of {steps.length}</p>
+    </div>
+    <ol className="flex gap-1.5 sm:gap-2">
       {steps.map((step, index) => (
-        <React.Fragment key={index}>
-          <div className="flex flex-col items-center flex-shrink-0">
-            <div
-              className={`progress-step ${
-                index < currentStep
-                  ? 'completed'
-                  : index === currentStep
-                  ? 'active'
-                  : 'upcoming'
-              }`}
-            >
-              {index < currentStep ? '✓' : index + 1}
-            </div>
-            <span className={`mt-1.5 text-xs text-center hidden sm:block whitespace-nowrap ${
-              index <= currentStep
-                ? 'text-primary-700 font-medium'
-                : 'text-neutral-500'
-            }`}>
-              {step}
-            </span>
-          </div>
-
-          {index < steps.length - 1 && (
-            <div className={`flex-1 h-0.5 mx-2 mt-4 ${
-              index < currentStep ? 'bg-success-500' : 'bg-neutral-200'
-            }`} />
-          )}
-        </React.Fragment>
+        <li key={step} aria-current={index === currentStep ? 'step' : undefined} className="min-w-0 flex-1">
+          <span className={'block h-1.5 rounded-full ' + (index <= currentStep ? 'bg-primary-500' : 'bg-primary-200 dark:bg-neutral-600')} />
+          <span className={'mt-2 hidden text-xs leading-snug sm:block ' + (index === currentStep ? 'font-semibold text-secondary-900 dark:text-primary-100' : 'text-secondary-500 dark:text-neutral-400')}>
+            {step}
+          </span>
+          <span className="sr-only sm:hidden">{step}</span>
+        </li>
       ))}
-      </div>
-  );
-};
+    </ol>
+  </nav>
+);
 
 export default ProgressStepper;

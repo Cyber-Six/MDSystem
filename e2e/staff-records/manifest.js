@@ -113,6 +113,11 @@ async function captureControls(page, section) {
         return button.textContent.trim().replace(/\s+/g, ' ');
       })(),
       label: (el.labels?.[0]?.textContent || el.closest('label')?.textContent || '').trim().replace(/\s+/g, ' '),
+      labelIndex: visible.slice(0, ordinal).filter(other => {
+        const panel = item => item.closest('div.max-h-0,div[class*="max-h-["]');
+        const label = item => (item.labels?.[0]?.textContent || item.closest('label')?.textContent || '').trim().replace(/\s+/g, ' ');
+        return panel(other) === panel(el) && other.type === el.type && label(other) === label(el);
+      }).length,
       value: el.type === 'file' ? '' : el.value, checked: ['checkbox', 'radio'].includes(el.type) ? el.checked : undefined,
       files: el.type === 'file' ? [...el.files].map(file => file.name) : undefined,
       index: visible.slice(0, ordinal).filter(other => {

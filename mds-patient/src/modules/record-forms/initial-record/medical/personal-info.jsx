@@ -1,4 +1,4 @@
-import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
+import { calculateAgeFromDateOfBirth, getDateOfBirthBounds, getDateOfBirthError, personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 import React from 'react';
 import { Input, Select } from './form-elements';
 import { searchStudentProgram } from '../../../../services/emr-service';
@@ -96,21 +96,11 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
     { value: 'Returnee', label: 'Returnee' },
   ];
 
-  const calculateAge = (birthday) => {
-    if (!birthday) return '';
-    const today = new Date();
-    const birthDate = new Date(birthday);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  };
+  const birthdayBounds = getDateOfBirthBounds();
 
   React.useEffect(() => {
     if (data.birthday) {
-      const age = calculateAge(data.birthday);
+      const age = calculateAgeFromDateOfBirth(data.birthday);
       if (age !== data.age) {
         handleChange('age', age);
       }
@@ -165,11 +155,12 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           <Input
             label="Birthday"
             type="date"
-            max={new Date().toISOString().slice(0, 10)}
+            min={birthdayBounds.min}
+            max={birthdayBounds.max}
             required
             value={data.birthday || ''}
             onChange={(e) => handleChange('birthday', e.target.value)}
-            error={fieldErrors.birthday}
+            error={fieldErrors.birthday || getDateOfBirthError(data.birthday)}
           />
           <Input
             label="Age"

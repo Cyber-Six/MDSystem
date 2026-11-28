@@ -1,4 +1,4 @@
-import { getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
+import { getDateOfBirthError, getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 /**
  * InitialRecordFormScreen — Main orchestrator for the multi-step initial medical record form.
  * Manages step navigation, catalog loading, validation, and 3-phase submission.
@@ -52,6 +52,7 @@ export const validatePersonalInfoFields = (
     if (!pi.surname?.trim()) errors.push('Surname is required');
     if (!pi.firstName?.trim()) errors.push('First name is required');
     if (!pi.birthday) errors.push('Birthday is required');
+    else if (getDateOfBirthError(pi.birthday)) errors.push(getDateOfBirthError(pi.birthday));
     if (!pi.gender) errors.push('Gender is required');
     if (!pi.civilStatus) errors.push('Civil status is required');
     if (!pi.nationality?.trim()) errors.push('Nationality is required');

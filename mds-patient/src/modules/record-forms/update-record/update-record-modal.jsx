@@ -62,37 +62,37 @@ const UpdateRecordModal = ({
     >
       <div 
         ref={modalRef}
-        className="relative w-full max-w-5xl bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl mx-4 flex flex-col animate-slide-in"
-        style={{ maxHeight: 'calc(100vh - 2rem)' }}
+        className="record-form-ui relative w-full max-w-5xl bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl mx-4 flex flex-col animate-slide-in"
+        style={{ maxHeight: 'calc(100dvh - 1rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Banner */}
-        <div className={`shrink-0 rounded-t-2xl ${isRevision ? 'bg-yellow-500' : 'bg-primary-500'}`}>
-          <div className="px-5 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
+        <div className={`record-form-header shrink-0 rounded-t-2xl border-t-4 border-primary-400 bg-primary-500 dark:border-primary-500 dark:bg-primary-950`}>
+          <div className="px-4 py-4 sm:px-6 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-1">
-              <div className="p-1.5 bg-white/25 rounded-lg">
+              <div className="p-2 bg-primary-100 dark:bg-primary-800 rounded-xl">
                 {isRevision ? (
-                  <svg className="w-5 h-5 text-secondary-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-secondary-900 dark:text-primary-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5 text-secondary-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-secondary-900 dark:text-primary-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 )}
               </div>
               <div className="flex-1">
-                <h1 id="update-record-modal-title" className="text-base sm:text-lg font-bold text-secondary-900" style={{ margin: 0 }}>
+                <h1 id="update-record-modal-title" className="text-lg sm:text-xl font-bold text-secondary-900 dark:text-primary-100" style={{ margin: 0 }}>
                   {isRevision ? 'Revise Your Medical Record' : 'Update Your Medical Record'}
                 </h1>
-                <p className="text-xs sm:text-sm text-secondary-800/70" style={{ margin: 0 }}>
+                <p className="text-sm text-secondary-800 dark:text-primary-100" style={{ margin: 0 }}>
                   {isRevision
                     ? 'Staff requested corrections — your previous answers are pre-filled below'
                     : 'Keep your health information current and complete'}
                 </p>
               </div>
             </div>
-            <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium bg-white/30 text-secondary-900 px-3 py-1.5 rounded-full flex-shrink-0`}>
+            <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium bg-primary-100 text-secondary-900 dark:bg-primary-900 dark:text-primary-100 px-3 py-1.5 rounded-full flex-shrink-0`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isRevision ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" : "M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747 0-3 1-5 1-6.253M12 6.253L7 3m0 0l5-3m-5 3l5 3"} />
               </svg>
@@ -102,13 +102,13 @@ const UpdateRecordModal = ({
 
           {/* Staff Note — attached flush to the bottom of the header, no gap */}
           {isRevision && revisionNote && (
-            <div className="mx-5 mb-4 px-4 py-3 bg-yellow-400/30 rounded-xl flex items-start gap-3">
-              <svg className="w-4 h-4 text-secondary-800 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="mx-4 sm:mx-6 mb-4 px-4 py-3 border border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800 rounded-xl flex items-start gap-3">
+              <svg className="w-4 h-4 text-secondary-800 dark:text-primary-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
               <div className="flex-1">
-                <p className="text-xs font-semibold text-secondary-900 uppercase tracking-wide mb-1">Staff Note</p>
-                <div className="text-sm text-secondary-800 whitespace-pre-wrap leading-relaxed bg-white/50 dark:bg-neutral-900/50 rounded-lg px-3 py-2 border-l-3 border-yellow-600">
+                <p className="text-xs font-semibold text-secondary-900 dark:text-primary-200 uppercase tracking-wide mb-1">Staff Note</p>
+                <div className="text-sm text-secondary-800 dark:text-neutral-200 whitespace-pre-wrap leading-relaxed break-words max-h-28 overflow-y-auto bg-white/50 dark:bg-neutral-900/50 rounded-lg px-3 py-2 border-l-3 border-yellow-600">
                   {revisionNote}
                 </div>
               </div>

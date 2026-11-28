@@ -1,4 +1,4 @@
-import { getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
+import { getDateOfBirthError, getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressStepper from './progress-stepper';
@@ -245,6 +245,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     if (!pi.surname?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Surname is required' });
     if (!pi.firstName?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First name is required' });
     if (!pi.birthday) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Birthday is required' });
+    else if (getDateOfBirthError(pi.birthday)) errors.push({ section: 'Personal Information', sectionIndex: 0, message: getDateOfBirthError(pi.birthday) });
     if (!pi.gender) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Gender is required' });
     if (!pi.civilStatus) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Civil status is required' });
     if (!pi.nationality?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Nationality is required' });
@@ -650,7 +651,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
         Back
       </Button>
 
-      <div className="hidden sm:block text-sm text-neutral-500">
+      <div className="text-xs sm:text-sm text-neutral-500">
         Step {formData.personalInfo.gender !== 'Female' && currentStep >= 5 ? currentStep : currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
       </div>
 
@@ -692,33 +693,33 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
   );
 
   return (
-    <div className={`${
+    <div className={`record-form-ui ${
       isModal
         ? 'flex-1 flex flex-col min-h-0'
-        : 'min-h-screen bg-stone-100 py-6 px-4'
+        : 'min-h-screen bg-primary-50/40 dark:bg-neutral-950 py-6 px-4'
     }`}>
 
       {/* Scrollable content area */}
       <div ref={formContentRef} className={`${
         isModal
-          ? 'flex-1 overflow-y-auto min-h-0 bg-stone-100 p-4 sm:p-5'
+          ? 'flex-1 overflow-y-auto min-h-0 bg-primary-50/40 dark:bg-neutral-950 p-4 sm:p-5'
           : ''
       }`}>
         <div className="max-w-5xl mx-auto w-full">
           {/* Header - Only show in standalone mode, modal has its own header */}
           {!isModal && (
             <div className="text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 mb-2">
+              <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 dark:text-primary-100 mb-2">
                 Initial Medical Record
               </h1>
-              <p className="text-secondary-600">
+              <p className="text-secondary-600 dark:text-neutral-300">
                 Please complete your medical information to access the system
               </p>
             </div>
           )}
 
           {/* Progress Stepper */}
-          <div className="mb-6">
+          <div className="sticky top-0 z-10 mb-6 bg-primary-50/40 dark:bg-neutral-950 pb-2">
             <ProgressStepper
               currentStep={
                 formData.personalInfo.gender !== 'Female' && currentStep >= 5
@@ -739,7 +740,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
 
           {/* Nav buttons - standalone mode only */}
           {!isModal && (
-            <div className="bg-white rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-neutral-200">
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-sm border border-primary-200 dark:border-neutral-700">
               <div className="flex justify-between items-center">
                 {renderNavButtons()}
               </div>
@@ -750,8 +751,8 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
 
       {/* Nav bar - modal mode only, fixed outside scroll area */}
       {isModal && (
-        <div className="shrink-0 border-t border-stone-200 bg-stone-100 px-4 py-3 sm:px-6 sm:py-4">
-          <div className="max-w-5xl mx-auto bg-white rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-neutral-200">
+        <div className="record-form-footer shrink-0 border-t border-primary-200 dark:border-primary-800 bg-white dark:bg-neutral-900 px-4 py-3 sm:px-6">
+          <div className="max-w-5xl mx-auto bg-white dark:bg-neutral-800 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-primary-200 dark:border-neutral-700">
             <div className="flex justify-between items-center">
               {renderNavButtons()}
             </div>

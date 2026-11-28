@@ -1,4 +1,4 @@
-import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
+import { calculateAgeFromDateOfBirth, getDateOfBirthBounds, getDateOfBirthError, personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 /**
  * Personal Info Step — Step 0 of the initial record form
  */
@@ -57,21 +57,15 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const [empCategoryOpen, setEmpCategoryOpen] = useState(false);
   const [empStatusOpen, setEmpStatusOpen] = useState(false);
   const { height: windowHeight } = useWindowDimensions();
+  const birthdayBounds = getDateOfBirthBounds();
 
   useEffect(() => {
     if (!pi.birthday) {
       if (pi.age) onUpdate({ age: '' });
       return;
     }
-    const birthDate = new Date(pi.birthday);
-    if (Number.isNaN(birthDate.getTime())) return;
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age -= 1;
-    }
-    const computedAge = age >= 0 ? String(age) : '';
+    const age = calculateAgeFromDateOfBirth(pi.birthday);
+    const computedAge = age === '' ? '' : String(age);
     if (computedAge !== (pi.age || '')) {
       onUpdate({ age: computedAge });
     }
@@ -303,13 +297,19 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           <View style={styles.fieldGroup}>
             <DatePickerInput
               label="Birthday"
-              maximumDate={new Date()}
+              minimumDate={new Date(`${birthdayBounds.min}T00:00:00`)}
+              maximumDate={new Date(`${birthdayBounds.max}T00:00:00`)}
               value={pi.birthday}
               onChange={(val) => onUpdate({ birthday: val })}
               isDark={isDark}
               required
               placeholder="Select birthday"
             />
+            {(errors.birthday || getDateOfBirthError(pi.birthday)) ? (
+              <Text accessibilityRole="alert" style={{ color: colors.error?.[500] || '#EF4444', fontSize: 12, marginTop: 4 }}>
+                {errors.birthday || getDateOfBirthError(pi.birthday)}
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.fieldGroup}>

@@ -7,7 +7,8 @@ function control(page, field) {
   const scope = field.accordion ? page.getByRole('button', { name: field.accordion, exact: true }).locator('..') : page;
   if (field.type === 'checkbox' && field.label && !field.name) {
     const checkbox = scope.getByRole(field.type, { name: field.label, exact: true }).filter({ visible: true });
-    return field.accordion ? checkbox : checkbox.and(page.locator('input:not(div.max-h-0 input, div[class*="max-h-["] input)'));
+    const active = field.accordion ? checkbox : checkbox.and(page.locator('input:not(div.max-h-0 input, div[class*="max-h-["] input)'));
+    return active.nth(field.labelIndex || 0);
   }
   let locator = scope.locator(field.tag);
   if (field.placeholder) locator = scope.getByPlaceholder(field.placeholder, { exact: true });

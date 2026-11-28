@@ -533,7 +533,7 @@ const RecordUpdateForm = ({
   };
 
   return (
-    <>
+    <div className="record-form-ui">
       {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -590,7 +590,7 @@ const RecordUpdateForm = ({
             {/* Button */}
             <button
               onClick={handleSuccessModalClose}
-              className="w-full px-6 py-3 bg-success-500 hover:bg-success-600 text-white font-semibold rounded-lg transition-colors"
+              className="w-full px-6 py-3 bg-success-500 hover:bg-success-600 text-secondary-900 font-semibold rounded-lg transition-colors"
             >
               Back to Updates
             </button>
@@ -770,7 +770,7 @@ const RecordUpdateForm = ({
             </div>
           )}
           {/* Header Section */}
-          <div className="rounded-2xl p-6 mb-6 bg-primary-500">
+          <div className="record-form-header rounded-2xl p-6 mb-6 bg-primary-500 dark:bg-primary-950">
             <div className="flex items-center gap-4">
               <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -797,7 +797,7 @@ const RecordUpdateForm = ({
           </div>
 
           {/* Progress Stepper */}
-          <div className="mb-6">
+          <div className="sticky top-0 z-10 mb-6 bg-primary-50/40 pb-2 dark:bg-neutral-950">
             <ProgressStepper currentStep={safeCurrentStep} steps={steps} />
           </div>
 
@@ -807,7 +807,7 @@ const RecordUpdateForm = ({
           </div>
 
           {/* Navigation Buttons */}
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl px-6 py-3 shadow-md border border-neutral-200 dark:border-neutral-700">
+          <div className="record-form-footer sticky bottom-0 z-10 bg-white dark:bg-neutral-900 rounded-2xl px-4 sm:px-6 py-3 shadow-sm border border-neutral-200 dark:border-neutral-700">
             <div className="flex justify-between items-center">
               <button
                 onClick={backButtonState.action === 'cancel-to-choice' ? handleCancelToChoice : handleBack}
@@ -824,7 +824,7 @@ const RecordUpdateForm = ({
                 {backButtonState.label}
               </button>
 
-              <span className="text-sm text-neutral-500 dark:text-neutral-400 hidden sm:block">
+              <span className="text-sm text-neutral-500 dark:text-neutral-400">
                 Step {steps.length > 0 ? safeCurrentStep + 1 : 0} of {steps.length}
               </span>
 
@@ -858,7 +858,7 @@ const RecordUpdateForm = ({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

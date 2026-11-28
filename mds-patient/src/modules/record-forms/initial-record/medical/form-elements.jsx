@@ -1,69 +1,93 @@
 import React from 'react';
 
-export const Input = ({ label, required, error, reserveErrorSpace = false, className = '', ...props }) => (
-  <div className="mb-1">
-    {label && (
-      <label className="form-label">
-        {label}
-        {required && <span className="text-error-500 ml-1">*</span>}
-      </label>
-    )}
-    <input
-      className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
-      {...props}
-    />
-    {(error || reserveErrorSpace) && (
-      <p className={`mt-0.5 min-h-4 text-xs text-error-600 ${error ? '' : 'invisible'}`}>{error || ' '}</p>
-    )}
-  </div>
-);
+export const Input = ({ id, label, required, error, reserveErrorSpace = false, className = '', ...props }) => {
+  const generatedId = React.useId();
+  const controlId = id ?? generatedId;
+  return (
+    <div className="mb-1">
+      {label && (
+        <label htmlFor={controlId} className="form-label">
+          {label}
+          {required && <span className="text-error-500 ml-1">*</span>}
+        </label>
+      )}
+      <input
+        id={controlId}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? controlId + '-error' : undefined}
+        className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
+        {...props}
+      />
+      {(error || reserveErrorSpace) && (
+        <p id={controlId + '-error'} className={`mt-0.5 min-h-4 text-xs text-error-600 ${error ? '' : 'invisible'}`}>{error || ' '}</p>
+      )}
+    </div>
+  );
+};
 
-export const Select = ({ label, required, error, options, className = '', ...props }) => (
-  <div className="mb-2">
-    {label && (
-      <label className="form-label">
-        {label}
-        {required && <span className="text-error-500 ml-1">*</span>}
-      </label>
-    )}
-    <select
-      className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
-      {...props}
-    >
-      <option value="">Select...</option>
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-    {error && <p className="mt-0.5 text-xs text-error-600">{error}</p>}
-  </div>
-);
+export const Select = ({ id, label, required, error, options, className = '', ...props }) => {
+  const generatedId = React.useId();
+  const controlId = id ?? generatedId;
+  return (
+    <div className="mb-2">
+      {label && (
+        <label htmlFor={controlId} className="form-label">
+          {label}
+          {required && <span className="text-error-500 ml-1">*</span>}
+        </label>
+      )}
+      <select
+        id={controlId}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? controlId + '-error' : undefined}
+        className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
+        {...props}
+      >
+        <option value="">Select...</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      {error && <p id={controlId + '-error'} className="mt-0.5 text-xs text-error-600">{error}</p>}
+    </div>
+  );
+};
 
 export const Checkbox = ({ label, ...props }) => (
-  <div className="flex items-center mb-1">
+  <label className="flex items-center gap-2 mb-1 cursor-pointer">
     <input type="checkbox" className="form-checkbox" {...props} />
-    {label && <label className="ml-2 text-xs text-secondary-700">{label}</label>}
-  </div>
+    {label && <span className="text-sm text-secondary-700">{label}</span>}
+  </label>
 );
 
-export const Textarea = ({ label, required, error, rows = 3, className = '', ...props }) => (
-  <div className="mb-2">
-    {label && (
-      <label className="form-label">
-        {label}
-        {required && <span className="text-error-500 ml-1">*</span>}
-      </label>
-    )}
-    <textarea
-      className={`form-input min-h-[100px] ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
-      rows={rows}
-      {...props}
-    />
-    {error && <p className="mt-0.5 text-xs text-error-600">{error}</p>}
-  </div>
-);
+export const Textarea = ({ id, label, required, error, rows = 3, className = '', ...props }) => {
+  const generatedId = React.useId();
+  const controlId = id ?? generatedId;
+  return (
+    <div className="mb-2">
+      {label && (
+        <label htmlFor={controlId} className="form-label">
+          {label}
+          {required && <span className="text-error-500 ml-1">*</span>}
+        </label>
+      )}
+      <textarea
+        id={controlId}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? controlId + '-error' : undefined}
+        className={`form-input min-h-[100px] ${error ? 'border-error-500 focus:ring-error-500' : ''} ${className}`}
+        rows={rows}
+        {...props}
+      />
+      {error && <p id={controlId + '-error'} className="mt-0.5 text-xs text-error-600">{error}</p>}
+    </div>
+  );
+};
 
 export const Button = ({ variant = 'primary', children, className = '', ...props }) => {
   const variantClasses = {

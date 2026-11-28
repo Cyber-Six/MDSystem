@@ -10,6 +10,13 @@ const enums = {
   civil_status: ['Single', 'Married', 'Widowed', 'Divorced', 'Separated'],
 };
 
+const MAX_REALISTIC_AGE = 125;
+function getMinimumDateOfBirth(now = new Date()) {
+  const minimum = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  minimum.setUTCFullYear(minimum.getUTCFullYear() - MAX_REALISTIC_AGE);
+  return minimum.toISOString().slice(0, 10);
+}
+
 // Validate supplied fields for both full submissions and partial revisions.
 // SQL values remain parameterized; text is preserved for names and addresses.
 function validatePersonalInput(input, res) {
@@ -23,7 +30,7 @@ function validatePersonalInput(input, res) {
     } else if (field === 'date_of_birth') {
       const date = value instanceof Date ? value : new Date(value);
       const text = value instanceof Date ? (Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)) : value;
-      if (typeof text !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text || date.getTime() > Date.now()) fail(field);
+      if (typeof text !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text || text < getMinimumDateOfBirth() || text > new Date().toISOString().slice(0, 10)) fail(field);
     } else if (!['identifier', 'branch'].includes(field)) {
       fail(field);
     }
