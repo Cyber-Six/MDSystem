@@ -438,9 +438,11 @@ const MedicalInventory = () => {
     showSuccess('Inventory Updated', 'Inventory updated successfully.', `Batch ${created.batchNumber} received (${batch.quantity} units).`);
   };
 
-  const handleSplit = async ({ sourceBatchId, quantity, toClinic, notes }) => {
+  const handleSplit = async ({ sourceBatchId, medicalItemId, quantity, toClinic, notes }) => {
     try {
-      const source = batches.find((b) => String(b.id) === String(sourceBatchId));
+      const source = batches.find((b) =>
+        String(b.id) === String(sourceBatchId) && String(b.medicalItemId) === String(medicalItemId)
+      );
       if (!source) {
         setError('Source batch not found.');
         return;
@@ -716,9 +718,11 @@ const MedicalInventory = () => {
     }
   };
 
-  const handleAdjust = async ({ batchId, type, quantity, reason }) => {
+  const handleAdjust = async ({ batchId, medicalItemId, type, quantity, reason }) => {
     try {
-      const source = batches.find((b) => String(b.id) === String(batchId));
+      const source = batches.find((b) =>
+        String(b.id) === String(batchId) && String(b.medicalItemId) === String(medicalItemId)
+      );
       if (!source) {
         setError('Source batch not found.');
         return;

@@ -35,7 +35,7 @@ const SplitSupplyModal = ({ batch, allBatches, allowedLocations = [], onClose, o
     
     setIsSubmitting(true);
     try {
-      await onSplit({ sourceBatchId: batch.id, quantity: qty, toClinic, notes });
+      await onSplit({ sourceBatchId: batch.id, medicalItemId: batch.medicalItemId, quantity: qty, toClinic, notes });
     } finally {
       setIsSubmitting(false);
     }

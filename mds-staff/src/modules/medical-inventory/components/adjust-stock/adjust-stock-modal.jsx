@@ -19,7 +19,7 @@ const AdjustStockModal = ({ batch, onClose, onAdjust }) => {
     if (!isValid || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await onAdjust({ batchId: batch.id, type, quantity: qty, reason });
+      await onAdjust({ batchId: batch.id, medicalItemId: batch.medicalItemId, type, quantity: qty, reason });
     } finally {
       setIsSubmitting(false);
     }
