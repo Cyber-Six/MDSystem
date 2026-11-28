@@ -24,6 +24,7 @@ describe('approved patient opening an update', () => {
   let root;
 
   beforeEach(() => {
+    jest.spyOn(window, 'scrollTo').mockImplementation(() => {});
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     container = document.createElement('div');
     root = createRoot(container);
@@ -34,6 +35,7 @@ describe('approved patient opening an update', () => {
 
   afterEach(() => {
     act(() => root.unmount());
+    jest.restoreAllMocks();
     localStorage.removeItem('patient_refreshToken');
     sessionStorage.clear();
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;
