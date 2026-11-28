@@ -74,6 +74,20 @@ test.each(patientRecordResolvers)('%s enforces patient scope, injects reviewable
   await expect(Query[resolverName](null, { userId: 8 }, context)).rejects.toThrow('401:Unauthorized');
 });
 
+test('allows sections from an explicitly selected cancelled ticket after the patient permission check', async () => {
+  const context = { user: { id: 3 }, res: {} };
+  const args = { userId: 8, ticketId: '42' };
+  Wrapper._getUserImmunizationProfile.mockClear().mockResolvedValue([{ id: 42 }]);
+  permit.isMedicalPermittedPatientBased.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+  await expect(Query.getUserImmunizationProfile(null, args, context)).rejects.toThrow('401:Unauthorized');
+  expect(Wrapper._getUserImmunizationProfile).not.toHaveBeenCalled();
+  await expect(Query.getUserImmunizationProfile(null, args, context)).resolves.toEqual([{ id: 42 }]);
+  expect(Wrapper._getUserImmunizationProfile).toHaveBeenCalledWith(null, {
+    ...args, statuses: expect.arrayContaining(['Cancelled', 'Expired']),
+  }, context);
+});
+
 test('passes update tickets and user ticket IDs through only after scoped permission checks', async () => {
   permit.isMedicalPermittedPatientBased.mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
   Wrapper._getUserUpdateTicket.mockResolvedValueOnce({ id: 4 });
@@ -124,6 +138,13 @@ test('clamps approval ticket branches to the permitted staff branch and requires
   expect(Wrapper._getStatusUpdateTickets).toHaveBeenLastCalledWith(null, { branch: 'Both' }, context);
 });
 
+test.each([null, undefined, 'Invalid'])('rejects ticket listing when the permission branch is %s', async branch => {
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: true, branch });
+  Wrapper._getStatusUpdateTickets.mockClear();
+  await expect(Query.getStatusUpdateTickets(null, { branch: 'Both' }, { user: { id: 3 }, res: {} })).rejects.toThrow('401:Unauthorized');
+  expect(Wrapper._getStatusUpdateTickets).not.toHaveBeenCalled();
+});
+
 test('masks restricted Superior information, returns permitted details, and handles patient search rules', async () => {
   const context = { user: { id: 3 }, res: {} };
   const args = { userId: 9, branch: 'Manila' };
@@ -163,4 +184,29 @@ test('returns basic info rows and nulls for empty results', async () => {
   Wrapper._getPatientBasicInfo.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 8 });
   await expect(Query.getPatientBasicInfo(null, { userId: 8 }, { user: { id: 3 }, res: {} })).resolves.toBeNull();
   await expect(Query.getPatientBasicInfo(null, { userId: 8 }, { user: { id: 3 }, res: {} })).resolves.toMatchObject({ id: 8 });
+});
+
+test.each(['Student', 'Employee', null])('real ticket schema returns profile_type %p for staff', async profileType => {
+  const { graphql } = require('graphql');
+  const { makeExecutableSchema } = require('@graphql-tools/schema');
+  const path = require('path');
+  const fs = require('fs');
+  const schema = makeExecutableSchema({
+    typeDefs: fs.readFileSync(path.join(__dirname, '../../schema.graphql'), 'utf8'),
+    resolvers: { Query: { getStatusUpdateTickets: Query.getStatusUpdateTickets } },
+  });
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: true, branch: 'Manila' });
+  Wrapper._getStatusUpdateTickets.mockResolvedValueOnce([
+    { id: '9001', patientId: '7001', status: 'Pending', profile_type: profileType },
+  ]);
+  const result = await graphql({
+    schema,
+    source: 'query { getStatusUpdateTickets(statuses: [Pending], branch: Both) { id patientId status profile_type } }',
+    contextValue: { user: { id: 3 }, res: {} },
+  });
+  expect(result.errors).toBeUndefined();
+  expect(result.data.getStatusUpdateTickets[0].profile_type).toBe(profileType);
+  expect(Wrapper._getStatusUpdateTickets).toHaveBeenLastCalledWith(
+    undefined, expect.objectContaining({ branch: 'Manila' }), { user: { id: 3 }, res: {} },
+  );
 });

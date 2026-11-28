@@ -152,7 +152,7 @@ MDSystem is designed for deployment in healthcare facilities following the **MDS
    - Data access restrictions and boundaries
 
 #### 8. **Notifications & Alerts**
-   - Send notifications to patients and staff
+   - Use the Notice Center to send notifications to patients and staff
    - Configure notification preferences
    - Track notification delivery and acknowledgment
    - Support for push notifications and in-app alerts

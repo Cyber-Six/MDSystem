@@ -1,3 +1,4 @@
+import { calculateAgeFromDateOfBirth, getDateOfBirthBounds, getDateOfBirthError, personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 /**
  * Personal Info Step — Step 0 of the initial record form
  */
@@ -56,21 +57,15 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const [empCategoryOpen, setEmpCategoryOpen] = useState(false);
   const [empStatusOpen, setEmpStatusOpen] = useState(false);
   const { height: windowHeight } = useWindowDimensions();
+  const birthdayBounds = getDateOfBirthBounds();
 
   useEffect(() => {
     if (!pi.birthday) {
       if (pi.age) onUpdate({ age: '' });
       return;
     }
-    const birthDate = new Date(pi.birthday);
-    if (Number.isNaN(birthDate.getTime())) return;
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age -= 1;
-    }
-    const computedAge = age >= 0 ? String(age) : '';
+    const age = calculateAgeFromDateOfBirth(pi.birthday);
+    const computedAge = age === '' ? '' : String(age);
     if (computedAge !== (pi.age || '')) {
       onUpdate({ age: computedAge });
     }
@@ -101,7 +96,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const handleProgramSearch = useCallback((value: string) => {
     setProgramSearch(value);
     if (programTimerRef.current) clearTimeout(programTimerRef.current);
-    if (value.trim().length < 2) { setProgramSuggestions([]); return; }
+    if (value.trim().length < 3) { setProgramSuggestions([]); setProgramSearching(false); return; }
     programTimerRef.current = setTimeout(async () => {
       setProgramSearching(true);
       try {
@@ -179,11 +174,14 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
       <TextInput
         style={[...inputStyle, errors[errorKey || field] && styles.inputError]}
         value={String(pi[field] || '')}
-        onChangeText={(val) => onUpdate({ [field]: val })}
+        onChangeText={(val) => {
+          if ((field === 'studentNumber' || field === 'employeeId') && (!/^[0-9]*$/.test(val) || Number(val) > 2147483647)) return;
+          onUpdate({ [field]: val });
+        }}
         placeholder={placeholder}
         placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
         keyboardType={opts?.keyboardType}
-        maxLength={opts?.maxLength}
+        maxLength={opts?.maxLength ?? personalInfoLimits[field as keyof typeof personalInfoLimits]}
         returnKeyType="done"
       />
       {errors[errorKey || field] && <Text style={styles.errorText}>{errors[errorKey || field]}</Text>}
@@ -266,7 +264,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           onChangeText={v => updateContact('contactNumber', v)}
           placeholder="Contact Number (e.g. 09XXXXXXXXX)"
           keyboardType="phone-pad"
-          maxLength={11}
+          maxLength={personalInfoLimits.contactNumber}
           placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
           returnKeyType="done"
           onSubmitEditing={() => Keyboard.dismiss()}
@@ -299,12 +297,19 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           <View style={styles.fieldGroup}>
             <DatePickerInput
               label="Birthday"
+              minimumDate={new Date(`${birthdayBounds.min}T00:00:00`)}
+              maximumDate={new Date(`${birthdayBounds.max}T00:00:00`)}
               value={pi.birthday}
               onChange={(val) => onUpdate({ birthday: val })}
               isDark={isDark}
               required
               placeholder="Select birthday"
             />
+            {(errors.birthday || getDateOfBirthError(pi.birthday)) ? (
+              <Text accessibilityRole="alert" style={{ color: colors.error?.[500] || '#EF4444', fontSize: 12, marginTop: 4 }}>
+                {errors.birthday || getDateOfBirthError(pi.birthday)}
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.fieldGroup}>
@@ -323,7 +328,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
           {renderField('Nationality', 'nationality', 'Enter nationality')}
           {renderField('Religion', 'religion', 'Enter religion')}
-          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad', maxLength: 11 })}
+          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad' })}
           {renderField('Present Address', 'address', 'Enter present address')}
           {renderField('Province Address', 'provinceAddress', 'Enter province address')}
         </>
@@ -336,7 +341,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
             Employee Information
           </Text>
 
-          {renderField('Employee ID Number', 'employeeId', 'Enter employee ID number')}
+          {renderField('Employee ID Number', 'employeeId', 'Enter employee ID number', undefined, { keyboardType: 'number-pad', maxLength: 10 })}
           {renderField('Department', 'department', 'Enter department')}
 
           {/* Employment Category */}
@@ -526,7 +531,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
                     {programSuggestions.length > 0 ? (
                       <FlatList
-                        data={programSuggestions}
+                        data={programSuggestions.slice(0, 5)}
                         keyExtractor={item => item.id}
                         keyboardShouldPersistTaps="handled"
                         style={{ flex: 1 }}
@@ -546,10 +551,10 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
                     ) : (
                       <View style={{ paddingVertical: 32, alignItems: 'center' }}>
                         <Text style={{ fontSize: 13, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>
-                          {!programSearchFocused && programSearch.trim().length < 2
+                          {!programSearchFocused && programSearch.trim().length < 3
                             ? 'Tap search to start'
-                            : programSearch.trim().length < 2
-                            ? 'Type at least 2 characters to search'
+                            : programSearch.trim().length < 3
+                            ? 'Type at least 3 characters to search'
                             : programSearching
                             ? 'Searching...'
                             : 'No programs found'}
@@ -608,7 +613,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
             </Modal>
           </View>
 
-          {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
+          {renderField('Student Number', 'studentNumber', 'e.g. 202200001', undefined, { keyboardType: 'number-pad', maxLength: 10 })}
         </>
       )}
 

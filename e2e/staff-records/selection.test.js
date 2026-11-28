@@ -54,10 +54,10 @@ test('only successful original submission inputs become expected values; aborted
   const response = { data: { submitTicket: 'Pending' } };
   const network = [
     { request: { query: 'mutation { createInitialPersonalRecord(input: $input) { id } }', variables: { input: { first_name: 'QA' } } }, response },
-    { request: { query: 'mutation BatchCreateInitialRecords { submitTicket }', variables: { medHistInput: { notes: 'original' } } }, response },
-    { request: { query: 'mutation BatchCreateInitialRecords { submitTicket }', variables: { medHistInput: { notes: 'aborted' } } }, response: { abortedForInvalidInputProbe: true } },
+    { request: { query: 'mutation BatchCreateInitialRecords { submitTicket }', variables: { medHistInput: { conditions: [{ conditionId: '101', description: 'original' }] } } }, response },
+    { request: { query: 'mutation BatchCreateInitialRecords { submitTicket }', variables: { medHistInput: { conditions: [{ conditionId: '101', description: 'aborted' }] } } }, response: { abortedForInvalidInputProbe: true } },
   ];
-  assert.equal(submittedRecord(network).record.medicalHistory.notes, 'original');
+  assert.equal(submittedRecord(network).record.medicalHistory.conditions[0].description, 'original');
   assert.equal(submittedRecord(network).record.personalInfo.first_name, 'QA');
 });
 

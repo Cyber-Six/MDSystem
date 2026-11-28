@@ -42,10 +42,14 @@ test('requires a readable migration file', () => {
 test('CI initializes databases through schema-init without a dedicated migration operation', () => {
   const workflow = fs.readFileSync(path.resolve(__dirname, '../.github/workflows/ci.yml'), 'utf8');
   assert.doesNotMatch(workflow, /migrate-employee-category|apply-schema-migrations|apply-employee-category-migration/);
-  assert.equal((workflow.match(/--profile setup run --rm schema-init/g) || []).length, 2);
   const yaml = require('js-yaml');
   const parsed = yaml.load(workflow);
-  assert.deepEqual(parsed.on.workflow_dispatch.inputs.operation.options, ['restart', 'reset-database']);
+  assert.deepEqual(parsed.on.workflow_dispatch.inputs.operation.options, ['deploy', 'reset-database']);
+  const schemaInitSteps = parsed.jobs['deploy-pi'].steps.filter(step =>
+    step.run?.includes('--profile setup run --rm schema-init'));
+  assert.equal(schemaInitSteps.length, 1);
+  assert.match(schemaInitSteps[0].if, /github\.ref == 'refs\/heads\/deployment'/);
+  assert.match(schemaInitSteps[0].if, /inputs\.operation == 'reset-database'/);
 });
 
 test('Compose applies the employee column through post-build setup on fresh initialization', () => {

@@ -75,19 +75,12 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
 
   // Gather selected self conditions
   const selfConditions = Object.entries(mh.self).filter(([, v]) => v).map(([id]) => getCatalogName(catalogs.medicalConditionCatalog, id));
-  if (mh.selfOtherChecked && mh.selfOther) selfConditions.push(`Other: ${mh.selfOther}`);
 
   // Gather selected family conditions
   const familyConditions = Object.entries(mh.family).filter(([, v]) => v).map(([id]) => ({
     name: getCatalogName(catalogs.medicalConditionCatalog, id),
     who: mh.familyWhoHasIt?.[id] || 'Not specified',
   }));
-  if (mh.familyOtherChecked && mh.familyOther) {
-    familyConditions.push({
-      name: `Other: ${mh.familyOther}`,
-      who: mh.familyOtherWhoHasIt || 'Not specified',
-    });
-  }
 
   // Immunizations
   const immunizationNames = Object.entries(mb.immunizations).filter(([, v]) => v).map(([id]) => getCatalogName(catalogs.immunizationCatalog, id));
@@ -115,8 +108,6 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
         <DataRow label="Program" value={pi.program === 'Other' ? pi.programOther : pi.program} />
         <DataRow label="Student Number" value={pi.studentNumber} />
         <DataRow label="Student Category" value={pi.studentCategory === 'Grade11' ? 'Grade 11' : pi.studentCategory === 'Grade12' ? 'Grade 12' : pi.studentCategory} />
-        <DataRow label="Last School Attended" value={pi.lastSchoolAttended} />
-        <DataRow label="Drug Test" value={pi.drugTestDone} />
       </View>
 
       {/* Emergency Contacts */}

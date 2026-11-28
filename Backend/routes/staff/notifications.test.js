@@ -1,19 +1,25 @@
 jest.mock('../../config/middleware/jwtProtect', () => ({ jwtProtect: jest.fn(() => jest.fn()) }));
 jest.mock('../../utils/logger', () => ({ warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() }));
 jest.mock('../../services/notifications/notifyStaffs', () => ({ notifyStaffs: jest.fn() }));
-jest.mock('../../services/notifications/notifyPatients', () => ({ notifyPatients: jest.fn() }));
+jest.mock('../../services/notifications/notifyPatients', () => ({
+  PATIENT_GROUPS: ['Student', 'Employee'],
+  GROUP_BRANCHES: ['Manila', 'QuezonCity', 'Both'],
+  notifyPatients: jest.fn(),
+  notifyPatientGroup: jest.fn(),
+  listPatientNotificationGroups: jest.fn(),
+}));
 jest.mock('../../services/authorization/permit', () => ({
   permissions: { is_admin: 'is_admin', notification_allow_send_to_patients: 'notification_allow_send_to_patients' },
-  isMedicalPermitted: jest.fn(), isMedicalPermittedLocationBased: jest.fn(), getStaffBranch: jest.fn(),
+  isMedicalPermitted: jest.fn(),
 }));
-jest.mock('../../config/query', () => ({ verifyUserIdentities: jest.fn(), getUserIdentitiesDetailed: jest.fn(), getPatientBranches: jest.fn(), resolveUnionBranch: jest.fn() }));
+jest.mock('../../config/query', () => ({ verifyUserIdentities: jest.fn(), getUserIdentitiesDetailed: jest.fn(), getPatientBranches: jest.fn() }));
 jest.mock('../../config/sockets/notification-acknowledgement', () => ({ acknowledgeNotification: jest.fn(), getNotificationStatus: jest.fn(), getSentNotifications: jest.fn(), getReceivedNotifications: jest.fn() }));
 
 const router = require('./notifications');
 const permit = require('../../services/authorization/permit');
 const queries = require('../../config/query');
 const { notifyStaffs } = require('../../services/notifications/notifyStaffs');
-const { notifyPatients } = require('../../services/notifications/notifyPatients');
+const { notifyPatients, notifyPatientGroup, listPatientNotificationGroups } = require('../../services/notifications/notifyPatients');
 const acknowledgements = require('../../config/sockets/notification-acknowledgement');
 
 function handler(method, path) {
@@ -21,7 +27,7 @@ function handler(method, path) {
   return layer.route.stack.at(-1).handle;
 }
 function response() {
-  const res = { status: jest.fn(), json: jest.fn() };
+  const res = { status: jest.fn(), json: jest.fn(), set: jest.fn() };
   res.status.mockReturnValue(res);
   return res;
 }
@@ -30,13 +36,10 @@ const delivery = { notificationId: 'n-1', totalRecipients: 1, delivery: { delive
 
 beforeEach(() => {
   jest.clearAllMocks();
-  permit.isMedicalPermitted.mockResolvedValue({ permitted: true });
-  permit.isMedicalPermittedLocationBased.mockResolvedValue(true);
-  permit.getStaffBranch.mockResolvedValue('Manila');
+  permit.isMedicalPermitted.mockResolvedValue({ permitted: true, branch: 'Manila' });
   queries.verifyUserIdentities.mockResolvedValue({ invalid: [], totalInvalid: 0 });
   queries.getUserIdentitiesDetailed.mockResolvedValue([{ id: 7 }]);
-  queries.getPatientBranches.mockResolvedValue(['Manila']);
-  queries.resolveUnionBranch.mockReturnValue('Manila');
+  queries.getPatientBranches.mockResolvedValue([{ userId: '7', branch: 'Manila' }]);
   notifyStaffs.mockResolvedValue(delivery); notifyPatients.mockResolvedValue(delivery);
   acknowledgements.acknowledgeNotification.mockResolvedValue(true);
   acknowledgements.getNotificationStatus.mockResolvedValue(null);
@@ -70,7 +73,7 @@ test('staff broadcast delivers to all or selected valid recipients and catches s
   expect(res.json).toHaveBeenLastCalledWith({ error: 'NOTIFICATION_FAILED', message: 'Failed to send staff notifications' });
 });
 
-test('patient notifications validates recipients, resolves branch scope, authorizes, and sends', async () => {
+test('patient notifications validates recipients and permits shared-campus patients within scope', async () => {
   const run = handler('post', '/notify-patients'); const res = response();
   await run(request({ id: null, body: { message: 'hello' } }), res); expect(res.status).toHaveBeenLastCalledWith(401);
   for (const message of [null, 1]) { await run(request({ body: { message } }), res); expect(res.status).toHaveBeenLastCalledWith(400); }
@@ -79,31 +82,85 @@ test('patient notifications validates recipients, resolves branch scope, authori
   queries.getUserIdentitiesDetailed.mockResolvedValueOnce([]);
   await run(request({ body: { message: 'hi', recipientIds: [7] } }), res); expect(res.json).toHaveBeenLastCalledWith(expect.objectContaining({ error: 'INVALID_RECIPIENTS' }));
   queries.getUserIdentitiesDetailed.mockResolvedValueOnce([{ id: 7 }]);
-  queries.getPatientBranches.mockResolvedValueOnce(['Manila', 'Both']);
-  queries.resolveUnionBranch.mockReturnValueOnce('Both');
+  queries.getPatientBranches.mockResolvedValueOnce([{ userId: '7', branch: 'Manila' }, { userId: '8', branch: 'Both' }]);
   await run(request({ body: { message: 'hello', recipientIds: [7, 8] } }), res);
-  expect(permit.isMedicalPermittedLocationBased).toHaveBeenCalledWith(12, 'notification_allow_send_to_patients', 'Both');
-  expect(notifyPatients).toHaveBeenCalledWith(12, 'hello', [7, 8]);
+  expect(permit.isMedicalPermitted).toHaveBeenCalledWith(12, 'notification_allow_send_to_patients');
+  expect(notifyPatients).toHaveBeenCalledWith(12, 'hello', [7, 8], 'Manila');
   expect(res.json).toHaveBeenLastCalledWith({ success: true, ...delivery });
   await run(request({ body: { message: 'all valid', recipientIds: [7] } }), res);
-  expect(notifyPatients).toHaveBeenLastCalledWith(12, 'all valid', [7]);
+  expect(notifyPatients).toHaveBeenLastCalledWith(12, 'all valid', [7], 'Manila');
 });
 
 test('patient notifications rejects insufficient scope and handles broadcast and dependency failures', async () => {
   const run = handler('post', '/notify-patients'); const res = response();
-  permit.isMedicalPermittedLocationBased.mockResolvedValueOnce(false);
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: false, branch: null });
   await run(request({ body: { message: 'hello' } }), res);
   expect(res.status).toHaveBeenLastCalledWith(403);
-  permit.isMedicalPermittedLocationBased.mockResolvedValueOnce(true);
+  queries.getPatientBranches.mockResolvedValueOnce([{ userId: '7', branch: 'Manila' }, { userId: '8', branch: 'QuezonCity' }]);
+  await run(request({ body: { message: 'hello', recipientIds: [7, 8] } }), res);
+  expect(res.status).toHaveBeenLastCalledWith(403);
+  expect(notifyPatients).not.toHaveBeenCalled();
   await run(request({ body: { message: 'hello' } }), res);
-  expect(permit.getStaffBranch).toHaveBeenCalledWith(12);
-  expect(notifyPatients).toHaveBeenCalledWith(12, 'hello', null);
+  expect(notifyPatients).toHaveBeenCalledWith(12, 'hello', null, 'Manila');
   queries.getUserIdentitiesDetailed.mockRejectedValueOnce(new Error('database down'));
   await run(request({ body: { message: 'hello', recipientIds: [7] } }), res);
   expect(res.status).toHaveBeenLastCalledWith(500);
   notifyPatients.mockRejectedValueOnce(new Error('queue down'));
   await run(request({ body: { message: 'hello' } }), res);
   expect(res.json).toHaveBeenLastCalledWith({ error: 'NOTIFICATION_FAILED', message: 'Failed to send patient notifications' });
+});
+
+test('group preview requires patient notification permission and uses its configured campus', async () => {
+  const run = handler('get', '/notify-patient-groups');
+  const res = response();
+  await run(request({ id: null }), res);
+  expect(res.status).toHaveBeenLastCalledWith(401);
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: false, branch: null });
+  await run(request(), res);
+  expect(res.status).toHaveBeenLastCalledWith(403);
+  expect(listPatientNotificationGroups).not.toHaveBeenCalled();
+
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: true, branch: 'QuezonCity' });
+  const options = { branches: ['QuezonCity'], groups: [{ branch: 'QuezonCity', profile: 'Student', count: 3 }] };
+  listPatientNotificationGroups.mockResolvedValueOnce(options);
+  await run(request(), res);
+  expect(permit.isMedicalPermitted).toHaveBeenLastCalledWith(12, 'notification_allow_send_to_patients');
+  expect(listPatientNotificationGroups).toHaveBeenCalledWith('QuezonCity');
+  expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
+  expect(res.json).toHaveBeenLastCalledWith(options);
+});
+
+test('group send checks current scope, rejects a stale count, and never falls back to a legacy send', async () => {
+  const run = handler('post', '/notify-patient-groups');
+  const res = response();
+  const body = { message: 'Campus reminder', profile: 'Employee', branch: 'Manila', expectedCount: 3 };
+  for (const overrides of [{ profile: 'Superior' }, { branch: 'All' }, { expectedCount: 0 }, { expectedCount: '3' }]) {
+    await run(request({ body: { ...body, ...overrides } }), res);
+    expect(res.status).toHaveBeenLastCalledWith(400);
+  }
+  permit.isMedicalPermitted.mockResolvedValue({ permitted: true, branch: 'Manila' });
+  for (const branch of ['QuezonCity', 'Both']) {
+    await run(request({ body: { ...body, branch } }), res);
+    expect(res.status).toHaveBeenLastCalledWith(403);
+  }
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: false, branch: null });
+  await run(request({ body }), res);
+  expect(res.status).toHaveBeenLastCalledWith(403);
+  expect(notifyPatientGroup).not.toHaveBeenCalled();
+
+  notifyPatientGroup.mockResolvedValueOnce({ audienceChanged: true });
+  await run(request({ body }), res);
+  expect(res.status).toHaveBeenLastCalledWith(409);
+  expect(res.json).toHaveBeenLastCalledWith(expect.objectContaining({ error: 'AUDIENCE_CHANGED' }));
+  expect(notifyPatientGroup).toHaveBeenLastCalledWith(12, body.message, { profile: 'Employee', branch: 'Manila', expectedCount: 3 });
+
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: true, branch: 'Both' });
+  const result = { notificationId: 'group-1', totalRecipients: 3, deliveryCounts: { delivered: 2, queued: 1, suppressed: 0, unconfirmed: 0 } };
+  notifyPatientGroup.mockResolvedValueOnce(result);
+  await run(request({ body: { ...body, branch: 'Both' } }), res);
+  expect(notifyPatientGroup).toHaveBeenLastCalledWith(12, body.message, { profile: 'Employee', branch: 'Both', expectedCount: 3 });
+  expect(res.json).toHaveBeenLastCalledWith({ success: true, ...result });
+  expect(notifyPatients).not.toHaveBeenCalled();
 });
 
 test('acknowledgement validates user and notification and reports missing, success, and errors', async () => {

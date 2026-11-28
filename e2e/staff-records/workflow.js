@@ -16,8 +16,12 @@ async function openRecord(staff, manifest, kind, status = 'Pending') {
   await link.hover();
   await link.click();
   await expect(staff.page).toHaveURL(`${staff.url}/pending`);
-  const type = staff.page.locator('select').filter({ has: staff.page.locator('option[value="Initial Record"]') });
-  await type.selectOption(kind === 'initial' ? 'Initial Record' : 'Record Update');
+  const typeButton = staff.page.getByRole('button', { name: kind === 'initial' ? 'Initial records' : 'Record updates', exact: true });
+  if (await typeButton.count()) await typeButton.click();
+  else {
+    const type = staff.page.locator('select').filter({ has: staff.page.locator('option[value="Initial Record"]') });
+    await type.selectOption(kind === 'initial' ? 'Initial Record' : 'Record Update');
+  }
   const filter = staff.page.locator('select').filter({ has: staff.page.locator('option[value="all"]') }).filter({ has: staff.page.locator('option[value="RevisionSubmitted"]') });
   await filter.first().selectOption(status);
   const branch = manifest.record.personalInfo.branch;
@@ -38,7 +42,9 @@ async function openRecord(staff, manifest, kind, status = 'Pending') {
   }
   await expect(row, `Selected QA ticket #${manifest.ticketId} must be visible in staff queue`).toHaveCount(1);
   await row.hover();
-  await row.click();
+  const reviewAction = row.getByRole('button', { name: /^Review/ });
+  if (await reviewAction.count()) await reviewAction.click();
+  else await row.click();
   const review = staff.page.getByRole('button', { name: 'Review Full Record', exact: true });
   await expect(review).toBeVisible();
   await review.click();

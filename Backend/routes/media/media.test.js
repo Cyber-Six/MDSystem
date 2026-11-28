@@ -20,6 +20,26 @@ const response = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn(), s
 const err = message => new Error(message);
 beforeEach(() => { jest.clearAllMocks(); });
 
+test('dental photos cannot be read by another patient or staff without permission', async () => {
+  for (const user of [{ id: 5, role: 'patient' }, { id: 8, role: 'medical' }]) {
+    db.query.mockResolvedValueOnce({ rows: [{ patientId: 6 }] });
+    const res = response();
+    await record({ params: { category: 'dentalPhoto', fileId: 'synthetic-photo' }, user }, res);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.sendFile).not.toHaveBeenCalled();
+    expect(media.checkFileByUuid).not.toHaveBeenCalled();
+  }
+});
+
+test('the patient can read their own dental photo with no-store caching', async () => {
+  db.query.mockResolvedValueOnce({ rows: [{ patientId: 5 }] });
+  media.checkFileByUuid.mockResolvedValueOnce('synthetic.png');
+  const res = response();
+  await record({ params: { category: 'dentalPhoto', fileId: 'synthetic-photo' }, user: { id: 5, role: 'patient' } }, res);
+  expect(res.sendFile).toHaveBeenCalled();
+  expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+});
+
 test('stages a valid upload and handles missing files and rejected file types', async () => {
   const res = response(); await stage({ file: null }, res);
   expect(res.status).toHaveBeenCalledWith(400); expect(res.json).toHaveBeenCalledWith({ error: 'NO_FILE_UPLOADED' });

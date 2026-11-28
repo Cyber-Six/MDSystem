@@ -1,8 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import RecordDisclosure from '../record-disclosure';
+import AllergyOptionGroup from '../allergy-option-group';
+import useCatalogSearch from '../use-catalog-search';
+import React, { useState, useEffect } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup, RadioButton } from './form-elements';
 import { fetchAllMedicalCatalogs } from './medical-history-service';
 import { useBanner } from '../../../context/use-banner.js';
 import { additionalCatalogItems } from '../initial-record/review-components';
+import ExpandableOptionList from '../expandable-option-list';
+import CatalogActivityOverlay from '../catalog-activity-overlay';
 import {
   searchImmunizationCatalog,
   createImmunizationCatalog,
@@ -39,97 +44,6 @@ const ALLERGEN_TYPE_OPTIONS = [
 const ALLERGEN_TYPE_ORDER = ['Food', 'Drug', 'Environmental', 'Insect', 'Chemical', 'Other'];
 
 // Reusable search+create "Others" hook
-function useCatalogSearch({ catalog, searchFn, createFn, nameKey = 'name' }) {
-  const [dynamicItems, setDynamicItems] = useState([]);
-  const [input, setInput] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [creating, setCreating] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const wrapperRef = useRef(null);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setFocused(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleInputChange = (value) => {
-    setInput(value);
-    const trimmed = value.trim().toLowerCase();
-    if (!trimmed) {
-      setSuggestions([]);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      return;
-    }
-    const allLoaded = [...catalog, ...dynamicItems];
-    const seen = new Set();
-    const localMatches = allLoaded.filter((v) => {
-      if (seen.has(v.id)) return false;
-      seen.add(v.id);
-      return (v[nameKey] || '').toLowerCase().includes(trimmed);
-    });
-    setSuggestions(localMatches);
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const dbResults = await searchFn(value.trim());
-        const mergedMap = new Map();
-        dbResults.forEach((v) => mergedMap.set(v.id, v));
-        localMatches.forEach((v) => { if (!mergedMap.has(v.id)) mergedMap.set(v.id, v); });
-        setSuggestions(Array.from(mergedMap.values()));
-      } catch {
-        // Keep local matches on error
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-  };
-
-  const selectItem = (item) => {
-    const alreadyInMain = catalog.some((v) => v.id === item.id);
-    const alreadyInDynamic = dynamicItems.some((v) => v.id === item.id);
-    if (!alreadyInMain && !alreadyInDynamic) {
-      setDynamicItems((prev) => [...prev, item]);
-    }
-    setInput('');
-    setSuggestions([]);
-    setFocused(false);
-    return item;
-  };
-
-  const createItem = async (...args) => {
-    setCreating(true);
-    try {
-      const created = await createFn(...args);
-      if (created.length > 0) {
-        const newItem = created[0];
-        setDynamicItems((prev) => [...prev, newItem]);
-        setInput('');
-        setSuggestions([]);
-        setFocused(false);
-        return newItem;
-      }
-    } catch (err) {
-      console.error('[CatalogSearch] Failed to create catalog entry:', err.message);
-    } finally {
-      setCreating(false);
-    }
-    return null;
-  };
-
-  return {
-    dynamicItems, input, suggestions, creating, searching, focused,
-    wrapperRef, setFocused, handleInputChange, selectItem, createItem,
-  };
-}
 
 const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {} }) => {
   const { clearAllBanners } = useBanner();
@@ -227,9 +141,9 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
   const handleCheckboxChange = (field, value, checked) => {
     const currentValues = formData[field] || [];
     if (checked) {
-      handleInputChange(field, [...currentValues, value]);
+      handleInputChange(field, currentValues.some(v => String(v) === String(value)) ? currentValues : [...currentValues, value]);
     } else {
-      handleInputChange(field, currentValues.filter(v => v !== value));
+      handleInputChange(field, currentValues.filter(v => String(v) !== String(value)));
     }
   };
 
@@ -314,6 +228,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
       hospitalizations: [...catalogs.hospitalizations, ...hospitalizationOthers.dynamicItems],
       operations: [...catalogs.operations, ...operationOthers.dynamicItems],
       medications: [...catalogs.medications, ...medicationOthers.dynamicItems],
+      visualAcuity: catalogs.visualAcuity,
     };
     Object.entries(catalogsByDomain).forEach(([domain, items]) => items.forEach((item) => onCatalogItemSelected(domain, item)));
   }, [catalogs, medicalConditionOthers.dynamicItems, immunizationOthers.dynamicItems, allergenOthers.dynamicItems, hospitalizationOthers.dynamicItems, operationOthers.dynamicItems, medicationOthers.dynamicItems, onCatalogItemSelected]);
@@ -341,58 +256,56 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
         <TabGroup tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
         {/* Yourself Tab Content */}
         {activeTab === 'yourself' && (
+          <div role="tabpanel" aria-label="Yourself" className="record-history-panel">
           <>
             <div className="space-y-4 mb-8">
               <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Check any conditions that apply to you:</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {medicalConditions.map((condition) => (
+              <ExpandableOptionList items={medicalConditions} isSelected={condition => !!formData.selfConditions?.[condition.id]} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" renderItem={(condition) => (
                   <Checkbox
                     key={condition.id}
                     label={condition.label}
                     checked={formData.selfConditions?.[condition.id] || false}
                     onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                   />
-                ))}
-              </div>
+                )} />
               {/* Dynamically added medical conditions from search */}
               {medicalConditionOthers.dynamicItems.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                  {additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems).map((condition) => (
+                <div className="mt-3"><ExpandableOptionList items={additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" renderItem={(condition) => (
                     <Checkbox
                       key={condition.id}
                       label={condition.name}
                       checked={formData.selfConditions?.[condition.id] || false}
                       onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                     />
-                  ))}
-                </div>
+                  )} /></div>
               )}
               {/* Search or add medical conditions */}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
-                <div ref={medicalConditionOthers.wrapperRef}>
+                <div ref={medicalConditionOthers.wrapperRef} className="relative">
+                  <CatalogActivityOverlay action={medicalConditionOthers.creating ? 'adding' : medicalConditionOthers.searching ? 'searching' : null} />
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    placeholder="Type to search for a condition..."
+                    placeholder="Type at least 3 characters to search..."
                     value={medicalConditionOthers.input}
                     autoComplete="off"
                     onFocus={() => medicalConditionOthers.setFocused(true)}
                     onChange={(e) => medicalConditionOthers.handleInputChange(e.target.value)}
                   />
-                  {medicalConditionOthers.focused && medicalConditionOthers.input.trim() && (
+                  {medicalConditionOthers.focused && medicalConditionOthers.input.trim().length >= 3 && (
                     <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
                       {medicalConditionOthers.searching && (
                         <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                       )}
                       {medicalConditionOthers.suggestions.length > 0 ? (
                         <>
-                          {medicalConditionOthers.suggestions.map(result => (
+                          {medicalConditionOthers.suggestions.slice(0, 5).map(result => (
                             <button
                               key={result.id}
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                              onMouseDown={(e) => { e.preventDefault(); const item = medicalConditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
+                              onClick={(e) => { e.preventDefault(); const item = medicalConditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
                             >
                               {result.name}
                               {formData.selfConditions?.[result.id] && (
@@ -403,20 +316,20 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                           <button
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
-                            disabled={medicalConditionOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                            disabled={medicalConditionOthers.creating || medicalConditionOthers.searching || medicalConditionOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                           >
-                            {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                            {medicalConditionOthers.creating ? 'Adding...' : medicalConditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicalConditionOthers.searching ? 'Checking for existing options...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
                           </button>
                         </>
                       ) : (
                         <button
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
-                          disabled={medicalConditionOthers.creating}
-                          onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                          disabled={medicalConditionOthers.creating || medicalConditionOthers.searching || medicalConditionOthers.hasExactMatch}
+                          onClick={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                         >
-                          {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                          {medicalConditionOthers.creating ? 'Adding...' : medicalConditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicalConditionOthers.searching ? 'Checking for existing options...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
                         </button>
                       )}
                     </div>
@@ -439,22 +352,22 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     <RadioButton label="Yes" name="hasAllergies" value="yes" checked={formData.hasAllergies === 'yes'} onChange={(e) => handleInputChange('hasAllergies', e.target.value)} />
                     <RadioButton label="No" name="hasAllergies" value="no" checked={formData.hasAllergies === 'no'} onChange={(e) => handleInputChange('hasAllergies', e.target.value)} />
                   </div>
-                  {formData.hasAllergies === 'yes' && (
+                  <RecordDisclosure open={formData.hasAllergies === 'yes'}>
                     <div className="space-y-4">
                       {catalogs.allergens.length > 0 ? (
                         <div className="space-y-5">
                           {ALLERGEN_TYPE_ORDER.filter(type =>
                             catalogs.allergens.some(a => a.type === type)
                           ).map((type) => (
-                            <div key={type}>
-                              <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-2">{type}</p>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
+                            <AllergyOptionGroup key={type} label={type} selectedCount={catalogs.allergens.filter(a => a.type === type && (formData.selectedAllergies || []).some(id => String(id) === String(a.id))).length}>
+
+                              <div className="contents">
                                 {catalogs.allergens
                                   .filter(a => a.type === type)
                                   .map((allergen) => {
-                                    const isChecked = (formData.selectedAllergies || []).includes(allergen.id);
+                                    const isChecked = (formData.selectedAllergies || []).some(id => String(id) === String(allergen.id));
                                     return (
-                                      <div key={allergen.id}>
+                                      <div key={allergen.id} className={`allergy-option-card ${isChecked ? 'is-selected' : ''}`}>
                                         <Checkbox
                                           label={allergen.allergen}
                                           name="allergen"
@@ -462,7 +375,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                           checked={isChecked}
                                           onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
                                         />
-                                        {isChecked && (
+                                        <RecordDisclosure open={isChecked}>
                                           <div className="ml-6 mt-1 mb-1 flex gap-2">
                                             <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
                                               <option value="Unknown">Severity: Unknown</option>
@@ -476,20 +389,20 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                               <option value="Suspected">Status: Suspected</option>
                                             </select>
                                           </div>
-                                        )}
+                                        </RecordDisclosure>
                                       </div>
                                     );
                                   })}
                               </div>
-                            </div>
+                            </AllergyOptionGroup>
                           ))}
                           {/* Dynamically added allergens from search */}
-                          {allergenOthers.dynamicItems.length > 0 && (
+                          {additionalCatalogItems(catalogs.allergens, allergenOthers.dynamicItems).length > 0 && (
                             <div>
                               <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-2">Added by you</p>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
                                 {additionalCatalogItems(catalogs.allergens, allergenOthers.dynamicItems).map((allergen) => {
-                                  const isChecked = (formData.selectedAllergies || []).includes(allergen.id);
+                                  const isChecked = (formData.selectedAllergies || []).some(id => String(id) === String(allergen.id));
                                   return (
                                     <div key={allergen.id}>
                                       <Checkbox
@@ -499,7 +412,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                         checked={isChecked}
                                         onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
                                       />
-                                      {isChecked && (
+                                      <RecordDisclosure open={isChecked}>
                                         <div className="ml-6 mt-1 mb-1 flex gap-2">
                                           <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
                                             <option value="Unknown">Severity: Unknown</option>
@@ -513,7 +426,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                             <option value="Suspected">Status: Suspected</option>
                                           </select>
                                         </div>
-                                      )}
+                                      </RecordDisclosure>
                                     </div>
                                   );
                                 })}
@@ -523,32 +436,33 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                           {/* Search or add allergens */}
                           <div className="mt-2">
                             <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Allergens (search or add):</label>
-                            <div ref={allergenOthers.wrapperRef}>
+                            <div ref={allergenOthers.wrapperRef} className="relative">
+                              <CatalogActivityOverlay action={allergenOthers.creating ? 'adding' : allergenOthers.searching ? 'searching' : null} />
                               <input
                                 type="text"
                                 className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
-                                placeholder="Type to search for an allergen..."
+                                placeholder="Type at least 3 characters to search..."
                                 value={allergenOthers.input}
                                 autoComplete="off"
                                 onFocus={() => allergenOthers.setFocused(true)}
                                 onChange={(e) => allergenOthers.handleInputChange(e.target.value)}
                               />
-                              {allergenOthers.focused && allergenOthers.input.trim() && (
+                              {allergenOthers.focused && allergenOthers.input.trim().length >= 3 && (
                                 <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
                                   {allergenOthers.searching && (
                                     <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                                   )}
                                   {allergenOthers.suggestions.length > 0 ? (
                                     <>
-                                      {allergenOthers.suggestions.map(result => (
+                                      {allergenOthers.suggestions.slice(0, 5).map(result => (
                                         <button
                                           key={result.id}
                                           type="button"
                                           className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                                          onMouseDown={(e) => { e.preventDefault(); const item = allergenOthers.selectItem(result); handleCheckboxChange('selectedAllergies', item.id, true); }}
+                                          onClick={(e) => { e.preventDefault(); const item = allergenOthers.selectItem(result); handleCheckboxChange('selectedAllergies', item.id, true); }}
                                         >
                                           {result.allergen} <span className="text-xs text-secondary-400">({result.type})</span>
-                                          {(formData.selectedAllergies || []).includes(result.id) && (
+                                          {(formData.selectedAllergies || []).some(id => String(id) === String(result.id)) && (
                                             <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
                                           )}
                                         </button>
@@ -570,10 +484,10 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                         <button
                                           type="button"
                                           className="w-full text-left text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none disabled:opacity-50"
-                                          disabled={allergenOthers.creating}
-                                          onMouseDown={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleCheckboxChange('selectedAllergies', item.id, true); }}
+                                          disabled={allergenOthers.creating || allergenOthers.searching || allergenOthers.hasExactMatch}
+                                          onClick={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleCheckboxChange('selectedAllergies', item.id, true); }}
                                         >
-                                          {allergenOthers.creating ? 'Adding...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
+                                          {allergenOthers.creating ? 'Adding...' : allergenOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : allergenOthers.searching ? 'Checking for existing options...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
                                         </button>
                                       </div>
                                     </>
@@ -595,10 +509,10 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                       <button
                                         type="button"
                                         className="w-full text-left text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none disabled:opacity-50"
-                                        disabled={allergenOthers.creating}
-                                        onMouseDown={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleCheckboxChange('selectedAllergies', item.id, true); }}
+                                        disabled={allergenOthers.creating || allergenOthers.searching || allergenOthers.hasExactMatch}
+                                        onClick={async (e) => { e.preventDefault(); const item = await allergenOthers.createItem(allergenOthers.input.trim(), allergenTypeForCreate); if (item) handleCheckboxChange('selectedAllergies', item.id, true); }}
                                       >
-                                        {allergenOthers.creating ? 'Adding...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
+                                        {allergenOthers.creating ? 'Adding...' : allergenOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : allergenOthers.searching ? 'Checking for existing options...' : `+ Add "${allergenOthers.input.trim()}" as a new allergen`}
                                       </button>
                                     </div>
                                   )}
@@ -623,7 +537,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                         onChange={(e) => handleInputChange('allergiesNotes', e.target.value)}
                       />
                     </div>
-                  )}
+                  </RecordDisclosure>
                 </div>
               </AccordionSection>
 
@@ -643,7 +557,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 <RadioButton label="No" name="smoker" value="no" checked={formData.smoker === 'no'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
                 <RadioButton label="Yes" name="smoker" value="yes" checked={formData.smoker === 'yes'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
               </div>
-              {formData.smoker === 'yes' && (
+              <RecordDisclosure open={formData.smoker === 'yes'}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Input
                     label="Sticks per day"
@@ -660,7 +574,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     onChange={(e) => handleInputChange('smokerYears', e.target.value)}
                   />
                 </div>
-              )}
+              </RecordDisclosure>
             </div>
 
             {/* Alcohol Section */}
@@ -670,14 +584,14 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 <RadioButton label="No" name="alcoholDrinker" value="no" checked={formData.alcoholDrinker === 'no'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
                 <RadioButton label="Yes" name="alcoholDrinker" value="yes" checked={formData.alcoholDrinker === 'yes'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
               </div>
-              {formData.alcoholDrinker === 'yes' && (
+              <RecordDisclosure open={formData.alcoholDrinker === 'yes'}>
                 <Select
                   label="Frequency"
                   options={LIFESTYLE_FREQUENCY_OPTIONS}
                   value={formData.alcoholFrequency || ''}
                   onChange={(e) => handleInputChange('alcoholFrequency', e.target.value)}
                 />
-              )}
+              </RecordDisclosure>
             </div>
 
             {/* Vaper Section */}
@@ -687,7 +601,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 <RadioButton label="No" name="vaper" value="no" checked={formData.vaper === 'no'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
                 <RadioButton label="Yes" name="vaper" value="yes" checked={formData.vaper === 'yes'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
               </div>
-              {formData.vaper === 'yes' && (
+              <RecordDisclosure open={formData.vaper === 'yes'}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Select
                     label="Vape Type"
@@ -702,7 +616,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     onChange={(e) => handleInputChange('vapeFrequency', e.target.value)}
                   />
                 </div>
-              )}
+              </RecordDisclosure>
             </div>
           </div>
         </AccordionSection>
@@ -721,7 +635,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="visualAcuity" value="yes" checked={formData.visualAcuity === 'yes'} onChange={(e) => handleInputChange('visualAcuity', e.target.value)} />
               <RadioButton label="No" name="visualAcuity" value="no" checked={formData.visualAcuity === 'no'} onChange={(e) => handleInputChange('visualAcuity', e.target.value)} />
             </div>
-            {formData.visualAcuity === 'yes' && (
+            <RecordDisclosure open={formData.visualAcuity === 'yes'}>
               <div className="space-y-4">
                 {catalogs.visualAcuity.length > 0 && (
                   <Select
@@ -752,7 +666,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   />
                 </div>
               </div>
-            )}
+            </RecordDisclosure>
             <Textarea
               label="Visual Acuity Notes (Optional)"
               placeholder="Any additional information about your vision, glasses, or eye health."
@@ -802,7 +716,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
           <div className="space-y-4">
             <p className="text-sm text-secondary-600 mb-4">Select vaccines you have received and provide details:</p>
             <div className="space-y-2">
-              {immunizations.map((vaccine) => {
+              <ExpandableOptionList items={immunizations} isSelected={vaccine => (formData.immunizations || []).includes(vaccine.id)} className="grid grid-cols-1 md:grid-cols-2 gap-3" renderItem={(vaccine) => {
                 const isChecked = (formData.immunizations || []).includes(vaccine.id);
                 return (
                   <div key={vaccine.id}>
@@ -811,7 +725,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                       checked={isChecked}
                       onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
                     />
-                    {isChecked && (
+                    <RecordDisclosure open={isChecked}>
                       <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                         <Input
                           label="Date Received"
@@ -836,10 +750,10 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                           }}
                         />
                       </div>
-                    )}
+                    </RecordDisclosure>
                   </div>
                 );
-              })}
+              }} />
             </div>
             {/* Dynamically added vaccines from search */}
             {immunizationOthers.dynamicItems.length > 0 && (
@@ -853,7 +767,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                         checked={isChecked}
                         onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
                       />
-                      {isChecked && (
+                      <RecordDisclosure open={isChecked}>
                         <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                           <Input
                             label="Date Received"
@@ -878,7 +792,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             }}
                           />
                         </div>
-                      )}
+                      </RecordDisclosure>
                     </div>
                   );
                 })}
@@ -887,29 +801,30 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
             {/* Search or add vaccines */}
             <div className="mt-4">
               <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Vaccines (search or add):</label>
-              <div ref={immunizationOthers.wrapperRef}>
+              <div ref={immunizationOthers.wrapperRef} className="relative">
+                <CatalogActivityOverlay action={immunizationOthers.creating ? 'adding' : immunizationOthers.searching ? 'searching' : null} />
                 <input
                   type="text"
                   className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
-                  placeholder="Type to search for a vaccine..."
+                  placeholder="Type at least 3 characters to search..."
                   value={immunizationOthers.input}
                   autoComplete="off"
                   onFocus={() => immunizationOthers.setFocused(true)}
                   onChange={(e) => immunizationOthers.handleInputChange(e.target.value)}
                 />
-                {immunizationOthers.focused && immunizationOthers.input.trim() && (
+                {immunizationOthers.focused && immunizationOthers.input.trim().length >= 3 && (
                   <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
                     {immunizationOthers.searching && (
                       <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                     )}
                     {immunizationOthers.suggestions.length > 0 ? (
                       <>
-                        {immunizationOthers.suggestions.map(result => (
+                        {immunizationOthers.suggestions.slice(0, 5).map(result => (
                           <button
                             key={result.id}
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                            onMouseDown={(e) => { e.preventDefault(); const item = immunizationOthers.selectItem(result); handleCheckboxChange('immunizations', item.id, true); }}
+                            onClick={(e) => { e.preventDefault(); const item = immunizationOthers.selectItem(result); handleCheckboxChange('immunizations', item.id, true); }}
                           >
                             {result.name}
                             {(formData.immunizations || []).includes(result.id) && (
@@ -920,32 +835,26 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                         <button
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
-                          disabled={immunizationOthers.creating}
-                          onMouseDown={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) handleCheckboxChange('immunizations', item.id, true); }}
+                          disabled={immunizationOthers.creating || immunizationOthers.searching || immunizationOthers.hasExactMatch}
+                          onClick={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) handleCheckboxChange('immunizations', item.id, true); }}
                         >
-                          {immunizationOthers.creating ? 'Adding...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
+                          {immunizationOthers.creating ? 'Adding...' : immunizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : immunizationOthers.searching ? 'Checking for existing options...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
                         </button>
                       </>
                     ) : (
                       <button
                         type="button"
                         className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
-                        disabled={immunizationOthers.creating}
-                        onMouseDown={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) handleCheckboxChange('immunizations', item.id, true); }}
+                        disabled={immunizationOthers.creating || immunizationOthers.searching || immunizationOthers.hasExactMatch}
+                        onClick={async (e) => { e.preventDefault(); const item = await immunizationOthers.createItem(immunizationOthers.input.trim()); if (item) handleCheckboxChange('immunizations', item.id, true); }}
                       >
-                        {immunizationOthers.creating ? 'Adding...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
+                        {immunizationOthers.creating ? 'Adding...' : immunizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : immunizationOthers.searching ? 'Checking for existing options...' : `+ Add "${immunizationOthers.input.trim()}" as a new vaccine`}
                       </button>
                     )}
                   </div>
                 )}
               </div>
             </div>
-            <Textarea
-              label="Immunization Notes (Optional)"
-              placeholder="Any additional information about your immunizations, dates, or reactions."
-              value={formData.immunizationNotes || ''}
-              onChange={(e) => handleInputChange('immunizationNotes', e.target.value)}
-            />
           </div>
         </AccordionSection>
 
@@ -963,13 +872,13 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="hasHospitalizations" value="yes" checked={formData.hasHospitalizations === 'yes'} onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)} />
               <RadioButton label="No" name="hasHospitalizations" value="no" checked={formData.hasHospitalizations === 'no'} onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)} />
             </div>
-            {formData.hasHospitalizations === 'yes' && (
+            <RecordDisclosure open={formData.hasHospitalizations === 'yes'}>
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.hospitalizations.length > 0 ? (
                   <div className="space-y-2">
-                    {catalogs.hospitalizations.map((condition) => {
+                    {[...catalogs.hospitalizations].sort((a, b) => Number(!!formData.hospitalizationConditions?.[b.id]) - Number(!!formData.hospitalizationConditions?.[a.id])).slice(0, 6).map((condition) => {
                       const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
                       return (
                         <div key={condition.id}>
@@ -978,7 +887,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                               <Input
                                 label="Admission Date"
@@ -993,7 +902,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -1011,7 +920,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                               <Input
                                 label="Admission Date"
@@ -1026,7 +935,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -1035,29 +944,30 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {/* Search or add hospitalization conditions */}
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
-                  <div ref={hospitalizationOthers.wrapperRef}>
+                  <div ref={hospitalizationOthers.wrapperRef} className="relative">
+                    <CatalogActivityOverlay action={hospitalizationOthers.creating ? 'adding' : hospitalizationOthers.searching ? 'searching' : null} />
                     <input
                       type="text"
                       className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
-                      placeholder="Type to search for a condition..."
+                      placeholder="Type at least 3 characters to search..."
                       value={hospitalizationOthers.input}
                       autoComplete="off"
                       onFocus={() => hospitalizationOthers.setFocused(true)}
                       onChange={(e) => hospitalizationOthers.handleInputChange(e.target.value)}
                     />
-                    {hospitalizationOthers.focused && hospitalizationOthers.input.trim() && (
+                    {hospitalizationOthers.focused && hospitalizationOthers.input.trim().length >= 3 && (
                       <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
                         {hospitalizationOthers.searching && (
                           <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                         )}
                         {hospitalizationOthers.suggestions.length > 0 ? (
                           <>
-                            {hospitalizationOthers.suggestions.map(result => (
+                            {hospitalizationOthers.suggestions.slice(0, 5).map(result => (
                               <button
                                 key={result.id}
                                 type="button"
                                 className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                                onMouseDown={(e) => { e.preventDefault(); const item = hospitalizationOthers.selectItem(result); handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
+                                onClick={(e) => { e.preventDefault(); const item = hospitalizationOthers.selectItem(result); handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
                               >
                                 {result.name}
                                 {formData.hospitalizationConditions?.[result.id] && (
@@ -1068,20 +978,20 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             <button
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
-                              disabled={hospitalizationOthers.creating}
-                              onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
+                              disabled={hospitalizationOthers.creating || hospitalizationOthers.searching || hospitalizationOthers.hasExactMatch}
+                              onClick={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
                             >
-                              {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
+                              {hospitalizationOthers.creating ? 'Adding...' : hospitalizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : hospitalizationOthers.searching ? 'Checking for existing options...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
                             </button>
                           </>
                         ) : (
                           <button
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
-                            disabled={hospitalizationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
+                            disabled={hospitalizationOthers.creating || hospitalizationOthers.searching || hospitalizationOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
                           >
-                            {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
+                            {hospitalizationOthers.creating ? 'Adding...' : hospitalizationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : hospitalizationOthers.searching ? 'Checking for existing options...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
                           </button>
                         )}
                       </div>
@@ -1095,7 +1005,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   onChange={(e) => handleInputChange('hospitalizationNotes', e.target.value)}
                 />
               </div>
-            )}
+            </RecordDisclosure>
           </div>
         </AccordionSection>
 
@@ -1113,13 +1023,13 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="hasSurgeries" value="yes" checked={formData.hasSurgeries === 'yes'} onChange={(e) => handleInputChange('hasSurgeries', e.target.value)} />
               <RadioButton label="No" name="hasSurgeries" value="no" checked={formData.hasSurgeries === 'no'} onChange={(e) => handleInputChange('hasSurgeries', e.target.value)} />
             </div>
-            {formData.hasSurgeries === 'yes' && (
+            <RecordDisclosure open={formData.hasSurgeries === 'yes'}>
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.operations.length > 0 ? (
                   <div className="space-y-2">
-                    {catalogs.operations.map((procedure) => {
+                    {[...catalogs.operations].sort((a, b) => Number(!!formData.operationConditions?.[b.id]) - Number(!!formData.operationConditions?.[a.id])).slice(0, 6).map((procedure) => {
                       const isChecked = formData.operationConditions?.[procedure.id] || false;
                       return (
                         <div key={procedure.id}>
@@ -1128,7 +1038,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1">
                               <Input
                                 label="Date of Operation"
@@ -1137,7 +1047,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -1155,7 +1065,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1">
                               <Input
                                 label="Date of Operation"
@@ -1164,7 +1074,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -1173,29 +1083,30 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {/* Search or add operations */}
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Operations (search or add):</label>
-                  <div ref={operationOthers.wrapperRef}>
+                  <div ref={operationOthers.wrapperRef} className="relative">
+                    <CatalogActivityOverlay action={operationOthers.creating ? 'adding' : operationOthers.searching ? 'searching' : null} />
                     <input
                       type="text"
                       className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
-                      placeholder="Type to search for a procedure..."
+                      placeholder="Type at least 3 characters to search..."
                       value={operationOthers.input}
                       autoComplete="off"
                       onFocus={() => operationOthers.setFocused(true)}
                       onChange={(e) => operationOthers.handleInputChange(e.target.value)}
                     />
-                    {operationOthers.focused && operationOthers.input.trim() && (
+                    {operationOthers.focused && operationOthers.input.trim().length >= 3 && (
                       <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
                         {operationOthers.searching && (
                           <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                         )}
                         {operationOthers.suggestions.length > 0 ? (
                           <>
-                            {operationOthers.suggestions.map(result => (
+                            {operationOthers.suggestions.slice(0, 5).map(result => (
                               <button
                                 key={result.id}
                                 type="button"
                                 className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                                onMouseDown={(e) => { e.preventDefault(); const item = operationOthers.selectItem(result); handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
+                                onClick={(e) => { e.preventDefault(); const item = operationOthers.selectItem(result); handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
                               >
                                 {result.name}
                                 {formData.operationConditions?.[result.id] && (
@@ -1206,20 +1117,20 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             <button
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
-                              disabled={operationOthers.creating}
-                              onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
+                              disabled={operationOthers.creating || operationOthers.searching || operationOthers.hasExactMatch}
+                              onClick={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
                             >
-                              {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
+                              {operationOthers.creating ? 'Adding...' : operationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : operationOthers.searching ? 'Checking for existing options...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
                             </button>
                           </>
                         ) : (
                           <button
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
-                            disabled={operationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
+                            disabled={operationOthers.creating || operationOthers.searching || operationOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
                           >
-                            {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
+                            {operationOthers.creating ? 'Adding...' : operationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : operationOthers.searching ? 'Checking for existing options...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
                           </button>
                         )}
                       </div>
@@ -1233,7 +1144,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   onChange={(e) => handleInputChange('surgeryNotes', e.target.value)}
                 />
               </div>
-            )}
+            </RecordDisclosure>
           </div>
         </AccordionSection>
 
@@ -1251,11 +1162,11 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="hasMedications" value="yes" checked={formData.hasMedications === 'yes'} onChange={() => onChange({ ...formData, hasMedications: 'yes', selectedMedications: formData.selectedMedications || {} })} />
               <RadioButton label="No" name="hasMedications" value="no" checked={formData.hasMedications === 'no'} onChange={() => onChange({ ...formData, hasMedications: 'no', selectedMedications: {} })} />
             </div>
-            {formData.hasMedications === 'yes' && (
+            <RecordDisclosure open={formData.hasMedications === 'yes'}>
               <div className="space-y-4">
                 {catalogs.medications.length > 0 ? (
                   <div className="space-y-2">
-                    {catalogs.medications.map((medicine) => {
+                    {[...catalogs.medications].sort((a, b) => Number(!!formData.selectedMedications?.[b.id]) - Number(!!formData.selectedMedications?.[a.id])).slice(0, 6).map((medicine) => {
                       const isChecked = formData.selectedMedications?.[medicine.id] || false;
                       return (
                         <div key={medicine.id}>
@@ -1289,29 +1200,30 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {/* Search or add medications */}
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Medications (search or add):</label>
-                  <div ref={medicationOthers.wrapperRef}>
+                  <div ref={medicationOthers.wrapperRef} className="relative">
+                    <CatalogActivityOverlay action={medicationOthers.creating ? 'adding' : medicationOthers.searching ? 'searching' : null} />
                     <input
                       type="text"
                       className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
-                      placeholder="Type to search for a medication..."
+                      placeholder="Type at least 3 characters to search..."
                       value={medicationOthers.input}
                       autoComplete="off"
                       onFocus={() => medicationOthers.setFocused(true)}
                       onChange={(e) => medicationOthers.handleInputChange(e.target.value)}
                     />
-                    {medicationOthers.focused && medicationOthers.input.trim() && (
+                    {medicationOthers.focused && medicationOthers.input.trim().length >= 3 && (
                       <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
                         {medicationOthers.searching && (
                           <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                         )}
                         {medicationOthers.suggestions.length > 0 ? (
                           <>
-                            {medicationOthers.suggestions.map(result => (
+                            {medicationOthers.suggestions.slice(0, 5).map(result => (
                               <button
                                 key={result.id}
                                 type="button"
                                 className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                                onMouseDown={(e) => { e.preventDefault(); const item = medicationOthers.selectItem(result); handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
+                                onClick={(e) => { e.preventDefault(); const item = medicationOthers.selectItem(result); handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
                               >
                                 {result.name}
                                 {formData.selectedMedications?.[result.id] && (
@@ -1322,20 +1234,20 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             <button
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
-                              disabled={medicationOthers.creating}
-                              onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
+                              disabled={medicationOthers.creating || medicationOthers.searching || medicationOthers.hasExactMatch}
+                              onClick={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
                             >
-                              {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
+                              {medicationOthers.creating ? 'Adding...' : medicationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicationOthers.searching ? 'Checking for existing options...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
                             </button>
                           </>
                         ) : (
                           <button
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
-                            disabled={medicationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
+                            disabled={medicationOthers.creating || medicationOthers.searching || medicationOthers.hasExactMatch}
+                            onClick={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
                           >
-                            {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
+                            {medicationOthers.creating ? 'Adding...' : medicationOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicationOthers.searching ? 'Checking for existing options...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
                           </button>
                         )}
                       </div>
@@ -1349,22 +1261,22 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   onChange={(e) => handleInputChange('medicationNotes', e.target.value)}
                 />
               </div>
-            )}
+            </RecordDisclosure>
           </div>
         </AccordionSection>
       </div>
           </>
+          </div>
         )}
 
         {/* Family Tab Content - Matching Initial Record Format */}
         {activeTab === 'family' && (
-          <div className="space-y-4">
+          <div role="tabpanel" aria-label="Family" className="space-y-4 record-history-panel">
             <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">
               Check any conditions that apply to your immediate family members and specify the relationship:
             </p>
             
-            <div className="space-y-3">
-              {medicalConditions.map((condition) => (
+            <ExpandableOptionList items={medicalConditions} isSelected={condition => !!formData.familyConditions?.[condition.id]?.checked} className="space-y-3" renderItem={(condition) => (
                 <div 
                   key={condition.id} 
                   className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"
@@ -1385,9 +1297,9 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     </div>
                   )}
                 </div>
-              ))}
+              )} />
               {/* Dynamically added family medical conditions from search */}
-              {additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems).map((condition) => (
+              <ExpandableOptionList items={additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems)} className="space-y-3" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"
@@ -1408,34 +1320,34 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )} />
             {/* Search or add family medical conditions */}
             <div className="mt-4">
               <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
-              <div ref={medicalConditionOthers.wrapperRef}>
+              <div ref={medicalConditionOthers.wrapperRef} className="relative">
+                <CatalogActivityOverlay action={medicalConditionOthers.creating ? 'adding' : medicalConditionOthers.searching ? 'searching' : null} />
                 <input
                   type="text"
                   className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
-                  placeholder="Type to search for a condition..."
+                  placeholder="Type at least 3 characters to search..."
                   value={medicalConditionOthers.input}
                   autoComplete="off"
                   onFocus={() => medicalConditionOthers.setFocused(true)}
                   onChange={(e) => medicalConditionOthers.handleInputChange(e.target.value)}
                 />
-                {medicalConditionOthers.focused && medicalConditionOthers.input.trim() && (
+                {medicalConditionOthers.focused && medicalConditionOthers.input.trim().length >= 3 && (
                   <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
                     {medicalConditionOthers.searching && (
                       <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                     )}
                     {medicalConditionOthers.suggestions.length > 0 ? (
                       <>
-                        {medicalConditionOthers.suggestions.map(result => (
+                        {medicalConditionOthers.suggestions.slice(0, 5).map(result => (
                           <button
                             key={result.id}
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                            onMouseDown={(e) => { e.preventDefault(); const item = medicalConditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
+                            onClick={(e) => { e.preventDefault(); const item = medicalConditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
                           >
                             {result.name}
                             {formData.familyConditions?.[result.id]?.checked && (
@@ -1446,20 +1358,20 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                         <button
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
-                          disabled={medicalConditionOthers.creating}
-                          onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                          disabled={medicalConditionOthers.creating || medicalConditionOthers.searching || medicalConditionOthers.hasExactMatch}
+                          onClick={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                         >
-                          {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                          {medicalConditionOthers.creating ? 'Adding...' : medicalConditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicalConditionOthers.searching ? 'Checking for existing options...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
                         </button>
                       </>
                     ) : (
                       <button
                         type="button"
                         className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
-                        disabled={medicalConditionOthers.creating}
-                        onMouseDown={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                        disabled={medicalConditionOthers.creating || medicalConditionOthers.searching || medicalConditionOthers.hasExactMatch}
+                        onClick={async (e) => { e.preventDefault(); const item = await medicalConditionOthers.createItem(medicalConditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                       >
-                        {medicalConditionOthers.creating ? 'Adding...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
+                        {medicalConditionOthers.creating ? 'Adding...' : medicalConditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : medicalConditionOthers.searching ? 'Checking for existing options...' : `+ Add "${medicalConditionOthers.input.trim()}" as a new condition`}
                       </button>
                     )}
                   </div>

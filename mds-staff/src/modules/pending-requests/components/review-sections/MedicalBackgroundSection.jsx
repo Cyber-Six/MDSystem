@@ -1,5 +1,34 @@
 import React from 'react';
-import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
+import SectionWrapper, { DataRow, EditableField, formatReviewDate, hasReviewValue, ReviewChip, ReviewGroup, ReviewNote } from './SectionWrapper';
+
+const NoEntries = ({ children }) => (
+  <p className="m-0 text-sm text-secondary-600 dark:text-neutral-300">{children}</p>
+);
+
+const groupedNotes = (items, sharedNote, getName) => {
+  const groups = new Map();
+  const keyOf = (value) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').toLowerCase() : '';
+  const sharedKey = keyOf(sharedNote);
+  items.forEach((item) => {
+    const key = keyOf(item.notes);
+    if (!key || key === sharedKey) return;
+    const group = groups.get(key) || { value: item.notes, names: [] };
+    group.names.push(getName(item));
+    groups.set(key, group);
+  });
+  return [...groups.values()];
+};
+
+const visualDetailsFromNotes = (notes) => {
+  const prefix = 'VA_META::';
+  if (typeof notes !== 'string' || !notes.startsWith(prefix)) return null;
+  try {
+    const details = JSON.parse(notes.slice(prefix.length));
+    return details?.version === 2 ? details : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * MedicalBackgroundSection
@@ -39,276 +68,174 @@ const MedicalBackgroundSection = ({
   const getOriginal = (key, current) =>
     editedFields[key] !== undefined ? current : undefined;
 
+  const showVapingDetails = !isEditing || getVal('vaper', lifestyle?.vapeUser ? 'Yes' : 'No') === 'Yes';
+  const yesNo = (value) => value == null ? '' : value ? 'Yes' : 'No';
+  const smokerDisplay = `${yesNo(lifestyle?.smoker)}${lifestyle?.smoker && [lifestyle.numberOfCigarettesPerDay && `${lifestyle.numberOfCigarettesPerDay} sticks/day`, lifestyle.yearsSmoked && `${lifestyle.yearsSmoked} years`].filter(Boolean).length ? ` (${[lifestyle.numberOfCigarettesPerDay && `${lifestyle.numberOfCigarettesPerDay} sticks/day`, lifestyle.yearsSmoked && `${lifestyle.yearsSmoked} years`].filter(Boolean).join(', ')})` : ''}`;
+  const alcoholDisplay = `${yesNo(lifestyle?.alcoholConsumer)}${lifestyle?.alcoholConsumer && lifestyle.frequencyOfAlcoholConsumption ? ` (${lifestyle.frequencyOfAlcoholConsumption})` : ''}`;
+  const vaperDisplay = `${yesNo(lifestyle?.vapeUser)}${lifestyle?.vapeUser && [lifestyle.vapeType, lifestyle.vapeFrequency].filter(Boolean).length ? ` (${[lifestyle.vapeType, lifestyle.vapeFrequency].filter(Boolean).join(', ')})` : ''}`;
+
   const getCatalogName = (catalog, id, nameField = 'name') => {
     if (!catalog?.length || id === undefined || id === null) return null;
     const item = catalog.find((c) => String(c.id) === String(id));
     return item?.[nameField] ?? null;
   };
 
-  const formatDate = (d) => {
-    if (!d) return null;
-    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
-  };
+  const immunizations = immunizationProfile?.immunizations ?? [];
+  const allergies = allergyProfile?.allergies ?? [];
+  const hospitalizations = hospitalizationProfile?.hospitalizations ?? [];
+  const operations = operationProfile?.operations ?? [];
+  const medications = medicationProfile?.medications ?? [];
+  const allergyNotes = groupedNotes(allergies, allergyProfile?.notes, item => catalogs.allergenCatalog?.find(entry => String(entry.id) === String(item.allergenCatalogId))?.allergen || 'Unresolved choice');
+  const hospitalizationNotes = groupedNotes(hospitalizations, hospitalizationProfile?.notes, item => getCatalogName(catalogs.hospitalizationCatalog, item.conditionId) || 'Unresolved choice');
+  const operationNotes = groupedNotes(operations, operationProfile?.notes, item => getCatalogName(catalogs.operationCatalog, item.procedureId) || 'Unresolved choice');
+  const medicationReasons = groupedNotes(medications.map(item => ({ ...item, notes: item.description })), null, item => getCatalogName(catalogs.medicationCatalog, item.medicineId) || 'Unresolved choice');
+
+  const showLifestyle = [lifestyle?.smoker, lifestyle?.alcoholConsumer, lifestyle?.vapeUser, lifestyle?.notes,
+    lifestyle?.numberOfCigarettesPerDay, lifestyle?.yearsSmoked, lifestyle?.frequencyOfAlcoholConsumption,
+    lifestyle?.vapeType, lifestyle?.vapeFrequency].some(hasReviewValue);
+  const acuity = visualAcuityProfile?.acuity;
+  const visualDetails = visualDetailsFromNotes(acuity?.notes);
+  const acuityType = getCatalogName(catalogs.visualAcuityCatalog, acuity?.acuityId);
+  const showAcuity = [acuityType, acuity?.left_eye, acuity?.right_eye, acuity?.recorded_at, acuity?.notes, visualAcuityProfile?.notes].some(hasReviewValue);
+  const showVitals = [...vitalKeys, 'notes', 'created_at'].some((key) => hasReviewValue(vitalSigns?.[key]));
 
   return (
     <SectionWrapper
       title="Medical Background"
-      scopeLabel="Medical"
       isLocked={isLocked}
-      icon={
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-        </svg>
-      }
       isEditing={isEditing}
       onToggleEdit={onToggleEdit}
       hasEdits={hasEdits}
       isPending={isPending}
     >
-      {/* ── Allergies ── */}
-      <div>
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Allergies
-        </h4>
-        {allergyProfile?.allergies?.length > 0 ? (() => {
-          // Build a lookup map for quick access: id → { allergen, type }
-          const allergenMap = {};
-          (catalogs.allergenCatalog || []).forEach((c) => { allergenMap[String(c.id)] = c; });
+      <ReviewGroup title="Immunizations">
+        {immunizations.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {immunizations.map((item, index) => (
+              <ReviewChip key={item.id ?? index} tone="vaccine" data-review-entry={`immunizationProfile:${index}`}
+                detail={[formatReviewDate(item.immunizationDate), hasReviewValue(item.doseNumber) && `Dose ${item.doseNumber}`].filter(Boolean).join(' · ')}>
+                {getCatalogName(catalogs.immunizationCatalog, item.vaccineTypeId) || 'Unresolved choice'}
+              </ReviewChip>
+            ))}
+          </div>
+        ) : <NoEntries>No immunizations recorded for this ticket.</NoEntries>}
+      </ReviewGroup>
 
-          // Group allergies by allergen type
-          const typeOrder = ['Food', 'Drug', 'Environmental', 'Insect', 'Chemical', 'Other'];
-          const grouped = {};
-          allergyProfile.allergies.forEach((a) => {
-            const entry = allergenMap[String(a.allergenCatalogId)];
-            const type = entry?.type || 'Other';
-            if (!grouped[type]) grouped[type] = [];
-            grouped[type].push({ ...a, _allergenName: entry?.allergen || null });
-          });
-
-          const sortedTypes = [
-            ...typeOrder.filter((t) => grouped[t]),
-            ...Object.keys(grouped).filter((t) => !typeOrder.includes(t)),
-          ];
-
-          return (
-            <div className="space-y-3">
-              {sortedTypes.map((type) => (
-                <div key={type}>
-                  <p className="text-xs font-medium text-secondary-400 dark:text-neutral-500 uppercase tracking-wide mb-1">
-                    {type}
-                  </p>
-                  <div className="space-y-2 pl-2">
-                    {grouped[type].map((a, i) => (
-                      <div key={a.id ?? i} data-review-entry={`allergyProfile:${allergyProfile.allergies.findIndex(item => String(item.allergenCatalogId) === String(a.allergenCatalogId))}`} className="flex items-center gap-2 flex-wrap">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                          a.status === 'Active'
-                            ? 'bg-error-100 dark:bg-error-900/20 text-error-800 dark:text-error-400'
-                            : a.status === 'Resolved'
-                            ? 'bg-success-100 dark:bg-success-900/20 text-success-800 dark:text-success-400'
-                            : 'bg-warning-100 dark:bg-warning-900/20 text-warning-800 dark:text-warning-400'
-                        }`}>
-                          {a._allergenName || 'Unresolved choice'}
-                        </span>
-                        <span className="text-xs text-secondary-600 dark:text-neutral-400">
-                          Severity: {a.severity || '—'} &middot; Status: {a.status}
-                        </span>
-                        {a.dateIdentified && <span className="text-xs">Identified: {formatDate(a.dateIdentified)}</span>}
-                        {a.notes && (
-                          <span className="text-xs text-secondary-500 dark:text-neutral-500 italic">
-                            — {a.notes}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+      <ReviewGroup title="Allergies" className="record-review-group record-review-allergies">
+        {allergies.length > 0 ? (
+          <>
+            <dl><DataRow label="Has Allergies" value={true} /></dl>
+            <p className="mb-1 mt-2 text-sm text-secondary-900 dark:text-neutral-100">Selected Allergies</p>
+            <div className="flex flex-wrap gap-2">
+              {allergies.map((item, index) => {
+                const allergen = catalogs.allergenCatalog?.find((entry) => String(entry.id) === String(item.allergenCatalogId));
+                const details = [allergen?.type, item.severity, item.status, formatReviewDate(item.dateIdentified)]
+                  .filter(hasReviewValue).join('; ');
+                return (
+                  <ReviewChip key={item.id ?? index} tone="condition" detail={details && `(${details})`} data-review-entry={`allergyProfile:${index}`}>
+                    {allergen?.allergen || 'Unresolved choice'}
+                  </ReviewChip>
+                );
+              })}
             </div>
-          );
-        })() : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No allergies reported</p>
-        )}
-        {allergyProfile?.notes && (
-          <p className="mt-1 text-xs text-secondary-500 dark:text-neutral-500">Note: {allergyProfile.notes}</p>
-        )}
-      </div>
+          </>
+        ) : <NoEntries>No allergy entries recorded for this ticket.</NoEntries>}
+        <ReviewNote label="Allergy Notes" value={allergyProfile?.notes} />
+        {allergyNotes.map((note, index) => <ReviewNote key={index} label={`Allergy Notes (${note.names.join(', ')})`} value={note.value} />)}
+      </ReviewGroup>
 
-      {/* ── Immunizations ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Immunizations
-        </h4>
-        {immunizationProfile?.immunizations?.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                  <th className="text-left py-1.5 px-2 text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase">Vaccine</th>
-                  <th className="text-left py-1.5 px-2 text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase">Date</th>
-                  <th className="text-left py-1.5 px-2 text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase">Dose #</th>
-                </tr>
-              </thead>
-              <tbody>
-                {immunizationProfile.immunizations.map((imm, i) => (
-                  <tr key={imm.id ?? i} data-review-entry={`immunizationProfile:${immunizationProfile.immunizations.findIndex(item => String(item.vaccineTypeId) === String(imm.vaccineTypeId))}`} className="border-b border-neutral-100 dark:border-neutral-700/50">
-                    <td className="py-1.5 px-2 text-secondary-900 dark:text-white">
-                      {getCatalogName(catalogs.immunizationCatalog, imm.vaccineTypeId) || 'Unresolved choice'}
-                    </td>
-                    <td className="py-1.5 px-2 text-secondary-700 dark:text-neutral-300">
-                      {formatDate(imm.immunizationDate)}
-                    </td>
-                    <td className="py-1.5 px-2 text-secondary-700 dark:text-neutral-300">
-                      {imm.doseNumber}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No immunizations reported</p>
-        )}
-      </div>
+      <ReviewGroup title="Hospitalizations">
+        {hospitalizations.length > 0
+          ? <dl><DataRow label="Hospitalization" value={true} /></dl>
+          : <NoEntries>No hospitalizations recorded for this ticket.</NoEntries>}
+        {hospitalizations.map((item, index) => (
+          <dl key={item.id ?? index} data-review-entry={`hospitalizationProfile:${index}`}>
+            <DataRow label={getCatalogName(catalogs.hospitalizationCatalog, item.conditionId) || 'Unresolved choice'}
+              value={[item.admissionDate && `Admitted: ${formatReviewDate(item.admissionDate)}`,
+                item.dischargeDate && `Discharged: ${formatReviewDate(item.dischargeDate)}`].filter(Boolean).join(' · ') || 'Date not specified'} />
+          </dl>
+        ))}
+        <ReviewNote label="Hospitalization Notes" value={hospitalizationProfile?.notes} />
+        {hospitalizationNotes.map((note, index) => <ReviewNote key={index} label={`Hospitalization Notes (${note.names.join(', ')})`} value={note.value} />)}
+      </ReviewGroup>
 
-      {/* ── Hospitalizations ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Hospitalizations
-        </h4>
-        {hospitalizationProfile?.hospitalizations?.length > 0 ? (
-          <div className="space-y-2">
-            {hospitalizationProfile.hospitalizations.map((h, i) => (
-              <div key={h.id ?? i} data-review-entry={`hospitalizationProfile:${hospitalizationProfile.hospitalizations.findIndex(item => String(item.conditionId) === String(h.conditionId))}`} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
-                <DataRow label="Condition" value={getCatalogName(catalogs.hospitalizationCatalog, h.conditionId) || 'Unresolved choice'} />
-                <DataRow label="Admitted" value={formatDate(h.admissionDate)} />
-                <DataRow label="Discharged" value={formatDate(h.dischargeDate) || 'Ongoing'} />
-                {h.notes && <DataRow label="Notes" value={h.notes} />}
-              </div>
+      <ReviewGroup title="Surgery and Operations">
+        {operations.length > 0
+          ? <dl><DataRow label="Surgery/Operation" value={true} /></dl>
+          : <NoEntries>No surgeries or operations recorded for this ticket.</NoEntries>}
+        {operations.map((item, index) => (
+          <dl key={item.id ?? index} data-review-entry={`operationProfile:${index}`}>
+            <DataRow label={getCatalogName(catalogs.operationCatalog, item.procedureId) || 'Unresolved choice'}
+              value={formatReviewDate(item.operationDate) || 'Date not specified'} />
+          </dl>
+        ))}
+        <ReviewNote label="Operation Notes" value={operationProfile?.notes} />
+        {operationNotes.map((note, index) => <ReviewNote key={index} label={`Operation Notes (${note.names.join(', ')})`} value={note.value} />)}
+      </ReviewGroup>
+
+      <ReviewGroup title="Medications">
+        {medications.length > 0
+          ? <dl><DataRow label="Maintenance Medications" value={true} /></dl>
+          : <NoEntries>No medications recorded for this ticket.</NoEntries>}
+        {medications.length > 0 && <>
+          <p className="mb-1 mt-2 text-sm text-secondary-900 dark:text-neutral-100">Selected Medications</p>
+          <div className="flex flex-wrap gap-2">
+            {medications.map((item, index) => (
+              <ReviewChip key={item.id ?? index} tone="medication" data-review-entry={`medicationProfile:${index}`}>
+                {getCatalogName(catalogs.medicationCatalog, item.medicineId) || 'Unresolved choice'}
+              </ReviewChip>
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No hospitalizations reported</p>
-        )}
-      </div>
+        </>}
+        {medicationReasons.map((reason, index) => <ReviewNote key={index} label={`Medication Reason (${reason.names.join(', ')})`} value={reason.value} />)}
+        <ReviewNote label="Medication Notes" value={medicationProfile?.notes} />
+      </ReviewGroup>
 
-      {/* ── Operations / Surgeries ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Operations / Surgeries
-        </h4>
-        {operationProfile?.operations?.length > 0 ? (
-          <div className="space-y-2">
-            {operationProfile.operations.map((op, i) => (
-              <div key={op.id ?? i} data-review-entry={`operationProfile:${operationProfile.operations.findIndex(item => String(item.procedureId) === String(op.procedureId))}`} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
-                <DataRow label="Procedure" value={getCatalogName(catalogs.operationCatalog, op.procedureId) || 'Unresolved choice'} />
-                <DataRow label="Date" value={formatDate(op.operationDate)} />
-                {op.notes && <DataRow label="Notes" value={op.notes} />}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No operations reported</p>
+      <ReviewGroup title="Daily Habits and Vision">
+        {!(showLifestyle || showAcuity || isEditing || hasLifestyleEdits || hasAcuityEdits) && (
+          <NoEntries>No daily habits or vision details recorded for this ticket.</NoEntries>
         )}
-      </div>
-
-      {/* ── Maintenance Medications ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Maintenance Medications
-        </h4>
-        {medicationProfile?.medications?.length > 0 ? (
-          <div className="space-y-1">
-            {medicationProfile.medications.map((med, i) => (
-              <div key={med.id ?? i} data-review-entry={`medicationProfile:${medicationProfile.medications.findIndex(item => String(item.medicineId) === String(med.medicineId))}`} className="flex items-center gap-2 py-1">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-accent-100 dark:bg-accent-900/20 text-accent-800 dark:text-accent-400">
-                  {getCatalogName(catalogs.medicationCatalog, med.medicineId) || 'Unresolved choice'}
-                </span>
-                {med.description && (
-                  <span className="text-sm text-secondary-600 dark:text-neutral-400">
-                    — {med.description}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No maintenance medications</p>
-        )}
-      </div>
-
-      {/* ── Lifestyle ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Lifestyle
-        </h4>
-        {lifestyle || isEditing || hasLifestyleEdits ? (
+        {(showLifestyle || isEditing || hasLifestyleEdits) && (
           <dl className="space-y-0">
             <EditableField
               label="Smoker"
-              value={getVal('smoker', lifestyle?.smoker ? 'Yes' : lifestyle ? 'No' : '')}
-              originalValue={getOriginal('smoker', lifestyle?.smoker ? 'Yes' : lifestyle ? 'No' : '')}
+              value={isEditing ? getVal('smoker', yesNo(lifestyle?.smoker)) : smokerDisplay}
+              originalValue={getOriginal('smoker', lifestyle?.smoker == null ? '' : lifestyle.smoker ? 'Yes' : 'No')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('smoker', v)}
               type="select"
               options={['Yes', 'No']}
             />
-            {getVal('smoker', lifestyle?.smoker ? 'Yes' : 'No') === 'Yes' && <EditableField
-              label="Cigarettes/Day"
-              value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
-              originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('cigarettesPerDay', v)}
-              type="number"
-            />}
-            {getVal('smoker', lifestyle?.smoker ? 'Yes' : 'No') === 'Yes' && <EditableField
-              label="Years Smoked"
-              value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
-              originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('yearsSmoked', v)}
-              type="number"
-            />}
+            {isEditing && getVal('smoker', yesNo(lifestyle?.smoker)) === 'Yes' && <>
+              <EditableField label="Cigarettes per day" value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))} originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))} isEditing onChange={v => onFieldChange?.('cigarettesPerDay', v)} type="number" />
+              <EditableField label="Years smoked" value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))} originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))} isEditing onChange={v => onFieldChange?.('yearsSmoked', v)} type="number" />
+            </>}
             <EditableField
-              label="Alcohol Consumer"
-              value={getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : lifestyle ? 'No' : '')}
-              originalValue={getOriginal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : lifestyle ? 'No' : '')}
+              label="Alcohol Drinker"
+              value={isEditing ? getVal('alcoholConsumer', yesNo(lifestyle?.alcoholConsumer)) : alcoholDisplay}
+              originalValue={getOriginal('alcoholConsumer', lifestyle?.alcoholConsumer == null ? '' : lifestyle.alcoholConsumer ? 'Yes' : 'No')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('alcoholConsumer', v)}
               type="select"
               options={['Yes', 'No']}
             />
-            {getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : 'No') === 'Yes' && <EditableField
-              label="Alcohol Frequency"
-              value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
-              originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
-            />}
+            {isEditing && getVal('alcoholConsumer', yesNo(lifestyle?.alcoholConsumer)) === 'Yes' && <EditableField label="Alcohol frequency" value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')} originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')} isEditing onChange={v => onFieldChange?.('alcoholFrequency', v)} />}
             <EditableField
               label="Vaper"
-              value={getVal('vaper', lifestyle?.vapeUser ? 'Yes' : lifestyle ? 'No' : '')}
-              originalValue={getOriginal('vaper', lifestyle?.vapeUser ? 'Yes' : lifestyle ? 'No' : '')}
+              value={isEditing ? getVal('vaper', yesNo(lifestyle?.vapeUser)) : vaperDisplay}
+              originalValue={getOriginal('vaper', lifestyle?.vapeUser == null ? '' : lifestyle.vapeUser ? 'Yes' : 'No')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('vaper', v)}
               type="select"
               options={['Yes', 'No']}
             />
-            {getVal('vaper', lifestyle?.vapeUser ? 'Yes' : 'No') === 'Yes' && <EditableField
-              label="Vape Type"
-              value={getVal('vapeType', lifestyle?.vapeType ?? '')}
-              originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('vapeType', v)}
-            />}
-            {getVal('vaper', lifestyle?.vapeUser ? 'Yes' : 'No') === 'Yes' && <EditableField
-              label="Vape Frequency"
-              value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
-              originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('vapeFrequency', v)}
-            />}
+            {isEditing && getVal('vaper', yesNo(lifestyle?.vapeUser)) === 'Yes' && <>
+              <EditableField label="Vape type" value={getVal('vapeType', lifestyle?.vapeType ?? '')} originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')} isEditing onChange={v => onFieldChange?.('vapeType', v)} />
+              <EditableField label="Vape frequency" value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')} originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')} isEditing onChange={v => onFieldChange?.('vapeFrequency', v)} />
+            </>}
+            {showVapingDetails && <DataRow label="Years Vaping" value={lifestyle?.yearsVaping} />}
             <EditableField
-              label="Notes"
+              label="Lifestyle Notes"
               value={getVal('lifestyleNotes', lifestyle?.notes ?? '')}
               originalValue={getOriginal('lifestyleNotes', lifestyle?.notes ?? '')}
               isEditing={isEditing}
@@ -316,55 +243,49 @@ const MedicalBackgroundSection = ({
               type="textarea"
             />
           </dl>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No lifestyle data</p>
         )}
-      </div>
 
-      {/* ── Visual Acuity ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Visual Acuity
-        </h4>
-        {visualAcuityProfile?.acuity || isEditing || hasAcuityEdits ? (
+        {(showAcuity || isEditing || hasAcuityEdits) && (
           <dl className="space-y-0">
-            <EditableField
+            {visualDetails && (
+              <>
+                <DataRow label="Eyeglasses" value={visualDetails.eyeglasses} />
+                <DataRow label="Contact Lenses" value={visualDetails.contactLenses} />
+                <DataRow label="Grade OD" value={visualDetails.grades?.eyeglasses?.od ?? visualDetails.grades?.contactLenses?.od} />
+                <DataRow label="Grade OS" value={visualDetails.grades?.eyeglasses?.os ?? visualDetails.grades?.contactLenses?.os} />
+              </>
+            )}
+            {isEditing && <DataRow label="Vision Assessment" value={acuityType} />}
+            {isEditing && <EditableField
               label="Left Eye (OS)"
               value={getVal('acuityLeft', visualAcuityProfile?.acuity?.left_eye ?? '')}
               originalValue={getOriginal('acuityLeft', visualAcuityProfile?.acuity?.left_eye ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityLeft', v)}
-            />
-            <EditableField
+            />}
+            {isEditing && <EditableField
               label="Right Eye (OD)"
               value={getVal('acuityRight', visualAcuityProfile?.acuity?.right_eye ?? '')}
               originalValue={getOriginal('acuityRight', visualAcuityProfile?.acuity?.right_eye ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityRight', v)}
-            />
-            {visualAcuityProfile?.acuity?.recorded_at && (
-              <DataRow label="Recorded" value={formatDate(visualAcuityProfile.acuity.recorded_at)} />
-            )}
-            <EditableField
+            />}
+            {!visualDetails && <EditableField
               label="Notes"
               value={getVal('acuityNotes', visualAcuityProfile?.acuity?.notes ?? '')}
               originalValue={getOriginal('acuityNotes', visualAcuityProfile?.acuity?.notes ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityNotes', v)}
               type="textarea"
-            />
+            />}
           </dl>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No visual acuity data</p>
         )}
-      </div>
+        <ReviewNote label="Visual Acuity Notes" value={visualAcuityProfile?.notes} />
+      </ReviewGroup>
 
       {/* ── Vital Signs (Height / Weight) ── */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Physical Measurements
-        </h4>
-        {vitalSigns || isEditing || hasVitalEdits ? (
+      {(showVitals || isEditing || hasVitalEdits) && (
+        <ReviewGroup title="Physical Measurements">
           <dl className="space-y-0">
             <EditableField
               label="Height (cm)"
@@ -406,19 +327,11 @@ const MedicalBackgroundSection = ({
               onChange={(v) => onFieldChange?.('temperature', v)}
               type="number"
             />
+            <DataRow label="Measurement Date" value={formatReviewDate(vitalSigns?.created_at)} />
+            <DataRow label="Measurement Notes" value={vitalSigns?.notes} />
           </dl>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No physical measurements</p>
-        )}
-      </div>
-      <dl>
-        <DataRow label="Immunization Notes" value={immunizationProfile?.notes} />
-        <DataRow label="Hospitalization Notes" value={hospitalizationProfile?.notes} />
-        <DataRow label="Operation Notes" value={operationProfile?.notes} />
-        <DataRow label="Medication Notes" value={medicationProfile?.notes} />
-        <DataRow label="Years Vaping" value={lifestyle?.vapeUser ? lifestyle?.yearsVaping : null} />
-        <DataRow label="Visual Acuity Notes" value={visualAcuityProfile?.notes} />
-      </dl>
+        </ReviewGroup>
+      )}
     </SectionWrapper>
   );
 };

@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import ProgressStepper from './medical/progress-stepper';
 
 /**
  * Modal overlay for Initial Medical Record
@@ -15,6 +16,19 @@ const InitialRecordModal = ({
   onLogout = null
 }) => {
   const modalRef = useRef(null);
+  const [recordProgress, setRecordProgress] = useState(null);
+
+  const handleProgressChange = useCallback((nextProgress) => {
+    setRecordProgress((previous) => {
+      const roundedProgress = Math.round(nextProgress.scrollProgress * 100) / 100;
+      if (
+        previous?.currentStep === nextProgress.currentStep &&
+        previous?.scrollProgress === roundedProgress &&
+        previous?.steps?.join('|') === nextProgress.steps.join('|')
+      ) return previous;
+      return { ...nextProgress, scrollProgress: roundedProgress };
+    });
+  }, []);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -61,30 +75,30 @@ const InitialRecordModal = ({
     >
       <div 
         ref={modalRef}
-        className="relative w-full max-w-5xl bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl mx-4 flex flex-col animate-slide-in"
-        style={{ maxHeight: 'calc(100vh - 2rem)' }}
+        className="record-form-ui relative w-full max-w-5xl bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl mx-4 flex flex-col animate-slide-in"
+        style={{ maxHeight: 'calc(100dvh - 1rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Banner */}
-        <div className={`shrink-0 rounded-t-2xl ${isRevision ? 'bg-yellow-500' : 'bg-primary-500'}`}>
-          <div className="px-5 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
+        <div className="record-form-header shrink-0 rounded-t-2xl">
+          <div className="px-4 py-3 sm:px-6 sm:py-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-3 flex-1">
-              <div className="p-1.5 bg-white/25 rounded-lg">
+              <div className="p-2 bg-primary-100 dark:bg-primary-800 rounded-xl">
                 {isRevision ? (
-                  <svg className="w-5 h-5 text-secondary-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-secondary-900 dark:text-primary-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5 text-secondary-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-secondary-900 dark:text-primary-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 )}
               </div>
               <div className="flex-1">
-                <h1 id="initial-record-modal-title" className="text-base sm:text-lg font-bold text-secondary-900" style={{ margin: 0 }}>
+                <h1 id="initial-record-modal-title" className="text-lg sm:text-xl font-bold text-secondary-900 dark:text-primary-100" style={{ margin: 0 }}>
                   {isRevision ? 'Revise Your Medical Record' : 'Complete Your Medical Record'}
                 </h1>
-                <p className="text-xs sm:text-sm text-secondary-800/70" style={{ margin: 0 }}>
+                <p className="text-sm text-secondary-800 dark:text-primary-100" style={{ margin: 0 }}>
                   {isRevision
                     ? 'Staff requested corrections — your previous answers are pre-filled below'
                     : 'Please fill out your initial medical record to access the dashboard'}
@@ -96,12 +110,12 @@ const InitialRecordModal = ({
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="text-xs sm:text-sm font-semibold bg-white text-secondary-900 px-3 py-1.5 rounded-lg hover:bg-white/90 transition-colors"
+                  className="min-h-11 text-sm font-semibold border border-primary-700/20 bg-primary-50 text-secondary-900 dark:border-primary-400/30 dark:bg-primary-900 dark:text-primary-50 px-3 py-2 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-800 transition-colors"
                 >
                   Logout
                 </button>
               )}
-              <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium bg-white/30 text-secondary-900 px-3 py-1.5 rounded-full flex-shrink-0`}>
+              <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium bg-primary-100 text-secondary-900 dark:bg-primary-900 dark:text-primary-100 px-3 py-1.5 rounded-full flex-shrink-0`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isRevision ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"} />
               </svg>
@@ -110,23 +124,35 @@ const InitialRecordModal = ({
             </div>
           </div>
 
-          {/* Staff Note — attached flush to the bottom of the header, no gap */}
+          {recordProgress?.steps?.length > 0 && (
+            <ProgressStepper
+              currentStep={recordProgress.currentStep}
+              steps={recordProgress.steps}
+              scrollProgress={recordProgress.scrollProgress}
+              trackScroll={false}
+              compact
+            />
+          )}
+
           {isRevision && revisionNote && (
-            <div className="mx-5 mb-4 px-4 py-3 bg-yellow-400/30 rounded-xl flex items-start gap-3">
-              <svg className="w-4 h-4 text-secondary-800 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="mx-4 sm:mx-6 mb-2 px-3 py-2 border border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800 rounded-xl flex items-start gap-3">
+              <svg className="w-4 h-4 text-secondary-800 dark:text-primary-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
               <div>
-                <p className="text-xs font-semibold text-secondary-900 uppercase tracking-wide">Staff Note</p>
-                <p className="text-sm text-secondary-800 mt-0.5">{revisionNote}</p>
+                <p className="text-xs font-semibold text-secondary-900 dark:text-primary-200 uppercase tracking-wide">Staff Note</p>
+                <p className="text-sm text-secondary-800 dark:text-neutral-200 mt-1 whitespace-pre-wrap break-words max-h-28 overflow-y-auto">{revisionNote}</p>
               </div>
             </div>
           )}
+
         </div>
 
         {/* Content */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-          {children}
+          {React.isValidElement(children)
+            ? React.cloneElement(children, { onProgressChange: handleProgressChange })
+            : children}
         </div>
       </div>
     </div>

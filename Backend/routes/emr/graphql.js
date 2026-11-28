@@ -20,6 +20,7 @@ const patientSchema = makeExecutableSchema({
     Query: patientResolver.Query,
     Mutation: patientResolver.Mutation,
     UserProfile: patientResolver.UserProfile, // <-- interface resolver
+    ...require('./retired-profile-notes.js'),
   },
 });
 
@@ -29,6 +30,7 @@ const medicalSchema = makeExecutableSchema({
     Query: medicalResolver.Query,
     Mutation: medicalResolver.Mutation,
     UserProfile: medicalResolver.UserProfile, // <-- interface resolver
+    ...require('./retired-profile-notes.js'),
   },
 });
 
@@ -40,6 +42,8 @@ function initPatientEMRGraphQL(app) {
       if (!req.body || !req.body.query) {
         throw new Error("Empty GraphQL request");
       }
+      req.res.setHeader("Cache-Control", "private, no-store");
+      req.res.setHeader("Pragma", "no-cache");
       return {
         schema: patientSchema,
         graphiql: true,

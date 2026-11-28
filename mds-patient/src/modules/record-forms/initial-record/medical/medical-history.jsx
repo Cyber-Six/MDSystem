@@ -1,79 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import useCatalogSearch from '../../use-catalog-search';
+import React, { useState } from 'react';
 import { Checkbox, Input } from './form-elements';
 import { searchDomainCatalog, createDomainCatalog } from '@core/services/emr-service';
 import { additionalCatalogItems } from '../review-components';
+import ExpandableOptionList from '../../expandable-option-list';
+import CatalogActivityOverlay from '../../catalog-activity-overlay';
 
 const isValidCatalogId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
 
-function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name', onItemSelected }) {
-  const [dynamicItems, setDynamicItems] = useState([]);
-  const [input, setInput] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [creating, setCreating] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const wrapperRef = useRef(null);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setFocused(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const handleInputChange = (value) => {
-    setInput(value);
-    if (!value.trim()) { setSuggestions([]); return; }
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const results = await searchFn(value.trim());
-        const allKnown = [...catalog, ...dynamicItems];
-        setSuggestions((results || []).filter(r => !allKnown.find(k => k.id === r.id)));
-      } catch { setSuggestions([]); }
-      setSearching(false);
-    }, 300);
-  };
-
-  const selectItem = (item) => {
-    if (!isValidCatalogId(item?.id)) return null;
-    setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
-    onItemSelected?.(item);
-    setInput('');
-    setSuggestions([]);
-    setFocused(false);
-    return item;
-  };
-
-  const createItem = async (name, extra) => {
-    if (!name) return null;
-    setCreating(true);
-    try {
-      const created = await createFn(name, extra);
-      // Catalog mutations return an array, while the search UI consumes one
-      // catalog item. Keep the same shape whether the caller returns an array
-      // or a single item.
-      const item = Array.isArray(created) ? created[0] : created;
-      if (!isValidCatalogId(item?.id)) return null;
-      if (item) {
-        setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
-        onItemSelected?.(item);
-        setInput('');
-        setSuggestions([]);
-        setFocused(false);
-      }
-      return item;
-    } catch { return null; }
-    finally { setCreating(false); }
-  };
-
-  return { dynamicItems, input, suggestions, creating, searching, focused, wrapperRef, setFocused, handleInputChange, selectItem, createItem };
-}
 
 /**
  * MedicalHistoryForm
@@ -86,11 +20,6 @@ function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name', 
  *    self:               { [conditionCatalogId]: boolean }
  *    family:             { [conditionCatalogId]: boolean }
  *    familyWhoHasIt:     { [conditionCatalogId]: string }  -- "Mother", "Father", etc.
- *    selfOtherChecked:   boolean
- *    selfOther:          string
- *    familyOtherChecked: boolean
- *    familyOther:        string
- *    familyOtherWhoHasIt: string
  *  }
  */
 const MedicalHistoryForm = ({
@@ -152,13 +81,17 @@ const MedicalHistoryForm = ({
       </h3>
 
       {/* Tabs */}
-      <div className="flex border-b-2 border-neutral-200 mb-6">
+      <div role="tablist" aria-label="Medical history category" className="relative flex border-b border-neutral-200 dark:border-neutral-700 mb-6">
+        <span aria-hidden="true" className="absolute bottom-0 h-0.5 rounded-full bg-primary-500 transition-transform duration-200 motion-reduce:transition-none" style={{ width: 104, transform: `translateX(${activeTab === 'self' ? 0 : 104}px)` }} />
         <button
           type="button"
-          className={`py-3 px-6 font-medium transition-colors duration-200 border-b-2 ${
+          role="tab"
+          aria-selected={activeTab === 'self'}
+          style={{ width: 104 }}
+          className={`min-h-11 px-6 font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset ${
             activeTab === 'self'
-              ? 'border-primary-600 text-primary-700'
-              : 'border-transparent text-secondary-500 hover:text-secondary-700'
+              ? 'text-primary-700 dark:text-primary-400'
+              : 'text-secondary-500 hover:text-secondary-700 dark:text-neutral-400 dark:hover:text-neutral-200'
           }`}
           onClick={() => setActiveTab('self')}
         >
@@ -166,10 +99,13 @@ const MedicalHistoryForm = ({
         </button>
         <button
           type="button"
-          className={`py-3 px-6 font-medium transition-colors duration-200 border-b-2 ${
+          role="tab"
+          aria-selected={activeTab === 'family'}
+          style={{ width: 104 }}
+          className={`min-h-11 px-6 font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset ${
             activeTab === 'family'
-              ? 'border-primary-600 text-primary-700'
-              : 'border-transparent text-secondary-500 hover:text-secondary-700'
+              ? 'text-primary-700 dark:text-primary-400'
+              : 'text-secondary-500 hover:text-secondary-700 dark:text-neutral-400 dark:hover:text-neutral-200'
           }`}
           onClick={() => setActiveTab('family')}
         >
@@ -179,7 +115,7 @@ const MedicalHistoryForm = ({
 
       {/* Self Medical History */}
       {activeTab === 'self' && (
-        <div>
+        <div role="tabpanel" aria-label="Yourself" className="record-history-panel">
           <p className="text-sm text-secondary-600 mb-4">
             Check any conditions that apply to you:
           </p>
@@ -189,8 +125,7 @@ const MedicalHistoryForm = ({
           ) : medicalConditionCatalog.length === 0 ? (
             <p className="text-sm text-secondary-400 italic">No conditions available.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {medicalConditionCatalog.map((condition) => (
+            <ExpandableOptionList items={medicalConditionCatalog} isSelected={condition => !!data.self?.[condition.id]} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -201,14 +136,12 @@ const MedicalHistoryForm = ({
                     onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                   />
                 </div>
-              ))}
-            </div>
+              )} />
           )}
 
           {/* Dynamically added conditions from search */}
           {conditionOthers.dynamicItems.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems).map((condition) => (
+            <div className="mt-4"><ExpandableOptionList items={additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems)} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -219,13 +152,13 @@ const MedicalHistoryForm = ({
                     onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                   />
                 </div>
-              ))}
-            </div>
+              )} /></div>
           )}
           {/* Search or add conditions */}
           <div className="mt-4">
             <label className="block text-sm font-medium text-secondary-700 mb-1">Other Conditions (search or add):</label>
-            <div ref={conditionOthers.wrapperRef}>
+            <div ref={conditionOthers.wrapperRef} className="relative">
+              <CatalogActivityOverlay action={conditionOthers.creating ? 'adding' : conditionOthers.searching ? 'searching' : null} />
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm bg-white text-secondary-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -235,19 +168,19 @@ const MedicalHistoryForm = ({
                 onFocus={() => conditionOthers.setFocused(true)}
                 onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
               />
-              {conditionOthers.focused && conditionOthers.input.trim() && (
+              {conditionOthers.focused && conditionOthers.input.trim().length >= 3 && (
                 <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm max-h-60 overflow-y-auto">
                   {conditionOthers.searching && (
                     <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
                   {conditionOthers.suggestions.length > 0 ? (
                     <>
-                      {conditionOthers.suggestions.map(result => (
+                      {conditionOthers.suggestions.slice(0, 5).map(result => (
                         <button
                           key={result.id}
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                          onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
+                          onClick={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
                         >
                           {result.name}
                           {data.self?.[result.id] && (
@@ -258,20 +191,20 @@ const MedicalHistoryForm = ({
                       <button
                         type="button"
                         className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                        disabled={conditionOthers.creating}
-                        onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                        disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                        onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                       >
-                        {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                        {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                      disabled={conditionOthers.creating}
-                      onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                      disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                      onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
                     >
-                      {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                      {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                     </button>
                   )}
                 </div>
@@ -284,7 +217,7 @@ const MedicalHistoryForm = ({
 
       {/* Family Medical History */}
       {activeTab === 'family' && (
-        <div>
+        <div role="tabpanel" aria-label="Family" className="record-history-panel">
           <p className="text-sm text-secondary-600 mb-4">
             Check any conditions that apply to your immediate family members and specify who has it:
           </p>
@@ -294,8 +227,7 @@ const MedicalHistoryForm = ({
           ) : medicalConditionCatalog.length === 0 ? (
             <p className="text-sm text-secondary-400 italic">No conditions available.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {medicalConditionCatalog.map((condition) => (
+            <ExpandableOptionList items={medicalConditionCatalog} isSelected={condition => !!data.family?.[condition.id]} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -316,14 +248,12 @@ const MedicalHistoryForm = ({
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )} />
           )}
 
           {/* Dynamically added conditions from search */}
           {conditionOthers.dynamicItems.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems).map((condition) => (
+            <div className="mt-4"><ExpandableOptionList items={additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems)} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -344,13 +274,13 @@ const MedicalHistoryForm = ({
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )} /></div>
           )}
           {/* Search or add conditions */}
           <div className="mt-4">
             <label className="block text-sm font-medium text-secondary-700 mb-1">Other Conditions (search or add):</label>
-            <div ref={conditionOthers.wrapperRef}>
+            <div ref={conditionOthers.wrapperRef} className="relative">
+              <CatalogActivityOverlay action={conditionOthers.creating ? 'adding' : conditionOthers.searching ? 'searching' : null} />
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm bg-white text-secondary-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -360,19 +290,19 @@ const MedicalHistoryForm = ({
                 onFocus={() => conditionOthers.setFocused(true)}
                 onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
               />
-              {conditionOthers.focused && conditionOthers.input.trim() && (
+              {conditionOthers.focused && conditionOthers.input.trim().length >= 3 && (
                 <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm max-h-60 overflow-y-auto">
                   {conditionOthers.searching && (
                     <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
                   )}
                   {conditionOthers.suggestions.length > 0 ? (
                     <>
-                      {conditionOthers.suggestions.map(result => (
+                      {conditionOthers.suggestions.slice(0, 5).map(result => (
                         <button
                           key={result.id}
                           type="button"
                           className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
-                          onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
+                          onClick={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
                         >
                           {result.name}
                           {data.family?.[result.id] && (
@@ -383,20 +313,20 @@ const MedicalHistoryForm = ({
                       <button
                         type="button"
                         className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
-                        disabled={conditionOthers.creating}
-                        onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                        disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                        onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                       >
-                        {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                        {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
                       className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
-                      disabled={conditionOthers.creating}
-                      onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                      disabled={conditionOthers.creating || conditionOthers.searching || conditionOthers.hasExactMatch}
+                      onClick={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
                     >
-                      {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                      {conditionOthers.creating ? 'Adding...' : conditionOthers.hasExactMatch ? 'Already in the list. Select the matching option.' : conditionOthers.searching ? 'Checking for existing options...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
                     </button>
                   )}
                 </div>

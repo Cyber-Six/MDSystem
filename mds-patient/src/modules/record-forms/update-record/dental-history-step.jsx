@@ -270,96 +270,31 @@ const DentalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => {
               <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">Loading procedure catalog...</p>
             ) : (
               <>
-            <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 dark:text-neutral-300 mr-4">Have you had any of the following dental procedures within the past 24 months (2 years)?</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasDentalProcedures"
-                  checked={hasDentalProcedures === true}
-                  onChange={() => handleInputChange('hasDentalProcedures', true)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasDentalProcedures"
-                  checked={hasDentalProcedures === false}
-                  onChange={() => onChange({ ...formData, hasDentalProcedures: false, dentalProcedures: [] })}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
-              </label>
-            </div>
-
-            {hasDentalProcedures === true && (
-              <div className="space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-3">Which of the following dental procedures have you had for the past 24 months (2 years) or more? <span className="text-xs font-normal">(Select all that apply)</span></p>
                 {catalogs.dentalProcedures.length === 0 ? (
                   <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
                     Dental procedure catalog unavailable. Please try again later.
                   </p>
                 ) : (
-                  catalogs.dentalProcedures.map((procedure) => {
+                  <div className="dental-option-grid">{catalogs.dentalProcedures.map((procedure) => {
                     const isSelected = (formData.dentalProcedures || []).some(p => p.procedureTypeId === procedure.id);
                     return (
-                      <div key={procedure.id} className="bg-neutral-50 dark:bg-neutral-800 p-4 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-secondary-700 dark:text-neutral-300">{procedure.name}</span>
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`procedure-${procedure.id}`}
-                                checked={isSelected}
-                                onChange={() => {
-                                  const procedures = formData.dentalProcedures || [];
-                                  if (!isSelected) {
-                                    handleInputChange('dentalProcedures', [...procedures, { procedureTypeId: procedure.id, procedureDate: '' }]);
-                                  }
-                                }}
-                                className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                              />
-                              <span className="text-sm text-secondary-600 dark:text-neutral-400">Yes</span>
-                            </label>
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`procedure-${procedure.id}`}
-                                checked={!isSelected}
-                                onChange={() => {
-                                  const procedures = (formData.dentalProcedures || []).filter(p => p.procedureTypeId !== procedure.id);
-                                  handleInputChange('dentalProcedures', procedures);
-                                }}
-                                className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                              />
-                              <span className="text-sm text-secondary-600 dark:text-neutral-400">No</span>
-                            </label>
-                          </div>
-                        </div>
-                        {isSelected && (
-                          <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
-                            <Input
-                              label="Date of Procedure *"
-                              type="date"
-                              required
-                              value={(formData.dentalProcedures || []).find(p => p.procedureTypeId === procedure.id)?.procedureDate || ''}
-                              onChange={(e) => {
-                                const procedures = (formData.dentalProcedures || []).map(p =>
-                                  p.procedureTypeId === procedure.id ? { ...p, procedureDate: e.target.value } : p
-                                );
-                                handleInputChange('dentalProcedures', procedures);
-                              }}
-                            />
-                          </div>
-                        )}
+                      <div key={procedure.id} className={`dental-option-card${isSelected ? ' is-selected' : ''}`}>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={isSelected} onChange={(event) => {
+                            const procedures = formData.dentalProcedures || [];
+                            handleInputChange('dentalProcedures', event.target.checked
+                              ? [...procedures, { procedureTypeId: procedure.id, procedureDate: '' }]
+                              : procedures.filter(item => item.procedureTypeId !== procedure.id));
+                          }} />
+                          <span className="text-sm">{procedure.name}</span>
+                        </label>
                       </div>
                     );
-                  })
+                  })}</div>
                 )}
-              </div>
-            )}
+            </div>
               </>
             )}
           </div>

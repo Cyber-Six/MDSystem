@@ -1,3 +1,4 @@
+import { getDateOfBirthError, getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressStepper from './progress-stepper';
@@ -12,6 +13,7 @@ import { Button } from './form-elements';
 import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
 import { createInitialMedicalRecord, fetchAllCatalogs } from '@core/services/emr-service';
 import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer';
+import { clearRecordFormDraft, readRecordFormDraft, saveRecordFormDraft } from '../../record-form-draft-storage';
 
 /**
  * Initial Medical Record Form Component
@@ -21,10 +23,16 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
  * @param {Function} props.onComplete - Optional callback when form is successfully submitted
  * @param {boolean} props.isModal - Whether the form is displayed in a modal (affects styling)
  */
-const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false, staffNote = null }) => {
+const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false, staffNote = null, onProgressChange }) => {
   const navigate = useNavigate();
   const formContentRef = useRef(null);
-  const [currentStep, setCurrentStep] = useState(0);
+  const draftFlow = isRevision ? 'initial-student-revision' : 'initial-student';
+  const [cachedDraft] = useState(() => readRecordFormDraft(draftFlow));
+  const [currentStep, setCurrentStep] = useState(() => Number.isInteger(cachedDraft?.data?.currentStep) ? Math.max(0, Math.min(cachedDraft.data.currentStep, 5)) : 0);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(Boolean(cachedDraft?.data?.formData || revisionData));
+  const [needsPhotoReupload, setNeedsPhotoReupload] = useState(Boolean(cachedDraft?.data?.requiresPhotoReupload));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -76,8 +84,9 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
 
   // When revision pre-fill data arrives, merge it into the form state
   useEffect(() => {
-    if (!revisionData) return;
+    if (!revisionData || cachedDraft?.data?.formData) return;
     console.log('[Initial Record Form] Applying revision pre-fill data...');
+    setDraftDirty(true);
     setFormData((prev) => ({
       ...prev,
       personalInfo:      { ...prev.personalInfo,      ...revisionData.personalInfo },
@@ -112,8 +121,6 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       programId: '',
       studentNumber: '',
       studentCategory: '',
-      lastSchoolAttended: '',
-      drugTestDone: '',
       emergencyContacts: [
         { name: '', relationship: '', contactNumber: '', address: '' },
         { name: '', relationship: '', contactNumber: '', address: '' }
@@ -127,7 +134,6 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       // Immunizations — keys are vaccine catalog IDs
       immunizations: {},
       immunizationDates: {},
-      immunizationOther: '',
       // Allergies — keys are allergen catalog IDs
       hasAllergies: '',
       allergies: {},
@@ -192,32 +198,72 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     }
   });
 
+  useEffect(() => {
+    const savedData = cachedDraft?.data?.formData;
+    if (savedData && typeof savedData === 'object') {
+      setFormData((previous) => {
+        const restored = { ...previous };
+        for (const section of ['personalInfo', 'medicalHistory', 'medicalBackground', 'dentalHistory', 'obgyne', 'certification']) {
+          const savedSection = savedData[section];
+          if (savedSection && typeof savedSection === 'object' && !Array.isArray(savedSection)) {
+            restored[section] = { ...previous[section], ...savedSection };
+          }
+        }
+        restored.dentalHistory = { ...restored.dentalHistory, upperTeethPhoto: null, lowerTeethPhoto: null };
+        restored.certification = { ...restored.certification, verified: false, signature: '', date: '' };
+        return restored;
+      });
+      setDraftRestored(true);
+      setNeedsPhotoReupload(Boolean(cachedDraft.data.requiresPhotoReupload));
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || !draftDirty) return;
+    const dentalHistory = formData.dentalHistory || {};
+    const photoReminder = needsPhotoReupload || Boolean(dentalHistory.upperTeethPhoto || dentalHistory.lowerTeethPhoto);
+    const persistedFormData = {
+      ...formData,
+      dentalHistory: { ...dentalHistory, upperTeethPhoto: null, lowerTeethPhoto: null },
+      certification: { ...formData.certification, verified: false, signature: '', date: '' },
+    };
+    saveRecordFormDraft(draftFlow, { formData: persistedFormData, currentStep, requiresPhotoReupload: photoReminder });
+  }, [draftFlow, draftReady, draftDirty, formData, currentStep, needsPhotoReupload]);
+
   const handlePersonalInfoChange = (data) => {
+    setDraftDirty(true);
     console.log('[Initial Medical Record Form] Personal info updated:', data);
     setFormData({ ...formData, personalInfo: data });
   };
 
   const handleMedicalHistoryChange = (data) => {
+    setDraftDirty(true);
     console.log('[Initial Medical Record Form] Medical history updated:', data);
     setFormData({ ...formData, medicalHistory: data });
   };
 
   const handleMedicalBackgroundChange = (data) => {
+    setDraftDirty(true);
     console.log('[Initial Medical Record Form] Medical background updated:', data);
     setFormData({ ...formData, medicalBackground: data });
   };
 
   const handleDentalHistoryChange = (data) => {
+    setDraftDirty(true);
+    if (data.upperTeethPhoto && data.lowerTeethPhoto) setNeedsPhotoReupload(false);
     console.log('[Initial Medical Record Form] Dental history updated:', data);
     setFormData({ ...formData, dentalHistory: data });
   };
 
   const handleOBGYNEChange = (data) => {
+    setDraftDirty(true);
     console.log('[Initial Medical Record Form] OB-GYNE updated:', data);
     setFormData({ ...formData, obgyne: data });
   };
 
   const handleCertificationChange = (data) => {
+    setDraftDirty(true);
     console.log('[Initial Medical Record Form] Certification updated:', data);
     setFormData({ ...formData, certification: data });
   };
@@ -239,11 +285,15 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
   const validateAllFields = (data) => {
     const errors = [];
     const pi = data.personalInfo || {};
+    for (const issue of getPersonalInfoLengthErrors(pi, { isEmployee: false })) {
+      errors.push({ section: 'Personal Information', sectionIndex: 0, ...issue });
+    }
 
     // ---- Personal Information (Step 0) ----
     if (!pi.surname?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Surname is required' });
     if (!pi.firstName?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First name is required' });
     if (!pi.birthday) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Birthday is required' });
+    else if (getDateOfBirthError(pi.birthday)) errors.push({ section: 'Personal Information', sectionIndex: 0, message: getDateOfBirthError(pi.birthday) });
     if (!pi.gender) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Gender is required' });
     if (!pi.civilStatus) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Civil status is required' });
     if (!pi.nationality?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Nationality is required' });
@@ -253,7 +303,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     if (!pi.provinceAddress?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Province address is required' });
     if (!pi.programId) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program is required — please select one from the search results' });
     if (!pi.studentNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number is required' });
-    else if (!/^[a-zA-Z0-9\-]+$/.test(pi.studentNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number must contain only letters, numbers, and dashes' });
+    else if (!/^[0-9]+$/.test(pi.studentNumber.trim()) || Number(pi.studentNumber.trim()) > 2147483647) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number must contain digits only and be between 0 and 2147483647' });
     if (!pi.studentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student category is required' });
 
     // Emergency contacts
@@ -391,6 +441,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     const errors = {};
 
     stepErrors.forEach(err => {
+      if (err.field) errors[err.field] = err.message;
       const msg = err.message.toLowerCase();
 
       // Personal Information (Step 0)
@@ -466,6 +517,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     setFieldErrors({});
 
     if (validateStep(currentStep)) {
+      if (formContentRef.current) formContentRef.current.scrollTop = 0;
       // Skip OB-GYNE step if gender is not Female
       if (currentStep === 3 && formData.personalInfo.gender !== 'Female') {
         console.log('[Initial Medical Record Form] Skipping OB-GYNE step (not female)');
@@ -481,6 +533,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
 
     // Clear field errors when navigating to a different step
     setFieldErrors({});
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
 
     // Skip OB-GYNE step when going back if gender is not Female
     if (currentStep === 5 && formData.personalInfo.gender !== 'Female') {
@@ -494,6 +547,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
   const handleEdit = (stepIndex) => {
     console.log('[Initial Medical Record Form] Edit requested for step:', stepIndex);
     setCurrentStep(stepIndex);
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
   };
 
   const handleSubmit = async () => {
@@ -530,9 +584,10 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       console.log('[Initial Medical Record Form] Submitting to backend...');
       
       // Submit to backend via GraphQL service
-      const result = await createInitialMedicalRecord(sanitizedData, { isRevision });
+      const result = await createInitialMedicalRecord(sanitizedData, { isRevision, catalogs: catalogs.catalogsLoading || catalogs.catalogsError ? null : catalogs });
       
       console.log('[Initial Medical Record Form] Submission successful!', result);
+      clearRecordFormDraft(draftFlow);
       setSubmittedRecord(result);
       setShowSuccessModal(true);
       
@@ -648,7 +703,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
         Back
       </Button>
 
-      <div className="hidden sm:block text-sm text-neutral-500">
+      <div className="text-xs sm:text-sm text-neutral-500">
         Step {formData.personalInfo.gender !== 'Female' && currentStep >= 5 ? currentStep : currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
       </div>
 
@@ -690,45 +745,52 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
   );
 
   return (
-    <div className={`${
+    <div className={`record-form-ui ${
       isModal
         ? 'flex-1 flex flex-col min-h-0'
-        : 'min-h-screen bg-stone-100 py-6 px-4'
+        : 'min-h-screen bg-primary-50/40 dark:bg-neutral-950 py-6 px-4'
     }`}>
 
       {/* Scrollable content area */}
       <div ref={formContentRef} className={`${
         isModal
-          ? 'flex-1 overflow-y-auto min-h-0 bg-stone-100 p-4 sm:p-5'
+          ? 'flex-1 overflow-y-auto min-h-0 bg-primary-50/40 dark:bg-neutral-950 p-4 sm:p-5'
           : ''
       }`}>
         <div className="max-w-5xl mx-auto w-full">
           {/* Header - Only show in standalone mode, modal has its own header */}
           {!isModal && (
             <div className="text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 mb-2">
+              <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 dark:text-primary-100 mb-2">
                 Initial Medical Record
               </h1>
-              <p className="text-secondary-600">
+              <p className="text-secondary-600 dark:text-neutral-300">
                 Please complete your medical information to access the system
               </p>
             </div>
           )}
 
           {/* Progress Stepper */}
-          <div className="mb-6">
-            <ProgressStepper
-              currentStep={
-                formData.personalInfo.gender !== 'Female' && currentStep >= 5
-                  ? currentStep - 1
-                  : currentStep
-              }
-              steps={formData.personalInfo.gender !== 'Female'
-                ? steps.filter((_, idx) => idx !== 4)
-                : steps
-              }
-            />
-          </div>
+          <ProgressStepper
+            scrollContainerRef={formContentRef}
+            onProgressChange={onProgressChange}
+            hideVisual={isModal}
+            currentStep={
+              formData.personalInfo.gender !== 'Female' && currentStep >= 5
+                ? currentStep - 1
+                : currentStep
+            }
+            steps={formData.personalInfo.gender !== 'Female'
+              ? steps.filter((_, idx) => idx !== 4)
+              : steps
+            }
+          />
+          {draftRestored && (
+            <p role="status" className="-mt-3 mb-4 text-sm text-secondary-600 dark:text-neutral-300">
+              <strong className="text-primary-700 dark:text-primary-300">Saved draft restored.</strong> Your entries were recovered from this browser tab.
+              {needsPhotoReupload && <span className="block mt-1">Please upload your dental photos again and reconfirm the certification before submitting.</span>}
+            </p>
+          )}
 
           {/* Form Content */}
           <div className="mb-6">
@@ -737,7 +799,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
 
           {/* Nav buttons - standalone mode only */}
           {!isModal && (
-            <div className="bg-white rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-neutral-200">
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-sm border border-primary-200 dark:border-neutral-700">
               <div className="flex justify-between items-center">
                 {renderNavButtons()}
               </div>
@@ -748,8 +810,8 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
 
       {/* Nav bar - modal mode only, fixed outside scroll area */}
       {isModal && (
-        <div className="shrink-0 border-t border-stone-200 bg-stone-100 px-4 py-3 sm:px-6 sm:py-4">
-          <div className="max-w-5xl mx-auto bg-white rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-neutral-200">
+        <div className="record-form-footer shrink-0 border-t border-primary-200 dark:border-primary-800 bg-white dark:bg-neutral-900 px-4 py-3 sm:px-6">
+          <div className="max-w-5xl mx-auto bg-white dark:bg-neutral-800 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-primary-200 dark:border-neutral-700">
             <div className="flex justify-between items-center">
               {renderNavButtons()}
             </div>

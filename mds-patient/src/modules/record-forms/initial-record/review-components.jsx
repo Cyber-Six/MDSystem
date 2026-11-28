@@ -3,9 +3,9 @@ import React from 'react';
 export const ReviewSectionHeader = ({ title, onEditClick }) => (
   <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-primary-400">
     <h4 className="text-lg font-heading font-semibold text-secondary-900">{title}</h4>
-    <button type="button" onClick={onEditClick} className="text-sm text-primary-700 hover:text-primary-800 font-semibold flex items-center transition-colors">
+    {onEditClick && <button type="button" onClick={onEditClick} className="text-sm text-primary-700 hover:text-primary-800 font-semibold flex items-center transition-colors">
       <span aria-hidden="true" className="mr-1">✎</span>Edit
-    </button>
+    </button>}
   </div>
 );
 
@@ -18,6 +18,22 @@ export const ReviewDataRow = ({ label, value, className = '' }) => {
       <dt className="font-medium text-secondary-600">{label}</dt>
       <dd className="col-span-2 text-secondary-900 whitespace-pre-wrap break-words">{hasValue ? displayValue : <span className="text-secondary-400">Not provided</span>}</dd>
     </div>
+  );
+};
+
+export const ReviewNote = ({ label, value }) => {
+  // VA_META is structured vision state stored in the legacy notes column, not
+  // user-authored notes. Never render that internal payload as note text.
+  const displayValue = typeof value === 'string' && value.startsWith('VA_META::') ? '' : value;
+  const hasValue = displayValue !== undefined && displayValue !== null && String(displayValue).trim() !== '';
+  if (!hasValue) return null;
+  return (
+    <dl className="my-2 min-w-0 border-b border-neutral-200 py-2 dark:border-neutral-700">
+      <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400">{label}</dt>
+      <dd className="break-words whitespace-pre-wrap text-base leading-relaxed text-secondary-900 dark:text-neutral-100">
+        {displayValue}
+      </dd>
+    </dl>
   );
 };
 

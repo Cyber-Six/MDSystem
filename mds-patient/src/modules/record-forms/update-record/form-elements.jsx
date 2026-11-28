@@ -1,4 +1,5 @@
 import React from 'react';
+import RecordDisclosure from '../record-disclosure';
 
 export const Input = ({ id, label, required, error, reserveErrorSpace = false, className = '', ...props }) => {
   const generatedId = React.useId();
@@ -156,15 +157,16 @@ export const AccordionSection = ({
   onToggle,
   children
 }) => (
-  <div className={`border-2 rounded-xl overflow-hidden transition-all duration-300
+  <div className={`border-2 rounded-xl overflow-hidden transition-colors duration-300
                   ${isOpen 
                     ? 'border-primary-500 dark:border-primary-500' 
                     : 'border-neutral-200 dark:border-neutral-700 hover:border-primary-300 dark:hover:border-primary-500/50'}`}>
     <button
       type="button"
+      aria-expanded={isOpen}
       onClick={() => onToggle(id)}
-      className={`w-full flex items-center justify-between px-5 py-4 text-left
-                 transition-all duration-200
+      className={`w-full min-h-13 flex items-center justify-between px-5 py-4 text-left
+                 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset
                  ${isOpen 
                    ? 'bg-primary-50 dark:bg-primary-500/10' 
                    : 'bg-neutral-50 dark:bg-neutral-800 hover:bg-primary-50/50 dark:hover:bg-primary-500/5'}`}
@@ -182,31 +184,32 @@ export const AccordionSection = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
     </button>
-    <div className={`transition-all duration-300 ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+    <RecordDisclosure open={isOpen}>
       <div className="p-5 bg-white dark:bg-neutral-900">
         {children}
       </div>
-    </div>
+    </RecordDisclosure>
   </div>
 );
 
 // Tab Component
 export const TabGroup = ({ tabs, activeTab, onTabChange }) => (
-  <div className="flex border-b border-neutral-200 dark:border-neutral-700 mb-6">
+  <div role="tablist" aria-label="Medical history category" className="relative flex border-b border-neutral-200 dark:border-neutral-700 mb-6">
+    <span aria-hidden="true" className="absolute bottom-0 h-0.5 rounded-full bg-primary-500 transition-transform duration-200 motion-reduce:transition-none" style={{ width: 104, transform: `translateX(${Math.max(0, tabs.findIndex(tab => tab.id === activeTab)) * 104}px)` }} />
     {tabs.map((tab) => (
       <button
         key={tab.id}
         type="button"
+        role="tab"
+        aria-selected={activeTab === tab.id}
+        style={{ width: 104 }}
         onClick={() => onTabChange(tab.id)}
-        className={`px-6 py-3 font-medium text-sm transition-all duration-200 relative
+        className={`min-h-11 px-6 font-medium text-sm transition-colors duration-200 relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset
                    ${activeTab === tab.id 
                      ? 'text-primary-600 dark:text-primary-500' 
                      : 'text-neutral-500 dark:text-neutral-400 hover:text-primary-500'}`}
       >
         {tab.label}
-        {activeTab === tab.id && (
-          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 rounded-t-full" />
-        )}
       </button>
     ))}
   </div>

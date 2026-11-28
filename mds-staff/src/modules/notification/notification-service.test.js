@@ -1,7 +1,7 @@
 import { axiosRequest } from '../../packages-core-adapter';
-import { fetchAllStaff, notifyPatients, notifyStaffs } from './notification-service';
+import { fetchAllStaff, notifyPatients, notifyStaffs, fetchPatientNotificationGroups, sendPatientGroupNotification } from './notification-service';
 
-jest.mock('../../packages-core-adapter', () => ({ axiosRequest: { post: jest.fn() } }));
+jest.mock('../../packages-core-adapter', () => ({ axiosRequest: { get: jest.fn(), post: jest.fn() } }));
 
 describe('staff notification service', () => {
   beforeEach(() => jest.resetAllMocks());
@@ -34,4 +34,24 @@ describe('staff notification service', () => {
     await notify('Broadcast');
     expect(axiosRequest.post).toHaveBeenLastCalledWith(endpoint, { message: 'Broadcast' });
   });
+
+  it('loads authorized groups and submits a group with the reviewed count', async () => {
+    const group = { profile: 'Student', branch: 'Manila', count: 3 };
+    const options = { branches: ['Manila'], groups: [group] };
+    axiosRequest.get.mockResolvedValueOnce({ data: options });
+    await expect(fetchPatientNotificationGroups()).resolves.toEqual(options);
+    expect(axiosRequest.get).toHaveBeenCalledWith('/staff/notify-patient-groups');
+    axiosRequest.post.mockResolvedValueOnce({ data: { totalRecipients: 3 } });
+    await expect(sendPatientGroupNotification('Reminder', group)).resolves.toEqual({ totalRecipients: 3 });
+    expect(axiosRequest.post).toHaveBeenCalledWith('/staff/notify-patient-groups', {
+      message: 'Reminder', profile: 'Student', branch: 'Manila', expectedCount: 3,
+    });
+  });
+
+  it.each(['<html>Staff portal</html>', {}, { branches: ['Manila'] }, null])(
+    'rejects an unexpected patient group response', async (data) => {
+      axiosRequest.get.mockResolvedValueOnce({ data });
+      await expect(fetchPatientNotificationGroups()).rejects.toThrow('unexpected response');
+    },
+  );
 });

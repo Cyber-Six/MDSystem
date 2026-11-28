@@ -36,8 +36,7 @@ jest.mock('../services/emr-service', () => ({
       birthday: '', age: '', gender: '', civilStatus: '',
       nationality: '', religion: '', address: '', provinceAddress: '',
       contactNumber: '', program: '', programId: '', programOther: '',
-      studentNumber: '', studentCategory: '', drugTestDone: '',
-      lastSchoolAttended: '',
+      studentNumber: '', studentCategory: '',
       employeeId: '', department: '', employmentCategory: '',
       employmentCategoryOther: '', employmentStatus: '', position: '',
       emergencyContacts: [
@@ -45,10 +44,10 @@ jest.mock('../services/emr-service', () => ({
         { name: '', relationship: '', contactNumber: '', address: '' },
       ],
     },
-    medicalHistory: { self: {}, family: {}, familyWhoHasIt: {}, selfOther: '', selfOtherChecked: false, familyOther: '', familyOtherWhoHasIt: '', familyOtherChecked: false },
-    medicalBackground: { immunizations: {}, immunizationDetails: {}, immunizationOther: '', hasAllergies: '', allergies: {}, allergyOther: '', allergyNotes: '', hasHospitalization: '', hospitalizationConditions: {}, hospitalizationDates: {}, hospitalizationDate: '', hospitalizationDischargeDate: '', hospitalizationNotes: '', hasOperation: '', operationConditions: {}, operationDates: {}, operationDate: '', operationNotes: '', hasMedications: '', selectedMedications: {}, medicationReason: '', medicationNotes: '', medicationDescription: '', smoker: 'no', smokerSticksPerDay: '', smokerYears: '', alcoholDrinker: 'no', alcoholFrequency: '', vaper: 'no', vapeType: '', vapeFrequency: '', yearsVaping: '', eyeglasses: false, contactLenses: false, gradeOD: '', gradeOS: '', visualAcuityDate: '' },
+    medicalHistory: { self: {}, family: {}, familyWhoHasIt: {} },
+    medicalBackground: { immunizations: {}, immunizationDetails: {}, hasAllergies: '', allergies: {}, allergyOther: '', allergyNotes: '', hasHospitalization: '', hospitalizationConditions: {}, hospitalizationDates: {}, hospitalizationDate: '', hospitalizationDischargeDate: '', hospitalizationNotes: '', hasOperation: '', operationConditions: {}, operationDates: {}, operationDate: '', operationNotes: '', hasMedications: '', selectedMedications: {}, medicationReason: '', medicationNotes: '', medicationDescription: '', smoker: 'no', smokerSticksPerDay: '', smokerYears: '', alcoholDrinker: 'no', alcoholFrequency: '', vaper: 'no', vapeType: '', vapeFrequency: '', yearsVaping: '', eyeglasses: false, contactLenses: false, gradeOD: '', gradeOS: '', visualAcuityDate: '' },
     dentalHistory: { firstTimeDentist: '', lastDentalConsultation: '', lastDentalCleaning: '', purpose: '', hasIntraOralAppliance: '', intraOralAppliances: {}, applianceOther: '', applianceLocation: '', selectedDentalProcedures: {}, procedureDates: {}, upperTeethPhoto: null, lowerTeethPhoto: null },
-    obgyne: { lastMenstrualPeriod: '', menstruationDuration: '', menarcheYearAge: '', padsPerDay: '', dysmenorrhea: '' },
+    obgyne: { lastMenstrualPeriod: '', menstruationDuration: '', dysmenorrhea: '' },
     certification: { verified: false, fullName: '', date: '' },
   }),
   fetchAllCatalogs: jest.fn().mockResolvedValue({}),
@@ -79,8 +78,7 @@ function makeStudentPersonalInfo(overrides: Partial<PersonalInfo> = {}): Persona
     nationality: 'Filipino', religion: '', address: '123 Main St', provinceAddress: 'Batangas',
     contactNumber: '09171234567',
     program: 'BSCS', programId: 'prog-001', programOther: '',
-    studentNumber: '2022-00001', studentCategory: 'Sophomore',
-    drugTestDone: '', lastSchoolAttended: '',
+    studentNumber: '202200001', studentCategory: 'Sophomore',
     employeeId: '', department: '', employmentCategory: '',
     employmentCategoryOther: '', employmentStatus: '', position: '',
     emergencyContacts: VALID_CONTACTS,
@@ -96,8 +94,7 @@ function makeEmployeePersonalInfo(overrides: Partial<PersonalInfo> = {}): Person
     contactNumber: '09171234567',
     program: '', programId: '', programOther: '',
     studentNumber: '', studentCategory: '',
-    drugTestDone: '', lastSchoolAttended: '',
-    employeeId: 'EMP-001', department: 'Information Technology',
+    employeeId: '700001', department: 'Information Technology',
     employmentCategory: 'Teaching', employmentCategoryOther: '', employmentStatus: 'Full time',
     position: 'Instructor',
     emergencyContacts: VALID_CONTACTS,
@@ -109,6 +106,17 @@ const STUDENT_OPTS = { isEmployee: false, isUpdate: false, isRevision: false };
 const EMPLOYEE_OPTS = { isEmployee: true, isUpdate: false, isRevision: false };
 const UPDATE_OPTS_STUDENT = { isEmployee: false, isUpdate: true, isRevision: false };
 const UPDATE_OPTS_EMPLOYEE = { isEmployee: true, isUpdate: true, isRevision: false };
+
+it.each([
+  [makeStudentPersonalInfo, STUDENT_OPTS, 'studentNumber', 'Student number'],
+  [makeEmployeePersonalInfo, EMPLOYEE_OPTS, 'employeeId', 'Employee ID number'],
+] as const)('rejects invalid and out-of-range integer identifiers', (makeInfo, options, field, label) => {
+  const message = `${label} must contain digits only and be between 0 and 2147483647`;
+  expect(validatePersonalInfoFields(makeInfo({ [field]: '2147483647' }), options)).not.toContain(message);
+  for (const invalid of ['AB123', '1.2', '-1', '1e3', '2147483648', '1; DROP TABLE x']) {
+    expect(validatePersonalInfoFields(makeInfo({ [field]: invalid }), options)).toContain(message);
+  }
+});
 
 // ─── Student validation ───────────────────────────────────────────────────────
 
@@ -123,8 +131,8 @@ describe('validatePersonalInfoFields — student (initial record)', () => {
   });
 
   it('rejects studentNumber with special characters', () => {
-    const errors = validatePersonalInfoFields(makeStudentPersonalInfo({ studentNumber: '2022/00001!' }), STUDENT_OPTS);
-    expect(errors).toContain('Student number must contain only letters, numbers, and dashes');
+    const errors = validatePersonalInfoFields(makeStudentPersonalInfo({ studentNumber: '2022/0001!' }), STUDENT_OPTS);
+    expect(errors).toContain('Student number must contain digits only and be between 0 and 2147483647');
   });
 
   it('requires programId for non-revision initial records', () => {
@@ -275,4 +283,22 @@ describe('validatePersonalInfoFields — revision mode (isRevision=true)', () =>
     );
     expect(errors).toContain('Program is required');
   });
+});
+
+it.each([
+  ['firstName', 'First name', 50],
+  ['middleName', 'Middle name', 50],
+  ['surname', 'Surname', 50],
+  ['suffix', 'Suffix', 10],
+  ['nationality', 'Nationality', 50],
+  ['religion', 'Religion', 50],
+  ['address', 'Present address', 10000],
+  ['provinceAddress', 'Province address', 10000],
+  ['contactNumber', 'Contact number', 15],
+  ['department', 'Department', 50],
+  ['position', 'Position', 50],
+] as const)('checks the storage length for %s before submission', (field, label, limit) => {
+  const message = label + ' must be at most ' + limit + ' characters';
+  expect(validatePersonalInfoFields(makeEmployeePersonalInfo({ [field]: '7'.repeat(limit) }), EMPLOYEE_OPTS)).not.toContain(message);
+  expect(validatePersonalInfoFields(makeEmployeePersonalInfo({ [field]: '7'.repeat(limit + 1) }), EMPLOYEE_OPTS)).toContain(message);
 });

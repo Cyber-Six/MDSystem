@@ -1,7 +1,19 @@
 import React from 'react';
 import RecordChoiceInfoSection from './record-choice-info-section';
 
-const RecordChoicePage = ({ onSelect, disabledChoiceIds = [] }) => {
+const RecordChoicePage = ({ onSelect, disabledChoiceIds = [], activeTicket = null, statusLoading = false, statusError = false, onRetryStatus, onStartRevision, revisionLoading = false }) => {
+  const activeStatus = Boolean(activeTicket && !['Approved', 'Rejected', 'Cancelled', 'Expired'].includes(activeTicket.status));
+  const statusDetails = {
+    InProgress: { title: 'Update in progress', message: 'Your request is still being prepared. A new update cannot be started yet.', tone: 'border-primary-400 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800' },
+    Pending: { title: 'Awaiting staff review', message: 'Your update was submitted successfully. Staff will review it before another update can begin.', tone: 'border-primary-400 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800' },
+    Revision: { title: 'Corrections requested', message: 'Staff requested changes to this update. Continue the existing revision.', tone: 'border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40' },
+    RevisionSubmitted: { title: 'Revision awaiting review', message: 'Your corrections were submitted successfully and are awaiting staff review.', tone: 'border-primary-400 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800' },
+    Approved: { title: 'Update approved', message: 'Your latest update was approved. You can start another update if needed.', tone: 'border-green-400 bg-green-50 dark:border-green-700 dark:bg-green-950/40' },
+    Rejected: { title: 'Update rejected', message: 'Your latest update was rejected. You can start a new update.', tone: 'border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/40' },
+    Cancelled: { title: 'Update cancelled', message: 'Your latest update was cancelled. You can start a new update.', tone: 'border-neutral-400 bg-neutral-50 dark:border-neutral-600 dark:bg-neutral-800' },
+    Expired: { title: 'Update expired', message: 'Your unfinished update expired. You can start a new update.', tone: 'border-neutral-400 bg-neutral-50 dark:border-neutral-600 dark:bg-neutral-800' },
+  };
+  const status = statusDetails[activeTicket?.status];
   const choices = [
     {
       id: 'medical',
@@ -73,10 +85,22 @@ const RecordChoicePage = ({ onSelect, disabledChoiceIds = [] }) => {
         </div>
       </div>
 
+      {(activeTicket || statusLoading || statusError) && (
+        <div role="status" className={`mb-6 rounded-xl border p-4 text-secondary-900 dark:text-neutral-100 ${status?.tone || 'border-primary-400 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800'}`}>
+          {statusLoading ? <p>Checking your update request status...</p> : statusError ? <>
+            <p>We could not check your update request status. Try again before starting another update.</p>
+            <button type="button" onClick={onRetryStatus} className="mt-2 rounded-lg bg-primary-500 px-4 py-2 font-semibold text-neutral-900">Retry</button>
+          </> : <>
+            <p className="font-semibold">{status?.title || 'Update status'} · {activeTicket.scope || 'Record'} record</p>
+            <p className="mt-1 text-sm">{status?.message || 'Please check your update status again before starting another request.'}</p>
+            {activeTicket.status === 'Revision' && <button type="button" onClick={onStartRevision} disabled={revisionLoading} aria-busy={revisionLoading} className="mt-3 rounded-lg bg-primary-500 px-4 py-2 font-semibold text-neutral-900 disabled:cursor-wait disabled:opacity-60">{revisionLoading ? 'Preparing Revision…' : 'Start Revision'}</button>}
+          </>}
+        </div>
+      )}
       {/* Choices Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
         {choices.map((choice) => {
-          const isDisabled = disabledChoiceIds.includes(choice.id);
+          const isDisabled = activeStatus || statusLoading || statusError || disabledChoiceIds.includes(choice.id);
           return isDisabled ? (
             <div
               key={choice.id}

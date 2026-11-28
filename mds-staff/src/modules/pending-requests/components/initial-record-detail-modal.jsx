@@ -3,6 +3,13 @@ import { TICKET_STATUS, staffUpdateTicket, approveReviewedRecord } from '../init
 import RecordReviewModal from './record-review-modal';
 import { formatBranchLabel } from '../../../utils/branch-utils';
 
+const formatDateTime = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime())
+    ? date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—';
+};
+
 /**
  * InitialRecordDetailModal
  *
@@ -29,6 +36,11 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
   const [error, setError] = useState('');
 
   if (!ticket) return null;
+
+  const submittedAt = ticket.created_at ? new Date(ticket.created_at) : null;
+  const expiresAt = submittedAt && Number.isFinite(submittedAt.getTime())
+    ? new Date(submittedAt.getTime() + 7 * 86400000)
+    : null;
 
   const isPending =
     ticket.status === TICKET_STATUS.PENDING ||
@@ -171,11 +183,19 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                   Submitted
                 </p>
                 <p className="text-xs text-secondary-700 dark:text-neutral-300">
-                  {ticket.created_at
-                    ? new Date(ticket.created_at).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                    : '—'}
+                  {formatDateTime(ticket.created_at)}
                 </p>
               </div>
+              {ticket.is_initial === false && ticket.created_at && (
+                <div>
+                  <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+                    Expires
+                  </p>
+                  <p className="text-xs text-secondary-700 dark:text-neutral-300">
+                    {formatDateTime(expiresAt)}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                   Branch

@@ -8,13 +8,6 @@
 import { axiosRequest } from '../../../packages-core-adapter';
 import { updatePersonalInfo } from './personal-info-service';
 
-// Debug logging - set to false to silence console logs
-const DEBUG = false;
-
-// Helper function for conditional logging
-const log = (...args) => DEBUG && console.log(...args);
-const warn = (...args) => DEBUG && console.warn(...args);
-
 const formatDateToMonthInput = (rawDate) => {
   if (!rawDate) return '';
   const dateText = String(rawDate).trim();
@@ -48,7 +41,7 @@ async function uploadMediaFile(file) {
   const response = await axiosRequest.post('/media/stage/', body, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
-  console.log('📸 Media file staged, fileId:', response.data.fileId);
+
   return response.data.fileId;
 }
 
@@ -60,9 +53,9 @@ async function unstageMediaFile(fileId) {
   if (!fileId) return;
   try {
     await axiosRequest.delete(`/media/unstage/${fileId}`);
-    console.log('🗑️ Staged media file removed:', fileId);
+
   } catch (error) {
-    console.warn('⚠️ Failed to remove staged media file:', fileId, error.message);
+
   }
 }
 
@@ -72,7 +65,7 @@ async function unstageMediaFile(fileId) {
  * @param {object} variables - Query/mutation variables
  * @returns {Promise<object>} GraphQL response data
  */
-async function sendGraphQLRequest(query, variables = {}) {
+async function sendGraphQLRequest(query, variables = {}, { strict = false } = {}) {
   try {
     const response = await axiosRequest({
       method: 'POST',
@@ -85,21 +78,29 @@ async function sendGraphQLRequest(query, variables = {}) {
 
     // Handle GraphQL errors gracefully
     if (response.data.errors && response.data.errors.length > 0) {
-      console.warn('⚠️ GraphQL Errors:', response.data.errors.map(e => e.message).join(', '));
-      
+      if (strict) {
+        const error = new Error('Stored records could not be loaded.');
+        // Preserve the GraphQL messages for the form's safe, user-facing error mapper.
+        // Do not attach response data, variables, or extensions that may contain PHI or internals.
+        error.graphQLErrors = response.data.errors
+          .map(({ message }) => ({ message }))
+          .filter(({ message }) => typeof message === 'string' && message.length > 0);
+        throw error;
+      }
+
       // If we have partial data (field-level errors in scope-aware queries), accept it
       // This happens when querying only Dental fields but backend returns "No active profile" 
       // for medical fields that weren't included in the query
       if (response.data.data && Object.keys(response.data.data).length > 0) {
-        console.log('✓ Returning partial data despite field-level errors');
+
         return response.data.data;
       }
-      
+
       // If data is completely null (backend table missing, no records, etc.), return empty object
       if (response.data.data === null) {
         return {};
       }
-      
+
       // Otherwise, throw the error
       throw new Error(response.data.errors.map(e => e.message).join(', '));
     }
@@ -107,7 +108,7 @@ async function sendGraphQLRequest(query, variables = {}) {
     // Return the actual GraphQL data object
     return response.data.data || response.data;
   } catch (error) {
-    console.error('✗ GraphQL Request Error:', error.message);
+
     throw error;
   }
 }
@@ -118,30 +119,30 @@ async function sendGraphQLRequest(query, variables = {}) {
  * Gets the current active update ticket status
  * @returns {Promise<object>} Ticket details {id, status} or null if no active ticket
  */
-export async function getUpdateTicketStatus() {
+export async function getUpdateTicketStatus({ strict = false } = {}) {
   const query = `
     query GetUpdateTicketStatus {
       getUpdateTicket {
         id
         status
         scope
+        notes
       }
     }
   `;
 
   try {
-    console.log('🔍 Fetching current update ticket status...');
-    const response = await sendGraphQLRequest(query, {});
-    
+
+    const response = await sendGraphQLRequest(query, {}, { strict });
+
     if (response.getUpdateTicket) {
-      console.log('✓ Current ticket status:', response.getUpdateTicket);
+
       return response.getUpdateTicket;
     }
-    
-    console.log('✓ No active update ticket');
+
     return null;
   } catch (error) {
-    console.log('ℹ️ Could not fetch ticket status:', error.message);
+    if (strict) throw error;
     return null;
   }
 }
@@ -152,38 +153,7 @@ export async function getUpdateTicketStatus() {
  * @returns {Promise<{id, status, notes} | null>} Ticket details or null if no ticket
  */
 export async function getUpdateRevisionStatus() {
-  const query = `
-    query GetUpdateTicket {
-      getUpdateTicket {
-        id
-        status
-        scope
-        notes
-      }
-    }
-  `;
-
-  try {
-    console.log('[UpdateRevision] 🔍 Checking for revision status...');
-    const response = await sendGraphQLRequest(query, {});
-    
-    if (response.getUpdateTicket) {
-      const ticket = response.getUpdateTicket;
-      console.log('[UpdateRevision] ✓ Ticket status:', ticket.status, 'Scope:', ticket.scope);
-      
-      if (ticket.status === 'Revision') {
-        console.log('[UpdateRevision] ⚠️ REVISION DETECTED - Staff notes:', ticket.notes);
-      }
-      
-      return ticket;
-    }
-    
-    console.log('[UpdateRevision] ✓ No active ticket');
-    return null;
-  } catch (error) {
-    console.log('[UpdateRevision] ℹ️ Could not fetch revision status:', error.message);
-    return null;
-  }
+  return getUpdateTicketStatus();
 }
 
 /**
@@ -191,36 +161,45 @@ export async function getUpdateRevisionStatus() {
  * Builds a scope-specific query based on the revision scope (Medical/Dental/Both)
  * @returns {Promise<object>} Previous form data to pre-fill the revision form
  */
-export async function fetchUpdateRevisionPrefill() {
-  console.log('[UpdateRevision] 📥 Fetching previous submission data for revision pre-fill...');
-  
+export async function fetchUpdateRevisionPrefill(ticket = null) {
   try {
-    // First, get the ticket scope to build the appropriate query
-    const ticket = await getUpdateTicketStatus();
-    const scope = ticket?.scope || 'Both'; // Default to Both if no scope
-    
-    console.log('[UpdateRevision] Query scope:', scope);
-    
+    const revisionTicket = ticket || await getUpdateTicketStatus();
+    // Revision prefill must restore photo bytes, not reuse permanent media IDs as
+    // upload IDs. Dental photo mutations promote staged uploads only.
+    return await fetchUpdatePrefill(revisionTicket?.scope || 'Both', { stageExistingPhotos: true });
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchUpdateRecordPrefill(recordType) {
+  const scope = { medical: 'Medical', dental: 'Dental', both: 'Both' }[recordType];
+  if (!scope) throw new Error('Select a valid record type.');
+  return fetchUpdatePrefill(scope, { approved: true });
+}
+
+async function fetchUpdatePrefill(scope, { approved = false, stageExistingPhotos = approved } = {}) {
+  try {
     // Build query based on scope - only request fields relevant to the revision scope
-    let query = `query GetRevisionEMRData {`;
-    
+    let query = `query ${approved ? 'GetApprovedUpdatePrefill' : 'GetRevisionEMRData'} {`;
+
     // Always fetch profile and emergency contact (needed for all scopes)
     query += `
       emrProfile: getProfile {
-        ... on StudentProfile { program year }
+        __typename
+        ... on StudentProfile { programId program year }
         ... on EmployeeProfile { department role position employmentCategoryOther }
       }
       emergencyContact: getEmergencyContact {
         firstContact { contactName relationship contactNumber address }
         secondContact { contactName relationship contactNumber address }
       }`;
-    
+
     // Add medical fields only for Medical or Both scope
     if (scope === 'Medical' || scope === 'Both') {
       query += `
       medicalHistory: getMedicalHistory {
         conditions { conditionId relationship }
-        notes
       }
       allergyProfile: getAllergyProfile {
         allergies { allergenCatalogId status severity notes }
@@ -240,7 +219,6 @@ export async function fetchUpdateRevisionPrefill() {
       }
       immunizationProfile: getImmunizationProfile {
         immunizations { vaccineTypeId immunizationDate doseNumber }
-        notes
       }
       lifestyle: getLifestyle {
         smoker numberOfCigarettesPerDay yearsSmoked
@@ -257,7 +235,7 @@ export async function fetchUpdateRevisionPrefill() {
         notes
       }`;
     }
-    
+
     // Add dental fields only for Dental or Both scope
     if (scope === 'Dental' || scope === 'Both') {
       query += `
@@ -274,23 +252,20 @@ export async function fetchUpdateRevisionPrefill() {
       oralApplianceProfile: getOralApplianceProfile {
         appliances { tagId status dateIssued arch }
         notes
+        otherDescription otherArch
       }`;
     }
-    
+
     query += `
     }`;
-    
-    const response = await sendGraphQLRequest(query, {});
-    console.log('[UpdateRevision] ✅ Pre-fill data fetched:', response);
-    
-    // Transform backend data to form data structure
-    const formData = await mapRevisionDataToFormData(response);
-    console.log('[UpdateRevision] ✅ Pre-fill data mapped to form structure:', formData);
-    
-    return formData;
+
+    if (approved) {
+      query = query.replace(/(\bget[A-Z]\w*)(\s*\{)/g, '$1(approved: true)$2');
+    }
+    const response = await sendGraphQLRequest(query, {}, { strict: approved });
+    return await mapRevisionDataToFormData(response, { stageExistingPhotos });
   } catch (error) {
-    console.warn('[UpdateRevision] ⚠️ Could not fetch pre-fill data:', error.message);
-    // Return empty object on error - form will still be accessible, just without pre-fill
+    if (approved) throw error;
     return {};
   }
 }
@@ -301,14 +276,11 @@ export async function fetchUpdateRevisionPrefill() {
  * @param {object} backendData - Data from GraphQL query (see fetchUpdateRevisionPrefill)
  * @returns {Promise<object>} Form data with all fields properly renamed and structured
  */
-export async function mapRevisionDataToFormData(backendData) {
+export async function mapRevisionDataToFormData(backendData, { stageExistingPhotos = false } = {}) {
   const formData = {};
 
-  console.log('[MapRevisionData] ========== STARTING DATA TRANSFORMATION ==========');
-  console.log('[MapRevisionData] Backend data received:', JSON.stringify(backendData, null, 2));
-
   // ======== PERSONAL INFO ========
-  
+
   // Emergency Contact
   if (backendData.emergencyContact?.firstContact) {
     const firstContact = backendData.emergencyContact.firstContact;
@@ -326,13 +298,19 @@ export async function mapRevisionDataToFormData(backendData) {
     formData.emergencyContact2Address = secondContact.address || '';
   }
 
+  if (backendData.emrProfile) {
+    formData.profileType = backendData.emrProfile.__typename === 'EmployeeProfile' || backendData.emrProfile.department ? 'Employee' : 'Student';
+  }
+
   // School/Employee Profile
   if (backendData.emrProfile?.program) {
     const rawProgramLabel = backendData.emrProfile.program || '';
     formData.program = rawProgramLabel;
     formData.schoolYear = backendData.emrProfile.year || '';
 
-    if (rawProgramLabel) {
+    if (backendData.emrProfile.programId) {
+      formData.programId = backendData.emrProfile.programId;
+    } else if (rawProgramLabel) {
       try {
         const searchResult = await sendGraphQLRequest(
           `
@@ -360,49 +338,51 @@ export async function mapRevisionDataToFormData(backendData) {
           formData.program = matchedProgram.label || rawProgramLabel;
         }
       } catch (error) {
-        console.warn('[MapRevisionData] Could not resolve program ID from label:', error.message);
+
       }
     }
   }
   if (backendData.emrProfile?.department) {
     formData.employeeDepartment = backendData.emrProfile.department || '';
-    formData.employeeRole = ({ NonStaff: 'Teaching', NonStaffOfficer: 'Teaching (Officer)', Staff: 'Non-Teaching', StaffOfficer: 'Non-Teaching (Officer)' })[backendData.emrProfile.role] || backendData.emrProfile.role || '';
-    formData.employeeCategoryOther = backendData.emrProfile.employmentCategoryOther || '';
+    const storedRole = backendData.emrProfile.role;
+    formData.employeeRole = ({ NonStaff: 'Teaching', NonStaffOfficer: 'Teaching (Officer)', Staff: 'Non-Teaching', StaffOfficer: 'Non-Teaching (Officer)' })[storedRole]
+      || (['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(storedRole) ? storedRole : 'Other');
+    formData.employeeCategoryOther = backendData.emrProfile.employmentCategoryOther || (formData.employeeRole === 'Other' && storedRole !== 'Other' ? storedRole : '') || '';
     formData.employeePosition = backendData.emrProfile.position || '';
   }
 
   // ======== MEDICAL HISTORY ========
-  
+
   // Medical Conditions
-  console.log('[MapRevisionData] Medical history data:', backendData.medicalHistory);
+
   if (backendData.medicalHistory?.conditions && Array.isArray(backendData.medicalHistory.conditions) && backendData.medicalHistory.conditions.length > 0) {
     formData.selfConditions = {};
     formData.familyConditions = {};
-    
+
     for (const condition of backendData.medicalHistory.conditions) {
-      console.log('[MapRevisionData] Processing condition:', condition);
+
       // Self conditions have relationship === null or undefined
       if (!condition.relationship || condition.relationship === 'Self' || condition.relationship === null) {
         formData.selfConditions[condition.conditionId] = true;
-        console.log('[MapRevisionData] Added self condition:', condition.conditionId);
+
       } else if (condition.relationship) {
         // Family conditions have a relationship name
         formData.familyConditions[condition.conditionId] = {
           checked: true,
           relationship: condition.relationship
         };
-        console.log('[MapRevisionData] Added family condition:', condition.conditionId, 'relationship:', condition.relationship);
+
       }
     }
-    console.log('[MapRevisionData] Conditions prefilled - Self:', formData.selfConditions, 'Family:', formData.familyConditions);
+
   } else {
-    console.log('[MapRevisionData] No medical conditions to prefill');
+
     formData.selfConditions = {};
     formData.familyConditions = {};
   }
 
   // Allergies
-  console.log('[MapRevisionData] Allergy profile data:', backendData.allergyProfile);
+
   if (Array.isArray(backendData.allergyProfile?.allergies) && backendData.allergyProfile.allergies.length > 0) {
     formData.hasAllergies = 'yes';
     formData.selectedAllergies = [];
@@ -416,7 +396,7 @@ export async function mapRevisionDataToFormData(backendData) {
       };
     }
   } else {
-    formData.hasAllergies = 'no';
+    formData.hasAllergies = backendData.allergyProfile ? 'no' : '';
   }
 
   formData.allergiesNotes = (backendData.allergyProfile?.notes || backendData.allergyProfile?.allergies?.[0]?.notes || '').replace(/^Other: /, '');
@@ -424,10 +404,9 @@ export async function mapRevisionDataToFormData(backendData) {
   formData.surgeryNotes = backendData.operationProfile?.notes || backendData.operationProfile?.operations?.[0]?.notes || '';
   formData.medicationNotes = backendData.medicationProfile?.notes || '';
   formData.medicationReason = backendData.medicationProfile?.medications?.[0]?.description || '';
-  formData.immunizationNotes = backendData.immunizationProfile?.notes || '';
 
   // Hospitalization
-  console.log('[MapRevisionData] Hospitalization profile data:', backendData.hospitalizationProfile);
+
   if (backendData.hospitalizationProfile?.hospitalizations && Array.isArray(backendData.hospitalizationProfile.hospitalizations) && backendData.hospitalizationProfile.hospitalizations.length > 0) {
     formData.hasHospitalizations = 'yes';
     formData.hospitalizationConditions = {};
@@ -442,11 +421,11 @@ export async function mapRevisionDataToFormData(backendData) {
       }
     }
   } else {
-    formData.hasHospitalizations = 'no';
+    formData.hasHospitalizations = backendData.hospitalizationProfile ? 'no' : '';
   }
 
   // Surgery/Operations
-  console.log('[MapRevisionData] Operation profile data:', backendData.operationProfile);
+
   if (backendData.operationProfile?.operations && Array.isArray(backendData.operationProfile.operations) && backendData.operationProfile.operations.length > 0) {
     formData.hasSurgeries = 'yes';
     formData.operationConditions = {};
@@ -458,29 +437,31 @@ export async function mapRevisionDataToFormData(backendData) {
       }
     }
   } else {
-    formData.hasSurgeries = 'no';
+    formData.hasSurgeries = backendData.operationProfile ? 'no' : '';
   }
 
   // Medications
-  console.log('[MapRevisionData] Medication profile data:', backendData.medicationProfile);
+
   if (backendData.medicationProfile?.medications && Array.isArray(backendData.medicationProfile.medications) && backendData.medicationProfile.medications.length > 0) {
     formData.hasMedications = 'yes';
     formData.selectedMedications = {};
+    formData.medicationDescriptions = {};
     for (const med of backendData.medicationProfile.medications) {
       if (med.medicineId) {
         formData.selectedMedications[med.medicineId] = true;
+        formData.medicationDescriptions[med.medicineId] = med.description || '';
       }
     }
   } else {
-    formData.hasMedications = 'no';
+    formData.hasMedications = backendData.medicationProfile ? 'no' : '';
   }
 
   // Immunizations
-  console.log('[MapRevisionData] Immunization profile data:', backendData.immunizationProfile);
+
   if (backendData.immunizationProfile?.immunizations && Array.isArray(backendData.immunizationProfile.immunizations) && backendData.immunizationProfile.immunizations.length > 0) {
     formData.immunizations = backendData.immunizationProfile.immunizations.map(imm => imm.vaccineTypeId);
     formData.immunizationDetails = {};
-    
+
     for (const imm of backendData.immunizationProfile.immunizations) {
       // Convert ISO date format to yyyy-MM-dd
       let dateStr = '';
@@ -492,15 +473,15 @@ export async function mapRevisionDataToFormData(backendData) {
           dateStr = imm.immunizationDate;
         }
       }
-      
+
       formData.immunizationDetails[imm.vaccineTypeId] = {
         date: dateStr,
-        doseNumber: imm.doseNumber || ''
+        doseNumber: imm.doseNumber ?? ''
       };
     }
-    console.log('[MapRevisionData] Immunizations prefilled:', formData.immunizations);
+
   } else {
-    console.log('[MapRevisionData] No immunizations to prefill - array is empty or missing');
+
     formData.immunizations = [];
     formData.immunizationDetails = {};
   }
@@ -527,7 +508,7 @@ export async function mapRevisionDataToFormData(backendData) {
     formData.leftEye = backendData.visualAcuityProfile.acuity.left_eye || '';
     formData.rightEye = backendData.visualAcuityProfile.acuity.right_eye || '';
   } else {
-    formData.visualAcuity = 'no';
+    formData.visualAcuity = backendData.visualAcuityProfile ? 'no' : '';
   }
 
   // OB-GYN (Female only)
@@ -535,10 +516,11 @@ export async function mapRevisionDataToFormData(backendData) {
     // Convert ISO date to yyyy-MM-dd format
     formData.lastMenstrualPeriod = backendData.obgynHistory.lastMenstrualPeriod ? backendData.obgynHistory.lastMenstrualPeriod.split('T')[0] : '';
     formData.dysmenorrhea = backendData.obgynHistory.hasDysmenorrhea ? 'yes' : 'no';
+    formData.menstruationDuration = backendData.obgynHistory.notes?.match(/Duration:\s*(\d+)\s*days/i)?.[1] || '';
   }
 
   // ======== DENTAL HISTORY ========
-  
+
   if (backendData.dentalHistory) {
     formData.seenByDentist = backendData.dentalHistory.seenByDentist === true;
     formData.lastDentalCleaning = backendData.dentalHistory.lastDentalCleaning || '0-6';
@@ -548,7 +530,7 @@ export async function mapRevisionDataToFormData(backendData) {
   }
 
   // Dental Procedures
-  console.log('[MapRevisionData] Dental procedure profile data:', backendData.dentalProcedureProfile);
+
   if (backendData.dentalProcedureProfile?.procedures && Array.isArray(backendData.dentalProcedureProfile.procedures) && backendData.dentalProcedureProfile.procedures.length > 0) {
     formData.dentalProcedures = backendData.dentalProcedureProfile.procedures.map(proc => {
       // Convert ISO date format to yyyy-MM-dd for input[type="date"]
@@ -558,9 +540,9 @@ export async function mapRevisionDataToFormData(backendData) {
         procedureDate: dateStr
       };
     });
-    console.log('[MapRevisionData] Dental procedures prefilled:', formData.dentalProcedures);
+
   } else {
-    console.log('[MapRevisionData] No dental procedures to prefill - array is empty or missing');
+
     formData.dentalProcedures = [];
   }
   if (backendData.dentalProcedureProfile) {
@@ -568,7 +550,7 @@ export async function mapRevisionDataToFormData(backendData) {
   }
 
   // Oral Appliances
-  console.log('[MapRevisionData] Oral appliance profile data:', backendData.oralApplianceProfile);
+
   if (backendData.oralApplianceProfile?.appliances && Array.isArray(backendData.oralApplianceProfile.appliances) && backendData.oralApplianceProfile.appliances.length > 0) {
     formData.oralAppliances = backendData.oralApplianceProfile.appliances.map(app => {
       // Convert ISO date format to yyyy-MM-dd for input[type="date"]
@@ -580,49 +562,56 @@ export async function mapRevisionDataToFormData(backendData) {
         arch: app.arch || 'None'
       };
     });
-    console.log('[MapRevisionData] Oral appliances prefilled:', formData.oralAppliances);
+
   } else {
-    console.log('[MapRevisionData] No oral appliances to prefill - array is empty or missing');
+
     formData.oralAppliances = [];
   }
   if (backendData.oralApplianceProfile) {
     formData.hasOralAppliances = formData.oralAppliances.length > 0;
   }
 
+  formData.oralApplianceNotes = backendData.oralApplianceProfile?.notes || '';
+  formData.oralApplianceOtherDescription = backendData.oralApplianceProfile?.otherDescription || '';
+  formData.oralApplianceOtherArch = backendData.oralApplianceProfile?.otherArch || 'None';
+  formData.dentalProcedureNotes = backendData.dentalProcedureProfile?.notes || '';
+  formData.visualAcuityNotes = backendData.visualAcuityProfile?.acuity?.notes || backendData.visualAcuityProfile?.notes || '';
+
   // Dental Photos - Convert file IDs to preview URLs
   if (backendData.dentalPhotoRecord?.upperTeeth) {
     try {
-      const previewUrl = await fetchDentalPhotoAsBlob(backendData.dentalPhotoRecord.upperTeeth);
+      const photo = await fetchDentalPhotoAsBlob(backendData.dentalPhotoRecord.upperTeeth, { includeFile: stageExistingPhotos });
+      const previewUrl = stageExistingPhotos ? photo?.preview : photo;
       if (previewUrl) {
         formData.upperTeethPhoto = {
-          id: backendData.dentalPhotoRecord.upperTeeth,
+          ...(stageExistingPhotos ? { file: photo.file } : { id: backendData.dentalPhotoRecord.upperTeeth }),
           preview: previewUrl,
-          name: 'Upper Teeth (from revision)'
+          name: 'Upper teeth'
         };
-        console.log('[MapRevisionData] Upper teeth photo mapped');
+
       }
     } catch (err) {
-      console.warn('[MapRevisionData] Could not fetch upper teeth photo:', err.message);
+
     }
   }
 
   if (backendData.dentalPhotoRecord?.lowerTeeth) {
     try {
-      const previewUrl = await fetchDentalPhotoAsBlob(backendData.dentalPhotoRecord.lowerTeeth);
+      const photo = await fetchDentalPhotoAsBlob(backendData.dentalPhotoRecord.lowerTeeth, { includeFile: stageExistingPhotos });
+      const previewUrl = stageExistingPhotos ? photo?.preview : photo;
       if (previewUrl) {
         formData.lowerTeethPhoto = {
-          id: backendData.dentalPhotoRecord.lowerTeeth,
+          ...(stageExistingPhotos ? { file: photo.file } : { id: backendData.dentalPhotoRecord.lowerTeeth }),
           preview: previewUrl,
-          name: 'Lower Teeth (from revision)'
+          name: 'Lower teeth'
         };
-        console.log('[MapRevisionData] Lower teeth photo mapped');
+
       }
     } catch (err) {
-      console.warn('[MapRevisionData] Could not fetch lower teeth photo:', err.message);
+
     }
   }
 
-  console.log('[MapRevisionData] ✅ Mapped form data:', formData);
   return formData;
 }
 
@@ -632,23 +621,22 @@ export async function mapRevisionDataToFormData(backendData) {
  * @param {string} fileId - File ID from getDentalPhotoRecord
  * @returns {Promise<string|null>} Blob URL for display, or null if fetch fails
  */
-export async function fetchDentalPhotoAsBlob(fileId) {
+export async function fetchDentalPhotoAsBlob(fileId, { includeFile = false } = {}) {
   if (!fileId) return null;
-  
+
   try {
-    console.log('[FetchPhoto] 📸 Fetching dental photo:', fileId);
-    
+
     const response = await axiosRequest({
       method: 'GET',
       url: `/media/record/dentalPhoto/${fileId}`,
       responseType: 'blob'
     });
-    
+
     const blobUrl = URL.createObjectURL(response.data);
-    console.log('[FetchPhoto] ✅ Photo fetched successfully, created blob URL');
-    return blobUrl;
+
+    return includeFile ? { preview: blobUrl, file: new File([response.data], 'dental-photo', { type: response.data.type }) } : blobUrl;
   } catch (error) {
-    console.error('[FetchPhoto] ❌ Failed to fetch photo:', error.message);
+
     return null;
   }
 }
@@ -659,40 +647,38 @@ export async function fetchDentalPhotoAsBlob(fileId) {
  */
 export async function ensureNoActiveTicket() {
   try {
-    console.log('🔍 Checking for active update ticket...');
+
     const ticket = await getUpdateTicketStatus();
-    
+
     if (!ticket) {
-      console.log('✓ No active ticket found');
+
       return true;
     }
-    
-    console.log('ℹ️ Found active ticket:', ticket.id, 'Status:', ticket.status);
-    
+
     // Check if ticket is in a cancellable state
     // Cancellable: InProgress, Pending, Revision (patient resubmitting after revision request)
     // Final/Not cancellable: Approved, Cancelled, Rejected, Expired
     const finalStatuses = ['Approved', 'Cancelled', 'Rejected', 'Expired'];
     const isFinalStatus = finalStatuses.includes(ticket.status);
-    
+
     if (isFinalStatus) {
-      console.log('ℹ️ Ticket is in final status:', ticket.status, '- no need to cancel');
+
       return true;
     }
-    
+
     // Otherwise ticket is cancellable (InProgress, Pending, Revision, etc)
-    console.log('🚫 Attempting to cancel active ticket...');
+
     const cancelResult = await cancelUpdateTicket();
-    
+
     if (cancelResult) {
-      console.log('✅ Successfully cancelled active ticket');
+
       return true;
     } else {
-      console.error('❌ Failed to cancel active ticket');
+
       return false;
     }
   } catch (error) {
-    console.error('❌ Error checking/cancelling active ticket:', error.message);
+
     return false;
   }
 }
@@ -710,12 +696,12 @@ export async function createUpdateTicket(scope = 'Both') {
   `;
 
   try {
-    console.log(`📝 Creating update ticket with scope: ${scope}`);
+
     const response = await sendGraphQLRequest(mutation, { scope });
-    console.log('✅ Update ticket created:', response.createUpdateTicket);
+
     return response.createUpdateTicket;
   } catch (error) {
-    console.error('❌ Failed to create update ticket:', error);
+
     throw error;
   }
 }
@@ -732,12 +718,12 @@ export async function submitUpdateTicket() {
   `;
 
   try {
-    console.log('📤 Submitting update ticket...');
+
     const response = await sendGraphQLRequest(mutation);
-    console.log('✅ Update ticket submitted:', response.submitUpdateTicket);
+
     return response.submitUpdateTicket;
   } catch (error) {
-    console.error('❌ Failed to submit update ticket:', error);
+
     throw error;
   }
 }
@@ -754,8 +740,7 @@ export async function cancelUpdateTicket() {
   `;
 
   try {
-    console.log('🚫 Attempting to cancel update ticket...');
-    
+
     const response = await axiosRequest({
       method: 'POST',
       url: '/emr/patient',
@@ -768,39 +753,37 @@ export async function cancelUpdateTicket() {
     // Check for GraphQL errors specifically about ticket status
     if (response.data.errors) {
       const errorMessages = response.data.errors.map(e => e.message).join(', ');
-      
+
       // If ticket is not in cancellable status (already Approved/Cancelled/Rejected), that's OK
       if (errorMessages.includes("not in 'InProgress' or 'Pending' status") || 
           errorMessages.includes("Cannot cancel update ticket")) {
-        console.log('ℹ️ Ticket already in final status (Approved/Cancelled/Rejected), skipping cancel');
-        console.log('ℹ️ Error message:', errorMessages);
+
         return null; // Return null to indicate no ticket was cancelled
       }
-      
+
       // Other GraphQL errors should be thrown
-      console.error('❌ GraphQL error cancelling ticket:', errorMessages);
+
       throw new Error(errorMessages);
     }
 
     // Success case
     const status = response.data.data?.cancelUpdateTicket;
-    console.log('✅ Update ticket cancelled with status:', status);
+
     return status;
-    
+
   } catch (error) {
     // Handle network errors or other non-GraphQL errors
     if (error.response?.data?.errors) {
       const errorMessages = error.response.data.errors.map(e => e.message).join(', ');
-      
+
       // Check if it's the "already in final status" error
       if (errorMessages.includes("not in 'InProgress' or 'Pending' status") || 
           errorMessages.includes("Cannot cancel update ticket")) {
-        console.log('ℹ️ Ticket already in final status, skipping cancel');
+
         return null;
       }
     }
-    
-    console.error('❌ Failed to cancel update ticket:', error.message);
+
     throw error;
   }
 }
@@ -811,7 +794,7 @@ export async function cancelUpdateTicket() {
  * Creates medical history profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createMedicalHistory(formData) {
+export async function createMedicalHistory(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateMedicalHistory($input: MedicalHistoryInput!) {
       createMedicalHistory(input: $input) {
@@ -825,72 +808,18 @@ export async function createMedicalHistory(formData) {
     }
   `;
 
-  // Build conditions array from selected conditions
-  const conditions = [];
-  const medicalHistoryNotes = [];
-  
-  // Add self conditions to conditions array
-  if (formData.selfConditions) {
-    const selfConditions = Object.entries(formData.selfConditions)
-      .filter(([_, checked]) => checked)
-      .map(([conditionId, _]) => ({
-        conditionId: parseInt(conditionId),
-        relationship: null // Self conditions have no relationship
-      }));
-    
-    conditions.push(...selfConditions);
-    const selfIds = Object.entries(formData.selfConditions)
-      .filter(([_, checked]) => checked)
-      .map(([conditionId, _]) => conditionId);
-    if (selfIds.length > 0) {
-      medicalHistoryNotes.push(`Self: ${selfIds.join(', ')}`);
-    }
-  }
-  
-  // Add self other notes
-  if (formData.selfOther) {
-    medicalHistoryNotes.push(`Self Other: ${formData.selfOther}`);
-  }
-  
-  // Add family conditions to conditions array with relationship
-  if (formData.familyConditions) {
-    const familyConditions = Object.entries(formData.familyConditions)
-      .filter(([_, val]) => val && val.checked)
-      .map(([conditionId, val]) => ({
-        conditionId: parseInt(conditionId),
-        relationship: val.relationship || 'Family'
-      }));
-    
-    conditions.push(...familyConditions);
-    
-    const familyConditionsDisplay = Object.entries(formData.familyConditions)
-      .filter(([_, val]) => val && val.checked)
-      .map(([conditionId, val]) => {
-        const relationship = val.relationship;
-        return relationship ? `${conditionId} (${relationship})` : conditionId;
-      });
-    if (familyConditionsDisplay.length > 0) {
-      medicalHistoryNotes.push(`Family history: ${familyConditionsDisplay.join(', ')}`);
-    }
-  }
-  
-  // Add family other notes with who has it
-  if (formData.familyOther) {
-    const whoHasIt = formData.familyOtherWhoHasIt;
-    const otherNote = whoHasIt 
-      ? `Family other: ${formData.familyOther} (${whoHasIt})`
-      : `Family other: ${formData.familyOther}`;
-    medicalHistoryNotes.push(otherNote);
-  }
+  const conditions = [
+    ...Object.entries(formData.selfConditions || {})
+      .filter(([, checked]) => checked)
+      .map(([conditionId]) => ({ conditionId: parseInt(conditionId), relationship: null })),
+    ...Object.entries(formData.familyConditions || {})
+      .filter(([, value]) => value?.checked)
+      .map(([conditionId, value]) => ({ conditionId: parseInt(conditionId), relationship: value.relationship || 'Family' })),
+  ];
+  const input = { conditions };
 
-  const input = {
-    conditions, // Now populated with condition objects
-    notes: medicalHistoryNotes.length > 0 ? medicalHistoryNotes.join('; ') : null
-  };
+  const response = await request(mutation, { input });
 
-  console.log('💊 Creating medical history...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Medical history created');
   return response.createMedicalHistory;
 }
 
@@ -898,7 +827,7 @@ export async function createMedicalHistory(formData) {
  * Creates allergy profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createAllergyProfile(formData) {
+export async function createAllergyProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateAllergyProfile($input: AllergyProfileInput!) {
       createAllergyProfile(input: $input) {
@@ -943,9 +872,8 @@ export async function createAllergyProfile(formData) {
     notes: allergyNotes
   };
 
-  console.log('🚨 Creating allergy profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Allergy profile created');
+  const response = await request(mutation, { input });
+
   return response.createAllergyProfile;
 }
 
@@ -953,7 +881,7 @@ export async function createAllergyProfile(formData) {
  * Creates lifestyle profile
  * Following emr-service.js pattern
  */
-export async function createLifestyle(formData) {
+export async function createLifestyle(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateLifestyle($input: LifestyleInput!) {
       createLifestyle(input: $input) {
@@ -979,12 +907,12 @@ export async function createLifestyle(formData) {
     vapeUser: isVaper,
     vapeType: isVaper ? (formData.vapeType || null) : null,
     vapeFrequency: isVaper ? (formData.vapeFrequency || null) : null,
+    yearsVaping: isVaper ? (formData.yearsVaping ?? null) : null,
     notes: null
   };
 
-  console.log('🏃 Creating lifestyle...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Lifestyle created');
+  const response = await request(mutation, { input });
+
   return response.createLifestyle;
 }
 
@@ -993,7 +921,7 @@ export async function createLifestyle(formData) {
  * NOTE: Initial record skips this due to backend bugs with null acuity
  * Following same pattern - create empty note only
  */
-export async function createVisualAcuityProfile(formData) {
+export async function createVisualAcuityProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateVisualAcuityProfile($input: VisualAcuityProfileInput!) {
       createVisualAcuityProfile(input: $input) {
@@ -1010,7 +938,7 @@ export async function createVisualAcuityProfile(formData) {
 
   const hasVisualAcuity = formData.visualAcuity === 'yes';
   const input = {
-    notes: hasVisualAcuity ? 'Uses corrective lenses' : null,
+    notes: formData.visualAcuityNotes || (hasVisualAcuity ? 'Uses corrective lenses' : null),
     acuity: hasVisualAcuity && formData.acuityId
       ? {
           acuityId: formData.acuityId,
@@ -1022,9 +950,8 @@ export async function createVisualAcuityProfile(formData) {
       : null
   };
 
-  console.log('👁️ Creating visual acuity profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Visual acuity profile created');
+  const response = await request(mutation, { input });
+
   return response.createVisualAcuityProfile;
 }
 
@@ -1032,7 +959,7 @@ export async function createVisualAcuityProfile(formData) {
  * Creates OB-GYN history (for female patients only)
  * Following emr-service.js pattern
  */
-export async function createObgynHistory(formData) {
+export async function createObgynHistory(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateObgynHistory($input: ObgynHistoryInput!) {
       createObgynHistory(input: $input) {
@@ -1048,7 +975,7 @@ export async function createObgynHistory(formData) {
   const lmpDate = formData.lastMenstrualPeriod 
     ? new Date(formData.lastMenstrualPeriod).toISOString().split('T')[0]
     : new Date().toISOString().split('T')[0];
-  
+
   // Build notes from menstruation duration
   const obgyneNotes = formData.menstruationDuration 
     ? `Duration: ${formData.menstruationDuration} days`
@@ -1060,17 +987,16 @@ export async function createObgynHistory(formData) {
     notes: obgyneNotes
   };
 
-  console.log('💗 Creating OB-GYN history...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ OB-GYN history created');
+  const response = await request(mutation, { input });
+
   return response.createObgynHistory;
 }
 
 /**
  * Creates immunization profile
- * Following emr-service.js pattern: empty arrays + notes field
+ * Stores vaccine choices, dates, and doses.
  */
-export async function createImmunizationProfile(formData) {
+export async function createImmunizationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateImmunizationProfile($input: ImmunizationProfileInput!) {
       createImmunizationProfile(input: $input) {
@@ -1085,12 +1011,12 @@ export async function createImmunizationProfile(formData) {
 
   // Build immunizations array with required fields
   const immunizations = [];
-  
+
   // Get selected immunizations with their details (dates, dose numbers)
   if (Array.isArray(formData.immunizations) && formData.immunizations.length > 0) {
     for (const vaccineId of formData.immunizations) {
       const detail = formData.immunizationDetails?.[vaccineId] || {};
-      
+
       // Create immunization object with required fields
       immunizations.push({
         vaccineTypeId: parseInt(vaccineId),
@@ -1101,13 +1027,11 @@ export async function createImmunizationProfile(formData) {
   }
 
   const input = {
-    immunizations, // Now populated with vaccine objects including date and dose
-    notes: formData.immunizationNotes || null
+    immunizations, // Vaccine objects include date and dose
   };
 
-  console.log('💉 Creating immunization profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Immunization profile created');
+  const response = await request(mutation, { input });
+
   return response.createImmunizationProfile;
 }
 
@@ -1115,7 +1039,7 @@ export async function createImmunizationProfile(formData) {
  * Creates hospitalization profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createHospitalizationProfile(formData) {
+export async function createHospitalizationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateHospitalizationProfile($input: HospitalizationProfileInput!) {
       createHospitalizationProfile(input: $input) {
@@ -1131,7 +1055,7 @@ export async function createHospitalizationProfile(formData) {
   // Build hospitalizations array from form data
   const hospitalizations = [];
   const hospitalizationNotes = [];
-  
+
   if (formData.hasHospitalizations === 'yes') {
     const conditions = formData.hospitalizationConditions || {};
     const dates = formData.hospitalizationDates || {};
@@ -1154,9 +1078,8 @@ export async function createHospitalizationProfile(formData) {
     notes: hospitalizationNotes.length > 0 ? hospitalizationNotes.join('; ') : null
   };
 
-  console.log('🏥 Creating hospitalization profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Hospitalization profile created');
+  const response = await request(mutation, { input });
+
   return response.createHospitalizationProfile;
 }
 
@@ -1164,7 +1087,7 @@ export async function createHospitalizationProfile(formData) {
  * Creates operation profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createOperationProfile(formData) {
+export async function createOperationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateOperationProfile($input: OperationProfileInput!) {
       createOperationProfile(input: $input) {
@@ -1180,7 +1103,7 @@ export async function createOperationProfile(formData) {
   // Build operations array from form data
   const operations = [];
   const operationNotes = [];
-  
+
   if (formData.hasSurgeries === 'yes') {
     const conditions = formData.operationConditions || {};
     const dates = formData.operationDates || {};
@@ -1202,9 +1125,8 @@ export async function createOperationProfile(formData) {
     notes: operationNotes.length > 0 ? operationNotes.join('; ') : null
   };
 
-  console.log('🔪 Creating operation profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Operation profile created');
+  const response = await request(mutation, { input });
+
   return response.createOperationProfile;
 }
 
@@ -1212,7 +1134,7 @@ export async function createOperationProfile(formData) {
  * Creates medication profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createMedicationProfile(formData) {
+export async function createMedicationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateMedicationProfile($input: MedicationProfileInput!) {
       createMedicationProfile(input: $input) {
@@ -1228,18 +1150,18 @@ export async function createMedicationProfile(formData) {
   // Build medications array from form data
   const medications = [];
   const medicationNotes = [];
-  
+
   if (formData.hasMedications === 'yes' && formData.selectedMedications) {
     for (const [medicineId, checked] of Object.entries(formData.selectedMedications)) {
       if (checked) {
         medications.push({
           medicineId: parseInt(medicineId),
-          description: null
+          description: formData.medicationDescriptions?.[medicineId] || formData.medicationReason || null
         });
       }
     }
   }
-  
+
   if (formData.medicationNotes) {
     medicationNotes.push(formData.medicationNotes);
   }
@@ -1249,9 +1171,8 @@ export async function createMedicationProfile(formData) {
     notes: medicationNotes.length > 0 ? medicationNotes.join('; ') : null
   };
 
-  console.log('💊 Creating medication profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Medication profile created');
+  const response = await request(mutation, { input });
+
   return response.createMedicationProfile;
 }
 
@@ -1261,7 +1182,7 @@ export async function createMedicationProfile(formData) {
  * Creates dental history
  * Following emr-service.js pattern
  */
-export async function createDentalHistory(formData) {
+export async function createDentalHistory(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateDentalHistory($input: DentalHistoryInput!) {
       createDentalHistory(input: $input) {
@@ -1283,9 +1204,8 @@ export async function createDentalHistory(formData) {
     lastVisitDate: normalizedLastVisitDate
   };
 
-  console.log('🦷 Creating dental history...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Dental history created');
+  const response = await request(mutation, { input });
+
   return response.createDentalHistory;
 }
 
@@ -1293,7 +1213,7 @@ export async function createDentalHistory(formData) {
  * Creates oral appliance profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createOralApplianceProfile(formData) {
+export async function createOralApplianceProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateOralApplianceProfile($input: OralApplianceProfileInput!) {
       createOralApplianceProfile(input: $input) {
@@ -1315,12 +1235,13 @@ export async function createOralApplianceProfile(formData) {
 
   const input = {
     appliances,
-    notes: formData.oralApplianceNotes || null
+    notes: formData.oralApplianceNotes || null,
+    otherDescription: formData.oralApplianceOtherDescription || null,
+    otherArch: formData.oralApplianceOtherArch || 'None'
   };
 
-  console.log('🔧 Creating oral appliance profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Oral appliance profile created');
+  const response = await request(mutation, { input });
+
   return response.createOralApplianceProfile;
 }
 
@@ -1328,7 +1249,7 @@ export async function createOralApplianceProfile(formData) {
  * Creates dental procedure profile  
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createDentalProcedureProfile(formData) {
+export async function createDentalProcedureProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateDentalProcedureProfile($input: DentalProcedureProfileInput!) {
       createDentalProcedureProfile(input: $input) {
@@ -1351,68 +1272,88 @@ export async function createDentalProcedureProfile(formData) {
     notes: formData.dentalProcedureNotes || null
   };
 
-  console.log('🔬 Creating dental procedure profile...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Dental procedure profile created');
+  const response = await request(mutation, { input });
+
   return response.createDentalProcedureProfile;
 }
 
 // ==================== ORCHESTRATION (Following Initial Record Pattern) ====================
 
+function createMutationCollector() {
+  const fields = [];
+  const definitions = [];
+  const variables = {};
+  const request = async (document, values) => {
+    const type = document.match(/\$input\s*:\s*([A-Za-z][A-Za-z0-9_]*!)/)?.[1];
+    const body = document.slice(document.indexOf('{') + 1, document.lastIndexOf('}')).trim();
+    const field = body.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\(/)?.[1];
+    if (!type || !field || !Object.hasOwn(values, 'input')) throw new Error('Invalid update mutation.');
+    const variableName = `input${fields.length}`;
+    definitions.push(`$${variableName}: ${type}`);
+    fields.push(body.replace(/\$input\b/g, `$${variableName}`));
+    variables[variableName] = values.input;
+    return { [field]: null };
+  };
+  const submit = () => sendGraphQLRequest(
+    `mutation SaveRecordUpdate(${definitions.join(', ')}) { ${fields.join('\n')} }`,
+    variables,
+    { strict: true }
+  );
+  return { request, submit };
+}
+
 /**
  * Submits medical update record
  * Following emr-service.js pattern: ALWAYS create all required records
  */
-export async function submitMedicalUpdate(formData) {
-  console.log('🏥 ==================== MEDICAL UPDATE ====================');
-  
+export async function submitMedicalUpdate(formData, request = sendGraphQLRequest) {
+
   const results = {};
 
   try {
     // Medical History (REQUIRED by backend)
-    console.log('[Medical Update] Creating medical history...');
-    results.medicalHistory = await createMedicalHistory(formData);
+
+    results.medicalHistory = await createMedicalHistory(formData, request);
 
     // Allergy Profile (REQUIRED by backend)
-    console.log('[Medical Update] Creating allergy profile...');
-    results.allergyProfile = await createAllergyProfile(formData);
+
+    results.allergyProfile = await createAllergyProfile(formData, request);
 
     // Hospitalization Profile (REQUIRED by backend)
-    console.log('[Medical Update] Creating hospitalization profile...');
-    results.hospitalizationProfile = await createHospitalizationProfile(formData);
+
+    results.hospitalizationProfile = await createHospitalizationProfile(formData, request);
 
     // Operation Profile (REQUIRED by backend)
-    console.log('[Medical Update] Creating operation profile...');
-    results.operationProfile = await createOperationProfile(formData);
+
+    results.operationProfile = await createOperationProfile(formData, request);
 
     // Medication Profile (REQUIRED by backend)
-    console.log('[Medical Update] Creating medication profile...');
-    results.medicationProfile = await createMedicationProfile(formData);
+
+    results.medicationProfile = await createMedicationProfile(formData, request);
 
     // Immunization Profile (REQUIRED by backend)
-    console.log('[Medical Update] Creating immunization profile...');
-    results.immunizationProfile = await createImmunizationProfile(formData);
+
+    results.immunizationProfile = await createImmunizationProfile(formData, request);
 
     // Lifestyle
-    console.log( '[Medical Update] Creating lifestyle...');
-    results.lifestyle = await createLifestyle(formData);
+
+    results.lifestyle = await createLifestyle(formData, request);
 
     // Visual Acuity Profile (REQUIRED by backend)
-    console.log('[Medical Update] Creating visual acuity profile...');
-    results.visualAcuityProfile = await createVisualAcuityProfile(formData);
+
+    results.visualAcuityProfile = await createVisualAcuityProfile(formData, request);
 
     // OB-GYN (Female only)
     if (formData.sex === 'Female') {
-      console.log('[Medical Update] Creating OB-GYNE history...');
-      results.obgynHistory = await createObgynHistory(formData);
+
+      results.obgynHistory = await createObgynHistory(formData, request);
     } else {
-      console.log('[Medical Update] Skipping OB-GYNE history (not female)');
+
     }
 
-    console.log('✅ Medical update completed successfully');
     return results;
   } catch (error) {
-    console.error('❌ Medical update failed:', error);
+
     throw error;
   }
 }
@@ -1421,68 +1362,68 @@ export async function submitMedicalUpdate(formData) {
  * Submits dental update record
  * Following emr-service.js pattern: ALWAYS create all required records
  */
-export async function submitDentalUpdate(formData) {
-  console.log('🦷 ==================== DENTAL UPDATE ====================');
-  
+export async function submitDentalUpdate(formData, request = sendGraphQLRequest, onStagedPhoto = () => {}) {
+
   const results = {};
   let upperTeethFileId = null;
   let lowerTeethFileId = null;
 
   try {
-    // Handle dental photos
-    // For new uploads: upload the file and get a fileId
-    // For pre-filled revisions: use the existing ID from the previous submission
-    console.log('[Dental Update] Processing dental photos...');
-    
+    // A saved record's ID points at permanent media, never at staging. Resolve
+    // legacy/restored IDs through the authenticated media route before uploading.
+    // Always stage fresh bytes so retries cannot reuse an already promoted ID.
+    const stagePhoto = async (photo) => {
+      if (!photo) return null;
+      let file = photo.file;
+      if (!file && photo.id) {
+        try {
+          const response = await axiosRequest({
+            method: 'GET',
+            url: `/media/record/dentalPhoto/${encodeURIComponent(photo.id)}`,
+            responseType: 'blob',
+          });
+          file = response.data;
+        } catch {
+          throw new Error('The saved dental photo could not be loaded. Please upload both teeth photos again before submitting.');
+        }
+      }
+      if (!(file instanceof Blob) || !file.size) {
+        throw new Error('Please upload both upper and lower teeth photos again before submitting.');
+      }
+      const fileId = await uploadMediaFile(file);
+      if (!fileId) throw new Error('The dental photo upload did not complete. Please try again.');
+      onStagedPhoto(fileId);
+      return fileId;
+    };
+
     // Handle upper teeth photo
-    if (formData.upperTeethPhoto?.file) {
-      // New upload
-      const result = await uploadMediaFile(formData.upperTeethPhoto.file);
-      upperTeethFileId = result;
-      console.log('[Dental Update] Upper teeth photo uploaded, fileId:', upperTeethFileId);
-    } else if (formData.upperTeethPhoto?.id) {
-      // Pre-filled from revision - use existing photo UUID
-      upperTeethFileId = formData.upperTeethPhoto.id;
-      console.log('[Dental Update] Upper teeth photo kept from revision, id:', upperTeethFileId);
-    }
-    
+    upperTeethFileId = await stagePhoto(formData.upperTeethPhoto);
+
     // Handle lower teeth photo
-    if (formData.lowerTeethPhoto?.file) {
-      // New upload
-      const result = await uploadMediaFile(formData.lowerTeethPhoto.file);
-      lowerTeethFileId = result;
-      console.log('[Dental Update] Lower teeth photo uploaded, fileId:', lowerTeethFileId);
-    } else if (formData.lowerTeethPhoto?.id) {
-      // Pre-filled from revision - use existing photo UUID
-      lowerTeethFileId = formData.lowerTeethPhoto.id;
-      console.log('[Dental Update] Lower teeth photo kept from revision, id:', lowerTeethFileId);
-    }
-    
-    console.log('[Dental Update] Photos processed:', { upperTeethFileId, lowerTeethFileId });
+    lowerTeethFileId = await stagePhoto(formData.lowerTeethPhoto);
 
     // Dental History
-    console.log('[Dental Update] Creating dental history...');
-    results.dentalHistory = await createDentalHistory(formData);
+
+    results.dentalHistory = await createDentalHistory(formData, request);
 
     // Dental Procedure Profile (REQUIRED by backend)
-    console.log('[Dental Update] Creating dental procedure profile...');
-    results.dentalProcedureProfile = await createDentalProcedureProfile(formData);
+
+    results.dentalProcedureProfile = await createDentalProcedureProfile(formData, request);
 
     // Oral Appliance Profile (REQUIRED by backend)
-    console.log('[Dental Update] Creating oral appliance profile...');
-    results.oralApplianceProfile = await createOralApplianceProfile(formData);
+
+    results.oralApplianceProfile = await createOralApplianceProfile(formData, request);
 
     // Dental Photo Record (REQUIRED by backend)
-    console.log('[Dental Update] Creating dental photo record...');
-    results.dentalPhotoRecord = await createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId);
 
-    console.log('✅ Dental update completed successfully');
+    results.dentalPhotoRecord = await createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId, request);
+
     return results;
   } catch (error) {
-    console.error('❌ Dental update failed:', error);
+
     // Clean up staged photos on failure
     if (upperTeethFileId || lowerTeethFileId) {
-      console.log('[Dental Update] Cleaning up staged media files...');
+
       await Promise.all([
         unstageMediaFile(upperTeethFileId),
         unstageMediaFile(lowerTeethFileId),
@@ -1497,7 +1438,7 @@ export async function submitDentalUpdate(formData) {
  * @param {string|null} upperTeethFileId - Staged fileId for upper teeth
  * @param {string|null} lowerTeethFileId - Staged fileId for lower teeth
  */
-async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId) {
+async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateDentalPhotoRecord($input: DentalPhotoRecordInput!) {
       createDentalPhotoRecord(input: $input) {
@@ -1514,9 +1455,8 @@ async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId) {
     lowerTeeth: lowerTeethFileId
   };
 
-  console.log('📸 Creating dental photo record...', input);
-  const response = await sendGraphQLRequest(mutation, { input });
-  console.log('✅ Dental photo record created');
+  const response = await request(mutation, { input });
+
   return response.createDentalPhotoRecord;
 }
 
@@ -1524,79 +1464,79 @@ async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId) {
  * Main submission handler - orchestrates the entire update process
  */
 export async function submitUpdateRecord(formData, recordType, options = {}) {
-  console.log('📋 ==================== STARTING UPDATE RECORD SUBMISSION ====================');
-  console.log('Record Type:', recordType);
-  console.log('Form Data:', formData);
+
   const skipPersonalUpdate = Boolean(options?.skipPersonalUpdate);
 
   let ticketId = null;
-  
+  let createdTicket = false;
+  const stagedPhotoIds = [];
+
   try {
     // Step 1: Check for existing update ticket
-    console.log('🔍 Checking for existing update ticket...');
-    const existingTicket = await getUpdateTicketStatus();
-    
-    if (existingTicket?.status === 'Revision') {
+
+    const existingTicket = await getUpdateTicketStatus({ strict: true });
+
+    if (existingTicket?.status === 'Revision' && options.revisionTicketId && String(existingTicket.id) === String(options.revisionTicketId)) {
       // Special case: Patient is resubmitting after a revision request
       // Reuse the existing Revision ticket instead of creating a new one
-      console.log('📋 Reusing existing Revision ticket:', existingTicket.id);
+
       ticketId = existingTicket.id;
+      const scopeMap = { medical: 'Medical', dental: 'Dental', both: 'Both' };
+      if (scopeMap[recordType] !== existingTicket.scope) throw new Error('The revision scope has changed. Reload the form before submitting.');
     } else {
-      // Normal case: No active ticket or ticket is in other state - cancel and create new
-      const canProceed = await ensureNoActiveTicket();
-      
-      if (!canProceed) {
-        throw new Error('An update ticket is already in progress. Please cancel it or wait for it to be processed.');
+      if (existingTicket && !['Approved', 'Cancelled', 'Rejected', 'Expired'].includes(existingTicket.status)) {
+        throw new Error('An update ticket is already in progress. Please wait for it to be resolved.');
       }
-      
-      console.log('✅ Ready to create new ticket');
 
       // Step 2: Map recordType to backend scope
       const scopeMap = { medical: 'Medical', dental: 'Dental', both: 'Both' };
       const scope = scopeMap[recordType] || 'Both';
       ticketId = await createUpdateTicket(scope);
+      createdTicket = true;
     }
 
     const results = { ticketId };
 
     // Step 3: Submit personal information unless explicitly skipped by caller.
     if (!skipPersonalUpdate) {
-      console.log('📝 Submitting personal information...');
+
       await updatePersonalInfo(formData);
-      console.log('✅ Personal information submitted');
+
     } else {
-      console.log('⏭️ Skipping personal information update for this submission mode');
+
     }
 
-    // Step 4: Submit medical data only when scope includes medical
+    const batch = createMutationCollector();
+
+    // Step 4: Prepare medical data only when scope includes medical
     if (recordType === 'medical' || recordType === 'both') {
-      results.medical = await submitMedicalUpdate(formData);
+      results.medical = await submitMedicalUpdate(formData, batch.request);
     }
 
     // Step 5: Submit dental data only when scope includes dental
     if (recordType === 'dental' || recordType === 'both') {
-      results.dental = await submitDentalUpdate(formData);
+      results.dental = await submitDentalUpdate(formData, batch.request, fileId => stagedPhotoIds.push(fileId));
     }
 
     // Step 6: Submit the ticket for review
+    await batch.submit();
     const finalStatus = await submitUpdateTicket();
     results.finalStatus = finalStatus;
 
-    console.log('✅ ==================== UPDATE RECORD SUBMISSION COMPLETE ====================');
     return results;
   } catch (error) {
-    console.error('❌ ==================== UPDATE RECORD SUBMISSION FAILED ====================');
-    console.error('Error:', error);
-    
+
+    await Promise.all(stagedPhotoIds.map(unstageMediaFile));
+
     // Try to cancel the ticket if it was created
-    if (ticketId) {
+    if (createdTicket) {
       try {
         await cancelUpdateTicket();
       } catch (cancelError) {
-        console.error('Failed to cancel ticket:', cancelError);
+
       }
     }
-    
+
     throw error;
   }
 }

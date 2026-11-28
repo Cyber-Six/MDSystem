@@ -1,0 +1,217 @@
+﻿/* Shared presentation for initial, revision, and update patient web forms. */
+.record-form-ui .allergy-option-group { border: 1px solid var(--color-border-light); border-radius: 0.625rem; color: var(--color-text-primary); }
+.record-form-ui .allergy-option-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+.record-form-ui .allergy-option-card { min-width: 0; padding: 0.75rem; border: 1px solid var(--color-border-light); border-radius: 0.5rem; }
+.record-form-ui .allergy-option-card.is-selected { border-color: var(--color-primary-500); background: var(--color-primary-50); }
+.dark .record-form-ui .allergy-option-card.is-selected { background: var(--color-primary-900); }
+.record-form-ui .allergy-option-card select { min-width: 0; flex: 1; }
+@media (min-width: 640px) { .record-form-ui .allergy-option-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.record-form-ui {
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  color-scheme: light;
+}
+.dark .record-form-ui {
+  --color-text-primary: var(--color-gray-50);
+  --color-text-secondary: var(--color-gray-200);
+  --color-text-tertiary: var(--color-gray-400);
+  --color-border-light: var(--color-gray-700);
+  --color-border-medium: var(--color-gray-600);
+  color-scheme: dark;
+}
+.record-form-ui .form-section {
+  padding: clamp(1rem, 3vw, 1.75rem);
+  box-shadow: 0 1px 3px rgb(28 25 23 / 0.04);
+  border-top: 3px solid var(--color-primary-200);
+}
+.record-form-ui .medical-review-groups { display: grid; gap: 0.875rem; }
+.record-form-ui .medical-review-group { min-width: 0; padding: 0.75rem 1rem; border: 1px solid var(--color-border-light); border-radius: 0.75rem; background: var(--color-surface, transparent); }
+.record-form-ui .medical-review-group > h5 { margin: 0 0 0.5rem; color: var(--color-primary-700); font-size: 0.875rem; font-weight: 700; }
+.dark .record-form-ui .medical-review-group > h5 { color: var(--color-primary-300); }
+.record-form-ui .dental-option-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.625rem;
+}
+.record-form-ui .dental-option-card {
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border-light);
+  border-radius: 0.625rem;
+  background: var(--color-surface, transparent);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.record-form-ui .dental-option-card:hover {
+  border-color: var(--color-primary-400);
+}
+.record-form-ui .dental-option-card.is-selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-50);
+}
+.record-form-ui .dental-option-card > label {
+  align-items: flex-start;
+  margin: 0;
+}
+.record-form-ui .dental-option-card > label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.record-form-ui .dental-option-details {
+  padding-left: 1.75rem;
+}
+.dark .record-form-ui .dental-option-card {
+  background: var(--color-gray-900);
+}
+.dark .record-form-ui .dental-option-card.is-selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-900);
+}
+@media (min-width: 480px) {
+  .record-form-ui .dental-option-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .record-form-ui .dental-option-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.dark .record-form-ui .form-section {
+  background-color: var(--color-gray-800);
+  border-color: var(--color-gray-700);
+  border-top-color: var(--color-primary-800);
+}
+.dark .record-form-ui .form-section :is(.bg-white, .bg-neutral-50) {
+  background-color: var(--color-gray-900);
+}
+.dark .record-form-ui .form-section .bg-primary-50 {
+  background-color: var(--color-primary-900);
+}
+.dark .record-form-ui .form-section .border-neutral-200 {
+  border-color: var(--color-gray-700);
+}
+.dark .record-form-ui .form-section :is(.text-secondary-900, .text-secondary-800) {
+  color: var(--color-gray-50);
+}
+.dark .record-form-ui .form-section :is(.text-secondary-700, .text-secondary-600, .text-secondary-500) {
+  color: var(--color-gray-200);
+}
+.dark .record-form-ui .form-input,
+.dark .record-form-ui .form-section :where(input:not([type="radio"]):not([type="checkbox"]):not([type="file"]), select, textarea) {
+  background-color: var(--color-gray-900);
+  color: var(--color-gray-50);
+  border-color: var(--color-gray-600);
+}
+.dark .record-form-ui .record-form-footer .text-neutral-500 {
+  color: var(--color-gray-300);
+}
+.dark .record-form-ui .form-input:disabled,
+.dark .record-form-ui .form-input[readonly] {
+  background-color: var(--color-gray-800);
+  color: var(--color-gray-400);
+}
+.dark .record-form-ui .form-section :is(.border-error-500, .border-red-400, .border-red-500),
+.dark .record-form-ui .form-section.border-error-500 {
+  border-color: var(--color-error);
+}
+.record-form-ui .form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-bottom: 0.625rem;
+}
+.dark .record-form-ui :is(.btn-secondary, .btn-outline) {
+  background-color: var(--color-gray-800);
+  color: var(--color-gray-50);
+  border-color: var(--color-gray-600);
+}
+.dark .record-form-ui :is(.btn-secondary, .btn-outline):hover:not(:disabled) {
+  background-color: var(--color-gray-700);
+}
+.record-form-ui :is(input:not([type="radio"]):not([type="checkbox"]):not([type="file"]), select, textarea) {
+  font-size: 1rem;
+  min-height: 2.75rem;
+}
+.record-form-ui :is(input[type="radio"], input[type="checkbox"]):not(.peer) {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  accent-color: var(--color-primary-700, #a16207);
+}
+.record-form-ui label:has(input[type="radio"]),
+.record-form-ui label:has(input[type="checkbox"]) {
+  min-height: 2.75rem;
+  padding-block: 0.375rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.record-form-ui :is(input, select, textarea, button):focus-visible {
+  outline: 2px solid var(--color-primary-900);
+  outline-offset: 3px;
+}
+.dark .record-form-ui :is(input, select, textarea, button):focus-visible {
+  outline-color: var(--color-primary-400);
+}
+.record-form-ui button:not([role="tab"]) { min-height: 2.75rem; }
+.record-form-ui .btn-primary,
+.record-form-ui button.bg-primary-500 { color: var(--color-gray-900); }
+.record-form-ui .record-form-header {
+  border-top: 4px solid var(--color-primary-500);
+  background-color: var(--color-primary-100);
+  background-image: none;
+  color: var(--color-gray-900);
+  box-shadow: 0 1px 0 rgb(28 25 23 / 0.08);
+  isolation: isolate;
+}
+.dark .record-form-ui .record-form-header {
+  background-color: var(--color-gray-900);
+  color: var(--color-primary-100);
+}
+.record-form-ui .record-form-header :is(h1, p, svg, button) {
+  color: inherit;
+}
+.record-progress-track {
+  display: block;
+  height: 0.375rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: var(--color-primary-200);
+}
+.dark .record-progress-track { background: var(--color-gray-600); }
+.record-progress [aria-current="step"] .record-progress-track { background: var(--color-primary-300); }
+.dark .record-progress [aria-current="step"] .record-progress-track { background: var(--color-primary-800); }
+.record-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary-700);
+  transition: width 180ms ease-out;
+}
+.dark .record-progress-fill { background: var(--color-primary-500); }
+.record-progress-label { opacity: 0.8; }
+.record-progress [aria-current="step"] .record-progress-label { font-weight: 700; opacity: 1; }
+.record-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 220ms ease, opacity 180ms ease;
+}
+.record-disclosure[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.record-disclosure-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.record-history-panel {
+  animation: record-history-enter 180ms ease-out;
+}
+@keyframes record-history-enter {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.record-form-ui .record-form-footer { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+@media (prefers-reduced-motion: reduce) {
+  .record-form-ui *, .record-form-ui *::before, .record-form-ui *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

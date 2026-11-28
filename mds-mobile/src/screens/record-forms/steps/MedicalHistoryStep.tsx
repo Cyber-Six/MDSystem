@@ -60,11 +60,13 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
         {(['self', 'family'] as Tab[]).map(t => (
           <TouchableOpacity
             key={t}
-            style={[styles.tab, tab === t && styles.tabActive, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === t }}
+            style={[styles.tab, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
             onPress={() => setTab(t)}
           >
-            <Text style={[styles.tabText, { color: tab === t ? '#FFFFFF' : isDark ? colors.neutral[300] : colors.neutral[600] }]}>
-              {t === 'self' ? 'Self' : 'Family'}
+            <Text style={[styles.tabText, { color: tab === t ? colors.primary[500] : isDark ? colors.neutral[300] : colors.neutral[600] }]}>
+              {t === 'self' ? 'Yourself' : 'Family'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -161,8 +163,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '700', marginBottom: 4 },
   subtitle: { fontSize: 14, marginBottom: 16 },
   tabRow: { flexDirection: 'row', marginBottom: 16, gap: 8 },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.primary[500], borderColor: colors.primary[500] },
+  tab: { flex: 1, minHeight: 44, paddingVertical: 10, borderBottomWidth: 2, alignItems: 'center', justifyContent: 'center' },
   tabText: { fontWeight: '600', fontSize: 14 },
   checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 12 },
   checkbox: {

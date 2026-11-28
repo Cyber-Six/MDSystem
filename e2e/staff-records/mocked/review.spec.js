@@ -114,10 +114,31 @@ test('a failed complete-visibility assertion stops the workflow before any decis
   expect(await page.evaluate(() => window.actions)).toEqual([]);
 });
 
-test('abandoned lifestyle details stay hidden while explicit No answers remain visible', async ({ page }) => {
+test('shows saved lifestyle details even when a legacy yes/no answer differs', async ({ page }) => {
   const manifest = fixture();
   Object.assign(manifest.record.lifestyle, { smoker: false, numberOfCigarettesPerDay: 98765, yearsSmoked: 12345, vapeUser: false, vapeType: 'Abandoned vape value', alcoholConsumer: false, frequencyOfAlcoholConsumption: 'Abandoned alcohol value' });
   await mount(page, manifest);
   await assertFullRecord(page, manifest);
-  await expect(page.getByRole('dialog', { name: 'Record Review' })).not.toContainText(/98765|12345|Abandoned/);
+  const review = page.getByRole('dialog', { name: 'Record Review' });
+  for (const value of ['98765', '12345', 'Abandoned vape value', 'Abandoned alcohol value']) {
+    await expect(review.getByText(value, { exact: true })).toBeVisible();
+  }
+});
+
+test('shows saved vision details and linked measurement notes as review fields', async ({ page }) => {
+  const manifest = fixture('Student', 'update', 'Medical');
+  const record = staffRecord(manifest);
+  record.visualAcuityProfile.acuity.notes = 'VA_META::' + JSON.stringify({
+    version: 2, eyeglasses: true, contactLenses: true,
+    grades: { eyeglasses: { od: '1.25', os: '1.50' }, contactLenses: { od: '2.25', os: '2.50' } },
+  });
+  record.vitalSigns = { heart_rate: 73, notes: 'QA measurement note' };
+  await mount(page, manifest, { record });
+  const review = page.getByRole('dialog', { name: 'Record Review' });
+  for (const [label, value] of [['Eyeglasses Grade (OD)', '1.25'], ['Contact Lens Grade (OS)', '2.50'],
+    ['Heart Rate (bpm)', '73'], ['Measurement Notes', 'QA measurement note']]) {
+    const row = review.getByText(label, { exact: true }).locator('..');
+    await expect(row.locator('dd')).toHaveText(value);
+  }
+  await expect(review.getByText(/VA_META::/)).toHaveCount(0);
 });

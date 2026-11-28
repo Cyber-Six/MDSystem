@@ -1,5 +1,5 @@
 import React from 'react';
-import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
+import SectionWrapper, { DataRow, EditableField, ReviewGroup } from './SectionWrapper';
 
 /**
  * EmergencyContactSection
@@ -13,6 +13,7 @@ const EmergencyContactSection = ({
   onFieldChange,
   onToggleEdit,
   isPending = false,
+  isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
 
@@ -26,19 +27,10 @@ const EmergencyContactSection = ({
   const second = emergencyContact?.secondContact;
 
   const renderContact = (contact, index, prefix) => {
-    if (!contact) {
-      return (
-        <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">
-          Contact {index} not provided
-        </p>
-      );
-    }
+    if (!contact) return null;
 
     return (
-      <div data-review-contact={index === 1 ? 'firstContact' : 'secondContact'} className="mb-3 pb-3 border-b border-neutral-100 dark:border-neutral-700/50 last:border-0 last:mb-0 last:pb-0">
-        <h5 className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
-          Contact {index}
-        </h5>
+      <ReviewGroup title={`Contact ${index}`} data-review-contact={index === 1 ? 'firstContact' : 'secondContact'}>
         <dl className="space-y-0">
           <EditableField
             label="Name"
@@ -66,34 +58,21 @@ const EmergencyContactSection = ({
           )}
           <DataRow label="Address" value={contact.address} />
         </dl>
-      </div>
+      </ReviewGroup>
     );
   };
 
   return (
     <SectionWrapper
       title="Emergency Contacts"
-      scopeLabel="Medical"
-      icon={
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-        </svg>
-      }
+      isLocked={isLocked}
       isEditing={isEditing}
       onToggleEdit={onToggleEdit}
       hasEdits={hasEdits}
       isPending={isPending}
     >
-      {!first && !second ? (
-        <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">
-          No emergency contacts on record
-        </p>
-      ) : (
-        <>
-          {renderContact(first, 1, 'first')}
-          {renderContact(second, 2, 'second')}
-        </>
-      )}
+      {renderContact(first, 1, 'first')}
+      {renderContact(second, 2, 'second')}
     </SectionWrapper>
   );
 };

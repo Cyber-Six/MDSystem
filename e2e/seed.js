@@ -53,8 +53,8 @@ async function main() {
               INSERT INTO "patientUpdateLog" ("patientId", status, scope)
               VALUES ($1, 'InProgress', 'Both') RETURNING id
             )
-            INSERT INTO "MedicalHistory" (id, notes)
-            SELECT id, 'U3 patient medical history' FROM ticket
+            INSERT INTO "MedicalHistory" (id)
+            SELECT id FROM ticket
           `, [id]);
         }
       }

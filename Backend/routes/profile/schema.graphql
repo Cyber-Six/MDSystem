@@ -56,6 +56,7 @@ input userProfileInitialInput{
   present_address: String!
   province_address: String!
   branch: USER_BRANCH!
+  # Required numeric identifier, between 0 and 2147483647.
   identifier: ID!
 }
 
@@ -160,6 +161,7 @@ type Mutation {
   reloadUserCredentialStatus(userId: ID!): String
   
   staffSetCredentialStatus(userId: ID!, status: CredentialStatus!): CredentialStatus
+  # Identifier must contain digits only and be between 0 and 2147483647.
   staffSetBranchIdentifier(userId: ID!, identifier: String!, branch: USER_BRANCH!): Boolean
 
 

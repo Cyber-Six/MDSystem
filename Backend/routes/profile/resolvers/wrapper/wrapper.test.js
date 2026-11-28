@@ -19,7 +19,7 @@ const { Query, Mutation } = require('./wrapper.js');
 
 const context = { user: { id: 7 }, res: {} };
 const result = (...rows) => ({ rows });
-const recordInput = (values = {}) => ({ first_name: 'Ada', middle_name: null, last_name: 'Lovelace', suffix: null, date_of_birth: '1815-12-10', sex: 'F', civil_status: 'Single', nationality: 'British', religion: 'None', contactNumber: '123', present_address: 'A', province_address: 'B', ...values });
+const recordInput = (values = {}) => ({ first_name: 'Ada', middle_name: null, last_name: 'Lovelace', suffix: null, date_of_birth: '2000-12-10', sex: 'Female', civil_status: 'Single', nationality: 'British', religion: 'None', contactNumber: '123', present_address: '1', province_address: 'B', ...values });
 
 beforeEach(() => { jest.clearAllMocks(); jest.spyOn(console, 'log').mockImplementation(() => {}); });
 afterEach(() => { jest.restoreAllMocks(); });
@@ -27,7 +27,7 @@ afterEach(() => { jest.restoreAllMocks(); });
 test.each([
   ['_getUserCredentialStatus', { status: 'Active' }, 'Active'],
   ['_getUserPersonalRecord', { id: 7, first_name: 'Ada' }, { id: 7, first_name: 'Ada' }],
-  ['_getBranchIdentifier', { identifier: 'P1', branch: 'Manila' }, { identifier: 'P1', branch: 'Manila' }],
+  ['_getBranchIdentifier', { identifier: '700001', branch: 'Manila' }, { identifier: '700001', branch: 'Manila' }],
   ['_getUserLoginCredentials', { email: 'a@b.test' }, { email: 'a@b.test' }],
 ])('queries %s and returns its first row', async (method, row, expected) => {
   db.query.mockResolvedValue(result(row));
@@ -84,7 +84,7 @@ test('personal record log applies date, offset and limit defaults and explicit v
 test('_PersonalRecordLog inserts pending input and translates database failures', async () => {
   db.queryClient.mockResolvedValueOnce(result({ id: 9, status: 'Pending' }));
   await expect(Mutation._PersonalRecordLog(null, { client: {}, userId: 7, input: recordInput() }, context)).resolves.toEqual({ id: 9, status: 'Pending' });
-  expect(db.queryClient.mock.calls[0][2]).toEqual([7, 'Ada', null, 'Lovelace', null, '1815-12-10', 'F', 'Single', 'British', 'None', '123', 'A', 'B', 'Pending']);
+  expect(db.queryClient.mock.calls[0][2]).toEqual([7, 'Ada', null, 'Lovelace', null, '2000-12-10', 'Female', 'Single', 'British', 'None', '123', '1', 'B', 'Pending']);
   db.queryClient.mockRejectedValueOnce(new Error('db'));
   await expect(Mutation._PersonalRecordLog(null, { client: {}, userId: 7, input: recordInput() }, context)).rejects.toThrow('GraphQL 500: Database error');
   expect(logger.error).toHaveBeenCalled();
@@ -102,11 +102,11 @@ test('uses the configured database client when mutation client arguments are omi
 
 test('_UpdatePersonalRecordLog updates provided fields and rejects empty or missing updates', async () => {
   db.queryClient.mockResolvedValueOnce(result({ id: 4 }));
-  await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { first_name: 'Grace', optional: null } }, context)).resolves.toEqual({ id: 4 });
+  await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { first_name: 'Grace', suffix: null } }, context)).resolves.toEqual({ id: 4 });
   expect(db.queryClient.mock.calls[0][2]).toEqual(['Grace', 'Pending', 7, 4]);
-  await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { a: null } }, context)).rejects.toThrow('GraphQL 400: No fields to update.');
+  await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { suffix: null } }, context)).rejects.toThrow('GraphQL 400: No fields to update.');
   db.queryClient.mockResolvedValueOnce(result());
-  await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { a: 1 } }, context)).rejects.toThrow('GraphQL 500: Database error');
+  await expect(Mutation._UpdatePersonalRecordLog(null, { client: {}, userId: 7, ticketId: 4, input: { first_name: 'Fixture' } }, context)).rejects.toThrow('GraphQL 500: Database error');
 });
 
 test('uses the configured client for revision and branch identifier writes when omitted', async () => {
@@ -114,33 +114,42 @@ test('uses the configured client for revision and branch identifier writes when 
   db.db.mockReturnValue(implicitClient);
   db.queryClient.mockResolvedValue(result({ id: 8 }));
   await expect(Mutation._UpdatePersonalRecordLog(null, { userId: 7, ticketId: 4, input: { first_name: 'Ada' } }, context)).resolves.toEqual({ id: 8 });
-  const branchClient = { query: jest.fn().mockResolvedValue(result({ id: 7, identifier: 'P1', branch: 'Manila' })) };
+  const branchClient = { query: jest.fn().mockResolvedValue(result({ id: 7, identifier: '700001', branch: 'Manila' })) };
   db.db.mockReturnValue(branchClient);
-  await expect(Mutation._UserBranchIdentifier(null, { userId: 7, input: { identifier: 'P1', branch: 'Manila' } }, context)).resolves.toEqual({ id: 7, identifier: 'P1', branch: 'Manila' });
-  expect(branchClient.query.mock.calls[0][1]).toEqual([7, 'P1', 'Manila']);
+  await expect(Mutation._UserBranchIdentifier(null, { userId: 7, input: { identifier: '700001', branch: 'Manila' } }, context)).resolves.toEqual({ id: 7, identifier: '700001', branch: 'Manila' });
+  expect(branchClient.query.mock.calls[0][1]).toEqual([7, '700001', 'Manila']);
 });
 
 test('_UserBranchIdentifier validates input, persists values, and maps database errors', async () => {
-  const client = { query: jest.fn().mockResolvedValue(result({ id: 7, identifier: 'P1', branch: 'Manila' })) };
-  await expect(Mutation._UserBranchIdentifier(null, { client, userId: 7, input: { identifier: 'P1', branch: 'Manila' } }, context)).resolves.toEqual({ id: 7, identifier: 'P1', branch: 'Manila' });
+  const client = { query: jest.fn().mockResolvedValue(result({ id: 7, identifier: '700001', branch: 'Manila' })) };
+  await expect(Mutation._UserBranchIdentifier(null, { client, userId: 7, input: { identifier: '700001', branch: 'Manila' } }, context)).resolves.toEqual({ id: 7, identifier: '700001', branch: 'Manila' });
   await expect(Mutation._UserBranchIdentifier(null, { client, userId: 7, input: {} }, context)).rejects.toThrow('GraphQL 400: Both identifier and branch are required.');
   client.query.mockRejectedValueOnce(new Error('db'));
-  await expect(Mutation._UserBranchIdentifier(null, { client, userId: 7, input: { identifier: 'P1', branch: 'Manila' } }, context)).rejects.toThrow('GraphQL 500: Database error');
+  await expect(Mutation._UserBranchIdentifier(null, { client, userId: 7, input: { identifier: '700001', branch: 'Manila' } }, context)).rejects.toThrow('GraphQL 500: Database error');
+});
+
+test('shared identifier writes enforce the integer range for staff and other callers', async () => {
+  const client = { query: jest.fn().mockResolvedValue(result({ identifier: '2147483647' })) };
+  await expect(Mutation._UserBranchIdentifier(null, { client, userId: 7, input: { identifier: '2147483648', branch: 'Manila' } }, context))
+    .rejects.toThrow('400: Identifier must contain digits only and be between 0 and 2147483647');
+  expect(client.query).not.toHaveBeenCalled();
+  await Mutation._UserBranchIdentifier(null, { client, userId: 7, input: { identifier: ' 2147483647 ', branch: 'Manila' } }, context);
+  expect(client.query).toHaveBeenCalledWith(expect.any(String), [7, '2147483647', 'Manila']);
 });
 
 test('_setPersonalRecordLog checks branch identity, handles empty results, approves transactionally and rolls back failures', async () => {
   db.query.mockResolvedValueOnce(result({ identifier: null, branch: null }));
   await expect(Mutation._setPersonalRecordLog(null, { userId: 7, status: 'Approved' }, context)).rejects.toThrow('GraphQL 400: Branch identifier not set. Please notify the patient to set their branch identifier.');
-  db.query.mockResolvedValueOnce(result({ identifier: 'P1', branch: 'Manila' }));
+  db.query.mockResolvedValueOnce(result({ identifier: '700001', branch: 'Manila' }));
   const emptyClient = { query: jest.fn().mockResolvedValue(result()), release: jest.fn() };
   db.connect.mockResolvedValueOnce(emptyClient);
   await expect(Mutation._setPersonalRecordLog(null, { userId: 7, status: 'Rejected' }, context)).resolves.toBeNull();
   expect(emptyClient.query).toHaveBeenCalledWith('BEGIN'); expect(emptyClient.release).toHaveBeenCalled();
-  db.query.mockResolvedValueOnce(result({ identifier: 'P1', branch: 'Manila' }));
+  db.query.mockResolvedValueOnce(result({ identifier: '700001', branch: 'Manila' }));
   const denied = { query: jest.fn().mockResolvedValueOnce(result()).mockResolvedValueOnce(result({ id: 9, status: 'Rejected' })), release: jest.fn() };
   db.connect.mockResolvedValueOnce(denied);
   await expect(Mutation._setPersonalRecordLog(null, { userId: 7, status: 'Rejected' }, context)).resolves.toBe('Rejected');
-  db.query.mockResolvedValueOnce(result({ identifier: 'P1', branch: 'Manila' }));
+  db.query.mockResolvedValueOnce(result({ identifier: '700001', branch: 'Manila' }));
   const patientUpdate = { query: jest.fn()
     .mockResolvedValueOnce(result())
     .mockResolvedValueOnce(result({ id: 10, status: 'Approved', first_name: 'Ada' }))
@@ -150,7 +159,7 @@ test('_setPersonalRecordLog checks branch identity, handles empty results, appro
   db.connect.mockResolvedValueOnce(patientUpdate);
   await expect(Mutation._setPersonalRecordLog(null, { userId: 7, status: 'Approved' }, context)).resolves.toBe('Approved');
   expect(patientUpdate.query).toHaveBeenCalledWith('BEGIN');
-  db.query.mockResolvedValueOnce(result({ identifier: 'P1', branch: 'Manila' }));
+  db.query.mockResolvedValueOnce(result({ identifier: '700001', branch: 'Manila' }));
   const insertOnMissing = { query: jest.fn()
     .mockResolvedValueOnce(result())
     .mockResolvedValueOnce(result({ id: 11, status: 'Approved', first_name: 'Grace', unexpected: 'ignored' }))
@@ -160,7 +169,7 @@ test('_setPersonalRecordLog checks branch identity, handles empty results, appro
   db.connect.mockResolvedValueOnce(insertOnMissing);
   await expect(Mutation._setPersonalRecordLog(null, { userId: 7, status: 'Approved' }, context)).resolves.toBe('Approved');
   expect(insertOnMissing.query.mock.calls[4][0]).toContain('INSERT INTO "UsersPersonal"');
-  db.query.mockResolvedValueOnce(result({ identifier: 'P1', branch: 'Manila' }));
+  db.query.mockResolvedValueOnce(result({ identifier: '700001', branch: 'Manila' }));
   const invalidFields = { query: jest.fn()
     .mockResolvedValueOnce(result())
     .mockResolvedValueOnce(result({ id: 12, status: 'Approved', unexpected: 'ignored' }))
@@ -171,10 +180,10 @@ test('_setPersonalRecordLog checks branch identity, handles empty results, appro
   const broken = { query: jest.fn(async sql => { if (sql === 'BEGIN') throw new Error('failure'); return result(); }), release: jest.fn() };
   db.query.mockRejectedValueOnce(new Error('branch lookup'));
   await expect(Mutation._setPersonalRecordLog(null, { userId: 7, status: 'Approved' }, context)).rejects.toThrow('branch lookup');
-  db.query.mockResolvedValueOnce(result({ identifier: 'P1', branch: 'Manila' })); db.connect.mockResolvedValueOnce(broken);
+  db.query.mockResolvedValueOnce(result({ identifier: '700001', branch: 'Manila' })); db.connect.mockResolvedValueOnce(broken);
   await expect(Mutation._setPersonalRecordLog(null, { userId: 7, status: 'Rejected' }, context)).rejects.toThrow('GraphQL 500: Database error');
   expect(broken.query).toHaveBeenCalledWith('ROLLBACK'); expect(broken.release).toHaveBeenCalled();
-  db.query.mockResolvedValueOnce(result({ identifier: 'P1', branch: 'Manila' }));
+  db.query.mockResolvedValueOnce(result({ identifier: '700001', branch: 'Manila' }));
   const applyFailure = { query: jest.fn()
     .mockResolvedValueOnce(result())
     .mockResolvedValueOnce(result({ id: 13, status: 'Approved', first_name: 'Ada' }))
@@ -227,4 +236,11 @@ test('_staffSetCredentialStatus accepts Locked and Active and handles validation
   await expect(Mutation._staffSetCredentialStatus(null, { userId: 7, status: 'Active' }, context)).rejects.toThrow('GraphQL 500: Database error');
   db.query.mockRejectedValueOnce(new Error('db'));
   await expect(Mutation._staffSetCredentialStatus(null, { userId: 7, status: 'Locked' }, context)).rejects.toThrow('GraphQL 500: Database error');
+});
+
+test('revision rejects unexpected SQL column names before executing SQL', async () => {
+  await expect(Mutation._UpdatePersonalRecordLog(null, {
+    client: {}, userId: 7, ticketId: 4, input: { ['first_name" = NULL; --']: 'attack' },
+  }, context)).rejects.toThrow('Invalid personal record field');
+  expect(db.queryClient).not.toHaveBeenCalled();
 });

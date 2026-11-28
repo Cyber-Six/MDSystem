@@ -30,6 +30,19 @@ describe('initial record service', () => {
     expect(axiosRequest.post).toHaveBeenCalledTimes(2);
   });
 
+  it('discards an in-flight response after the staff session changes', async () => {
+    localStorage.setItem('staff_refreshToken', 'synthetic-session-a');
+    let resolveRequest;
+    axiosRequest.post.mockImplementationOnce(() => new Promise(resolve => { resolveRequest = resolve; }));
+    const pending = getStatusUpdateTickets(['Pending'], BRANCH.MANILA);
+    localStorage.setItem('staff_refreshToken', 'synthetic-session-b');
+    resolveRequest({ data: { data: { getStatusUpdateTickets: [{ id: 'old-ticket' }] } } });
+    await expect(pending).rejects.toThrow('Staff session changed');
+    axiosRequest.post.mockResolvedValueOnce({ data: { data: { getStatusUpdateTickets: [{ id: 'new-ticket' }] } } });
+    await expect(getStatusUpdateTickets(['Pending'], BRANCH.MANILA)).resolves.toEqual([{ id: 'new-ticket' }]);
+    localStorage.removeItem('staff_refreshToken');
+  });
+
   it('returns individual tickets and uses null default', async () => {
     axiosRequest.post.mockResolvedValueOnce({ data: { data: { getUserUpdateTicket: { id: 't1' } } } });
     await expect(getUserUpdateTicket('p1')).resolves.toEqual({ id: 't1' });
@@ -66,4 +79,11 @@ describe('initial record service', () => {
     expect(axiosRequest.post).toHaveBeenCalledTimes(1);
     expect(axiosRequest.post.mock.calls[0][0]).toBe('/emr/medical');
   });
+});
+
+test('requests and preserves patient types in ticket lists', async () => {
+  const tickets = [{ id: 'synthetic-student', profile_type: 'Student' }, { id: 'synthetic-employee', profile_type: 'Employee' }];
+  axiosRequest.post.mockResolvedValueOnce({ data: { data: { getStatusUpdateTickets: tickets } } });
+  await expect(getStatusUpdateTickets(['Pending'], BRANCH.BOTH, 0, 20, { force: true })).resolves.toEqual(tickets);
+  expect(axiosRequest.post.mock.lastCall[1].query).toContain('profile_type');
 });

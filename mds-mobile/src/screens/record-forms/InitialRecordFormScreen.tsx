@@ -1,3 +1,4 @@
+import { getDateOfBirthError, getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 /**
  * InitialRecordFormScreen — Main orchestrator for the multi-step initial medical record form.
  * Manages step navigation, catalog loading, validation, and 3-phase submission.
@@ -41,13 +42,17 @@ export const validatePersonalInfoFields = (
   pi: FormData['personalInfo'],
   opts: { isEmployee: boolean; isUpdate: boolean; isRevision: boolean },
 ): string[] => {
-  const errors: string[] = [];
   const { isEmployee, isUpdate, isRevision } = opts;
+  const errors: string[] = getPersonalInfoLengthErrors(pi, {
+    includeProfile: !isUpdate,
+    isEmployee,
+  }).map((issue: { message: string }) => issue.message);
 
   if (!isUpdate) {
     if (!pi.surname?.trim()) errors.push('Surname is required');
     if (!pi.firstName?.trim()) errors.push('First name is required');
     if (!pi.birthday) errors.push('Birthday is required');
+    else if (getDateOfBirthError(pi.birthday)) errors.push(getDateOfBirthError(pi.birthday));
     if (!pi.gender) errors.push('Gender is required');
     if (!pi.civilStatus) errors.push('Civil status is required');
     if (!pi.nationality?.trim()) errors.push('Nationality is required');
@@ -58,13 +63,14 @@ export const validatePersonalInfoFields = (
 
     if (isEmployee) {
       if (!pi.employeeId?.trim()) errors.push('Employee ID number is required');
+      else if (!/^[0-9]+$/.test(pi.employeeId.trim()) || Number(pi.employeeId.trim()) > 2147483647) errors.push('Employee ID number must contain digits only and be between 0 and 2147483647');
       if (!pi.department?.trim()) errors.push('Department is required');
       if (!pi.employmentCategory) errors.push('Employment category is required');
       if (pi.employmentCategory === 'Other' && !pi.employmentCategoryOther?.trim()) errors.push('Please specify employment category');
       if (!pi.employmentStatus) errors.push('Employment status is required');
     } else {
       if (!pi.studentNumber?.trim()) errors.push('Student number is required');
-      else if (!/^[a-zA-Z0-9\-]+$/.test(pi.studentNumber.trim())) errors.push('Student number must contain only letters, numbers, and dashes');
+      else if (!/^[0-9]+$/.test(pi.studentNumber.trim()) || Number(pi.studentNumber.trim()) > 2147483647) errors.push('Student number must contain digits only and be between 0 and 2147483647');
     }
   }
 

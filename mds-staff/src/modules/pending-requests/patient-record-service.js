@@ -25,6 +25,7 @@ const catalogDefinitions = {
   operationCatalog: 'getDomainCatalogs(domain: Operation,',
   medicationCatalog: 'getDomainCatalogs(domain: Medication,',
   immunizationCatalog: 'getDomainCatalogs(domain: Immunization,',
+  visualAcuityCatalog: 'getDomainCatalogs(domain: VisualAcuity,',
   allergenCatalog: 'getAllergenCatalogs(',
   oralApplianceCatalog: 'getOralApplianceCatalogs(',
   dentalProcedureCatalog: 'getDomainCatalogs(domain: DentalProcedure,',
@@ -196,7 +197,6 @@ export const getUserMedicalHistory = async (userId) => {
            diagnosedDate
            relationship
          }
-         notes
          created_at
        }
      }`,
@@ -287,7 +287,6 @@ export const getUserImmunizationProfile = async (userId) => {
            immunizationDate
            doseNumber
          }
-         notes
          created_at
        }
      }`,
@@ -565,7 +564,7 @@ export const fetchCatalogsForReview = async () => {
  * Strategy:
  *  • ONE POST to /emr/medical  — all patient-data resolvers + all catalog
  *    resolvers batched into a single GraphQL document via field aliases.
- *  • ONE POST to /staff/emr   — vital signs (different endpoint, medical only).
+ *  • Read vital signs from /staff/emr only when the selected ticket links them.
  *
  * OB-GYNE is always included for medical-scope records (backend returns []
  * for male patients) so the lazy-load second request is eliminated.
@@ -576,69 +575,75 @@ export const fetchCatalogsForReview = async () => {
  * @param {string} userId  — Patient ID
  * @param {string} scope   — 'Medical' | 'Dental' | 'Both'
  * @param {string} _sex    — kept for API compatibility; OB-GYNE is now batched
+ * @param {string} ticketId — Exact EMR ticket to review
+ * @param {boolean} isInitial — Initial reviews also read the personal profile
  * @returns {Promise<Object>} All fetched record sections + catalogs
  */
-export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex = null, ticketId = null) => {
+export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex = null, ticketId = null, isInitial = true) => {
   const includeMedical = scope === 'Medical' || scope === 'Both';
   const includeDental  = scope === 'Dental'  || scope === 'Both';
+  const sectionArgs = 'userId: $userId, ticketId: $ticketId, limit: 1';
 
   // ── Build a single batched /emr/medical query ─────────────────────────────
   const medicalFields = includeMedical ? `
-    medicalHistory: getUserMedicalHistory(userId: $userId, limit: 1000) {
-      id conditions { id conditionId description diagnosedDate relationship } notes created_at
+    medicalHistory: getUserMedicalHistory(${sectionArgs}) {
+      id conditions { id conditionId description diagnosedDate relationship } created_at
     }
-    lifestyle: getUserLifestyle(userId: $userId, limit: 1000) {
+    lifestyle: getUserLifestyle(${sectionArgs}) {
       id smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer
       frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency yearsVaping notes created_at
     }
-    allergyProfile: getUserAllergyProfile(userId: $userId, limit: 1000) {
+    allergyProfile: getUserAllergyProfile(${sectionArgs}) {
       id allergies { id allergenCatalogId status severity notes dateIdentified } notes created_at
     }
-    medicationProfile: getUserMedicationProfile(userId: $userId, limit: 1000) {
+    medicationProfile: getUserMedicationProfile(${sectionArgs}) {
       id medications { id medicineId description } notes created_at
     }
-    immunizationProfile: getUserImmunizationProfile(userId: $userId, limit: 1000) {
-      id immunizations { id vaccineTypeId immunizationDate doseNumber } notes created_at
+    immunizationProfile: getUserImmunizationProfile(${sectionArgs}) {
+      id immunizations { id vaccineTypeId immunizationDate doseNumber } created_at
     }
-    hospitalizationProfile: getUserHospitalizationProfile(userId: $userId, limit: 1000) {
+    hospitalizationProfile: getUserHospitalizationProfile(${sectionArgs}) {
       id hospitalizations { id conditionId admissionDate dischargeDate notes } notes created_at
     }
-    operationProfile: getUserOperationProfile(userId: $userId, limit: 1000) {
+    operationProfile: getUserOperationProfile(${sectionArgs}) {
       id operations { id procedureId operationDate notes } notes created_at
     }
-    visualAcuityProfile: getUserVisualAcuityProfile(userId: $userId, limit: 1000) {
+    visualAcuityProfile: getUserVisualAcuityProfile(${sectionArgs}) {
       id notes acuity { id acuityId left_eye right_eye notes recorded_at } created_at
     }
-    obgynHistory: getUserObgynHistory(userId: $userId, limit: 1000) {
+    obgynHistory: getUserObgynHistory(${sectionArgs}) {
       id lastMenstrualPeriod hasDysmenorrhea notes created_at
     }` : '';
 
   const dentalFields = includeDental ? `
-    dentalHistory: getUserDentalHistory(userId: $userId, limit: 1000) {
+    dentalHistory: getUserDentalHistory(${sectionArgs}) {
       id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
     }
-    dentalProcedureProfile: getUserDentalProcedureProfile(userId: $userId, limit: 1000) {
+    dentalProcedureProfile: getUserDentalProcedureProfile(${sectionArgs}) {
       id procedures { id procedureTypeId procedureDate } notes created_at
     }
-    oralApplianceProfile: getUserOralApplianceProfile(userId: $userId, limit: 1000) {
+    oralApplianceProfile: getUserOralApplianceProfile(${sectionArgs}) {
       id appliances { id tagId status dateIssued arch } notes otherDescription otherArch created_at
     }
-    dentalPhotoRecord: getUserDentalPhotoRecord(userId: $userId, limit: 1000) {
+    dentalPhotoRecord: getUserDentalPhotoRecord(${sectionArgs}) {
       id upperTeeth lowerTeeth isValid created_at
     }` : '';
 
   const batchedQuery = `
-    query FetchPatientRecordForReview($userId: ID!) {
-      basicInfo: getPatientBasicInfo(userId: $userId) {
+    query FetchPatientRecordForReview($userId: ID!, $ticketId: ID) {
+      ${ticketId == null ? '' : `reviewTicket: getUserUpdateTicket(userId: $userId, ticketId: $ticketId) {
+        id notes vitalSignsId
+      }`}
+      ${isInitial ? `basicInfo: getPatientBasicInfo(userId: $userId) {
         id identifier branch sex first_name last_name middle_name suffix
-        profile_type program year department role employmentCategoryOther latest_ticket_id
-        latest_status latest_scope latest_updated_at
-      }
-      profile: getUserProfile(userId: $userId, limit: 1000) {
+        profile_type program year department role employmentCategoryOther
+      }` : ''}
+      profile: getUserProfile(${sectionArgs}) {
+        __typename
         ... on StudentProfile { id program year status created_at }
         ... on EmployeeProfile { id department role position employmentCategoryOther status created_at }
       }
-      emergencyContact: getUserEmergencyContact(userId: $userId, limit: 1000) {
+      emergencyContact: getUserEmergencyContact(${sectionArgs}) {
         id
         firstContact { id contactName relationship contactNumber address isVerified }
         secondContact { id contactName relationship contactNumber address isVerified }
@@ -651,13 +656,13 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex =
       operationCatalog: getDomainCatalogs(domain: Operation, limit: 200) { id name }
       medicationCatalog: getDomainCatalogs(domain: Medication, limit: 200) { id name }
       immunizationCatalog: getDomainCatalogs(domain: Immunization, limit: 200) { id name }
+      ${includeMedical ? 'visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, limit: 200) { id name }' : ''}
       allergenCatalog: getAllergenCatalogs(limit: 200) { id allergen type }
       oralApplianceCatalog: getOralApplianceCatalogs(limit: 200) { id name }
       dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, limit: 200) { id name }
     }`;
 
-  // Fire the batched EMR query and the vital-signs query in parallel
-  // (vital signs uses a different endpoint so it cannot be merged)
+  // Initial submissions also have a personal profile in a separate endpoint.
   const personalQuery = `query ReviewPersonalInformation($userId: ID!) {
     logs: getUserPersonalRecordLog(userId: $userId, limit: 1) {
       id first_name middle_name last_name suffix date_of_birth sex civil_status
@@ -668,33 +673,46 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex =
       nationality religion contactNumber present_address province_address
     }
   }`;
-  const [emrSettled, vsSettled, personalSettled] = await Promise.allSettled([
-    sendGraphQL(batchedQuery, { userId }),
-    includeMedical ? getUserVitalSigns(userId) : Promise.resolve([]),
-    axiosRequest.post('/profile/medical', { query: personalQuery, variables: { userId } }).then(response => {
+  const [emrSettled, personalSettled] = await Promise.allSettled([
+    sendGraphQL(batchedQuery, { userId, ticketId }),
+    isInitial ? axiosRequest.post('/profile/medical', { query: personalQuery, variables: { userId } }).then(response => {
       if (response.data?.errors?.length) throw new Error(response.data.errors.map(error => error.message).join('; '));
       return response.data.data;
-    }),
+    }) : Promise.resolve(null),
   ]);
 
   const emr = emrSettled.status === 'fulfilled' ? emrSettled.value : {};
-  const vs  = vsSettled.status  === 'fulfilled' ? vsSettled.value  : [];
-
   if (emrSettled.status === 'rejected') {
     throw emrSettled.reason;
   }
   if (personalSettled.status === 'rejected') throw personalSettled.reason;
-  await completeReviewCatalogs(emr);
+  const reviewTicket = emr.reviewTicket && String(emr.reviewTicket.id) === String(ticketId) ? emr.reviewTicket : null;
+  if (ticketId != null && !reviewTicket) {
+    throw new Error('The selected ticket could not be loaded for this patient.');
+  }
+  const [vitalSigns] = await Promise.all([
+    includeMedical && reviewTicket?.vitalSignsId
+      ? sendStaffEMRGraphQL(`query ReviewVitalSigns($id: ID!) {
+        record: getVitalSignsById(id: $id) {
+          id patientId height_cm weight_kg blood_pressure heart_rate temperature notes created_at
+        }
+      }`, { id: reviewTicket.vitalSignsId }).then(({ record }) =>
+        record && String(record.patientId) === String(userId) ? record : null)
+      : Promise.resolve(null),
+    completeReviewCatalogs(emr),
+  ]);
 
   // Helper: arrays → first element; objects → as-is; null/undefined → null
   const first = (val) => Array.isArray(val)
-    ? (ticketId == null ? val[0] ?? null : val.find(row => String(row.id) === String(ticketId)) ?? null)
+    ? (ticketId == null ? val[0] ?? null : val.find(row => String(row?.id) === String(ticketId)) ?? null)
     : (val ?? null);
   const personal = personalSettled.value?.logs?.[0] ?? personalSettled.value?.approved;
 
   return {
-    basicInfo:              emr.basicInfo ? { ...emr.basicInfo, ...personal, id: emr.basicInfo.id } : null,
+    basicInfo:              isInitial && (emr.basicInfo || personal)
+      ? { ...emr.basicInfo, ...personal, id: emr.basicInfo?.id ?? userId } : null,
     profile:                first(emr.profile),
+    ticketNotes:            reviewTicket?.notes ?? null,
     emergencyContact:       first(emr.emergencyContact),
     // medical
     medicalHistory:         first(emr.medicalHistory)         ?? null,
@@ -705,7 +723,7 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex =
     hospitalizationProfile: first(emr.hospitalizationProfile) ?? null,
     operationProfile:       first(emr.operationProfile)       ?? null,
     visualAcuityProfile:    first(emr.visualAcuityProfile)    ?? null,
-    vitalSigns:             first(vs)                         ?? null,
+    vitalSigns,
     obgynHistory:           first(emr.obgynHistory)           ?? null,
     // dental
     dentalHistory:          first(emr.dentalHistory)          ?? null,
@@ -719,6 +737,7 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', _sex =
       operationCatalog:        emr.operationCatalog        ?? [],
       medicationCatalog:       emr.medicationCatalog       ?? [],
       immunizationCatalog:     emr.immunizationCatalog     ?? [],
+      visualAcuityCatalog:     emr.visualAcuityCatalog     ?? [],
       allergenCatalog:         emr.allergenCatalog         ?? [],
       oralApplianceCatalog:    emr.oralApplianceCatalog    ?? [],
       dentalProcedureCatalog:  emr.dentalProcedureCatalog  ?? [],
@@ -810,7 +829,7 @@ export const staffUpdateEmergencyContact = async (userId, input) => {
 export const staffUpdateMedicalHistory = async (userId, input) => {
   const data = await sendGraphQL(
     `mutation UpdateMedicalHistory($userId: ID!, $input: MedicalHistoryInput!) {
-       updateMedicalHistory(userId: $userId, input: $input) { id notes }
+       updateMedicalHistory(userId: $userId, input: $input) { id }
      }`,
     { userId, input },
   );
@@ -1043,26 +1062,6 @@ export const submitStaffEdits = async (userId, editedFields, recordData) => {
     mutations.push(
       staffUpdateEmergencyContact(userId, input)
         .catch((e) => { errors.push(`Emergency contacts: ${e.message}`); }),
-    );
-  }
-
-  // ── Medical History (notes only) ───────────────────────────────────────────
-  const mh = editedFields.medicalHistory;
-  if (mh && Object.keys(mh).length > 0) {
-    const origConditions = recordData?.medicalHistory?.conditions ?? [];
-    const input = {
-      conditions: origConditions.map((c) => ({
-        conditionId: c.conditionId,
-        description: c.description || undefined,
-        diagnosedDate: c.diagnosedDate || undefined,
-        relationship: c.relationship || undefined,
-      })),
-      notes: mh.notes ?? recordData?.medicalHistory?.notes ?? null,
-    };
-
-    mutations.push(
-      staffUpdateMedicalHistory(userId, input)
-        .catch((e) => { errors.push(`Medical history: ${e.message}`); }),
     );
   }
 

@@ -18,13 +18,19 @@ The staff router mounts these paths under `/staff`:
 | Method and path | Purpose |
 | --- | --- |
 | `POST /staff/notify-staffs` | Admin broadcast to staff or selected recipients. |
-| `POST /staff/notify-patients` | Staff notification to patients within authorized branch scope. |
+| `POST /staff/notify-patients` | Staff notification to patients within the branch scope of the patient notification permission. |
+| `GET /staff/notify-patient-groups` | List available campuses and eligible recipient counts for student and employee groups. |
+| `POST /staff/notify-patient-groups` | Send to an authorized campus and patient group after reviewing its recipient count. |
 | `POST /staff/notify-acknowledge` | Acknowledge a notification. |
 | `GET /staff/notify-status/:notificationId` | Read delivery and acknowledgement status. |
 | `GET /staff/notify-sent` | List notifications sent by the caller. |
 | `GET /staff/notify-received` | List notifications received by the caller. |
 
 These routes enforce authentication and role or permission checks. Socket acknowledgements are also available for supported client event handlers.
+
+The staff portal's **Notice Center** patient groups use the branch set on **Send Notification to Patients** in Role Management. Admins have both-campus access. Group recipients must have an active account, a matching Student or Employee patient profile, and a campus within the chosen scope. Patients assigned to both campuses are included in either campus group and counted once for a both-campus send.
+
+A group send accepts `message`, `profile`, `branch`, and the reviewed `expectedCount`. The server checks the sender's current permission and rebuilds the recipient list before sending. If the count changes, it returns HTTP 409 so the sender can review a new count. Group results include aggregate delivery outcomes.
 
 ## Socket events
 

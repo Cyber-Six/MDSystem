@@ -11,7 +11,7 @@ export const GQL_FULL_RECORD = `
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
     getUserMedicalHistory(userId: $userId, limit: 1) {
-      id notes created_at
+      id created_at
       conditions { id conditionId description diagnosedDate relationship }
     }
     getUserAllergyProfile(userId: $userId, limit: 1) {
@@ -19,7 +19,7 @@ export const GQL_FULL_RECORD = `
       allergies { id allergenCatalogId status severity notes dateIdentified }
     }
     getUserImmunizationProfile(userId: $userId, limit: 1) {
-      id notes created_at
+      id created_at
       immunizations { id vaccineTypeId immunizationDate doseNumber }
     }
     getUserLifestyle(userId: $userId, limit: 1) {

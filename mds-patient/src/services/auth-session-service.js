@@ -1,4 +1,5 @@
 import { logout } from '../packages-core-adapter';
+import { clearPatientRecordFormDrafts } from '../modules/record-forms/record-form-draft-storage';
 
 const INACTIVE_REACTIVATION_LOCK_LEGACY_KEY = 'patient_inactive_reactivation_lock';
 
@@ -8,6 +9,7 @@ export const clearPatientSessionArtifacts = () => {
   localStorage.removeItem('patient_role');
   localStorage.removeItem('patient_email');
   localStorage.removeItem(INACTIVE_REACTIVATION_LOCK_LEGACY_KEY);
+  clearPatientRecordFormDrafts();
 
   try {
     const refreshToken = localStorage.getItem('patient_refreshToken') || '';

@@ -1,3 +1,4 @@
+import { calculateAgeFromDateOfBirth, getDateOfBirthBounds, getDateOfBirthError, personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 import React from 'react';
 import { Input, Select } from '../medical/form-elements';
 
@@ -8,30 +9,14 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
     onChange({ ...data, [field]: value });
   };
 
-  const [phoneWarnings, setPhoneWarnings] = React.useState({});
 
-  // Strip non-phone chars and enforce a maximum of 11 digits
-  const handlePhone = (fieldKey, rawVal) => {
+  // Strip non-phone chars and enforce the storage length limit
+  const handlePhone = (rawVal) => {
     const filtered = rawVal.replace(/[^\d+\-\s()]/g, '');
-    const digits = filtered.replace(/\D/g, '');
-    if (digits.length > 11) {
-      let digitCount = 0;
-      let result = '';
-      for (const char of filtered) {
-        if (/\d/.test(char)) {
-          if (digitCount >= 11) break;
-          digitCount++;
-        }
-        result += char;
-      }
-      setPhoneWarnings(prev => ({ ...prev, [fieldKey]: true }));
-      return result;
-    }
-    setPhoneWarnings(prev => ({ ...prev, [fieldKey]: false }));
-    return filtered;
+    return filtered.slice(0, personalInfoLimits.contactNumber);
   };
-  // Strip any character that is not alphanumeric or a dash
-  const filterEmployeeId = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
+  // Reject nonnumeric identifier input
+  const filterEmployeeId = (val) => (/^[0-9]*$/.test(val) && Number(val) <= 2147483647 ? val : (data.employeeId || ''));
 
   const handleEmergencyContactChange = (index, field, value) => {
     // Clear error for this emergency contact field when user starts typing
@@ -50,21 +35,11 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
     { value: 'Other', label: 'Other' },
   ];
 
-  const calculateAge = (birthday) => {
-    if (!birthday) return '';
-    const today = new Date();
-    const birthDate = new Date(birthday);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  };
+  const birthdayBounds = getDateOfBirthBounds();
 
   React.useEffect(() => {
     if (data.birthday) {
-      const age = calculateAge(data.birthday);
+      const age = calculateAgeFromDateOfBirth(data.birthday);
       if (age !== data.age) {
         handleChange('age', age);
       }
@@ -90,6 +65,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           <Input
             label="Surname"
             required
+            maxLength={personalInfoLimits.surname}
             value={data.surname || ''}
             onChange={(e) => handleChange('surname', e.target.value)}
             placeholder="Enter surname"
@@ -98,6 +74,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           <Input
             label="Given Name"
             required
+            maxLength={personalInfoLimits.firstName}
             value={data.firstName || ''}
             onChange={(e) => handleChange('firstName', e.target.value)}
             placeholder="Enter given name"
@@ -105,12 +82,14 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           />
           <Input
             label="Middle Name"
+            maxLength={personalInfoLimits.middleName}
             value={data.middleName || ''}
             onChange={(e) => handleChange('middleName', e.target.value)}
             placeholder="Enter middle name"
           />
           <Input
             label="Suffix"
+            maxLength={personalInfoLimits.suffix}
             value={data.suffix || ''}
             onChange={(e) => handleChange('suffix', e.target.value)}
             placeholder="e.g., Jr., Sr., III"
@@ -118,6 +97,9 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           <Input
             label="Employee ID Number"
             required
+            maxLength={10}
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={data.employeeId || ''}
             onChange={(e) => handleChange('employeeId', filterEmployeeId(e.target.value))}
             placeholder="Enter employee ID number"
@@ -126,10 +108,12 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           <Input
             label="Birthday"
             type="date"
+            min={birthdayBounds.min}
+            max={birthdayBounds.max}
             required
             value={data.birthday || ''}
             onChange={(e) => handleChange('birthday', e.target.value)}
-            error={fieldErrors.birthday}
+            error={fieldErrors.birthday || getDateOfBirthError(data.birthday)}
           />
           <Input
             label="Age"
@@ -165,6 +149,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           <Input
             label="Nationality"
             required
+            maxLength={personalInfoLimits.nationality}
             value={data.nationality || ''}
             onChange={(e) => handleChange('nationality', e.target.value)}
             placeholder="Enter nationality"
@@ -172,6 +157,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           />
           <Input
             label="Religion"
+            maxLength={personalInfoLimits.religion}
             value={data.religion || ''}
             onChange={(e) => handleChange('religion', e.target.value)}
             placeholder="Enter religion"
@@ -181,11 +167,12 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             type="tel"
             required
             reserveErrorSpace
+            maxLength={personalInfoLimits.contactNumber}
             value={data.contactNumber || ''}
-            onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
+            onChange={(e) => handleChange('contactNumber', handlePhone(e.target.value))}
             placeholder="09XXXXXXXXX"
             className="mb-0"
-            error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
+            error={fieldErrors.contactNumber}
           />
           <Input
             label="Active Email Address"
@@ -199,6 +186,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           <Input
             label="Complete Address"
             required
+            maxLength={personalInfoLimits.address}
             value={data.address || ''}
             onChange={(e) => handleChange('address', e.target.value)}
             placeholder="House Number, Street Name, Barangay, City / Municipality, Province"
@@ -224,6 +212,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           <Input
             label="Department"
             required
+            maxLength={personalInfoLimits.department}
             value={data.department || ''}
             onChange={(e) => handleChange('department', e.target.value)}
             placeholder="Enter department"
@@ -249,6 +238,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
           )}
           <Input
             label="Position"
+            maxLength={personalInfoLimits.position}
             value={data.position || ''}
             onChange={(e) => handleChange('position', e.target.value)}
             placeholder="Enter position"
@@ -304,10 +294,11 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               type="tel"
               required
               reserveErrorSpace
+              maxLength={personalInfoLimits.contactNumber}
               value={data.emergencyContacts[0]?.contactNumber || ''}
-              onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', handlePhone('ec0', e.target.value))}
+              onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', handlePhone(e.target.value))}
               placeholder="Contact Number"
-              error={phoneWarnings.ec0 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact1ContactNumber}
+              error={fieldErrors.emergencyContact1ContactNumber}
             />
           </div>
           <div className="mt-2">
@@ -346,10 +337,11 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               label="Contact Number"
               type="tel"
               reserveErrorSpace
+              maxLength={personalInfoLimits.contactNumber}
               value={data.emergencyContacts[1]?.contactNumber || ''}
-              onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', handlePhone('ec1', e.target.value))}
+              onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', handlePhone(e.target.value))}
               placeholder="Contact Number"
-              error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact2ContactNumber}
+              error={fieldErrors.emergencyContact2ContactNumber}
             />
           </div>
           <div className="mt-2">

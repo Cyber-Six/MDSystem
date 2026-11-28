@@ -91,7 +91,7 @@ export const MODULE_PERMISSION_LABEL_OVERRIDES = {
 // ─── Module Definitions (for UI layout) ──────────────────────────────────
 export const PERMISSION_MODULES = [
   { id: 'patientSearch', label: 'Search Patient', description: 'Search and view patient profiles and medical identifiers', icon: 'search' },
-  { id: 'pendingRequests', label: 'Pending Requests', description: 'Approve or reject appointment, medicine, and record update requests', icon: 'pending' },
+  { id: 'pendingRequests', label: 'Record Requests', description: 'Review initial record submissions and record update requests', icon: 'pending' },
   { id: 'personalRecords', label: 'Personal Records', description: 'Profile approvals and profile record access controls', icon: 'profile' },
   { id: 'medicalRecords', label: 'Medical Records', description: 'View, edit, add consultation notes and set vital signs', icon: 'medical' },
   { id: 'dentalRecords', label: 'Dental Records', description: 'View, edit, and add notes to dental records', icon: 'dental' },
@@ -100,7 +100,7 @@ export const PERMISSION_MODULES = [
   { id: 'inventory', label: 'Inventory', description: 'View stock, add/restock items, dispense and configure medicine', icon: 'inventory' },
   { id: 'announcements', label: 'Announcements', description: 'Create, edit, and delete announcements visible to all users', icon: 'bell' },
   { id: 'healthChat', label: 'Health Chat', description: 'Access health chat consultation and messaging features', icon: 'chat' },
-  { id: 'sendNotification', label: 'Send Notification', description: 'Send push notifications and alerts directly to patients', icon: 'notification' },
+  { id: 'sendNotification', label: 'Notice Center', description: 'Send push notifications and alerts directly to patients', icon: 'notification' },
   { id: 'analytics', label: 'Analytics', description: 'View reports, dashboards, and system analytics', icon: 'chart' },
   { id: 'documents', label: 'Documents', description: 'View, manage, and generate patient documents and templates', icon: 'document' },
   // superiorAccess excluded here — rendered as a Major Permission Switch instead

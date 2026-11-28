@@ -236,7 +236,7 @@ All granular permission keys (mapped to modules):
 
 **Patient Search:** `profile_allow_view`, `emr_allow_view`
 
-**Pending Requests:** `emr_allow_approval`, `profile_allow_approval`, `appointment_allow_approval`, `medicine_request_allow_approve`
+**Record Requests:** `emr_allow_approval`, `profile_allow_approval`, `appointment_allow_approval`, `medicine_request_allow_approve`
 
 **Medical Records:** `emr_allow_view`, `emr_allow_edit`, `emr_allow_edit_catalogs`, `consultation_allow_view`, `consultation_allow_edit`, `profile_allow_view`, `profile_allow_edit`
 

@@ -15,6 +15,15 @@ it('restores Student revision notes saved on hospitalization and operation entri
   expect(medicalBackground.operationNotes).toBe('Outpatient surgery');
 });
 
+it('omits unsupported school and drug test fields from Student revision prefill', () => {
+  const { personalInfo } = mapRevisionDataToFormData({}, {
+    emrProfile: { program: 'BS Computer Science', year: 'Freshman' },
+  });
+  expect(personalInfo.studentCategory).toBe('Freshman');
+  expect(personalInfo).not.toHaveProperty('lastSchoolAttended');
+  expect(personalInfo).not.toHaveProperty('drugTestDone');
+});
+
 it.each(['', '+', null])('restores an empty second Employee contact phone from %p', (storedPhone) => {
   const { personalInfo } = mapRevisionDataToFormData({}, {
     emergencyContact: {
@@ -62,6 +71,27 @@ it('loads saved dental photos as previews and keeps their IDs on resubmission', 
   } finally {
     URL.createObjectURL = createObjectURL;
   }
+});
+
+it.each([
+  ['yes', 3, { vapeUser: true, vapeType: 'Nicotine', vapeFrequency: 'Weekly', yearsVaping: 3 }],
+  ['yes', 0, { vapeUser: true, vapeType: 'Nicotine', vapeFrequency: 'Weekly', yearsVaping: 0 }],
+  ['yes', '', { vapeUser: true, vapeType: 'Nicotine', vapeFrequency: 'Weekly', yearsVaping: null }],
+  ['no', 3, { vapeUser: false, vapeType: null, vapeFrequency: null, yearsVaping: null }],
+])('submits initial revision vaping answers for vaper=%s and duration=%p', async (vaper, yearsVaping, expected) => {
+  sendGraphQLRequest.mockReset();
+  sendGraphQLRequest.mockImplementation(async (document) => {
+    if (document.includes('getUpdateTicket')) return { getUpdateTicket: { id: '42', status: 'Revision' } };
+    if (document.includes('submitUpdateTicket')) return { submitTicket: 'RevisionSubmitted' };
+    return {};
+  });
+  await createInitialMedicalRecord({
+    personalInfo: { studentNumber: 'ST-1' }, medicalHistory: {}, dentalHistory: {},
+    medicalBackground: { smoker: 'no', vaper, vapeType: 'Nicotine', vapeFrequency: 'Weekly', yearsVaping },
+  }, { isRevision: true });
+
+  const [, variables] = sendGraphQLRequest.mock.calls.find(([document]) => document.includes('BatchCreateInitialRecords'));
+  expect(variables.lifeInput).toMatchObject({ smoker: false, ...expected, notes: null });
 });
 
 it('keeps profile-level notes when present and restores the submitted Employee position', () => {

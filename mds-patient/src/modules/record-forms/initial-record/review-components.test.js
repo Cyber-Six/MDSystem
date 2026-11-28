@@ -2,8 +2,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server.node';
 import ReviewForm from './medical/review-form';
 import EmployeeReviewForm from './employee/review-form';
+import OBGYNEForm from './medical/obygyne';
+import EmployeeOBGYNEForm from './employee/obygyne';
 import UpdateReview from '../update-record/review-step';
-import { ReviewDataRow, additionalCatalogItems, collectUnresolvedCatalogSelections, isResolvableCatalogSelection, resolveCatalogLabel } from './review-components';
+import { ReviewDataRow, ReviewNote, additionalCatalogItems, collectUnresolvedCatalogSelections, isResolvableCatalogSelection, resolveCatalogLabel } from './review-components';
 
 const catalog = (id, name, extra = {}) => ({ id, name, ...extra });
 const catalogs = {
@@ -55,10 +57,47 @@ describe('patient review summaries', () => {
     expect(html).toContain('line one\nline two');
   });
 
+  test('renders notes as full-width blocks with line breaks and safe wrapping', () => {
+    const html = renderToStaticMarkup(<ReviewNote label="Hospitalization Notes" value={'First line\nA long follow-up note that should wrap instead of stretching the review row'} />);
+    expect(html).toContain('Hospitalization Notes');
+    expect(html).toContain('whitespace-pre-wrap');
+    expect(html).toContain('break-words');
+    expect(html).toContain('First line\nA long follow-up note');
+  });
+
+  test('hides empty optional notes from review summaries', () => {
+    expect(renderToStaticMarkup(<ReviewNote label="Medication Notes" value="  " />)).toBe('');
+    expect(renderToStaticMarkup(<ReviewNote label="Medication Notes" value={null} />)).toBe('');
+  });
+
   test('shows Student initial values, custom choices, details, photos, and female fields', () => {
     const html = renderToStaticMarkup(<ReviewForm {...initialProps(initialFixture())} />);
-    for (const value of ['QA asthma', 'Mother', 'QA vaccine', '2025', 'QA pollen', 'Environmental', 'Mild', 'Active', 'QA hospitalization', 'Admitted:', 'QA operation', 'QA medication', 'Pain relief', '0 sticks/day', 'Custom guard', 'Upper', 'upper.png', 'Menarche Year/Age']) expect(html).toContain(value);
+    for (const value of ['QA asthma', 'Mother', 'QA vaccine', '2025', 'QA pollen', 'Environmental', 'Mild', 'Active', 'QA hospitalization', 'Admitted:', 'QA operation', 'QA medication', 'Pain relief', '0 sticks/day', 'Custom guard', 'Upper', 'upper.png', 'Menstruation Duration']) expect(html).toContain(value);
     expect(html).not.toContain('undefined');
+  });
+
+  test.each([
+    ['Student', OBGYNEForm, ReviewForm],
+    ['Employee', EmployeeOBGYNEForm, EmployeeReviewForm],
+  ])('omits retired OB-GYN fields from %s entry and review even with a legacy draft', (_, Entry, Review) => {
+    const fixture = initialFixture();
+    const entry = renderToStaticMarkup(<Entry data={fixture.obgyne} onChange={() => {}} />);
+    const review = renderToStaticMarkup(<Review {...initialProps(fixture)} />);
+    for (const html of [entry, review]) {
+      expect(html).not.toMatch(/menarche|pads|pad\/s/i);
+      expect(html).toContain('Menstruation Duration');
+      expect(html).toContain('Dysmenorrhea');
+    }
+    expect(review).toContain('5 days');
+  });
+
+  test('omits unsupported fields from Student initial review', () => {
+    const html = renderToStaticMarkup(<ReviewForm {...initialProps(initialFixture('Male'))} />);
+    expect(html).toContain('0 sticks/day');
+    expect(html).not.toContain('Tattoo Location');
+    expect(html).not.toContain('Piercing Location');
+    expect(html).not.toContain('Last School Attended');
+    expect(html).not.toContain('Drug Test Completed');
   });
 
   test('shows Employee initial values with the employee fields and photos', () => {
@@ -92,7 +131,10 @@ describe('patient review summaries', () => {
       upperTeethPhoto: { name: 'update-upper.png', preview: 'data:image/png;base64,AA==' },
     };
     const html = renderToStaticMarkup(<UpdateReview formData={update} recordType="both" steps={['Personal Info', 'Medical History', 'Dental History', 'Review & Submit']} onEdit={() => {}} />);
-    for (const value of ['QA asthma', 'Mother', 'QA pollen', 'QA vaccine', 'Dose:', 'QA hospitalization', 'QA operation', 'QA medication', 'Two lines', 'Right eye', 'QA cleaning', 'Upper', 'update-upper.png']) expect(html).toContain(value);
+    for (const value of ['QA asthma', 'Mother', 'QA pollen', 'QA vaccine', 'Dose:', 'QA hospitalization', 'QA operation', 'QA medication', 'Two lines', 'Grade OD', 'QA cleaning', 'Upper', 'update-upper.png']) expect(html).toContain(value);
+    for (const group of ['School Information', 'Emergency Contact Information', 'Medical History', 'Medical Background', 'History of Allergies', 'Daily habits and vision', 'OB-GYNE History', 'Dental visits', 'Intra-Oral Appliances']) expect(html).toContain(group);
+    expect(html).toContain('medical-review-groups');
+    expect(html).not.toContain('sm:grid-cols-2');
     expect(html).not.toContain('undefined');
   });
 });
@@ -130,4 +172,23 @@ test('shows a correction action and blocks certification for unresolved selectio
 
 test('resolves revision allergen registries using their actual response labels', () => {
   expect(resolveCatalogLabel(null, 11, { 11: { id: '11', allergen: 'QA pollen', type: 'Environmental' } })).toBe('QA pollen');
+});
+
+
+test.each(['medical', 'dental', 'both'])('update review shows employee fields, contacts and only the %s scope', recordType => {
+  const html = renderToStaticMarkup(<UpdateReview formData={{
+    profileType: 'Employee', employeeDepartment: 'QA department', employeeRole: 'Other', employeeCategoryOther: 'QA researcher', employeePosition: 'QA analyst',
+    emergencyContact1Name: 'QA contact', emergencyContact1Relationship: 'Parent', emergencyContact1Number: '09170000000', emergencyContact1Address: 'QA address',
+    sex: 'Female', menstruationDuration: '5', vaper: 'yes', yearsVaping: 0,
+    oralApplianceOtherDescription: 'QA guard', oralApplianceOtherArch: 'Upper', oralApplianceNotes: 'QA appliance note', dentalProcedureNotes: 'QA procedure note',
+  }} recordType={recordType} steps={['Personal Info', 'Medical History', 'Dental History', 'Review & Submit']} onEdit={() => {}} />);
+  for (const value of ['Employment Information', 'QA department', 'QA researcher', 'QA analyst', 'QA contact', 'Parent', 'QA address']) expect(html).toContain(value);
+  expect(html).not.toContain('Student Category');
+  expect(html).not.toContain('First Name');
+  if (recordType !== 'dental') {
+    expect(html).toContain('5 days');
+    expect(html).toContain('0 years');
+  } else expect(html).not.toContain('OB-GYNE History');
+  if (recordType !== 'medical') for (const value of ['QA guard', 'QA appliance note', 'QA procedure note']) expect(html).toContain(value);
+  else expect(html).not.toContain('Dental History');
 });

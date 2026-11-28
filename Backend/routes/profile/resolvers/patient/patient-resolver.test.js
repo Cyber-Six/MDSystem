@@ -67,16 +67,16 @@ test('initial profile creates a record transactionally with student branch and d
   const context = ctx(); const firstClient = client(); db.connect.mockResolvedValueOnce(firstClient);
   Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce(null);
   validator.isStudentEmail.mockReturnValueOnce(true);
-  Wrapper.Mutation._PersonalRecordLog.mockResolvedValueOnce({ logId: 1 }); Wrapper.Mutation._UserBranchIdentifier.mockResolvedValueOnce({ identifier: 'A' });
-  const studentInput = {};
-  expect(await Mutation.createInitialPersonalRecord(null, { input: studentInput }, context)).toEqual({ identifier: 'A', logId: 1 });
+  Wrapper.Mutation._PersonalRecordLog.mockResolvedValueOnce({ logId: 1 }); Wrapper.Mutation._UserBranchIdentifier.mockResolvedValueOnce({ identifier: '1' });
+  const studentInput = { identifier: '1' };
+  expect(await Mutation.createInitialPersonalRecord(null, { input: studentInput }, context)).toEqual({ identifier: '1', logId: 1 });
   expect(studentInput.branch).toBe('Manila'); expect(firstClient.query).toHaveBeenCalledWith('COMMIT'); expect(firstClient.release).toHaveBeenCalled();
   const secondClient = client(); db.connect.mockResolvedValueOnce(secondClient);
   _getUserUpdateTicket.mockResolvedValueOnce({ status: 'Revision' });
   Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce({ id: 29, status: 'Pending' });
-  Wrapper.Mutation._UpdatePersonalRecordLog.mockResolvedValueOnce({ logId: 2 }); Wrapper.Mutation._UserBranchIdentifier.mockResolvedValueOnce({ identifier: 'B' });
-  const revisedInput = { first_name: 'Revised', identifier: 'B' };
-  expect(await Mutation.createInitialPersonalRecord(null, { input: revisedInput }, context)).toEqual({ identifier: 'B', logId: 2 });
+  Wrapper.Mutation._UpdatePersonalRecordLog.mockResolvedValueOnce({ logId: 2 }); Wrapper.Mutation._UserBranchIdentifier.mockResolvedValueOnce({ identifier: '3' });
+  const revisedInput = { first_name: 'Revised', identifier: '3' };
+  expect(await Mutation.createInitialPersonalRecord(null, { input: revisedInput }, context)).toEqual({ identifier: '3', logId: 2 });
   expect(revisedInput.branch).toBe('Both');
   expect(Wrapper.Mutation._UpdatePersonalRecordLog).toHaveBeenCalledWith(null, {
     client: secondClient, userId: 7, ticketId: 29, input: { first_name: 'Revised' },
@@ -85,9 +85,9 @@ test('initial profile creates a record transactionally with student branch and d
   expect(secondClient.release).toHaveBeenCalled();
   const thirdClient = client(); db.connect.mockResolvedValueOnce(thirdClient);
   Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce(null);
-  Wrapper.Mutation._PersonalRecordLog.mockResolvedValueOnce({ logId: 3 }); Wrapper.Mutation._UserBranchIdentifier.mockResolvedValueOnce({ identifier: 'C' });
-  const suppliedInput = { branch: 'QuezonCity' };
-  expect(await Mutation.createInitialPersonalRecord(null, { input: suppliedInput }, context)).toEqual({ identifier: 'C', logId: 3 });
+  Wrapper.Mutation._PersonalRecordLog.mockResolvedValueOnce({ logId: 3 }); Wrapper.Mutation._UserBranchIdentifier.mockResolvedValueOnce({ identifier: '2' });
+  const suppliedInput = { identifier: '2', branch: 'QuezonCity' };
+  expect(await Mutation.createInitialPersonalRecord(null, { input: suppliedInput }, context)).toEqual({ identifier: '2', logId: 3 });
   expect(suppliedInput.branch).toBe('QuezonCity');
 });
 
@@ -98,12 +98,12 @@ test('initial profile rolls back when an update, insert, or transaction fails', 
     const connection = client(); db.connect.mockResolvedValueOnce(connection);
     Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce(status ? { status } : null);
     Wrapper.Mutation[operation].mockResolvedValueOnce(null);
-    await expect(Mutation.createInitialPersonalRecord(null, { input: {} }, context)).rejects.toThrow('Failed to create initial personal record');
+    await expect(Mutation.createInitialPersonalRecord(null, { input: { identifier: '700001' } }, context)).rejects.toThrow('Failed to create initial personal record');
     expect(connection.query).toHaveBeenCalledWith('ROLLBACK'); expect(connection.release).toHaveBeenCalled();
   }
   const connection = client(); connection.query.mockRejectedValueOnce(Error('db down')); db.connect.mockResolvedValueOnce(connection);
   Wrapper.Query._getUserCredentialStatus.mockResolvedValueOnce('Unverified'); Wrapper.Query._getUserPersonalRecordLogStatus.mockResolvedValueOnce(null);
-  await expect(Mutation.createInitialPersonalRecord(null, { input: {} }, context)).rejects.toThrow('Failed to create initial personal record');
+  await expect(Mutation.createInitialPersonalRecord(null, { input: { identifier: '700001' } }, context)).rejects.toThrow('Failed to create initial personal record');
   expect(logger.error).toHaveBeenCalledWith('Error creating initial personal record:', expect.any(Error));
 });
 

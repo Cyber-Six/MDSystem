@@ -190,20 +190,16 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
             ) : oralApplianceCatalog.length === 0 ? (
               <p className="text-sm text-secondary-400 italic">No appliances available.</p>
             ) : (
-              <div className="space-y-2 ml-6">
+              <div className="dental-option-grid ml-2" role="group" aria-label="Intra-oral appliance types">
                 {oralApplianceCatalog.map((appliance) => {
                   const appVal = data.intraOralAppliances?.[appliance.id];
                   const isChecked = typeof appVal === 'object' ? !!appVal?.checked : !!appVal;
                   const arch = typeof appVal === 'object' ? (appVal?.arch || '') : '';
                   return (
-                    <div key={appliance.id}>
-                      <Checkbox
-                        label={appliance.name}
-                        checked={isChecked}
-                        onChange={(e) => handleApplianceChange(appliance.id, e.target.checked)}
-                      />
+                    <div key={appliance.id} className={`dental-option-card${isChecked ? ' is-selected' : ''}`}>
+                      <Checkbox label={appliance.name} checked={isChecked} onChange={(e) => handleApplianceChange(appliance.id, e.target.checked)} />
                       {isChecked && (
-                        <div className="ml-6 mt-1 mb-2 flex gap-2">
+                        <div className="dental-option-details flex flex-wrap gap-x-3">
                           {['Upper', 'Lower', 'Both'].map((loc) => (
                             <label key={loc} className="flex items-center text-sm">
                               <input
@@ -226,7 +222,7 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
             )}
 
             {/* Other / custom appliance */}
-            <div className="mt-2 ml-6">
+            <div className="dental-option-card dental-option-other mt-3">
               <div>
                 <Checkbox
                   label="Other:"
@@ -301,14 +297,15 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
           ) : dentalProcedureCatalog.length === 0 ? (
             <p className="text-sm text-secondary-400 italic">No procedures available.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-2">
+            <div className="dental-option-grid">
               {dentalProcedureCatalog.map((procedure) => (
-                <Checkbox
-                  key={procedure.id}
-                  label={procedure.name}
-                  checked={data.selectedDentalProcedures?.[procedure.id] || false}
-                  onChange={(e) => handleDentalProcedureChange(procedure.id, e.target.checked)}
-                />
+                <div key={procedure.id} className={`dental-option-card${data.selectedDentalProcedures?.[procedure.id] ? ' is-selected' : ''}`}>
+                  <Checkbox
+                    label={procedure.name}
+                    checked={data.selectedDentalProcedures?.[procedure.id] || false}
+                    onChange={(e) => handleDentalProcedureChange(procedure.id, e.target.checked)}
+                  />
+                </div>
               ))}
             </div>
           )}

@@ -1,3 +1,4 @@
+import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 import React from 'react';
 import { Input, Select } from './form-elements';
 import { searchStudentProgram } from '@core/services/emr-service';
@@ -33,7 +34,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
       onChange({ ...formData, program: '', programId: '' });
     }
     if (programDebounceRef.current) clearTimeout(programDebounceRef.current);
-    if (!value.trim()) { setProgramSuggestions([]); return; }
+    if (value.trim().length < 3) { setProgramSuggestions([]); setProgramSearching(false); return; }
     programDebounceRef.current = setTimeout(async () => {
       setProgramSearching(true);
       try {
@@ -84,9 +85,9 @@ const PersonalInfoStep = ({ formData, onChange }) => {
   return (
     <div className="space-y-4">
       {formData.profileType === 'Employee' ? (
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
+      <div className="form-section rounded-xl">
         <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white mb-5 pb-4 border-b border-neutral-200 dark:border-neutral-700">Employment Information</h3>
-        <Input label="Department" required placeholder="Enter department" value={formData.employeeDepartment || ''} onChange={(event) => onChange({ ...formData, employeeDepartment: event.target.value })} />
+        <Input maxLength={personalInfoLimits.department} label="Department" required placeholder="Enter department" value={formData.employeeDepartment || ''} onChange={(event) => onChange({ ...formData, employeeDepartment: event.target.value })} />
         <Select
           label="Employment Category"
           required
@@ -101,12 +102,12 @@ const PersonalInfoStep = ({ formData, onChange }) => {
           ]}
         />
         {formData.employeeRole === 'Other' && <Input label="Specify Employment Category" required placeholder="Enter your employment category" value={formData.employeeCategoryOther || ''} onChange={(event) => onChange({ ...formData, employeeCategoryOther: event.target.value })} />}
-        <Input label="Position" placeholder="Enter position" value={formData.employeePosition || ''} onChange={(event) => onChange({ ...formData, employeePosition: event.target.value })} />
+        <Input maxLength={personalInfoLimits.position} label="Position" placeholder="Enter position" value={formData.employeePosition || ''} onChange={(event) => onChange({ ...formData, employeePosition: event.target.value })} />
       </div>
       ) : (
       <>
       {/* School Information Card */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
+      <div className="form-section rounded-xl">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
           <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-500/20 flex items-center justify-center">
             <svg className="w-5 h-5 text-primary-600 dark:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,10 +145,13 @@ const PersonalInfoStep = ({ formData, onChange }) => {
                 {programSearching && (
                   <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
                 )}
-                {!programSearching && programSuggestions.length === 0 && (
+                {!programSearching && programInput.trim().length > 0 && programInput.trim().length < 3 && (
+                  <div className="px-3 py-2 text-xs text-secondary-500">Type at least 3 characters to search.</div>
+                )}
+                {!programSearching && programInput.trim().length >= 3 && programSuggestions.length === 0 && (
                   <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">No programs found.</div>
                 )}
-                {programSuggestions.map(item => (
+                {programSuggestions.slice(0, 5).map(item => (
                   <button
                     key={item.id}
                     type="button"
@@ -184,7 +188,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
       )}
 
       {/* Emergency Contact Card */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-4 shadow-lg border border-neutral-200 dark:border-neutral-700">
+      <div className="form-section rounded-xl">
         <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-neutral-200 dark:border-neutral-700">
           <div className="w-9 h-9 rounded-lg bg-error-100 dark:bg-error-500/20 flex items-center justify-center">
             <svg className="w-5 h-5 text-error-600 dark:text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -220,6 +224,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               reserveErrorSpace
               placeholder="Contact Number"
+              maxLength={personalInfoLimits.contactNumber}
               value={formData.emergencyContact1Number || ''}
               onChange={(e) => handleInputChange('emergencyContact1Number', handlePhone('ec1', e.target.value))}
               error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : undefined}
@@ -259,6 +264,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               reserveErrorSpace
               placeholder="Contact Number"
+              maxLength={personalInfoLimits.contactNumber}
               value={formData.emergencyContact2Number || ''}
               onChange={(e) => handleInputChange('emergencyContact2Number', handlePhone('ec2', e.target.value))}
               error={phoneWarnings.ec2 ? 'Contact number cannot exceed 11 digits.' : undefined}

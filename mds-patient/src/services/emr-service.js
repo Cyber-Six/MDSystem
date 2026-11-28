@@ -280,9 +280,8 @@ const registerInitialProfile = async (identifier, personalInfo, { branch } = {})
   }
 };
 
-export const createInitialMedicalRecord = async (formData, { isRevision = false } = {}) => {
+export const createInitialMedicalRecord = async (formData, { isRevision = false, catalogs = null } = {}) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)', isRevision ? '(revision)' : '(new)');
-  console.log('[EMR Service] Form data received:', formData);
 
   let ticketCreated = false;
   // profileLogCreated tracks whether a NEW log was created (not an update).
@@ -342,13 +341,12 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     const parallelError = [ticketResult, upperResult, lowerResult].find(r => r.status === 'rejected');
     if (parallelError) throw parallelError.reason;
 
-    console.log('[EMR Service] Ticket + photos ready:', { ticketId: results.ticketId, upperTeethFileId, lowerTeethFileId });
 
     // ======== REQUEST 3: Batch all create mutations + submit in one request ========
     // submitUpdateTicket is appended as the last field in the same mutation document
     // so the server processes it after all creates complete (GraphQL serial execution).
     console.log('[EMR Service] [3/3] Fetching all catalogs & sending batched mutations...');
-    const allCatalogs = await fetchAllCatalogs();
+    const allCatalogs = catalogs || await fetchAllCatalogs();
     const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
@@ -391,7 +389,7 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
  * Create a complete initial medical record for an employee
  * Same 3-phase flow as createInitialMedicalRecord but uses employeeId as identifier
  */
-export const createInitialEmployeeRecord = async (formData, { isRevision = false } = {}) => {
+export const createInitialEmployeeRecord = async (formData, { isRevision = false, catalogs = null } = {}) => {
   console.log('[EMR Service] Starting initial EMPLOYEE medical record creation (batched)', isRevision ? '(revision)' : '(new)');
 
   let ticketCreated = false;
@@ -443,11 +441,10 @@ export const createInitialEmployeeRecord = async (formData, { isRevision = false
     const parallelError = [ticketResult, upperResult, lowerResult].find(r => r.status === 'rejected');
     if (parallelError) throw parallelError.reason;
 
-    console.log('[EMR Service] Ticket + photos ready:', { ticketId: results.ticketId, upperTeethFileId, lowerTeethFileId });
 
     // ======== REQUEST 3: Batch all create mutations + submit in one request ========
     console.log('[EMR Service] [3/3] Fetching all catalogs & sending batched mutations...');
-    const allCatalogs = await fetchAllCatalogs();
+    const allCatalogs = catalogs || await fetchAllCatalogs();
     const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
@@ -731,7 +728,6 @@ export const createAllergenCatalogEntry = async (allergen, type = 'Other') => {
  * formData.medicalHistory.familyWhoHasIt = { [conditionCatalogId]: "Mother / Father / ..." }
  */
 const buildMedicalConditionRecords = (medicalHistory) => {
-  const notes = [];
   const conditions = [
     // Self conditions
     ...Object.entries(medicalHistory?.self || {})
@@ -745,15 +741,7 @@ const buildMedicalConditionRecords = (medicalHistory) => {
         return { conditionId: id, diagnosedDate: null, relationship: who, description: null };
       }),
   ];
-  // Free-text "other" entries (no catalog ID) → append to notes
-  if (medicalHistory?.selfOther) notes.push(`Self: ${medicalHistory.selfOther}`);
-  if (medicalHistory?.familyOther) {
-    const who = medicalHistory.familyOtherWhoHasIt;
-    notes.push(who
-      ? `Family other: ${medicalHistory.familyOther} (${who})`
-      : `Family other: ${medicalHistory.familyOther}`);
-  }
-  return { conditions, notes: notes.length ? notes.join('; ') : null };
+  return { conditions };
 };
 
 /**
@@ -833,19 +821,15 @@ const buildMedicationRecords = (medicalBackground) => {
 const buildImmunizationRecords = (medicalBackground, catalog) => {
   const today = new Date().toISOString().split('T')[0];
   const validIds = new Set(catalog.map(c => c.id));
-  const noteParts = [];
   const immunizationRecords = Object.entries(medicalBackground?.immunizations || {})
     .filter(([, checked]) => checked)
     .flatMap(([id]) => {
-      if (!validIds.has(id)) { noteParts.push(id); return []; }
+      if (!validIds.has(id)) return [];
       const date = medicalBackground?.immunizationDates?.[id] || today;
       const dose = medicalBackground?.immunizationDoses?.[id];
       return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: dose ? parseInt(dose, 10) : 1 }];
     });
-  if (medicalBackground?.immunizationOther?.trim()) {
-    noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
-  }
-  return { immunizationRecords, immunizationNotes: noteParts.length ? noteParts.join('; ') : null };
+  return { immunizationRecords };
 };
 
 /**
@@ -1009,8 +993,8 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   }
 
   // Medical History — self + family conditions via catalog IDs
-  const { conditions: medConditions, notes: medNotes } = buildMedicalConditionRecords(formData.medicalHistory);
-  inputs.medicalHistory = { conditions: medConditions, notes: medNotes };
+  const { conditions: medConditions } = buildMedicalConditionRecords(formData.medicalHistory);
+  inputs.medicalHistory = { conditions: medConditions };
 
   // Allergy Profile — allergen catalog IDs
   const { allergies, notes: allergyNotes } = buildAllergyRecords(formData.medicalBackground);
@@ -1029,22 +1013,16 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   inputs.medicationProfile = { medications, notes: medicalNotes };
 
   // Immunization Profile — vaccine catalog IDs (direct)
-  const { immunizationRecords, immunizationNotes } = buildImmunizationRecords(
+  const { immunizationRecords } = buildImmunizationRecords(
     formData.medicalBackground,
     immunizationCatalog
   );
-  inputs.immunizationProfile = { immunizations: immunizationRecords, notes: immunizationNotes };
+  inputs.immunizationProfile = { immunizations: immunizationRecords };
 
   // Lifestyle
+  const yearsVaping = parseInt(formData.medicalBackground.yearsVaping, 10);
   inputs.lifestyle = {
     smoker: formData.medicalBackground.smoker === 'yes',
-    vapeUser: formData.medicalBackground.smoker === 'vape',
-    vapeType: formData.medicalBackground.smoker === 'vape' 
-      ? formData.medicalBackground.vapeType || null : null,
-    vapeFrequency: formData.medicalBackground.smoker === 'vape'
-      ? formData.medicalBackground.vapeFrequency || null : null,
-    yearsVaping: formData.medicalBackground.smoker === 'vape'
-      ? (formData.medicalBackground.yearsVaping ? parseInt(formData.medicalBackground.yearsVaping) : null) : null,
     numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes'
       ? parseInt(formData.medicalBackground.smokerSticksPerDay) || null : null,
     yearsSmoked: formData.medicalBackground.smoker === 'yes'
@@ -1057,6 +1035,7 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       ? formData.medicalBackground.vapeType || null : null,
     vapeFrequency: formData.medicalBackground.vaper === 'yes'
       ? formData.medicalBackground.vapeFrequency || null : null,
+    yearsVaping: formData.medicalBackground.vaper === 'yes' && !Number.isNaN(yearsVaping) ? yearsVaping : null,
     notes: null
   };
 
@@ -1122,10 +1101,6 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       const noteParts = [];
       if (formData.obgyne.menstruationDuration)
         noteParts.push(`Duration: ${formData.obgyne.menstruationDuration} days`);
-      if (formData.obgyne.menarcheYearAge)
-        noteParts.push(`Menarche: ${formData.obgyne.menarcheYearAge}`);
-      if (formData.obgyne.padsPerDay)
-        noteParts.push(`Pads/day: ${formData.obgyne.padsPerDay}`);
       inputs.obgynHistory = {
         lastMenstrualPeriod: lmpDate,
         hasDysmenorrhea: formData.obgyne.dysmenorrhea === 'Yes',
@@ -1647,8 +1622,6 @@ export const mapRevisionDataToFormData = (profileData, emrData) => {
     employmentStatus:   '',   // not persisted in backend
     position:           rawPosition,
     branch,
-    drugTestDone:       '',   // not persisted
-    lastSchoolAttended: '',   // not persisted
     emergencyContacts: [
       {
         name:          ec.firstContact?.contactName   || '',
@@ -1729,7 +1702,6 @@ export const mapRevisionDataToFormData = (profileData, emrData) => {
     immunizations:             immunMap,
     immunizationDates:         immunDatesMap,
     immunizationDoses:         immunDosesMap,
-    immunizationOther:         emr?.immunizationProfile?.notes || '',
     hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
     allergies:                 allergyMap,
     allergyOther:              (emr?.allergyProfile?.notes || allergies[0]?.notes || '').replace(/^Other: /, ''),
@@ -1852,7 +1824,6 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
     query += `
     medicalHistory: getMedicalHistory {
       conditions { conditionId relationship }
-      notes
     }
     allergyProfile: getAllergyProfile {
       allergies { allergenCatalogId status severity notes dateIdentified }
@@ -1872,7 +1843,6 @@ const buildRevisionPrefillEMRQuery = (scope = 'Both') => {
     }
     immunizationProfile: getImmunizationProfile {
       immunizations { vaccineTypeId immunizationDate doseNumber }
-      notes
     }
     lifestyle: getLifestyle {
       smoker numberOfCigarettesPerDay yearsSmoked

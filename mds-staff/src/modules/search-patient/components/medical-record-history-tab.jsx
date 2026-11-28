@@ -73,7 +73,7 @@ function AllergyGroup({ label, items }) {
 const GQL_MEDICAL_RECORD_HISTORY = `
   query GetMedicalRecordHistory($userId: ID!) {
     getUserMedicalHistory(userId: $userId, limit: 50) {
-      id notes created_at
+      id created_at
       conditions { id conditionId description diagnosedDate relationship }
     }
     getUserAllergyProfile(userId: $userId, limit: 50) {
@@ -85,7 +85,7 @@ const GQL_MEDICAL_RECORD_HISTORY = `
       medications { id medicineId description }
     }
     getUserImmunizationProfile(userId: $userId, limit: 50) {
-      id notes created_at
+      id created_at
       immunizations { id vaccineTypeId immunizationDate doseNumber }
     }
     getUserHospitalizationProfile(userId: $userId, limit: 50) {
@@ -314,12 +314,6 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
                 </div>
               ))}
             </div>
-          </>
-        )}
-        {r.notes && (
-          <>
-            <SubLabel>Notes</SubLabel>
-            <p className="text-sm text-secondary-700 dark:text-neutral-300">{r.notes}</p>
           </>
         )}
       </>

@@ -1,3 +1,4 @@
+import { getDateOfBirthError, getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressStepper from '../medical/progress-stepper';
@@ -12,6 +13,7 @@ import { Button } from '../medical/form-elements';
 import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
 import { createInitialEmployeeRecord, fetchAllCatalogs } from '@core/services/emr-service';
 import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer';
+import { clearRecordFormDraft, readRecordFormDraft, saveRecordFormDraft } from '../../record-form-draft-storage';
 
 /**
  * Initial Employee Medical Record Form Component
@@ -21,10 +23,16 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
  * @param {Function} props.onComplete - Optional callback when form is successfully submitted
  * @param {boolean} props.isModal - Whether the form is displayed in a modal
  */
-const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false }) => {
+const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false, onProgressChange }) => {
   const navigate = useNavigate();
   const formContentRef = useRef(null);
-  const [currentStep, setCurrentStep] = useState(0);
+  const draftFlow = isRevision ? 'initial-employee-revision' : 'initial-employee';
+  const [cachedDraft] = useState(() => readRecordFormDraft(draftFlow));
+  const [currentStep, setCurrentStep] = useState(() => Number.isInteger(cachedDraft?.data?.currentStep) ? Math.max(0, Math.min(cachedDraft.data.currentStep, 5)) : 0);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(Boolean(cachedDraft?.data?.formData || revisionData));
+  const [needsPhotoReupload, setNeedsPhotoReupload] = useState(Boolean(cachedDraft?.data?.requiresPhotoReupload));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -75,8 +83,9 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
 
   // When revision pre-fill data arrives, merge it into the form state
   useEffect(() => {
-    if (!revisionData) return;
+    if (!revisionData || cachedDraft?.data?.formData) return;
     console.log('[Employee Record Form] Applying revision pre-fill data...');
+    setDraftDirty(true);
     setFormData((prev) => ({
       ...prev,
       personalInfo:      { ...prev.personalInfo,      ...revisionData.personalInfo },
@@ -125,7 +134,6 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     medicalBackground: {
       immunizations: {},
       immunizationDates: {},
-      immunizationOther: '',
       hasAllergies: '',
       allergies: {},
       allergyOther: '',
@@ -172,9 +180,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     },
     obgyne: {
       lastMenstrualPeriod: '',
-      menarcheYearAge: '',
       menstruationDuration: '',
-      padsPerDay: '',
       dysmenorrhea: 'No'
     },
     certification: {
@@ -185,27 +191,67 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     }
   });
 
+  useEffect(() => {
+    const savedData = cachedDraft?.data?.formData;
+    if (savedData && typeof savedData === 'object') {
+      setFormData((previous) => {
+        const restored = { ...previous };
+        for (const section of ['personalInfo', 'medicalHistory', 'medicalBackground', 'dentalHistory', 'obgyne', 'certification']) {
+          const savedSection = savedData[section];
+          if (savedSection && typeof savedSection === 'object' && !Array.isArray(savedSection)) {
+            restored[section] = { ...previous[section], ...savedSection };
+          }
+        }
+        restored.dentalHistory = { ...restored.dentalHistory, upperTeethPhoto: null, lowerTeethPhoto: null };
+        restored.certification = { ...restored.certification, verified: false, signature: '', date: '' };
+        return restored;
+      });
+      setDraftRestored(true);
+      setNeedsPhotoReupload(Boolean(cachedDraft.data.requiresPhotoReupload));
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || !draftDirty) return;
+    const dentalHistory = formData.dentalHistory || {};
+    const photoReminder = needsPhotoReupload || Boolean(dentalHistory.upperTeethPhoto || dentalHistory.lowerTeethPhoto);
+    const persistedFormData = {
+      ...formData,
+      dentalHistory: { ...dentalHistory, upperTeethPhoto: null, lowerTeethPhoto: null },
+      certification: { ...formData.certification, verified: false, signature: '', date: '' },
+    };
+    saveRecordFormDraft(draftFlow, { formData: persistedFormData, currentStep, requiresPhotoReupload: photoReminder });
+  }, [draftFlow, draftReady, draftDirty, formData, currentStep, needsPhotoReupload]);
+
   const handlePersonalInfoChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, personalInfo: data });
   };
 
   const handleMedicalHistoryChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, medicalHistory: data });
   };
 
   const handleMedicalBackgroundChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, medicalBackground: data });
   };
 
   const handleDentalHistoryChange = (data) => {
+    setDraftDirty(true);
+    if (data.upperTeethPhoto && data.lowerTeethPhoto) setNeedsPhotoReupload(false);
     setFormData({ ...formData, dentalHistory: data });
   };
 
   const handleOBGYNEChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, obgyne: data });
   };
 
   const handleCertificationChange = (data) => {
+    setDraftDirty(true);
     setFormData({ ...formData, certification: data });
   };
 
@@ -223,11 +269,15 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   const validateAllFields = (data) => {
     const errors = [];
     const pi = data.personalInfo || {};
+    for (const issue of getPersonalInfoLengthErrors(pi, { isEmployee: true })) {
+      errors.push({ section: 'Personal Information', sectionIndex: 0, ...issue });
+    }
 
     // ---- Personal Information (Step 0) ----
     if (!pi.surname?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Surname is required' });
     if (!pi.firstName?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First name is required' });
     if (!pi.birthday) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Birthday is required' });
+    else if (getDateOfBirthError(pi.birthday)) errors.push({ section: 'Personal Information', sectionIndex: 0, message: getDateOfBirthError(pi.birthday) });
     if (!pi.gender) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Gender is required' });
     if (!pi.civilStatus) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Civil status is required' });
     if (!pi.nationality?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Nationality is required' });
@@ -235,7 +285,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number must be a valid Philippine number (e.g. 09171234567 or +639171234567)' });
     if (!pi.address?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Address is required' });
     if (!pi.employeeId?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employee ID number is required' });
-    else if (!/^[a-zA-Z0-9\-]+$/.test(pi.employeeId.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employee ID must contain only letters, numbers, and dashes' });
+    else if (!/^[0-9]+$/.test(pi.employeeId.trim()) || Number(pi.employeeId.trim()) > 2147483647) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employee ID number must contain digits only and be between 0 and 2147483647' });
     if (!pi.department?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Department is required' });
     if (!pi.employmentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employment category is required' });
     if (pi.employmentCategory === 'Other' && !pi.employmentCategoryOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your employment category' });
@@ -298,6 +348,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     const errors = {};
 
     stepErrors.forEach(err => {
+      if (err.field) errors[err.field] = err.message;
       const msg = err.message.toLowerCase();
 
       // Personal Information (Step 0)
@@ -424,6 +475,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     setFieldErrors({});
 
     if (validateStep(currentStep)) {
+      if (formContentRef.current) formContentRef.current.scrollTop = 0;
       // Skip OB-GYNE step if gender is not Female
       if (currentStep === 3 && formData.personalInfo.gender !== 'Female') {
         setCurrentStep(5); // Skip to Review
@@ -436,6 +488,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   const handleBack = () => {
     // Clear field errors when navigating to a different step
     setFieldErrors({});
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
 
     if (currentStep === 5 && formData.personalInfo.gender !== 'Female') {
       setCurrentStep(3);
@@ -446,6 +499,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
 
   const handleEdit = (stepIndex) => {
     setCurrentStep(stepIndex);
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
   };
 
   const handleSubmit = async () => {
@@ -474,8 +528,9 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     
     try {
       console.log('[Employee Record Form] Submitting to backend...');
-      const result = await createInitialEmployeeRecord(sanitizedData, { isRevision });
+      const result = await createInitialEmployeeRecord(sanitizedData, { isRevision, catalogs: catalogs.catalogsLoading || catalogs.catalogsError ? null : catalogs });
       console.log('[Employee Record Form] Submission successful!', result);
+      clearRecordFormDraft(draftFlow);
       setSubmittedRecord(result);
       setShowSuccessModal(true);
     } catch (error) {
@@ -588,7 +643,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
         Back
       </Button>
 
-      <div className="hidden sm:block text-sm text-neutral-500">
+      <div className="text-xs sm:text-sm text-neutral-500">
         Step {formData.personalInfo.gender !== 'Female' && currentStep >= 5 ? currentStep : currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
       </div>
 
@@ -630,49 +685,56 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   );
 
   return (
-    <div className={`${
+    <div className={`record-form-ui ${
       isModal
         ? 'flex-1 flex flex-col min-h-0'
-        : 'min-h-screen bg-stone-100 py-6 px-4'
+        : 'min-h-screen bg-primary-50/40 dark:bg-neutral-950 py-6 px-4'
     }`}>
 
       <div ref={formContentRef} className={`${
         isModal
-          ? 'flex-1 overflow-y-auto min-h-0 bg-stone-100 p-4 sm:p-5'
+          ? 'flex-1 overflow-y-auto min-h-0 bg-primary-50/40 dark:bg-neutral-950 p-4 sm:p-5'
           : ''
       }`}>
         <div className="max-w-5xl mx-auto w-full">
           {!isModal && (
             <div className="text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 mb-2">
+              <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 dark:text-primary-100 mb-2">
                 Initial Medical Record (Employee)
               </h1>
-              <p className="text-secondary-600">
+              <p className="text-secondary-600 dark:text-neutral-300">
                 Please complete your medical information to access the system
               </p>
             </div>
           )}
 
-          <div className="mb-6">
-            <ProgressStepper
-              currentStep={
-                formData.personalInfo.gender !== 'Female' && currentStep >= 5
-                  ? currentStep - 1
-                  : currentStep
-              }
-              steps={formData.personalInfo.gender !== 'Female'
-                ? steps.filter((_, idx) => idx !== 4)
-                : steps
-              }
-            />
-          </div>
+          <ProgressStepper
+            scrollContainerRef={formContentRef}
+            onProgressChange={onProgressChange}
+            hideVisual={isModal}
+            currentStep={
+              formData.personalInfo.gender !== 'Female' && currentStep >= 5
+                ? currentStep - 1
+                : currentStep
+            }
+            steps={formData.personalInfo.gender !== 'Female'
+              ? steps.filter((_, idx) => idx !== 4)
+              : steps
+            }
+          />
+          {draftRestored && (
+            <p role="status" className="-mt-3 mb-4 text-sm text-secondary-600 dark:text-neutral-300">
+              <strong className="text-primary-700 dark:text-primary-300">Saved draft restored.</strong> Your entries were recovered from this browser tab.
+              {needsPhotoReupload && <span className="block mt-1">Please upload your dental photos again and reconfirm the certification before submitting.</span>}
+            </p>
+          )}
 
           <div className="mb-6">
             {renderStepContent()}
           </div>
 
           {!isModal && (
-            <div className="bg-white rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-neutral-200">
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-sm border border-primary-200 dark:border-neutral-700">
               <div className="flex justify-between items-center">
                 {renderNavButtons()}
               </div>
@@ -682,8 +744,8 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
       </div>
 
       {isModal && (
-        <div className="shrink-0 border-t border-stone-200 bg-stone-100 px-4 py-3 sm:px-6 sm:py-4">
-          <div className="max-w-5xl mx-auto bg-white rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-neutral-200">
+        <div className="record-form-footer shrink-0 border-t border-primary-200 dark:border-primary-800 bg-white dark:bg-neutral-900 px-4 py-3 sm:px-6">
+          <div className="max-w-5xl mx-auto bg-white dark:bg-neutral-800 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 shadow-md border border-primary-200 dark:border-neutral-700">
             <div className="flex justify-between items-center">
               {renderNavButtons()}
             </div>

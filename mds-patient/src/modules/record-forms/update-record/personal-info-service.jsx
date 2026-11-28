@@ -18,10 +18,6 @@ const mapYearToEnum = (year) => year || 'Freshman';
  * @returns {Promise} Response from the server
  */
 const sendGraphQLRequest = async (query, variables = {}) => {
-  console.log('[Personal Info Service] Sending GraphQL request:', {
-    query: query,
-    variables: JSON.stringify(variables, null, 2)
-  });
 
   try {
     const response = await axiosRequest.post('/emr/patient', {
@@ -29,27 +25,20 @@ const sendGraphQLRequest = async (query, variables = {}) => {
       variables
     });
 
-    console.log('[Personal Info Service] GraphQL response received:', response.data);
-    
     if (response.data.errors) {
-      console.warn('[Personal Info Service] ⚠️ GraphQL errors:', JSON.stringify(response.data.errors, null, 2));
-      
+
       // If data is null (backend issue), return empty object for graceful degradation
       if (response.data.data === null) {
-        console.warn('[Personal Info Service] Data is null, will trigger fallback logic');
+
         return {};
       }
-      
+
       throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
     }
 
     return response.data.data;
   } catch (error) {
-    console.error('[Personal Info Service] Request failed:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
+
     throw error;
   }
 };
@@ -61,8 +50,7 @@ const sendGraphQLRequest = async (query, variables = {}) => {
  * @returns {Promise} Response from server
  */
 export const updateStudentProfile = async (schoolData) => {
-  console.log('[Personal Info Service] Creating/updating student profile:', schoolData);
-  
+
   // Validation
   if (!schoolData.programId) {
     throw new Error('Program is required');
@@ -70,7 +58,7 @@ export const updateStudentProfile = async (schoolData) => {
   if (!schoolData.schoolYear) {
     throw new Error('School Year is required');
   }
-  
+
   const mutation = `
     mutation CreateStudentProfile($input: StudentProfileInput!) {
       createStudentProfile(input: $input) {
@@ -91,10 +79,10 @@ export const updateStudentProfile = async (schoolData) => {
 
   try {
     const data = await sendGraphQLRequest(mutation, variables);
-    console.log('[Personal Info Service] Student profile created/updated:', data.createStudentProfile);
+
     return data.createStudentProfile;
   } catch (error) {
-    console.error('[Personal Info Service] Failed to create/update student profile:', error.message);
+
     throw error;
   }
 };
@@ -131,8 +119,7 @@ export const updateEmployeeProfile = async (employeeData) => {
  * @returns {Promise} Response from server
  */
 export const updateEmergencyContact = async (emergencyData) => {
-  console.log('[Personal Info Service] Creating/updating emergency contact:', emergencyData);
-  
+
   // Validation
   if (!emergencyData.emergencyContact1Name || !emergencyData.emergencyContact1Relationship || !emergencyData.emergencyContact1Number) {
     throw new Error('Primary emergency contact information is incomplete');
@@ -140,7 +127,7 @@ export const updateEmergencyContact = async (emergencyData) => {
   if (!emergencyData.emergencyContact2Name || !emergencyData.emergencyContact2Relationship || !emergencyData.emergencyContact2Number) {
     throw new Error('Secondary emergency contact information is incomplete');
   }
-  
+
   const mutation = `
     mutation CreateEmergencyContact($input: EmergencyContactInput!) {
       createEmergencyContact(input: $input) {
@@ -182,10 +169,10 @@ export const updateEmergencyContact = async (emergencyData) => {
 
   try {
     const data = await sendGraphQLRequest(mutation, variables);
-    console.log('[Personal Info Service] Emergency contact created/updated:', data.createEmergencyContact);
+
     return data.createEmergencyContact;
   } catch (error) {
-    console.error('[Personal Info Service] Failed to create/update emergency contact:', error.message);
+
     throw error;
   }
 };
@@ -198,31 +185,26 @@ export const updateEmergencyContact = async (emergencyData) => {
  * @throws {Error} If validation fails or API request fails
  */
 export const updatePersonalInfo = async (formData) => {
-  console.log('[Personal Info Service] Creating/updating personal information');
-  
+
   if (!formData) {
     throw new Error('Form data is required');
   }
-  
+
   try {
-    console.log('[Personal Info Service] Step 1: Creating/updating patient profile...');
+
     const profileResult = formData.profileType === 'Employee'
       ? await updateEmployeeProfile(formData)
       : await updateStudentProfile(formData);
-    console.log('[Personal Info Service] ✓ Patient profile created/updated successfully');
-    
-    console.log('[Personal Info Service] Step 2: Creating/updating emergency contact...');
+
     const contactResult = await updateEmergencyContact(formData);
-    console.log('[Personal Info Service] ✓ Emergency contact created/updated successfully');
-    
-    console.log('[Personal Info Service] ✓ All personal information updated successfully');
+
     return {
       success: true,
       profile: profileResult,
       contact: contactResult
     };
   } catch (error) {
-    console.error('[Personal Info Service] ✗ Failed to update personal information:', error.message);
+
     throw new Error(`Personal information update failed: ${error.message}`);
   }
 };

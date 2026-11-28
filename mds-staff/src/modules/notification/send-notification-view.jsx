@@ -1,468 +1,558 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { notifyStaffs, notifyPatients, fetchAllStaff } from './notification-service';
+import React, { useEffect, useRef, useState } from 'react';
+import { Bell, Check, ChevronDown, CircleAlert, CircleCheck, HeartPulse, LoaderCircle, Plus, Search, Send, Users, X } from 'lucide-react';
+import {
+  notifyStaffs, notifyPatients, fetchAllStaff, fetchPatientNotificationGroups, sendPatientGroupNotification,
+} from './notification-service';
 import { searchPatients, formatPatientName, getPatientYearLevelLabel } from '../../services/patient-search-service';
 import { usePermissions } from '../../context/permissions-context';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
 
-const MAX_MESSAGE_LENGTH = 500;
 const MAX_TITLE_LENGTH = 80;
+const MAX_MESSAGE_LENGTH = 500;
 const SEARCH_DEBOUNCE_MS = 500;
 
-/**
- * Send Notification View — multicast support
- *
- * Role-based behaviour:
- *   Admin  → can notify Staff OR Patients; notifyAll or select specific recipients.
- *   Staff  → can only notify Patients; notifyAll or select specific patients.
- *   Patient → cannot access this view (guarded at router level).
- *
- * Recipient data sources:
- *   Staff  → /rolemanagement/admin GraphQL `listStaffAccounts` (admin only, loaded once)
- *   Patient→ /emr/medical GraphQL `searchPatients` (debounced live search)
- *
- * Branch filtering is enforced server-side; the UI shows whatever the GraphQL
- * endpoints return to the current user.
- */
-const SendNotificationView = () => {
-  const { isAdmin } = usePermissions();
-  const { profile } = useStaffProfile();
+const audiences = [
+  { value: 'staff', label: 'Staff', icon: Users },
+  { value: 'patients', label: 'Patients', icon: HeartPulse },
+];
+const groupLabels = { Student: 'Students', Employee: 'Employees' };
+const campusLabels = { Manila: 'Manila', QuezonCity: 'Quezon City', Both: 'Both campuses' };
 
-  // ── Recipient type (staff | patients) ──────────────────────────────────────
-  const [recipientType, setRecipientType] = useState(isAdmin ? 'staff' : 'patients');
+const cardClass = 'min-w-0 rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-800';
+const mutedClass = 'text-neutral-600 dark:text-neutral-300';
+const focusClass = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-900 dark:focus-visible:outline-primary-300';
+const fieldClass = `w-full rounded-xl border border-neutral-400 bg-white px-3 py-2.5 text-[16px] text-neutral-900 placeholder:text-neutral-600 sm:text-sm dark:border-neutral-500 dark:bg-neutral-900 dark:text-white dark:placeholder:text-neutral-400 ${focusClass}`;
+const labelClass = 'block text-sm font-semibold text-neutral-900 dark:text-white';
 
-  // ── Message ─────────────────────────────────────────────────────────────────
-  const [title, setTitle] = useState('');
-  const [message, setMessage] = useState('');
+function useRecipientSearch(isStaff, query, branch, browseStaff) {
+  const [staff, setStaff] = useState(null);
+  const [staffError, setStaffError] = useState(false);
+  const [patientSearch, setPatientSearch] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+  const shouldLoadStaff = isStaff && Boolean(query || browseStaff);
 
-  // ── Selected recipients: [{id, label}] ──────────────────────────────────────
-  const [selected, setSelected] = useState([]);
-
-  // ── Search state ─────────────────────────────────────────────────────────────
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // ── Staff roster (admin only, loaded when staff tab + select mode opens) ─────
-  const [allStaff, setAllStaff] = useState(null);   // null = not yet loaded
-  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
-  const [staffError, setStaffError] = useState(null);
-
-  // ── Send state ───────────────────────────────────────────────────────────────
-  const [isSending, setIsSending] = useState(false);
-  const [result, setResult] = useState(null); // {type:'success'|'error', text, details?}
-
-  const debounceRef = useRef(null);
-  const searchInputRef = useRef(null);
-
-  // ── Load staff roster ────────────────────────────────────────────────────────
-  const loadAllStaff = useCallback(async () => {
-    if (allStaff !== null || isLoadingStaff) return;
-    setIsLoadingStaff(true);
-    setStaffError(null);
-    try {
-      const staff = await fetchAllStaff();
-      setAllStaff(staff);
-    } catch (err) {
-      setStaffError('Failed to load staff list. Please try again.');
-      setAllStaff([]);
-    } finally {
-      setIsLoadingStaff(false);
-    }
-  }, [allStaff, isLoadingStaff]);
-
-  // Trigger staff load when staff tab is active
   useEffect(() => {
-    if (recipientType === 'staff') {
-      loadAllStaff();
-    }
-  }, [recipientType, loadAllStaff]);
+    if (!shouldLoadStaff || staff || staffError) return;
 
-  // ── Search logic ─────────────────────────────────────────────────────────────
-
-  // Staff: filter loaded roster client-side
-  useEffect(() => {
-    if (recipientType !== 'staff' || !allStaff) return;
-    if (!searchTerm.trim()) {
-      setSearchResults(allStaff);
-      return;
-    }
-    const q = searchTerm.toLowerCase();
-    setSearchResults(
-      allStaff.filter(s =>
-        s.name?.toLowerCase().includes(q) ||
-        s.email?.toLowerCase().includes(q) ||
-        s.role?.toLowerCase().includes(q)
-      )
+    let active = true;
+    fetchAllStaff().then(
+      (users) => { if (active) setStaff(users); },
+      () => { if (active) setStaffError(true); },
     );
-  }, [searchTerm, allStaff, recipientType]);
 
-  // Patients: debounced live search
+    return () => { active = false; };
+  }, [shouldLoadStaff, staff, staffError]);
+
   useEffect(() => {
-    if (recipientType !== 'patients') return;
+    if (isStaff || !query) return;
 
-    clearTimeout(debounceRef.current);
-
-    if (!searchTerm.trim()) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    setIsSearching(true);
-    debounceRef.current = setTimeout(async () => {
+    let active = true;
+    const timer = setTimeout(async () => {
       try {
-        const results = await searchPatients(searchTerm, 20, profile?.branch || null, null, false);
-        setSearchResults(results);
+        const users = await searchPatients(query, 20, branch, null, false);
+        if (active) setPatientSearch({ query, branch, users });
       } catch {
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
+        if (active) setPatientSearch({ query, branch, error: true });
       }
     }, SEARCH_DEBOUNCE_MS);
 
-    return () => clearTimeout(debounceRef.current);
-  }, [searchTerm, recipientType, profile?.branch]);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [isStaff, query, branch, attempt]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  const currentSearch = patientSearch?.query === query && patientSearch.branch === branch ? patientSearch : null;
+  const staffQuery = query.toLowerCase();
+  const matches = isStaff
+    ? (staff ?? []).filter((user) => [user.name, user.email, user.role].some((value) => value?.toLowerCase().includes(staffQuery)))
+    : currentSearch?.users ?? [];
 
-  const handleRecipientType = (type) => {
-    setRecipientType(type);
-    setSelected([]);
-    setSearchTerm('');
-    setSearchResults([]);
+  return {
+    matches,
+    loading: isStaff ? !staff && !staffError : Boolean(query && !currentSearch),
+    error: isStaff ? staffError : Boolean(currentSearch?.error),
+    resetPatientSearch: () => setPatientSearch(null),
+    retry: () => {
+      if (isStaff) {
+        setStaffError(false);
+      } else {
+        setPatientSearch(null);
+        setAttempt((previous) => previous + 1);
+      }
+    },
+  };
+}
+
+function CharacterCount({ id, value, limit }) {
+  return (
+    <span id={id} className={`shrink-0 text-xs tabular-nums ${value.length === limit ? 'font-semibold text-primary-950 dark:text-primary-300' : mutedClass}`}>
+      {value.length}/{limit}<span className="sr-only"> characters used</span>
+    </span>
+  );
+}
+
+function SendResult({ result }) {
+  const isError = result?.type === 'error';
+  const counts = result?.details?.deliveryCounts;
+  const hasUnconfirmed = counts?.unconfirmed > 0;
+  return (
+    <div aria-live="polite" aria-atomic="true">
+      {result && (
+        <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${isError
+          ? 'border-error-200 bg-error-50 text-error-900 dark:border-error-800 dark:bg-error-900/30 dark:text-error-200'
+          : hasUnconfirmed
+            ? 'border-warning-200 bg-warning-50 text-warning-900 dark:border-warning-800 dark:bg-warning-900/30 dark:text-warning-200'
+            : 'border-success-200 bg-success-50 text-success-900 dark:border-success-800 dark:bg-success-900/30 dark:text-success-200'}`}>
+          {isError || hasUnconfirmed
+            ? <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            : <CircleCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />}
+          <div className="min-w-0 break-words">
+            <p className="mb-0 font-semibold">{result.text}</p>
+            {!isError && (
+              <p className="mb-0 mt-1">
+                {counts?.delivered ?? result.details.delivery?.delivered?.length ?? 0} delivered immediately · {counts?.queued ?? result.details.delivery?.queued?.length ?? 0} queued
+                {counts?.suppressed > 0 && ` · ${counts.suppressed} opted out`}
+                {hasUnconfirmed && ` · ${counts.unconfirmed} unconfirmed`}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SendNotificationView() {
+  const { isAdmin } = usePermissions();
+  const { profile } = useStaffProfile();
+  const [selectedAudience, setSelectedAudience] = useState(isAdmin ? 'staff' : 'patients');
+  const [selected, setSelected] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [browseStaff, setBrowseStaff] = useState(false);
+  const [recipientMode, setRecipientMode] = useState('individual');
+  const [groupOptions, setGroupOptions] = useState(null);
+  const [groupAttempt, setGroupAttempt] = useState(0);
+  const [groupProfile, setGroupProfile] = useState('');
+  const [groupCampus, setGroupCampus] = useState('');
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [result, setResult] = useState(null);
+  const searchInput = useRef(null);
+  const sending = useRef(false);
+
+  const isStaff = isAdmin && selectedAudience === 'staff';
+  const isGroup = !isStaff && recipientMode === 'group';
+  const audience = isStaff ? 'Staff' : 'Patients';
+  const groupBranches = groupOptions?.data?.branches;
+  const groupBranch = groupBranches?.includes(groupCampus) ? groupCampus
+    : !groupCampus && groupBranches?.length === 1 ? groupBranches[0] : '';
+  const group = groupOptions?.data?.groups?.find(option => option.profile === groupProfile && option.branch === groupBranch);
+  const query = isGroup ? '' : searchTerm.trim();
+  const branch = profile?.branch || null;
+  const { matches, loading, error, resetPatientSearch, retry } = useRecipientSearch(isStaff, query, branch, browseStaff);
+  const activeRecipients = selected.filter((recipient) => recipient.audience === audience);
+  const selectedIds = new Set(activeRecipients.map((recipient) => recipient.id));
+  const available = matches.filter((user) => !selectedIds.has(String(user.id)));
+  const showResults = Boolean(query || (isStaff && browseStaff));
+  const recipientCount = isGroup ? group?.count ?? 0 : activeRecipients.length;
+  const hasMessage = Boolean(title.trim() && message.trim());
+  const canSend = recipientCount > 0 && hasMessage && !isSending;
+
+  useEffect(() => {
+    if (!isGroup) return;
+
+    let active = true;
+    fetchPatientNotificationGroups().then(
+      (data) => { if (active) setGroupOptions({ data }); },
+      (err) => {
+        if (active) setGroupOptions({ error: err?.response?.status === 403 ? 'forbidden' : 'unavailable' });
+      },
+    );
+    return () => { active = false; };
+  }, [isGroup, groupAttempt]);
+
+  const reloadGroups = () => {
+    setGroupOptions(null);
+    setGroupAttempt(previous => previous + 1);
+  };
+
+  const changeRecipientMode = (mode) => {
+    setRecipientMode(mode);
+    setGroupOptions(null);
     setResult(null);
+  };
+
+  const updateSearch = (value) => {
+    if (value.trim() !== query) resetPatientSearch();
+    setSearchTerm(value);
+  };
+
+  const changeAudience = (value) => {
+    setSelectedAudience(value);
+    changeRecipientMode('individual');
+    setGroupProfile('');
+    setGroupCampus('');
+    setSelected([]);
+    updateSearch('');
+    setBrowseStaff(false);
   };
 
   const addRecipient = (user) => {
     const id = String(user.id);
-    if (selected.find(r => r.id === id)) return;
-    const label =
-      recipientType === 'staff'
-        ? user.name
-        : formatPatientName(user);
-    setSelected(prev => [...prev, { id, label }]);
+    const label = isStaff ? user.name : formatPatientName(user);
+    setSelected((previous) => previous.some((recipient) => recipient.id === id && recipient.audience === audience)
+      ? previous
+      : [...previous, { id, label, audience }]);
+    searchInput.current?.focus();
   };
 
   const removeRecipient = (id) => {
-    setSelected(prev => prev.filter(r => r.id !== id));
+    setSelected((previous) => previous.filter((recipient) => recipient.id !== id || recipient.audience !== audience));
+    searchInput.current?.focus();
   };
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    const trimmedTitle = title.trim();
-    const trimmedMessage = message.trim();
-    if (!trimmedTitle || !trimmedMessage) return;
-    if (selected.length === 0) return;
+  const handleSend = async (event) => {
+    event.preventDefault();
+    if (!canSend || sending.current) return;
 
+    sending.current = true;
     setIsSending(true);
     setResult(null);
-
     try {
-      const recipientIds = selected.map(r => r.id);
-      const payload = JSON.stringify({ title: trimmedTitle, body: trimmedMessage });
-      let data;
-      if (recipientType === 'staff') {
-        data = await notifyStaffs(payload, recipientIds);
-      } else {
-        data = await notifyPatients(payload, recipientIds);
+      const recipientIds = activeRecipients.map((recipient) => recipient.id);
+      const payload = JSON.stringify({ title: title.trim(), body: message.trim() });
+      const send = isStaff ? notifyStaffs : notifyPatients;
+      const data = isGroup ? await sendPatientGroupNotification(payload, group) : await send(payload, recipientIds);
+      if (data.totalRecipients === 0) {
+        setResult({ type: 'error', text: 'No selected recipients were eligible. Check your recipient list and try again.' });
+        return;
       }
-
-      const label = recipientType === 'staff' ? 'staff member' : 'patient';
+      const label = isStaff ? 'staff member' : 'patient';
       const plural = data.totalRecipients !== 1 ? 's' : '';
       setResult({
         type: 'success',
-        text: `Notification sent to ${data.totalRecipients} ${label}${plural}.`,
+        text: isGroup
+          ? `Group notification processed for ${data.totalRecipients.toLocaleString()} ${group.profile.toLowerCase()}${plural}.`
+          : `Notification sent to ${data.totalRecipients} ${label}${plural}.`,
         details: data,
       });
       setTitle('');
       setMessage('');
       setSelected([]);
-      setSearchTerm('');
-      setSearchResults([]);
+      updateSearch('');
+      setBrowseStaff(false);
+      if (isGroup) {
+        setGroupProfile('');
+        setGroupCampus('');
+        reloadGroups();
+      }
     } catch (err) {
       const status = err?.response?.status;
       let text = 'Failed to send notification. Please try again.';
-      if (status === 403) text = 'You do not have permission to send notifications to this group.';
-      else if (status === 400) text = err?.response?.data?.message ?? 'Invalid request.';
+      if (isGroup && status === 409) {
+        text = 'The recipient count changed. Review the updated group before sending.';
+        reloadGroups();
+      } else if (status === 403) {
+        text = 'You do not have permission to send notifications to this group.';
+        if (isGroup) {
+          setGroupProfile('');
+          setGroupCampus('');
+          reloadGroups();
+        }
+      } else if (status === 400) text = err?.response?.data?.message ?? 'Invalid request.';
+      else if (isGroup && !status) text = 'Could not confirm the send. Check delivery before sending again.';
       else if (err?.message) text = err.message;
       setResult({ type: 'error', text });
     } finally {
+      sending.current = false;
       setIsSending(false);
     }
   };
 
-  // ── Derived ──────────────────────────────────────────────────────────────────
-  const charsLeft = MAX_MESSAGE_LENGTH - message.length;
-  const canSend =
-    title.trim().length > 0 &&
-    message.trim().length > 0 &&
-    !isSending &&
-    selected.length > 0;
+  // Enter in a single-line input should not send a notification.
+  const preventImplicitSend = (event) => {
+    if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault();
+  };
 
-  // Results excluding already-selected recipients
-  const filteredResults = searchResults.filter(
-    r => !selected.find(s => s.id === String(r.id))
-  );
-  const titleCharsLeft = MAX_TITLE_LENGTH - title.length;
+  let searchStatus = isStaff ? 'Search by name, email, or role.' : 'Search by name or patient ID.';
+  if (showResults) {
+    if (loading) searchStatus = isStaff ? 'Loading staff…' : 'Searching patients…';
+    else if (error) searchStatus = isStaff ? 'Could not load the staff list.' : 'Could not search for patients.';
+    else if (available.length) searchStatus = `${available.length} ${available.length === 1 ? 'match' : 'matches'} available to add.`;
+    else if (matches.length) searchStatus = 'All matching recipients are already selected.';
+    else searchStatus = query ? 'No matches. Try a different search.' : 'No staff are available to select.';
+  }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="px-4 pt-0 pb-4 max-w-2xl mx-auto">
-      {/* Page header — consistent with other module headers */}
-      <div className="flex items-center justify-between mb-1">
-        <div>
-          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Send Notification</h1>
-          <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mt-0.5">Broadcast a message to staff or patients.</p>
+    <div className="mx-auto w-full max-w-5xl pb-6 pt-1 sm:pt-3">
+      <header className="mb-6 flex items-start gap-3 sm:mb-8 sm:gap-4">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-100 text-primary-950 dark:bg-primary-500/15 dark:text-primary-300 sm:h-12 sm:w-12">
+          <Send aria-hidden="true" className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="mb-0 text-2xl font-bold tracking-tight text-neutral-900 dark:text-white sm:text-3xl">Notice Center</h1>
+          <p className={`mb-0 mt-1 text-sm leading-relaxed ${mutedClass}`}>Send a notification to individuals or a patient group.</p>
         </div>
-      </div>
+      </header>
 
-      <form
-        onSubmit={handleSend}
-        className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm p-4 space-y-4"
-      >
-        {/* ── Recipient type (admin only) ────────────────────────────────── */}
-        {isAdmin && (
-          <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400 mb-1.5">
-              Notify group
-            </label>
-            <div className="flex gap-2">
-              {[
-                { value: 'staff', label: 'Staff' },
-                { value: 'patients', label: 'Patients' },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => handleRecipientType(opt.value)}
-                  className={`px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
-                    recipientType === opt.value
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-                      : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-600'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      <form onSubmit={handleSend} className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.57fr)] lg:gap-6">
+        <fieldset disabled={isSending} className={cardClass}>
+          <legend className="sr-only">Notification details</legend>
+          <section aria-labelledby="notification-audience" className="p-4 sm:p-6">
+            <h2 id="notification-audience" className="mb-0 text-lg font-semibold text-neutral-900 dark:text-white">Recipients</h2>
+            {isAdmin && (
+              <fieldset className="mt-4 min-w-0">
+                <legend className={labelClass}>Audience</legend>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:gap-3">
+                  {audiences.map(({ value, label, icon: Icon }) => (
+                    <label key={value} className="relative min-w-0 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="notification-audience"
+                        value={value}
+                        checked={selectedAudience === value}
+                        onChange={() => changeAudience(value)}
+                        className="peer sr-only"
+                      />
+                      <span className="flex min-h-11 items-center gap-1.5 rounded-xl border border-neutral-300 px-2 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 peer-checked:border-primary-700 peer-checked:bg-primary-50 peer-checked:text-primary-950 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-900 peer-disabled:cursor-not-allowed sm:gap-2 sm:px-3 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:peer-checked:border-primary-500/70 dark:peer-checked:bg-primary-500/10 dark:peer-checked:text-primary-200 dark:peer-focus-visible:outline-primary-300">
+                        <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                        {label}
+                        {selectedAudience === value && <Check aria-hidden="true" className="ml-auto h-4 w-4 shrink-0" />}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
-        {/* ── Recipients ────────────────────────────────────────────────── */}
-        <div>
-          <label className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400 mb-1.5">
-            Recipients
-          </label>
+            {!isStaff && (
+              <fieldset className="mt-4 min-w-0">
+                <legend className={labelClass}>Send to</legend>
+                <div className={`mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm ${mutedClass}`}>
+                  {[['individual', 'Individuals'], ['group', 'Patient group']].map(([value, label]) => (
+                    <label key={value} className="inline-flex min-h-9 cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="notification-recipient-mode"
+                        checked={recipientMode === value}
+                        onChange={() => changeRecipientMode(value)}
+                        className={`h-4 w-4 accent-primary-700 dark:accent-primary-400 ${focusClass}`}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
-          {/* ── Select recipients panel ──────────────────────────────────── */}
-          <div className="space-y-2">
-              {/* Search input */}
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                  </svg>
-                </span>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  placeholder={
-                    recipientType === 'staff'
-                      ? 'Search staff by name, email, or role…'
-                      : 'Search patients by name or ID…'
-                  }
-                  className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  autoComplete="off"
-                />
-                {(isSearching || isLoadingStaff) && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <svg className="w-4 h-4 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                    </svg>
-                  </span>
+            {isGroup ? (
+              <div className="mt-4">
+                {groupBranches && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="notification-group" className={labelClass}>Patient group</label>
+                      <select
+                        id="notification-group"
+                        value={groupProfile}
+                        onChange={event => { setGroupProfile(event.target.value); setResult(null); }}
+                        className={`mt-2 ${fieldClass}`}
+                      >
+                        <option value="">Choose a group</option>
+                        {Object.entries(groupLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="notification-campus" className={labelClass}>Campus</label>
+                      <select
+                        id="notification-campus"
+                        value={groupBranch}
+                        onChange={event => { setGroupCampus(event.target.value); setResult(null); }}
+                        className={`mt-2 ${fieldClass}`}
+                      >
+                        {(groupBranches.length > 1 || !groupBranch) && <option value="">Choose a campus</option>}
+                        {groupBranches.map(value => <option key={value} value={value}>{campusLabels[value]}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <p role="status" className={`mb-0 mt-2 text-sm ${mutedClass}`}>
+                  {!groupOptions && 'Loading patient groups…'}
+                  {groupOptions?.error === 'forbidden' && 'Your role does not allow patient group notifications.'}
+                  {groupOptions?.error === 'unavailable' && 'Could not load patient groups.'}
+                  {groupBranches && 'Campus options follow your notification permission in Role Management.'}
+                </p>
+                {groupOptions?.error === 'unavailable' && (
+                  <button type="button" onClick={reloadGroups} className={`mt-1 min-h-9 rounded-md px-1 text-sm font-semibold text-primary-950 underline dark:text-primary-300 ${focusClass}`}>Try again</button>
                 )}
               </div>
-
-              {/* Staff load error */}
-              {staffError && (
-                <p className="text-xs text-red-500 dark:text-red-400">{staffError}</p>
-              )}
-
-              {/* Search results */}
-              {filteredResults.length > 0 && (
-                <ul className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-600 divide-y divide-neutral-100 dark:divide-neutral-700">
-                  {filteredResults.map(user => (
-                    <li
-                      key={user.id}
-                      className="flex items-center justify-between px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer"
-                      onClick={() => addRecipient(user)}
-                    >
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <p className="text-sm font-medium text-secondary-800 dark:text-white truncate leading-none m-0">
-                          {recipientType === 'staff' ? user.name : formatPatientName(user)}
-                        </p>
-                        <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate leading-none m-0">
-                          {recipientType === 'staff'
-                            ? [user.role, user.branch].filter(Boolean).join(' · ')
-                            : [user.identifier, getPatientYearLevelLabel(user), user.branch].filter(Boolean).join(' · ')}
-                        </p>
-                      </div>
-                      <span className="ml-3 shrink-0 text-primary-500 text-xs font-semibold">Add</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* Empty state */}
-              {searchTerm.trim() &&
-                !isSearching &&
-                !isLoadingStaff &&
-                filteredResults.length === 0 && (
-                  <p className="text-xs text-secondary-400 dark:text-neutral-500 py-1">
-                    No results found.
-                  </p>
-                )}
-
-              {/* Selected chips */}
-              {selected.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 mb-1.5">
-                    Selected ({selected.length})
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selected.map(r => (
-                      <span
-                        key={r.id}
-                        className="flex items-center gap-1 px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 rounded-full text-[11px] font-medium"
-                      >
-                        {r.label}
-                        <button
-                          type="button"
-                          onClick={() => removeRecipient(r.id)}
-                          className="ml-0.5 hover:text-primary-600 dark:hover:text-primary-200 transition-colors"
-                          aria-label={`Remove ${r.label}`}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
+            ) : (
+              <div className="mt-4">
+                <div className="mb-2 flex min-h-6 flex-wrap items-center justify-between gap-x-2">
+                  <label htmlFor="notification-search" className={labelClass}>Find {isStaff ? 'staff' : 'patients'}</label>
+                  {isStaff && !query && (
+                    <button type="button" aria-expanded={browseStaff} aria-controls="notification-search-results" onClick={() => setBrowseStaff(!browseStaff)} className={`inline-flex min-h-8 items-center gap-1 rounded-md px-1 text-sm font-semibold text-primary-950 hover:underline dark:text-primary-300 ${focusClass}`}>
+                      {browseStaff ? 'Hide staff list' : 'Browse staff'} <ChevronDown aria-hidden="true" className={`h-4 w-4 ${browseStaff ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
                 </div>
-              )}
+                <div className="relative">
+                  <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-600 dark:text-neutral-400" />
+                  <input
+                    ref={searchInput}
+                    id="notification-search"
+                    type="search"
+                    autoComplete="off"
+                    value={searchTerm}
+                    onChange={(event) => updateSearch(event.target.value)}
+                    onKeyDown={preventImplicitSend}
+                    aria-describedby="notification-search-status"
+                    placeholder={isStaff ? 'Search staff' : 'Search patients'}
+                    className={`${fieldClass} pl-9`}
+                  />
+                </div>
 
-              {/* Hint when no recipients selected yet */}
-              {selected.length === 0 && !searchTerm && (
-                <p className="text-xs text-secondary-400 dark:text-neutral-500">
-                  Search and select at least one recipient to send.
+                <div id="notification-search-results" className="mt-2">
+                  <p id="notification-search-status" role="status" className={`mb-0 text-sm ${mutedClass}`}>{searchStatus}</p>
+                  {showResults && error && (
+                    <button type="button" onClick={() => { retry(); searchInput.current?.focus(); }} className={`mt-1 min-h-9 rounded-md px-1 text-sm font-semibold text-primary-950 underline dark:text-primary-300 ${focusClass}`}>
+                      Try again
+                    </button>
+                  )}
+                  {showResults && !loading && !error && available.length > 0 && (
+                    <ul aria-label="Matching recipients" className="mt-2 max-h-56 divide-y divide-neutral-200 overflow-y-auto rounded-xl border border-neutral-200 dark:divide-neutral-700 dark:border-neutral-700">
+                      {available.map((user) => {
+                        const name = isStaff ? user.name : formatPatientName(user);
+                        const details = isStaff ? [user.role, user.branch, user.email] : [user.identifier, getPatientYearLevelLabel(user), user.branch];
+                        return (
+                          <li key={user.id}>
+                            <button
+                              type="button"
+                              onClick={() => addRecipient(user)}
+                              aria-label={`Add ${name}`}
+                              aria-describedby={`notification-recipient-${user.id}`}
+                              className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-900 dark:hover:bg-neutral-700 dark:focus-visible:outline-primary-300"
+                            >
+                              <span className="min-w-0 break-words">
+                                <span className="block text-sm font-semibold text-neutral-900 dark:text-white">{name}</span>
+                                <span id={`notification-recipient-${user.id}`} className={`block text-xs leading-relaxed ${mutedClass}`}>{details.filter(Boolean).join(' · ')}</span>
+                              </span>
+                              <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary-950 dark:text-primary-300">
+                                <Plus aria-hidden="true" className="h-4 w-4" /> Add
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!isGroup && recipientCount > 0 && (
+              <ul aria-label="Selected recipients" className="mt-4 flex flex-wrap gap-2">
+                {activeRecipients.map(({ id, label }) => (
+                  <li key={id} className="inline-flex max-w-full items-center gap-1 rounded-xl border border-primary-200 bg-primary-50 pl-3 text-sm text-primary-950 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-200">
+                    <span className="min-w-0 break-words py-1">{label}</span>
+                    <button type="button" onClick={() => removeRecipient(id)} aria-label={`Remove ${label}`} className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl hover:bg-primary-100 dark:hover:bg-primary-500/20 ${focusClass}`}>
+                      <X aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section aria-labelledby="notification-content" className="space-y-4 border-t border-neutral-200 p-4 dark:border-neutral-700 sm:p-6">
+            <h2 id="notification-content" className="mb-0 text-lg font-semibold text-neutral-900 dark:text-white">Compose message</h2>
+            <div>
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <label htmlFor="notification-title" className={labelClass}>Title</label>
+                <CharacterCount id="notification-title-count" value={title} limit={MAX_TITLE_LENGTH} />
+              </div>
+              <input
+                id="notification-title"
+                type="text"
+                autoComplete="off"
+                required
+                maxLength={MAX_TITLE_LENGTH}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                onKeyDown={preventImplicitSend}
+                aria-describedby="notification-title-count"
+                placeholder="Enter a short title"
+                className={fieldClass}
+              />
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <label htmlFor="notification-message" className={labelClass}>Message</label>
+                <CharacterCount id="notification-message-count" value={message} limit={MAX_MESSAGE_LENGTH} />
+              </div>
+              <textarea
+                id="notification-message"
+                required
+                maxLength={MAX_MESSAGE_LENGTH}
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                aria-describedby="notification-message-count"
+                placeholder="Write your notification"
+                rows={5}
+                className={`${fieldClass} block resize-y`}
+              />
+            </div>
+          </section>
+        </fieldset>
+
+        <div className="min-w-0 space-y-4">
+          <section aria-labelledby="notification-preview" className={cardClass}>
+            <div className="p-4 sm:p-5">
+              <h2 id="notification-preview" className="mb-0 text-lg font-semibold text-neutral-900 dark:text-white">Notification preview</h2>
+              <div className="mt-4 flex min-h-28 items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-900 sm:p-4">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary-100 text-primary-950 dark:bg-primary-500/15 dark:text-primary-300">
+                  <Bell aria-hidden="true" className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                  <p className={`mb-0 text-sm font-semibold ${title.trim() ? 'text-neutral-900 dark:text-white' : mutedClass}`}>{title.trim() || 'Your notification title'}</p>
+                  <p className={`mb-0 mt-1 whitespace-pre-wrap text-sm leading-relaxed ${mutedClass}`}>{message.trim() || 'Your message appears here as you type.'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-neutral-200 p-4 dark:border-neutral-700 sm:p-5">
+              <dl className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <dt className={mutedClass}>{isGroup && group ? `${groupLabels[group.profile]} · ${campusLabels[group.branch]}` : audience}</dt>
+                <dd className="font-semibold tabular-nums text-neutral-900 dark:text-white">
+                  <span role="status">
+                    {isGroup
+                      ? group && `${recipientCount.toLocaleString()} eligible ${recipientCount === 1 ? 'recipient' : 'recipients'}`
+                      : `${recipientCount} ${recipientCount === 1 ? 'recipient' : 'recipients'} selected`}
+                  </span>
+                </dd>
+              </dl>
+              <button
+                type="submit"
+                disabled={!canSend}
+                className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-600 disabled:opacity-100 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-300 ${focusClass}`}
+              >
+                {isSending
+                  ? <><LoaderCircle aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" /> Sending…</>
+                  : <><Send aria-hidden="true" className="h-4 w-4" /> {isGroup && recipientCount > 0 ? `Send to ${recipientCount.toLocaleString()}` : 'Send notification'}</>}
+              </button>
+              {!canSend && !isSending && (!isGroup || groupBranches) && (
+                <p className={`mb-0 mt-2 text-sm ${mutedClass}`}>
+                  {isGroup && recipientCount === 0
+                    ? group ? 'This group has no eligible recipients.' : 'Choose a group and campus.'
+                    : recipientCount === 0 ? 'Select at least one recipient.' : 'Enter a title and message to send.'}
                 </p>
               )}
-          </div>
-        </div>
-
-        {/* ── Title ─────────────────────────────────────────────────────── */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label
-              htmlFor="notification-title"
-              className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400"
-            >
-              Title
-            </label>
-            <span className={`text-xs ${
-              titleCharsLeft < 20
-                ? 'text-red-500 dark:text-red-400'
-                : 'text-secondary-400 dark:text-neutral-500'
-            }`}>
-              {titleCharsLeft}/{MAX_TITLE_LENGTH}
-            </span>
-          </div>
-          <input
-            id="notification-title"
-            type="text"
-            value={title}
-            onChange={e => { if (e.target.value.length <= MAX_TITLE_LENGTH) setTitle(e.target.value); }}
-            placeholder="Short notification title…"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            autoComplete="off"
-          />
-        </div>
-
-        {/* ── Message ───────────────────────────────────────────────────── */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label
-              htmlFor="notification-message"
-              className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400"
-            >
-              Message
-            </label>
-            <span
-              className={`text-xs ${
-                charsLeft < 50
-                  ? 'text-red-500 dark:text-red-400'
-                  : 'text-secondary-400 dark:text-neutral-500'
-              }`}
-            >
-              {charsLeft}/{MAX_MESSAGE_LENGTH}
-            </span>
-          </div>
-          <textarea
-            id="notification-message"
-            value={message}
-            onChange={e => {
-              if (e.target.value.length <= MAX_MESSAGE_LENGTH) setMessage(e.target.value);
-            }}
-            rows={3}
-            placeholder="Write your notification message…"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-          />
-        </div>
-
-        {/* ── Result feedback ───────────────────────────────────────────── */}
-        {result && (
-          <div
-            className={`rounded-lg px-3 py-2 text-xs ${
-              result.type === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700'
-                : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-700'
-            }`}
-          >
-            <p className="font-medium">{result.text}</p>
-            {result.type === 'success' && result.details && (
-              <p className="mt-1 text-xs opacity-75">
-                Delivered immediately: {result.details.delivery?.delivered?.length ?? 0} ·{' '}
-                Queued for next login: {result.details.delivery?.queued?.length ?? 0}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* ── Submit ────────────────────────────────────────────────────── */}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={!canSend}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-primary-600 hover:bg-primary-700 disabled:bg-neutral-300 dark:disabled:bg-neutral-600 text-white text-xs font-medium transition-colors disabled:cursor-not-allowed"
-          >
-            {isSending ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-                Sending…
-              </>
-            ) : (
-              'Send Notification'
-            )}
-          </button>
+            </div>
+          </section>
+          <SendResult result={result} />
         </div>
       </form>
     </div>
   );
-};
-
-export default SendNotificationView;
+}

@@ -15,7 +15,8 @@ for (const kind of ['initial', 'update']) for (const status of ['Pending', 'Revi
       if (pathname === '/') return route.fulfill({ contentType: 'text/html', body: nav });
       if (pathname !== '/pending') return route.fulfill({ status: 404, body: 'Wrong route' });
       return route.fulfill({ contentType: 'text/html', body: `${nav}
-        <select id="kind"><option value="all">All Types</option><option value="Initial Record">Initial Record</option><option value="Record Update">Record Update</option></select>
+        <button onclick="window.selectedType='Initial Record'">Initial records</button>
+        <button onclick="window.selectedType='Record Update'">Record updates</button>
         <select id="status"><option value="all">All Status</option><option value="Revision">Revision Requested</option>${['Pending', 'RevisionSubmitted', 'Approved', 'Rejected'].map(value => `<option value="${value}">${value}</option>`).join('')}</select>
         <select id="branch" ${kind === 'update' ? 'disabled' : ''}><option value="Manila">Manila</option></select>
         <table><tbody id="rows"><tr><td>#other-ticket</td></tr></tbody></table>
@@ -25,7 +26,9 @@ for (const kind of ['initial', 'update']) for (const status of ['Pending', 'Revi
           function showAssigned(){
             const row=document.createElement('tr'), cell=document.createElement('td');
             cell.textContent='#${manifest.ticketId}'; row.append(cell);
-            row.onclick=()=>{window.selected='${manifest.ticketId}';document.querySelector('#review').hidden=false;};
+            const action=document.createElement('button');action.textContent='Review';
+            action.onclick=()=>{window.selected='${manifest.ticketId}';document.querySelector('#review').hidden=false;};
+            const actionCell=document.createElement('td');actionCell.append(action);row.append(actionCell);
             document.querySelector('#rows').replaceChildren(row);
             document.querySelector('[aria-label="Next page"]').disabled=true;
           }
@@ -33,7 +36,7 @@ for (const kind of ['initial', 'update']) for (const status of ['Pending', 'Revi
     });
     await openRecord({ page, url }, manifest, kind, status);
     expect(paths).toEqual(['/', '/pending']);
-    await expect(page.locator('#kind')).toHaveValue(kind === 'initial' ? 'Initial Record' : 'Record Update');
+    expect(await page.evaluate(() => window.selectedType)).toBe(kind === 'initial' ? 'Initial Record' : 'Record Update');
     await expect(page.locator('#status')).toHaveValue(status);
     expect(await page.evaluate(() => window.reviewed)).toBe(manifest.ticketId);
   });

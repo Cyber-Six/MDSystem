@@ -10,8 +10,16 @@ import {
   MedicalBackgroundSection,
   DentalHistorySection,
   ObGyneSection,
+  SectionWrapper,
   SectionSkeleton,
 } from './review-sections';
+
+const formatTicketDateTime = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime())
+    ? date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—';
+};
 
 /**
  * RecordReviewModal  (Step 2)
@@ -43,6 +51,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
   // Revision form
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const [revisionNote, setRevisionNote] = useState('');
+  const revisionReasonRef = useRef(null);
 
   // Edit state per section
   const [editingSections, setEditingSections] = useState({});
@@ -51,8 +60,17 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
   // DPA confirmation
   const [showDPAConfirm, setShowDPAConfirm] = useState(false);
 
-  // Prevent infinite re-fetch for OB-GYNE lazy-load
-  const obgynFetchedRef = useRef(false);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    const closeButton = closeButtonRef.current;
+    if (!closeButton) return;
+    const previousFocus = document.activeElement;
+    closeButton.focus({ preventScroll: true });
+    return () => {
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [ticket?.id]);
 
   // Derived values (safe to compute before hooks since they come from props/state)
   const scope = ticket?.scope ?? 'Both';
@@ -64,14 +82,14 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
   useEffect(() => {
     if (!ticket) return;
     let cancelled = false;
-    obgynFetchedRef.current = false; // reset on new ticket
 
     const fetchData = async () => {
       setLoading(true);
       setFetchError('');
+      setRecordData(null);
       try {
         const sex = ticket.sex ?? null; // may not be available from ticket list
-        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex, ticket.id);
+        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex, ticket.id, ticket.is_initial !== false);
         if (!cancelled) {
           const { catalogs: cats, ...recordFields } = data;
           setRecordData(recordFields);
@@ -86,28 +104,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
 
     fetchData();
     return () => { cancelled = true; };
-  }, [ticket?.patientId, ticket?.id, ticket?.status, scope]);
-
-  // OB-GYNE is now included in the initial batched fetch for all medical-scope
-  // records, so a lazy-load is only needed if recordData was set before the
-  // batch approach existed (i.e. obgynHistory key is completely absent).
-  useEffect(() => {
-    const sex = recordData?.basicInfo?.sex;
-    if (!sex || !includeMedical || obgynFetchedRef.current) return;
-    if (sex.toLowerCase() !== 'female') return;
-    // Skip if already populated by the batched fetch.
-    if ('obgynHistory' in (recordData ?? {})) return;
-
-    obgynFetchedRef.current = true; // mark attempted — prevents infinite loop
-    import('../patient-record-service').then(({ getUserObgynHistory }) => {
-      getUserObgynHistory(ticket.patientId).then((data) => {
-        setRecordData((prev) => ({
-          ...prev,
-          obgynHistory: Array.isArray(data) ? (data[0] ?? null) : data,
-        }));
-      }).catch(() => {});
-    });
-  }, [recordData?.basicInfo?.sex, includeMedical, ticket?.patientId]);
+  }, [ticket?.patientId, ticket?.id, ticket?.status, ticket?.is_initial, scope]);
 
   // ── Edit helpers ───────────────────────────────────────────────────────────
 
@@ -183,9 +180,16 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     }
   };
 
+  const openRevisionForm = () => {
+    setShowRevisionForm(true);
+    requestAnimationFrame(() => {
+      revisionReasonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      revisionReasonRef.current?.focus({ preventScroll: true });
+    });
+  };
+
   // ── Derived render values ───────────────────────────────────────────────────
 
-  const isFemale = recordData?.basicInfo?.sex?.toLowerCase() === 'female';
   const unresolvedChoices = unresolvedReviewChoices(recordData, catalogs);
   const canAccessMedical = staffRole === 'medical' || staffRole === 'both';
   const canAccessDental  = staffRole === 'dental'  || staffRole === 'both';
@@ -202,28 +206,54 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     [TICKET_STATUS.REVISION]:           'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
   };
 
-  const badgeClass = statusClasses[ticket.status] ?? 'bg-neutral-100 text-neutral-600';
+  const badgeClass = statusClasses[ticket?.status] ?? 'bg-neutral-100 text-neutral-600';
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (!ticket) return null;
 
+  const submittedAt = ticket.created_at ? new Date(ticket.created_at) : null;
+  const expiresAt = submittedAt && Number.isFinite(submittedAt.getTime())
+    ? new Date(submittedAt.getTime() + 7 * 86400000)
+    : null;
+
+  const handleDialogKeyDown = (event) => {
+    if (event.key === 'Escape' && !actionLoading) {
+      event.preventDefault();
+      onClose();
+    }
+    if (event.key !== 'Tab') return;
+    const controls = Array.from(event.currentTarget.querySelectorAll(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]',
+    )).filter((control) => control.getClientRects().length > 0);
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && event.target === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && event.target === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
-    <div role="dialog" aria-label="Record Review" data-ticket-id={ticket.id} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] flex flex-col">
+    <div role="dialog" aria-modal="true" aria-label="Record Review" data-ticket-id={ticket.id} onKeyDown={handleDialogKeyDown}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4">
+      <div className="flex max-h-[95dvh] w-full max-w-5xl flex-col rounded-2xl border-t-4 border-primary-500 bg-white shadow-2xl dark:bg-neutral-800">
 
         {/* ── Header ── */}
-        <div className="sticky top-0 z-10 bg-white dark:bg-neutral-800 px-6 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between rounded-t-xl">
+        <div className="flex shrink-0 items-start justify-between gap-2 border-b border-neutral-200 px-4 py-3 dark:border-neutral-700 sm:px-6">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2" style={{ marginBottom: '8px' }}>
-              <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-xl font-bold text-secondary-900 dark:text-white truncate">
-                Record Review
+            <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h2 className="m-0 text-xl font-bold leading-tight text-secondary-900 dark:text-white">
+                {ticket.is_initial === false ? 'Record Update' : 'Initial Record Submission'}
               </h2>
               <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded whitespace-nowrap ${badgeClass}`}>
                 {ticket.status}
               </span>
             </div>
-            <div className="flex items-center gap-3 text-sm text-secondary-600 dark:text-neutral-400">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-secondary-600 dark:text-neutral-400">
               <span className="font-semibold text-secondary-800 dark:text-neutral-200">
                 {ticket.first_name || ticket.last_name
                   ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
@@ -232,13 +262,21 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
               <span>Scope: {scope}</span>
               <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
-              <span>{formatBranchLabel(ticket.branch)}</span>
+              <span>Branch: {formatBranchLabel(ticket.branch)}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-secondary-500 dark:text-neutral-400">
+              <span>Ticket #{ticket.id}</span>
+              <span>Submitted {formatTicketDateTime(ticket.created_at)}</span>
+              {ticket.is_initial === false && <span>Expires {formatTicketDateTime(expiresAt)}</span>}
             </div>
           </div>
           <button
+            ref={closeButtonRef}
+            type="button"
+            aria-label="Close record review"
             onClick={onClose}
             disabled={actionLoading}
-            className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors flex-shrink-0"
+            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600 dark:hover:bg-neutral-700 dark:focus-visible:outline-primary-300"
           >
             <svg className="w-5 h-5 text-secondary-600 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -247,7 +285,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
         </div>
 
         {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-neutral-50 p-3 dark:bg-neutral-900 sm:p-5">
 
           {/* Fetch error */}
           {fetchError && (
@@ -272,94 +310,97 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
           {!loading && recordData && (
             <>
               {unresolvedChoices.length > 0 && <div role="alert" className="p-4 text-error-700">Some submitted choices could not be resolved. Request correction before approval.</div>}
-              {/* Personal Information — always shown */}
-              <PersonalInfoSection
-                basicInfo={recordData.basicInfo}
-                profile={recordData.profile}
-                isEditing={editingSections.personalInfo ?? false}
-                editedFields={editedFields.personalInfo ?? {}}
-                onFieldChange={(f, v) => setFieldValue('personalInfo', f, v)}
-                onToggleEdit={() => toggleEdit('personalInfo')}
-                isPending={isPending}
-              />
+              <div className="record-review-sections">
+                {recordData.ticketNotes?.trim() && (
+                  <SectionWrapper title="Ticket Notes">
+                    <p className="m-0 whitespace-pre-wrap break-words text-sm text-secondary-900 dark:text-neutral-100">{recordData.ticketNotes}</p>
+                  </SectionWrapper>
+                )}
+                {((ticket.is_initial !== false && recordData.basicInfo) || recordData.profile) && <PersonalInfoSection
+                  basicInfo={ticket.is_initial !== false ? recordData.basicInfo : null}
+                  profile={recordData.profile}
+                  isEditing={editingSections.personalInfo ?? false}
+                  editedFields={editedFields.personalInfo ?? {}}
+                  onFieldChange={(f, v) => setFieldValue('personalInfo', f, v)}
+                  onToggleEdit={() => toggleEdit('personalInfo')}
+                  isPending={isPending && ticket.is_initial !== false}
+                />}
 
-              {/* Emergency Contacts */}
-              {includeMedical && (
-                <EmergencyContactSection
-                  emergencyContact={recordData.emergencyContact}
-                  isEditing={editingSections.emergencyContact ?? false}
-                  editedFields={editedFields.emergencyContact ?? {}}
-                  onFieldChange={(f, v) => setFieldValue('emergencyContact', f, v)}
-                  onToggleEdit={canAccessMedical ? () => toggleEdit('emergencyContact') : undefined}
-                  isPending={isPending && canAccessMedical}
-                  isLocked={!canAccessMedical}
-                />
-              )}
+                {/* Emergency Contacts */}
+                {(recordData.emergencyContact?.firstContact || recordData.emergencyContact?.secondContact) && (
+                  <EmergencyContactSection
+                    emergencyContact={recordData.emergencyContact}
+                    isEditing={editingSections.emergencyContact ?? false}
+                    editedFields={editedFields.emergencyContact ?? {}}
+                    onFieldChange={(f, v) => setFieldValue('emergencyContact', f, v)}
+                    onToggleEdit={canAccessMedical ? () => toggleEdit('emergencyContact') : undefined}
+                    isPending={isPending && canAccessMedical}
+                    isLocked={!canAccessMedical}
+                  />
+                )}
 
-              {/* Medical History */}
-              {includeMedical && (
-                <MedicalHistorySection
-                  medicalHistory={recordData.medicalHistory}
-                  catalogs={catalogs}
-                  isEditing={editingSections.medicalHistory ?? false}
-                  editedFields={editedFields.medicalHistory ?? {}}
-                  onFieldChange={(f, v) => setFieldValue('medicalHistory', f, v)}
-                  onToggleEdit={canAccessMedical ? () => toggleEdit('medicalHistory') : undefined}
-                  isPending={isPending && canAccessMedical}
-                  isLocked={!canAccessMedical}
-                />
-              )}
+                {/* Medical History */}
+                {includeMedical && (
+                  <MedicalHistorySection
+                    medicalHistory={recordData.medicalHistory}
+                    catalogs={catalogs}
+                    isLocked={!canAccessMedical}
+                  />
+                )}
 
-              {/* Medical Background (allergies, immunizations, etc.) */}
-              {includeMedical && (
-                <MedicalBackgroundSection
-                  catalogs={catalogs}
-                  allergyProfile={recordData.allergyProfile}
-                  immunizationProfile={recordData.immunizationProfile}
-                  hospitalizationProfile={recordData.hospitalizationProfile}
-                  operationProfile={recordData.operationProfile}
-                  medicationProfile={recordData.medicationProfile}
-                  lifestyle={recordData.lifestyle}
-                  visualAcuityProfile={recordData.visualAcuityProfile}
-                  vitalSigns={recordData.vitalSigns}
-                  isEditing={editingSections.medicalBackground ?? false}
-                  editedFields={editedFields.medicalBackground ?? {}}
-                  onFieldChange={(f, v) => setFieldValue('medicalBackground', f, v)}
-                  onToggleEdit={canAccessMedical ? () => toggleEdit('medicalBackground') : undefined}
-                  isPending={isPending && canAccessMedical}
-                  isLocked={!canAccessMedical}
-                />
-              )}
+                {/* Medical Background (allergies, immunizations, etc.) */}
+                {includeMedical && (
+                  <MedicalBackgroundSection
+                    catalogs={catalogs}
+                    allergyProfile={recordData.allergyProfile}
+                    immunizationProfile={recordData.immunizationProfile}
+                    hospitalizationProfile={recordData.hospitalizationProfile}
+                    operationProfile={recordData.operationProfile}
+                    medicationProfile={recordData.medicationProfile}
+                    lifestyle={recordData.lifestyle}
+                    visualAcuityProfile={recordData.visualAcuityProfile}
+                    vitalSigns={recordData.vitalSigns}
+                    isEditing={editingSections.medicalBackground ?? false}
+                    editedFields={editedFields.medicalBackground ?? {}}
+                    onFieldChange={(f, v) => setFieldValue('medicalBackground', f, v)}
+                    onToggleEdit={canAccessMedical ? () => toggleEdit('medicalBackground') : undefined}
+                    isPending={isPending && canAccessMedical}
+                    isLocked={!canAccessMedical}
+                  />
+                )}
 
-              {/* OB-GYNE (female + medical scope) */}
-              {includeMedical && isFemale && (
-                <ObGyneSection
-                  obgynHistory={recordData.obgynHistory}
-                  isEditing={editingSections.obgyne ?? false}
-                  editedFields={editedFields.obgyne ?? {}}
-                  onFieldChange={(f, v) => setFieldValue('obgyne', f, v)}
-                  onToggleEdit={canAccessMedical ? () => toggleEdit('obgyne') : undefined}
-                  isPending={isPending && canAccessMedical}
-                  isLocked={!canAccessMedical}
-                />
-              )}
+                {/* The ticket already identifies whether an OB-GYNE record was submitted. */}
+                {includeMedical && recordData.obgynHistory && (
+                  <ObGyneSection
+                    obgynHistory={recordData.obgynHistory}
+                    isEditing={editingSections.obgyne ?? false}
+                    editedFields={editedFields.obgyne ?? {}}
+                    onFieldChange={(f, v) => setFieldValue('obgyne', f, v)}
+                    onToggleEdit={canAccessMedical ? () => toggleEdit('obgyne') : undefined}
+                    isPending={isPending && canAccessMedical}
+                    isLocked={!canAccessMedical}
+                  />
+                )}
 
-              {/* Dental History */}
-              {includeDental && (
-                <DentalHistorySection
-                  catalogs={catalogs}
-                  dentalHistory={recordData.dentalHistory}
-                  dentalProcedureProfile={recordData.dentalProcedureProfile}
-                  oralApplianceProfile={recordData.oralApplianceProfile}
-                  dentalPhotoRecord={recordData.dentalPhotoRecord}
-                  isEditing={editingSections.dentalHistory ?? false}
-                  editedFields={editedFields.dentalHistory ?? {}}
-                  onFieldChange={(f, v) => setFieldValue('dentalHistory', f, v)}
-                  onToggleEdit={canAccessDental ? () => toggleEdit('dentalHistory') : undefined}
-                  isPending={isPending && canAccessDental}
-                  isLocked={!canAccessDental}
-                />
-              )}
+                {/* Dental History */}
+                {includeDental && (
+                  <DentalHistorySection
+                    catalogs={catalogs}
+                    dentalHistory={recordData.dentalHistory}
+                    dentalProcedureProfile={recordData.dentalProcedureProfile}
+                    oralApplianceProfile={recordData.oralApplianceProfile}
+                    dentalPhotoRecord={recordData.dentalPhotoRecord}
+                    isEditing={editingSections.dentalHistory ?? false}
+                    editedFields={editedFields.dentalHistory ?? {}}
+                    onFieldChange={(f, v) => setFieldValue('dentalHistory', f, v)}
+                    onToggleEdit={canAccessDental ? () => toggleEdit('dentalHistory') : undefined}
+                    isPending={isPending && canAccessDental}
+                    isLocked={!canAccessDental}
+                  />
+                )}
+
+              </div>
+              <p className="record-review-empty">No submitted details are available for this ticket.</p>
 
               {/* Edit summary when edits exist */}
               {hasAnyEdits && (
@@ -444,6 +485,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                   </div>
                   <div className="p-4">
                     <textarea
+                      ref={revisionReasonRef}
                       value={revisionNote}
                       onChange={(e) => { setRevisionNote(e.target.value); setActionError(''); }}
                       rows={3}
@@ -471,7 +513,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
         </div>
 
         {/* ── Footer ── */}
-        <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-6 py-4 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-3 rounded-b-xl">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-b-2xl border-t border-neutral-200 bg-neutral-50 px-3 py-3 dark:border-neutral-700 dark:bg-neutral-800/50 sm:gap-3 sm:px-6">
           {showRevisionForm ? (
             <>
               <button
@@ -508,10 +550,10 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               >
                 Back
               </button>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => setShowRevisionForm(true)}
-                  disabled={actionLoading}
+                  onClick={openRevisionForm}
+                  disabled={actionLoading || loading || Boolean(fetchError)}
                   className="px-4 py-2 text-sm font-medium text-white bg-warning-500 hover:bg-warning-600 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

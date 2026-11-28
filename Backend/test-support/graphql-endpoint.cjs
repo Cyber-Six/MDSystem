@@ -44,13 +44,16 @@ function endpointContract(directory, { resolvers, endpoints, userProfile = false
           ]);
           const { options } = call.at(-1);
           const user = { id: '12', role: endpoint.role };
-          const res = {};
+          const res = { setHeader: jest.fn() };
           const settings = options({ body: { query: '{ __typename }' }, user, res });
           expect(settings.context).toEqual({ user, res });
           expect(settings.graphiql).toBe(endpoint.productionGraphiql ? !production : true);
           expect(settings.schema.typeDefs).toMatch(/type\s+Query/);
           expect(settings.schema.resolvers.Query).toEqual({ label: endpoint.resolver });
           expect(settings.schema.resolvers.Mutation).toEqual({ label: endpoint.resolver });
+          if (endpoint.privateResponse) {
+            expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+          }
           if (userProfile) expect(settings.schema.resolvers.UserProfile).toEqual({ label: endpoint.resolver });
           expect(options({ body: { query: '{ __typename }' }, res }).context.user).toBe(endpoint.nullUser ? null : undefined);
           if (endpoint.rejectEmpty) {

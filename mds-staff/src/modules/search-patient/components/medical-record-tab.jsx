@@ -78,7 +78,6 @@ export default function PatientMedicalRecordTab({ patient }) {
 
   const selfConditions   = history.self   || [];
   const familyConditions = history.family || [];
-  const historyNotes     = history.notes  || '';
 
   const allergiesList    = med.allergiesList    || [];
   const medications      = med.medications      || [];
@@ -165,12 +164,6 @@ export default function PatientMedicalRecordTab({ patient }) {
               </>
             )}
 
-            {historyNotes && (
-              <>
-                <SubLabel>Notes</SubLabel>
-                <p className="text-sm text-secondary-700 dark:text-neutral-300">{historyNotes}</p>
-              </>
-            )}
           </PatientSectionCard>
 
           {/* Allergies grouped by type */}

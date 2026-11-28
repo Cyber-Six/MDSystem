@@ -11,6 +11,7 @@
  */
 
 import { axiosRequest } from '../../packages-core-adapter';
+import { invalidateRequestCaches, onRequestCacheInvalidated, requestCacheGeneration, requestCacheVersion } from './request-cache-session';
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -62,6 +63,7 @@ export const TICKET_STATUS = {
 const _ticketCache   = new Map(); // cacheKey → { data, ts }
 const _ticketFlight  = new Map(); // cacheKey → Promise
 const _TICKET_TTL_MS = 30_000;   // 30 s
+onRequestCacheInvalidated(() => { _ticketCache.clear(); _ticketFlight.clear(); });
 
 /**
  * Fetch the latest update ticket for each patient matching the given statuses
@@ -81,6 +83,9 @@ const _TICKET_TTL_MS = 30_000;   // 30 s
  */
 export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit = 20, options = {}) => {
   const forceRefresh = options?.force === true;
+  if (forceRefresh) invalidateRequestCaches();
+  const generation = requestCacheGeneration();
+  const version = requestCacheVersion();
   const cacheKey = `${[...statuses].sort().join('|')}_${branch}_${offset}_${limit}`;
 
   // Return a still-fresh cached result immediately unless force refresh was requested.
@@ -112,14 +117,18 @@ export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit
          created_at
          first_name
          last_name
+         email
+         identifier
+         profile_type
          branch
        }
      }`,
     { statuses, branch, offset, limit },
   )
     .then((data) => {
+      if (generation !== requestCacheGeneration()) throw new Error('Staff session changed. Reload requests.');
       const result = data.getStatusUpdateTickets ?? [];
-      _ticketCache.set(cacheKey, { data: result, ts: Date.now() });
+      if (version === requestCacheVersion()) _ticketCache.set(cacheKey, { data: result, ts: Date.now() });
       if (_ticketFlight.get(cacheKey) === request) {
         _ticketFlight.delete(cacheKey);
       }
@@ -176,6 +185,7 @@ export const staffUpdateTicket = async (userId, status, notes) => {
      }`,
     { userId, status, notes: notes || null },
   );
+  invalidateRequestCaches();
   return data.staffUpdateTicket;
 };
 

@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import ProgressStepper from './progress-stepper';
+import { getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import ProgressStepper, { getRecordScrollContainer } from './progress-stepper';
 import PersonalInfoStep from './personal-info-step';
 import MedicalHistoryStep from './medical-history-step';
 import DentalHistoryStep from './dental-history-step';
 import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
-import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill } from './update-record-service';
+import { submitUpdateRecord, getUpdateTicketStatus, fetchUpdateRevisionPrefill, fetchUpdateRecordPrefill } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
 import { sendGraphQLRequest } from '../../../utils/graphql-client';
 import { usePatientNotifications } from '../../notification/notification-context';
@@ -15,6 +16,7 @@ import {
   clampStepIndex,
   getBackButtonState,
 } from './step-navigation-utils';
+import { clearRecordFormDraft, readRecordFormDraft, saveRecordFormDraft } from '../record-form-draft-storage';
 
 const RecordUpdateForm = ({
   forceRecordType = null,
@@ -25,21 +27,45 @@ const RecordUpdateForm = ({
   isInactiveMode = false,
 }) => {
   const { subscribe } = usePatientNotifications();
-  const [currentStep, setCurrentStep] = useState(0);
+  const formRef = useRef(null);
+  const initialTicketSyncStarted = useRef(false);
+  const patientSessionId = useRef(localStorage.getItem('patient_refreshToken')?.split(':')[0]);
+  const isCurrentPatientSession = useCallback(() =>
+    localStorage.getItem('patient_refreshToken')?.split(':')[0] === patientSessionId.current, []);
+  const draftFlowBase = forceRecordType ? `record-update-${forceRecordType}` : 'record-update';
+  const [draftFlow, setDraftFlow] = useState(draftFlowBase);
+  const [cachedDraft] = useState(() => readRecordFormDraft(draftFlow));
+  const restoredRecordDraft = cachedDraft?.data?.formData && typeof cachedDraft.data.formData === 'object' && !Array.isArray(cachedDraft.data.formData) ? cachedDraft.data.formData : {};
+  const [currentStep, setCurrentStep] = useState(() => Number.isInteger(cachedDraft?.data?.currentStep) ? Math.max(0, Math.min(cachedDraft.data.currentStep, 3)) : 0);
   const [patientDefaults, setPatientDefaults] = useState({});
   const [profileLoadStatus, setProfileLoadStatus] = useState('loading');
-  const [recordDraft, setRecordDraft] = useState({});
+  const [loadedRecordType, setLoadedRecordType] = useState(null);
+  const [sessionChanged, setSessionChanged] = useState(false);
+  const [prefillAttempt, setPrefillAttempt] = useState(0);
+  const [recordDraft, setRecordDraft] = useState(() => restoredRecordDraft);
   const formData = useMemo(() => ({ ...patientDefaults, ...recordDraft }), [patientDefaults, recordDraft]);
+  const [draftRestored, setDraftRestored] = useState(Boolean(Object.keys(restoredRecordDraft).length || cachedDraft?.data?.recordType));
+  const [revisionDraftRestored, setRevisionDraftRestored] = useState(false);
+  const [needsPhotoReupload, setNeedsPhotoReupload] = useState(Boolean(cachedDraft?.data?.requiresPhotoReupload));
   const [reviewHasUnresolvedChoices, setReviewHasUnresolvedChoices] = useState(false);
+  const [updateReviewConfirmed, setUpdateReviewConfirmed] = useState(false);
+  const [reviewConfirmationError, setReviewConfirmationError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
+  const [isStepTransitioning, setIsStepTransitioning] = useState(false);
+  const stepTransitionRef = useRef(false);
+  const [recordType, setRecordType] = useState(() => cachedDraft?.data?.recordType || null); // 'medical', 'dental', or 'both'
   const effectiveRecordType = forceRecordType || recordType;
   const shouldShowRecordChoice = !effectiveRecordType && !hideRecordChoice;
-  const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
+  const scrollToFormTop = () => {
+    const scrollTarget = getRecordScrollContainer(formRef.current) || window;
+    scrollTarget.scrollTo?.({ top: 0, behavior: 'instant' });
+  };
 
   // Revision tracking
   const [revisionStatus, setRevisionStatus] = useState(null); // { id, status, notes }
-  const [showRevisionBanner, setShowRevisionBanner] = useState(false);
+  const [activeTicket, setActiveTicket] = useState(null);
+  const [ticketStatusLoading, setTicketStatusLoading] = useState(true);
+  const [ticketStatusError, setTicketStatusError] = useState(false);
   const [revisionPrefillData, setRevisionPrefillData] = useState(null); // Pre-fetched form data for revision
   const [isLoadingRevisionPrefill, setIsLoadingRevisionPrefill] = useState(false);
 
@@ -55,26 +81,81 @@ const RecordUpdateForm = ({
   const [validationErrors, setValidationErrors] = useState([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
-  const syncRevisionStatus = useCallback(async (source = 'mount') => {
+  useEffect(() => {
+    if (sessionChanged || !isCurrentPatientSession()) return;
+    if (!Object.keys(recordDraft).length && !recordType) return;
+    const dentalPhotos = {
+      upperTeethPhoto: recordDraft.upperTeethPhoto,
+      lowerTeethPhoto: recordDraft.lowerTeethPhoto,
+    };
+    const hasAnyPhoto = Boolean(dentalPhotos.upperTeethPhoto || dentalPhotos.lowerTeethPhoto);
+    const photoReminder = needsPhotoReupload || hasAnyPhoto;
+    const persistedDraft = { ...recordDraft };
+    for (const field of ['upperTeethPhoto', 'lowerTeethPhoto']) {
+      if (Object.hasOwn(recordDraft, field)) persistedDraft[field] = null;
+    }
+    saveRecordFormDraft(draftFlow, {
+      formData: persistedDraft,
+      currentStep,
+      recordType: forceRecordType || recordType,
+      requiresPhotoReupload: photoReminder,
+    });
+  }, [draftFlow, forceRecordType, recordDraft, recordType, currentStep, needsPhotoReupload, sessionChanged, isCurrentPatientSession]);
+
+  useEffect(() => {
+    if (recordDraft.upperTeethPhoto && recordDraft.lowerTeethPhoto) setNeedsPhotoReupload(false);
+    else if (recordDraft.upperTeethPhoto || recordDraft.lowerTeethPhoto) setNeedsPhotoReupload(true);
+  }, [recordDraft.upperTeethPhoto, recordDraft.lowerTeethPhoto]);
+
+  const syncRevisionStatus = useCallback(async () => {
+    setTicketStatusLoading(true);
+    setTicketStatusError(false);
     try {
-      console.log(`[RecordUpdateForm] Syncing revision status from ${source}...`);
-      const ticket = await getUpdateRevisionStatus();
+      const ticket = await getUpdateTicketStatus({ strict: true });
+      if (!isCurrentPatientSession()) return;
+      setActiveTicket(ticket);
+      setTicketStatusError(false);
+      // Render the ticket and staff note while revision data is still loading.
+      // The revision action remains disabled until the prefill request finishes.
+      setTicketStatusLoading(false);
+      setUpdateReviewConfirmed(false);
+      setReviewConfirmationError(false);
 
       if (ticket && ticket.status === 'Revision') {
-        console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
+
         setRevisionStatus(ticket);
-        setShowRevisionBanner(true);
         setIsLoadingRevisionPrefill(true);
+
+        const revisionFlow = `${draftFlowBase}-revision`;
+        const revisionDraft = readRecordFormDraft(revisionFlow);
+        setDraftFlow(revisionFlow);
+        if (revisionDraft?.data) {
+          const savedRevisionData = revisionDraft.data.formData;
+          setRecordDraft(savedRevisionData && typeof savedRevisionData === 'object' && !Array.isArray(savedRevisionData) ? savedRevisionData : {});
+          setCurrentStep(Number.isInteger(revisionDraft.data.currentStep) ? Math.max(0, Math.min(revisionDraft.data.currentStep, 3)) : 0);
+          setRecordType(revisionDraft.data.recordType || null);
+          setDraftRestored(Boolean(revisionDraft.data.formData || revisionDraft.data.recordType));
+          setRevisionDraftRestored(true);
+          setNeedsPhotoReupload(Boolean(revisionDraft.data.requiresPhotoReupload));
+        } else {
+          setRecordDraft({});
+          setCurrentStep(0);
+          setRecordType(null);
+          setDraftRestored(false);
+          setRevisionDraftRestored(false);
+          setNeedsPhotoReupload(false);
+        }
 
         // Pre-fetch previous data for revision
         try {
-          const prefill = await fetchUpdateRevisionPrefill();
+          const prefill = await fetchUpdateRevisionPrefill(ticket);
+          if (!isCurrentPatientSession()) return;
           if (prefill && Object.keys(prefill).length > 0) {
-            console.log('[RecordUpdateForm] ✅ Pre-fill data fetched:', prefill);
+
             setRevisionPrefillData(prefill); // Store for later use
           }
         } catch (err) {
-          console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
+
         } finally {
           setIsLoadingRevisionPrefill(false);
         }
@@ -82,93 +163,120 @@ const RecordUpdateForm = ({
       }
 
       setRevisionStatus(ticket || null);
-      setShowRevisionBanner(false);
       setRevisionPrefillData(null);
-      console.log('[RecordUpdateForm] No revision pending');
+      clearRecordFormDraft(`${draftFlowBase}-revision`);
+
     } catch (error) {
-      console.error('[RecordUpdateForm] Error checking revision status:', error.message);
+      if (isCurrentPatientSession()) setTicketStatusError(true);
+    } finally {
+      if (isCurrentPatientSession()) setTicketStatusLoading(false);
     }
-  }, []);
+  }, [draftFlowBase, isCurrentPatientSession]);
 
   // Check for pending revision request on mount
   useEffect(() => {
-    syncRevisionStatus('mount');
+    if (initialTicketSyncStarted.current) return;
+    initialTicketSyncStarted.current = true;
+    syncRevisionStatus();
   }, [syncRevisionStatus]);
+
+  useEffect(() => {
+    if (!forceRecordType && ['Pending', 'InProgress', 'RevisionSubmitted'].includes(activeTicket?.status)) {
+      setRecordType(null);
+    }
+  }, [activeTicket?.status, forceRecordType]);
 
   // Keep revision modal in sync with live update-ticket status changes.
   useEffect(() => {
     const unsubscribe = subscribe('updateTicket:statusChanged', () => {
-      syncRevisionStatus('notification');
+      syncRevisionStatus();
     });
 
     return () => unsubscribe();
   }, [subscribe, syncRevisionStatus]);
 
-  // Fetch patient sex on mount so OB-GYN section shows correctly for female patients
+  // Load the stored personal profile for review and to determine OB-GYN visibility.
   useEffect(() => {
+    if (!effectiveRecordType && revisionStatus?.status !== 'Revision') return;
     const fetchUserSex = async () => {
       try {
         const response = await axiosRequest({
           method: 'POST',
           url: '/profile/patient',
-          data: { query: '{ getPersonalRecord { sex } }' }
+          data: { query: '{ getPersonalRecord { sex } getPersonalRecordLog { sex } }' }
         });
-        const sex = response.data?.data?.getPersonalRecord?.sex;
-        if (sex) {
-          setPatientDefaults(prev => ({ ...prev, sex }));
+        const profile = response.data?.data?.getPersonalRecord || response.data?.data?.getPersonalRecordLog;
+        if (!isCurrentPatientSession()) return;
+        if (profile) {
+          setPatientDefaults(prev => ({ ...prev, sex: profile.sex || prev.sex }));
         }
       } catch (error) {
-        console.warn('[RecordUpdateForm] Could not fetch user sex:', error.message);
+
       }
     };
     fetchUserSex();
+  }, [effectiveRecordType, revisionStatus?.status, isCurrentPatientSession]);
+
+  useEffect(() => {
+    const patientId = localStorage.getItem('patient_refreshToken')?.split(':')[0];
+    const onSessionChange = (event) => {
+      if (event.key !== 'patient_refreshToken' && event.key !== null) return;
+      if (localStorage.getItem('patient_refreshToken')?.split(':')[0] === patientId) return;
+      setSessionChanged(true);
+      setPatientDefaults({});
+      setRecordDraft({});
+      setUpdateReviewConfirmed(false);
+      setReviewConfirmationError(false);
+      setRevisionPrefillData(null);
+      setRevisionStatus(null);
+    };
+    window.addEventListener('storage', onSessionChange);
+    return () => window.removeEventListener('storage', onSessionChange);
   }, []);
 
   useEffect(() => {
-    const fetchProfileType = async () => {
-      try {
-        const { getMyProfile: profile } = await sendGraphQLRequest(`
-          query GetUpdateProfileType {
-            getMyProfile {
-              __typename
-              ... on StudentProfile { program year }
-              ... on EmployeeProfile { department role position employmentCategoryOther }
-            }
-          }`);
-        setProfileLoadStatus('ready');
-        if (!profile) return;
-        const employeeRoleByDatabaseRole = {
-          NonStaff: 'Teaching',
-          NonStaffOfficer: 'Teaching (Officer)',
-          Staff: 'Non-Teaching',
-          StaffOfficer: 'Non-Teaching (Officer)',
-        };
-        const employeeRole = employeeRoleByDatabaseRole[profile.role]
-          || (['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? profile.role : 'Other');
-        setPatientDefaults((previous) => ({
-          ...previous,
-          profileType: profile.__typename === 'EmployeeProfile' ? 'Employee' : 'Student',
-          ...(profile.__typename === 'EmployeeProfile' ? {
-            employeeDepartment: profile.department || '',
-            employeeRole,
-            employeePosition: profile.position || '',
-            employeeCategoryOther: employeeRole === 'Other' ? profile.employmentCategoryOther || (profile.role === 'Other' ? '' : profile.role || '') : '',
-          } : {}),
-        }));
-      } catch (error) {
-        setProfileLoadStatus('error');
-        console.warn('[RecordUpdateForm] Could not fetch patient profile type:', error.message);
+    let cancelled = false;
+    let loadedPrefill;
+    const releasePhotoPreviews = (prefill) => {
+      for (const field of ['upperTeethPhoto', 'lowerTeethPhoto']) {
+        const preview = prefill?.[field]?.preview;
+        if (preview) URL.revokeObjectURL(preview);
       }
     };
-    fetchProfileType();
-  }, []);
+    if (!effectiveRecordType || sessionChanged) return undefined;
+    const recordTypeToLoad = effectiveRecordType;
+    setProfileLoadStatus('loading');
+    fetchUpdateRecordPrefill(recordTypeToLoad).then(prefill => {
+      if (cancelled || !isCurrentPatientSession()) {
+        releasePhotoPreviews(prefill);
+        return;
+      }
+      loadedPrefill = prefill;
+      setPatientDefaults(previous => ({ ...previous, ...prefill, sex: previous.sex || prefill.sex }));
+      setLoadedRecordType(recordTypeToLoad);
+      setProfileLoadStatus('ready');
+    }).catch(() => {
+      if (!cancelled) setProfileLoadStatus('error');
+    });
+    return () => {
+      cancelled = true;
+      releasePhotoPreviews(loadedPrefill);
+    };
+  }, [effectiveRecordType, prefillAttempt, sessionChanged]);
+
+  const updateRecordDraft = (nextFormData) => {
+    if (!isCurrentPatientSession()) return;
+    setUpdateReviewConfirmed(false);
+    setReviewConfirmationError(false);
+    setRecordDraft(Object.fromEntries(Object.entries(nextFormData).filter(([field, value]) => value !== patientDefaults[field])));
+  };
 
   const steps = buildUpdateRecordSteps({
     effectiveRecordType,
     skipPersonalStep,
   });
   const safeCurrentStep = clampStepIndex(currentStep, steps.length);
-  const waitingForProfile = steps[safeCurrentStep] === 'Personal Info' && profileLoadStatus !== 'ready';
+  const waitingForProfile = sessionChanged || profileLoadStatus !== 'ready' || loadedRecordType !== effectiveRecordType;
   const canReturnToChoicePage = !forceRecordType && !hideRecordChoice;
   const backButtonState = getBackButtonState({
     currentStep: safeCurrentStep,
@@ -182,12 +290,22 @@ const RecordUpdateForm = ({
     }
   }, [currentStep, safeCurrentStep]);
 
+  const getPersonalLengthErrors = () => getPersonalInfoLengthErrors({
+    department: formData.employeeDepartment,
+    position: formData.employeePosition,
+    emergencyContacts: [
+      { contactNumber: formData.emergencyContact1Number },
+      { contactNumber: formData.emergencyContact2Number },
+    ],
+  }, { includeProfile: false, isEmployee: formData.profileType === 'Employee' }).map(issue => ({ section: 'Personal Info', sectionIndex: 0, ...issue }));
+
   // Validate required fields before allowing Next
   const validateCurrentStep = () => {
     const stepName = steps[safeCurrentStep];
     const errors = [];
 
     if (stepName === 'Personal Info') {
+      errors.push(...getPersonalLengthErrors());
       if (formData.profileType === 'Employee') {
         if (!formData.employeeDepartment) errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please enter your department before proceeding.' });
         if (!formData.employeeRole) errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your employment category before proceeding.' });
@@ -264,7 +382,8 @@ const RecordUpdateForm = ({
       const stepIndexForDental = (effectiveRecordType === 'both' && !skipPersonalStep)
         ? 2
         : 1;
-      
+
+
       // Dentist visit info is required
       if (formData.seenByDentist === undefined || formData.seenByDentist === null) {
         errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please indicate whether you have visited a dentist.' });
@@ -304,36 +423,49 @@ const RecordUpdateForm = ({
     if (errors.length > 0) {
       setValidationErrors(errors);
       setShowValidationModal(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToFormTop();
       return false;
     }
 
     return true;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (stepTransitionRef.current || isSubmitting) return;
     if (!validateCurrentStep()) return;
     if (safeCurrentStep < steps.length - 1) {
+      const isStandardUpdate = revisionStatus?.status !== 'Revision';
+      if (isStandardUpdate) {
+        stepTransitionRef.current = true;
+        setIsStepTransitioning(true);
+        await new Promise(resolve => window.setTimeout(resolve, 700));
+      }
       setCurrentStep(safeCurrentStep + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToFormTop();
+      if (isStandardUpdate) {
+        stepTransitionRef.current = false;
+        setIsStepTransitioning(false);
+      }
     }
   };
 
   const handleBack = () => {
     if (safeCurrentStep > 0) {
       setCurrentStep(safeCurrentStep - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToFormTop();
     }
   };
 
   const handleCancelToChoice = () => {
     if (!canReturnToChoicePage) return;
     handleChangeType();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToFormTop();
   };
 
   const registerCatalogItem = useCallback((domain, item) => {
     if (!item?.id || String(item.id) === 'undefined') return;
+    setUpdateReviewConfirmed(false);
+    setReviewConfirmationError(false);
     setRecordDraft((previous) => {
       const domainItems = previous.catalogRegistry?.[domain] || {};
       if (domainItems[String(item.id)]?.name === (item.name || item.allergen || item.allergy)) return previous;
@@ -349,21 +481,30 @@ const RecordUpdateForm = ({
 
   const handleEdit = (step) => {
     setCurrentStep(step);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToFormTop();
   };
 
   const handleSubmit = async () => {
-    if (reviewHasUnresolvedChoices) return;
-    // Check for an existing Pending ticket first and warn the patient before cancelling it
-    try {
-      const existing = await getUpdateTicketStatus();
-      if (existing?.status === 'Pending') {
-        setPendingWarning({ scope: existing.scope });
-        return; // stop here — wait for patient to confirm or cancel
-      }
-    } catch {
-      // If we can't check, just proceed — ensureNoActiveTicket will handle it
+    if (sessionChanged || !isCurrentPatientSession()) return;
+    if (formData.profileType === 'Student' && revisionStatus?.status !== 'Revision' && !updateReviewConfirmed) {
+      const reviewStepIndex = steps.indexOf('Review & Submit');
+      setReviewConfirmationError(true);
+      setValidationErrors([{ section: 'Review & Submit', sectionIndex: reviewStepIndex, message: 'Review the complete record and confirm it before submitting.' }]);
+      setShowValidationModal(true);
+      scrollToFormTop();
+      return;
     }
+    if (reviewHasUnresolvedChoices) return;
+    if (!skipPersonalSubmit && !skipPersonalStep) {
+      const lengthErrors = getPersonalLengthErrors();
+      if (lengthErrors.length) {
+        setValidationErrors(lengthErrors);
+        setShowValidationModal(true);
+        return;
+      }
+    }
+    // submitUpdateRecord performs the authoritative ticket check immediately before writes.
+    // Avoid a duplicate status request here; backend ticket guards still reject concurrent updates.
     await doSubmit();
   };
 
@@ -383,7 +524,9 @@ const RecordUpdateForm = ({
         const lower = msg.toLowerCase();
 
         // Handle ticket-related errors
-        if (lower.includes('already in progress') || lower.includes('cannot cancel update ticket')) {
+        if (lower === 'file_not_found') {
+          errors.push({ section: 'Dental History', sectionIndex: steps.indexOf('Dental History'), message: 'A dental photo is unavailable. Please upload both teeth photos again and retry.' });
+        } else if (lower.includes('already in progress') || lower.includes('cannot cancel update ticket')) {
           errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A previous submission is still being processed. Please wait a moment and try again.' });
         } else if (lower.includes('invalid input value for enum') || lower.includes('invalid value')) {
           errors.push({ section: 'Submission Error', sectionIndex: null, message: 'One or more fields contain invalid values. Please review your selections and try again.' });
@@ -393,12 +536,19 @@ const RecordUpdateForm = ({
           errors.push({ section: 'Submission Error', sectionIndex: null, message: 'This record has already been submitted.' });
         } else if (lower.includes('invalid input syntax') || /\bdate\b/.test(lower) || /\btimestamp\b/.test(lower)) {
           errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A date field contains an invalid value. Please check and re-enter date fields.' });
+        } else if (lower.includes('revision scope has changed')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'This revision form is out of date. Reload the form and try again.' });
+        } else if (lower.includes('required records are missing or incomplete')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Some required record details are missing. Review the form and complete the required fields before submitting.' });
         } else if (lower.includes('unauthorized') || error.status === 401 || error.response?.status === 401) {
           errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your session has expired. Please log out and log back in, then try again.' });
         } else if (lower === 'database error' || lower.startsWith('database error') || lower.includes('internal server error')) {
           // Suppress generic messages
+        } else if (lower.includes('stored records could not be loaded') || lower.includes('database error') || lower.includes('internal server error')) {
+          // Keep database details and generic GraphQL internals out of the patient UI.
         } else {
-          errors.push({ section: 'Submission Error', sectionIndex: null, message: msg });
+          // Only surface known domain-level errors. Unknown GraphQL messages may include
+          // implementation details, so they fall through to the safe message below.
         }
       });
     } else if (error.response?.status === 401) {
@@ -407,43 +557,43 @@ const RecordUpdateForm = ({
       errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Access denied. You may not have permission to submit this form.' });
     } else if (error.response?.status >= 500) {
       errors.push({ section: 'Submission Error', sectionIndex: null, message: 'The server encountered an unexpected error. Please try again in a moment.' });
-    } else if (error.message) {
+    } else if (error.message && !error.message.toLowerCase().includes('stored records could not be loaded')) {
       errors.push({ section: 'Submission Error', sectionIndex: null, message: error.message });
     } else {
       errors.push({ section: 'Submission Error', sectionIndex: null, message: 'An unexpected error occurred. Please check your inputs and try again.' });
     }
 
     if (errors.length === 0) {
-      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your submission could not be completed. Please review your inputs and try again.' });
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'We couldn’t save your update. Your information has not been confirmed as submitted. Please try again. If this continues, contact support.' });
     }
 
     return errors;
   };
 
   const doSubmit = async () => {
+    if (sessionChanged || !isCurrentPatientSession()) return;
     setIsSubmitting(true);
     const resolvedRecordType = effectiveRecordType || 'both';
-    
+
     try {
-      console.log('[RecordUpdateForm] ==================== STARTING SUBMISSION ====================');
-      console.log('[RecordUpdateForm] Record Type:', resolvedRecordType);
-      console.log('[RecordUpdateForm] Form Data:', formData);
 
       // Submit all records (this creates ticket FIRST, then personal info, then medical/dental)
-      console.log('[RecordUpdateForm] Submitting all records...');
+
       const results = await submitUpdateRecord(formData, resolvedRecordType, {
         skipPersonalUpdate: Boolean(skipPersonalSubmit || skipPersonalStep),
+        revisionTicketId: revisionStatus?.status === 'Revision' ? revisionStatus.id : null,
       });
-      console.log('[RecordUpdateForm] ✅ Records submitted successfully:', results);
-      
+
+      clearRecordFormDraft(draftFlow);
+      setActiveTicket({ id: results.ticketId, status: results.finalStatus || 'Pending', scope: { medical: 'Medical', dental: 'Dental', both: 'Both' }[resolvedRecordType] });
+
       // Show success modal!
       const recordTypeLabel = resolvedRecordType === 'both' ? 'Medical and Dental' : resolvedRecordType === 'medical' ? 'Medical' : 'Dental';
       setSuccessMessage(recordTypeLabel);
       setShowSuccessModal(true);
-      
-      console.log('[RecordUpdateForm] ==================== SUBMISSION COMPLETE ====================');
+
     } catch (error) {
-      console.error('[RecordUpdateForm] ❌ Submission failed:', error);
+
       const parsedErrors = parseSubmissionError(error);
       setDbErrors(parsedErrors);
       setShowDbErrorModal(true);
@@ -455,11 +605,13 @@ const RecordUpdateForm = ({
   const handleSuccessModalClose = () => {
     const submittedRecordType = effectiveRecordType || recordType || null;
     setShowSuccessModal(false);
+    clearRecordFormDraft(draftFlow);
     setRecordDraft({});
     setCurrentStep(0);
     setRecordType(null);
+    setUpdateReviewConfirmed(false);
+    setReviewConfirmationError(false);
     setRevisionStatus(null);
-    setShowRevisionBanner(false);
 
     if (typeof onSubmissionSuccess === 'function') {
       onSubmissionSuccess({ recordType: submittedRecordType });
@@ -467,20 +619,25 @@ const RecordUpdateForm = ({
   };
 
   const renderStep = () => {
+    if (sessionChanged) {
+      return <p role="alert">Your sign-in changed. Reload this page before continuing.</p>;
+    }
+    if (waitingForProfile) {
+      return profileLoadStatus === 'error' ? (
+        <div role="alert">
+          <p>Your stored records could not be loaded.</p>
+          <button type="button" onClick={() => setPrefillAttempt(attempt => attempt + 1)} className="btn-secondary mt-3">Try again</button>
+        </div>
+      ) : <p role="status">Loading your saved records?</p>;
+    }
     const stepName = steps[safeCurrentStep];
-    
     switch (stepName) {
       case 'Personal Info':
-        if (waitingForProfile) {
-          return <p role="status">{profileLoadStatus === 'error'
-            ? 'Your profile could not be loaded. Refresh this page to try again.'
-            : 'Loading your profile…'}</p>;
-        }
-        return <PersonalInfoStep formData={formData} onChange={setRecordDraft} />;
+        return <PersonalInfoStep formData={formData} onChange={updateRecordDraft} />;
       case 'Medical History':
-        return <MedicalHistoryStep formData={formData} onChange={setRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
+        return <MedicalHistoryStep formData={formData} onChange={updateRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
       case 'Dental History':
-        return <DentalHistoryStep formData={formData} onChange={setRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
+        return <DentalHistoryStep formData={formData} onChange={updateRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
       case 'Review & Submit':
         return (
           <ReviewStep 
@@ -491,6 +648,12 @@ const RecordUpdateForm = ({
             onValidationStateChange={setReviewHasUnresolvedChoices}
             isRevision={revisionStatus?.status === 'Revision'}
             revisionNotes={revisionStatus?.notes || null}
+            isReviewConfirmed={updateReviewConfirmed}
+            reviewConfirmationError={reviewConfirmationError}
+            onReviewConfirmedChange={(confirmed) => {
+              setUpdateReviewConfirmed(confirmed);
+              if (confirmed) setReviewConfirmationError(false);
+            }}
           />
         );
       default:
@@ -498,23 +661,64 @@ const RecordUpdateForm = ({
     }
   };
 
-  const handleChoiceSelect = (choice) => {
+  const handleChoiceSelect = async (choice) => {
     if (hideRecordChoice) return;
     if (forceRecordType && choice !== forceRecordType) return; // only allow the forced type
+    if (ticketStatusLoading || ticketStatusError || ['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(activeTicket?.status)) return;
+    try {
+      const existing = await getUpdateTicketStatus({ strict: true });
+      if (['Pending', 'Revision', 'InProgress', 'RevisionSubmitted'].includes(existing?.status)) {
+        setActiveTicket(existing);
+        return;
+      }
+    } catch {
+      setTicketStatusError(true);
+      return;
+    }
+    clearRecordFormDraft(draftFlow);
+    setDraftRestored(false);
+    setNeedsPhotoReupload(false);
     setRecordType(choice);
     setCurrentStep(0);
     setRecordDraft({});
+    setUpdateReviewConfirmed(false);
+    setReviewConfirmationError(false);
   };
 
   const handleChangeType = () => {
     if (forceRecordType || hideRecordChoice) return;
+    clearRecordFormDraft(draftFlow);
+    setDraftRestored(false);
+    setNeedsPhotoReupload(false);
     setRecordType(null);
     setCurrentStep(0);
     setRecordDraft({});
+    setUpdateReviewConfirmed(false);
+    setReviewConfirmationError(false);
+  };
+
+  const handleStartRevision = () => {
+    if (revisionStatus?.status !== 'Revision' || isLoadingRevisionPrefill) return;
+    const scopeMap = { Medical: 'medical', Dental: 'dental', Both: 'both' };
+    const recordTypeForRevision = scopeMap[revisionStatus.scope] || 'medical';
+
+    if (!revisionDraftRestored && revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
+      setRecordDraft(previous => {
+        const merged = { ...previous, ...revisionPrefillData };
+        if (revisionPrefillData.oralAppliances?.length > 0 && merged.hasOralAppliances !== true) {
+          merged.hasOralAppliances = true;
+        }
+        return merged;
+      });
+    }
+
+    if (!forceRecordType) setRecordType(recordTypeForRevision);
+    if (!revisionDraftRestored) setCurrentStep(0);
+    scrollToFormTop();
   };
 
   return (
-    <>
+    <div ref={formRef} className="record-form-ui">
       {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -571,7 +775,7 @@ const RecordUpdateForm = ({
             {/* Button */}
             <button
               onClick={handleSuccessModalClose}
-              className="w-full px-6 py-3 bg-success-500 hover:bg-success-600 text-white font-semibold rounded-lg transition-colors"
+              className="w-full px-6 py-3 bg-success-500 hover:bg-success-600 text-secondary-900 font-semibold rounded-lg transition-colors"
             >
               Back to Updates
             </button>
@@ -601,144 +805,16 @@ const RecordUpdateForm = ({
         subtitle="Please fix the following issues before proceeding to the next step."
       />
 
-      {/* Revision Request Banner - Show if revision is pending */}
-      {showRevisionBanner && revisionStatus?.status === 'Revision' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6">
-            {/* Header */}
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-12 h-12 rounded-full bg-error-100 dark:bg-error-900/30 flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-error-600 dark:text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 4v2M7.08 6.47A9.002 9.002 0 0012 2c4.97 0 9 4.03 9 9s-4.03 9-9 9S3 16.97 3 12c0-2.395.896-4.576 2.364-6.192M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold text-secondary-900 dark:text-white mb-1">
-                  Revision Requested
-                </h2>
-                <p className="text-secondary-600 dark:text-neutral-400">
-                  The medical staff has requested you to revise your submitted record.
-                </p>
-              </div>
-            </div>
-
-            {/* Staff Notes Section */}
-            {revisionStatus?.notes && (
-              <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-xl p-4 mb-6">
-                <div className="text-sm font-semibold text-error-900 dark:text-error-200 mb-2">
-                  🔍 Staff Notes:
-                </div>
-                <p className="text-sm text-error-800 dark:text-error-300 whitespace-pre-wrap mb-0">
-                  {revisionStatus.notes}
-                </p>
-              </div>
-            )}
-
-            {/* Action Instructions */}
-            <div className="bg-primary-50 dark:bg-primary-500/10 rounded-xl p-4 mb-6 border border-primary-200 dark:border-primary-500/30">
-              <ol className="text-sm text-secondary-700 dark:text-neutral-300 space-y-2 list-decimal list-inside">
-                <li>Review the notes above carefully</li>
-                <li>Edit the required sections if needed</li>
-                <li>Submit your revised record for re-review</li>
-              </ol>
-            </div>
-
-            {/* Button */}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowRevisionBanner(false)}
-                className="px-5 py-2.5 rounded-lg font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
-              >
-                Close
-              </button>
-              <button
-                disabled={isLoadingRevisionPrefill}
-                onClick={() => {
-                  setShowRevisionBanner(false);
-                  // Map scope to recordType: Medical→medical, Dental→dental, Both→both
-                  const scopeMap = {
-                    'Medical': 'medical',
-                    'Dental': 'dental',
-                    'Both': 'both'
-                  };
-                  const recordTypeForRevision = scopeMap[revisionStatus?.scope] || 'medical';
-                  
-                  // Merge pre-filled revision data into form
-                  if (revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
-                    console.log('[RecordUpdateForm] Merging pre-fill data into form');
-                    setRecordDraft(prev => {
-                      // Ensure toggle states match pre-filled data presence
-                      const merged = { ...prev, ...revisionPrefillData };
-                      
-                      // If we have pre-filled oral appliances, set the toggle to true
-                      if (revisionPrefillData.oralAppliances?.length > 0 && merged.hasOralAppliances !== true) {
-                        merged.hasOralAppliances = true;
-                      }
-                      
-                      // If we have pre-filled dental procedures, we'll sync with the local state via useEffect
-                      
-                      return merged;
-                    });
-                  }
-
-                  if (!forceRecordType) {
-                    setRecordType(recordTypeForRevision);
-                  }
-                  setCurrentStep(0);
-                }}
-                className="px-5 py-2.5 rounded-lg font-semibold bg-primary-500 hover:bg-primary-600 text-white transition-colors"
-              >
-                Start Revision
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pending Warning Modal (existing) */}
-      {pendingWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-xl max-w-md w-full p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-10 h-10 rounded-full bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-secondary-800 dark:text-white mb-1">
-                  Existing Request Found
-                </h3>
-                <p className="text-sm text-secondary-600 dark:text-neutral-300">
-                  You already have a <strong>{pendingWarning.scope}</strong> update request that is currently pending staff review.
-                </p>
-                <p className="text-sm text-secondary-600 dark:text-neutral-300 mt-2">
-                  If you continue, your existing <strong>{pendingWarning.scope}</strong> request will be <span className="text-error-600 dark:text-error-400 font-semibold">cancelled</span> and replaced with this new submission.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end mt-6">
-              <button
-                onClick={() => setPendingWarning(null)}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
-              >
-                Keep Old Request
-              </button>
-              <button
-                onClick={() => { setPendingWarning(null); doSubmit(); }}
-                className="px-4 py-2 rounded-lg text-sm font-semibold bg-error-500 hover:bg-error-600 text-white transition-colors"
-              >
-                Cancel Old &amp; Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {shouldShowRecordChoice ? (
         <RecordChoicePage
           onSelect={handleChoiceSelect}
           disabledChoiceIds={forceRecordType === 'both' ? ['medical', 'dental'] : []}
+          activeTicket={activeTicket}
+          statusLoading={ticketStatusLoading}
+          statusError={ticketStatusError}
+          onRetryStatus={syncRevisionStatus}
+          onStartRevision={handleStartRevision}
+          revisionLoading={isLoadingRevisionPrefill}
         />
       ) : (
         <div className="max-w-5xl mx-auto px-4">
@@ -751,36 +827,51 @@ const RecordUpdateForm = ({
             </div>
           )}
           {/* Header Section */}
-          <div className="rounded-2xl p-6 mb-6 bg-primary-500">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="record-form-header sticky top-0 z-30 rounded-2xl mb-5 pb-2">
+            <div className="px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-2">
+              <div className="p-2 bg-primary-100 dark:bg-primary-800 rounded-xl">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>
+                <h1 className="text-lg sm:text-xl font-bold" style={{ margin: 0 }}>
                   Update {effectiveRecordType === 'medical' ? 'Medical Record' : effectiveRecordType === 'dental' ? 'Dental Record' : 'Medical & Dental Record'}
                 </h1>
-                <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>
+                <p className="text-sm" style={{ margin: 0 }}>
                   Keep your health information up-to-date
                 </p>
               </div>
               {effectiveRecordType && !forceRecordType && !hideRecordChoice && (
                 <button
+                  type="button"
                   onClick={handleChangeType}
-                  className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="min-h-11 text-sm font-semibold border border-primary-700/20 bg-primary-50 dark:border-primary-400/30 dark:bg-primary-900 px-3 py-2 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-800 transition-colors"
                 >
                   Cancel
                 </button>
               )}
             </div>
+            <ProgressStepper currentStep={safeCurrentStep} steps={steps} scrollContainerRef={formRef} compact />
+            {revisionStatus?.status === 'Revision' && revisionStatus?.notes && (
+              <div className="mx-4 sm:mx-6 mb-2 px-3 py-2 border border-primary-200 bg-primary-50 dark:border-primary-700 dark:bg-neutral-800 rounded-xl flex items-start gap-3">
+                <svg className="w-4 h-4 text-secondary-800 dark:text-primary-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-secondary-900 dark:text-primary-200 uppercase tracking-wide">Staff Note</p>
+                  <p className="text-sm text-secondary-800 dark:text-neutral-200 mt-1 whitespace-pre-wrap break-words max-h-28 overflow-y-auto">{revisionStatus.notes}</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Progress Stepper */}
-          <div className="mb-6">
-            <ProgressStepper currentStep={safeCurrentStep} steps={steps} />
-          </div>
+          {draftRestored && (
+            <p role="status" className="-mt-3 mb-4 text-sm text-secondary-600 dark:text-neutral-300">
+              <strong className="text-primary-700 dark:text-primary-300">Saved draft restored.</strong> Your entries were recovered from this browser tab.
+              {needsPhotoReupload && <span className="block mt-1">Please upload dental photos again if you had added them before refreshing.</span>}
+            </p>
+          )}
 
           {/* Form Content */}
           <div className="mb-6">
@@ -788,7 +879,7 @@ const RecordUpdateForm = ({
           </div>
 
           {/* Navigation Buttons */}
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl px-6 py-3 shadow-md border border-neutral-200 dark:border-neutral-700">
+          <div className="record-form-footer sticky bottom-0 z-10 bg-white dark:bg-neutral-900 rounded-2xl px-4 sm:px-6 py-3 shadow-sm border border-neutral-200 dark:border-neutral-700">
             <div className="flex justify-between items-center">
               <button
                 onClick={backButtonState.action === 'cancel-to-choice' ? handleCancelToChoice : handleBack}
@@ -805,13 +896,13 @@ const RecordUpdateForm = ({
                 {backButtonState.label}
               </button>
 
-              <span className="text-sm text-neutral-500 dark:text-neutral-400 hidden sm:block">
+              <span className="text-sm text-neutral-500 dark:text-neutral-400">
                 Step {steps.length > 0 ? safeCurrentStep + 1 : 0} of {steps.length}
               </span>
 
               <button
                 onClick={safeCurrentStep === steps.length - 1 ? handleSubmit : handleNext}
-                disabled={waitingForProfile || isSubmitting || (safeCurrentStep === steps.length - 1 && reviewHasUnresolvedChoices)}
+                disabled={waitingForProfile || isSubmitting || isStepTransitioning || (safeCurrentStep === steps.length - 1 && reviewHasUnresolvedChoices)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg 
                          transition-all duration-200
                          disabled:opacity-50 disabled:cursor-not-allowed"
@@ -824,6 +915,8 @@ const RecordUpdateForm = ({
                     </svg>
                     <span>Submitting...</span>
                   </>
+                ) : isStepTransitioning ? (
+                  <span>Continuing...</span>
                 ) : safeCurrentStep === steps.length - 1 ? (
                   <span>Submit</span>
                 ) : (
@@ -839,7 +932,7 @@ const RecordUpdateForm = ({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

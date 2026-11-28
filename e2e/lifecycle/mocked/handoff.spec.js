@@ -55,7 +55,7 @@ for (const [index, definition] of scenarios.entries()) {
       if (assigned.action === 'revise') {
         current.status = 'Revision';
         current.manifest = structuredClone(current.manifest);
-        current.manifest.record.medicalHistory.notes = 'Revised QA medical note';
+        current.manifest.record.medicalHistory.conditions[0].description = 'Revised QA condition';
         current.status = 'RevisionSubmitted';
         expect(current.manifest.record.medicationProfile).toEqual(unchanged);
       }

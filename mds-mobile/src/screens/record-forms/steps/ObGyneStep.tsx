@@ -17,7 +17,7 @@ interface Props {
 
 export const ObGyneStep: React.FC<Props> = ({ formData, onUpdate, isDark }) => {
   const ob = formData.obgyne ?? {
-    lastMenstrualPeriod: '', menstruationDuration: '', menarcheYearAge: '', padsPerDay: '', dysmenorrhea: '',
+    lastMenstrualPeriod: '', menstruationDuration: '', dysmenorrhea: '',
   };
 
   const inputStyle = [styles.input, {
@@ -63,32 +63,6 @@ export const ObGyneStep: React.FC<Props> = ({ formData, onUpdate, isDark }) => {
           value={ob.menstruationDuration}
           onChangeText={v => onUpdate({ menstruationDuration: v })}
           placeholder="e.g. 5"
-          keyboardType="numeric"
-          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-        />
-
-        {/* Menarche Year/Age */}
-        <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900], marginTop: 20 }]}>
-          Menarche Year / Age
-        </Text>
-        <TextInput
-          style={inputStyle}
-          value={ob.menarcheYearAge}
-          onChangeText={v => onUpdate({ menarcheYearAge: v })}
-          placeholder="e.g. 12"
-          keyboardType="numeric"
-          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-        />
-
-        {/* Pads per Day */}
-        <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900], marginTop: 20 }]}>
-          Pads per Day
-        </Text>
-        <TextInput
-          style={inputStyle}
-          value={ob.padsPerDay}
-          onChangeText={v => onUpdate({ padsPerDay: v })}
-          placeholder="e.g. 3"
           keyboardType="numeric"
           placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
         />

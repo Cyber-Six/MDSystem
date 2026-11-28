@@ -1,0 +1,107 @@
+.record-review-sections {
+  @apply grid gap-4 sm:gap-5;
+}
+
+.record-review-empty {
+  @apply hidden rounded-xl border border-neutral-200 bg-white p-4 text-sm text-secondary-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300;
+}
+
+.record-review-sections:empty + .record-review-empty {
+  display: block;
+}
+
+.record-review-card {
+  @apply min-w-0 rounded-2xl border border-t-[3px] border-neutral-200 border-t-primary-500 bg-white px-4 py-3 dark:border-neutral-700 dark:border-t-primary-600 dark:bg-neutral-800 sm:px-6 sm:py-4;
+}
+
+.record-review-card-header {
+  @apply flex min-h-12 flex-wrap items-center justify-between gap-x-4 border-b-2 border-primary-400 pb-1 dark:border-primary-500;
+}
+
+.record-review-card-header h3 {
+  @apply m-0 py-2 text-lg font-semibold text-secondary-900 dark:text-neutral-100;
+}
+
+.record-review-card-body {
+  @apply flex min-w-0 flex-col gap-3 pt-3;
+}
+
+.record-review-edit {
+  @apply inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-primary-950 hover:bg-primary-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600 dark:text-primary-300 dark:hover:bg-primary-900/25 dark:focus-visible:outline-primary-300;
+}
+
+.record-review-group {
+  @apply min-w-0 rounded-lg border border-neutral-200 p-3 dark:border-neutral-700;
+}
+
+.record-review-group h4 {
+  @apply mb-2 mt-0 text-sm font-semibold text-primary-900 dark:text-primary-300;
+}
+
+.record-review-row {
+  @apply grid min-w-0 gap-x-4 gap-y-1 border-b border-neutral-200 py-2 text-sm leading-6 dark:border-neutral-600 sm:grid-cols-3;
+}
+
+.record-review-row dt {
+  @apply m-0 font-medium text-secondary-800 dark:text-neutral-100;
+}
+
+.record-review-row dd {
+  @apply m-0 min-w-0 whitespace-pre-wrap text-secondary-900 dark:text-neutral-100 sm:col-span-2;
+  overflow-wrap: anywhere;
+}
+
+.record-review-note {
+  @apply mb-0 mt-2 border-b border-neutral-200 pb-2 dark:border-neutral-600;
+}
+
+.record-review-note dt {
+  @apply text-xs font-semibold text-secondary-600 dark:text-neutral-300;
+}
+
+.record-review-note dd {
+  @apply m-0 mt-1 whitespace-pre-wrap text-sm leading-6 text-secondary-900 dark:text-neutral-100;
+  overflow-wrap: anywhere;
+}
+
+.record-review-chip {
+  @apply inline-flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+  overflow-wrap: anywhere;
+}
+
+.record-review-chip[data-tone='condition'] {
+  @apply bg-error-100 text-error-800 dark:bg-error-900/50 dark:text-error-200;
+}
+
+.record-review-allergies .record-review-chip[data-tone='condition'] {
+  background-color: #ffe1e2;
+  color: #991b1b;
+}
+
+.record-review-allergies .record-review-note {
+  @apply mt-4;
+}
+
+.record-review-allergies .record-review-note dt {
+  @apply uppercase;
+}
+
+.record-review-chip[data-tone='vaccine'] {
+  @apply bg-success-100 text-success-800 dark:bg-success-900/50 dark:text-success-200;
+}
+
+.record-review-chip[data-tone='appliance'] {
+  @apply bg-accent-100 text-accent-800 dark:bg-accent-900/50 dark:text-accent-200;
+}
+
+.record-review-chip[data-tone='procedure'] {
+  @apply bg-warning-100 text-warning-800 dark:bg-warning-900/50 dark:text-warning-200;
+}
+
+.record-review-chip[data-tone='medication'] {
+  @apply bg-accent-100 text-accent-800 dark:bg-accent-900/50 dark:text-accent-200;
+}
+
+.record-review-input {
+  @apply min-h-10 w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-base text-secondary-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 dark:focus-visible:outline-primary-300 sm:text-sm;
+}
