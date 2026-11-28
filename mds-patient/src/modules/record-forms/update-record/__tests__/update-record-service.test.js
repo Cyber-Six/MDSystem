@@ -1,10 +1,65 @@
 import { axiosRequest } from '../../../../packages-core-adapter';
-import { createImmunizationProfile, fetchUpdateRecordPrefill, getUpdateTicketStatus, mapRevisionDataToFormData, submitDentalUpdate } from '../update-record-service';
+import { createImmunizationProfile, fetchUpdateRecordPrefill, getUpdateTicketStatus, mapRevisionDataToFormData, submitDentalUpdate, submitUpdateRecord } from '../update-record-service';
 import fs from 'fs';
 import path from 'path';
 
 const { buildSchema, parse, validate } = require('../../../../../../Backend/node_modules/graphql');
 const emrSchema = buildSchema(fs.readFileSync(path.resolve(__dirname, '../../../../../../Backend/routes/emr/schema.graphql'), 'utf8'));
+
+it('sends medical update profiles in one serial GraphQL request before final submission', async () => {
+  axiosRequest.mockReset().mockImplementation(async config => {
+    const query = config.data.query;
+    if (query.includes('GetUpdateTicketStatus')) return { data: { data: { getUpdateTicket: null } } };
+    if (query.includes('CreateUpdateTicket')) return { data: { data: { createUpdateTicket: '42' } } };
+    if (query.includes('SaveRecordUpdate')) return { data: { data: {} } };
+    if (query.includes('SubmitUpdateTicket')) return { data: { data: { submitUpdateTicket: 'Pending' } } };
+    throw new Error('Unexpected request');
+  });
+  const result = await submitUpdateRecord({ sex: 'Male' }, 'medical', { skipPersonalUpdate: true });
+  const queries = axiosRequest.mock.calls.map(([config]) => config.data.query);
+  expect(queries).toHaveLength(4);
+  expect(validate(emrSchema, parse(queries[2]))).toEqual([]);
+  expect(queries[2]).toContain('createMedicalHistory');
+  expect(queries[2]).toContain('createMedicationProfile');
+  expect(queries[3]).toContain('submitUpdateTicket');
+  expect(result.finalStatus).toBe('Pending');
+});
+
+it('does not submit the ticket when a profile in the update batch fails', async () => {
+  axiosRequest.mockReset().mockImplementation(async config => {
+    const query = config.data.query;
+    if (query.includes('GetUpdateTicketStatus')) return { data: { data: { getUpdateTicket: { id: '42', status: 'Revision', scope: 'Medical' } } } };
+    if (query.includes('SaveRecordUpdate')) return { data: { data: { createMedicalHistory: null }, errors: [{ message: 'Synthetic failure' }] } };
+    throw new Error('Unexpected request');
+  });
+  await expect(submitUpdateRecord({ sex: 'Male' }, 'medical', { skipPersonalUpdate: true, revisionTicketId: '42' })).rejects.toThrow('Stored records could not be loaded');
+  expect(axiosRequest.mock.calls.some(([config]) => config.data.query.includes('SubmitUpdateTicket'))).toBe(false);
+});
+
+it.each([
+  ['dental', 'Student', 'Female', false],
+  ['both', 'Employee', 'Female', false],
+  ['both', 'Student', 'Female', true],
+])('batches %s for %s including revision=%s', async (scope, profileType, sex, revision) => {
+  const expectedScope = scope === 'both' ? 'Both' : 'Dental';
+  axiosRequest.mockReset().mockImplementation(async config => {
+    const query = config.data.query;
+    if (query.includes('GetUpdateTicketStatus')) return { data: { data: { getUpdateTicket: revision ? { id: '42', status: 'Revision', scope: expectedScope } : null } } };
+    if (query.includes('CreateUpdateTicket')) return { data: { data: { createUpdateTicket: '42' } } };
+    if (query.includes('SaveRecordUpdate')) return { data: { data: {} } };
+    if (query.includes('SubmitUpdateTicket')) return { data: { data: { submitUpdateTicket: revision ? 'RevisionSubmitted' : 'Pending' } } };
+    throw new Error('Unexpected request');
+  });
+  const result = await submitUpdateRecord({ profileType, sex }, scope, { skipPersonalUpdate: true, revisionTicketId: revision ? '42' : null });
+  const queries = axiosRequest.mock.calls.map(([config]) => config.data.query);
+  const batch = queries.find(query => query.includes('SaveRecordUpdate'));
+  expect(queries).toHaveLength(revision ? 3 : 4);
+  expect(validate(emrSchema, parse(batch))).toEqual([]);
+  expect(batch).toContain('createDentalPhotoRecord');
+  expect(batch.includes('createMedicalHistory')).toBe(scope === 'both');
+  expect(batch.includes('createObgynHistory')).toBe(scope === 'both');
+  expect(result.finalStatus).toBe(revision ? 'RevisionSubmitted' : 'Pending');
+});
 
 it('fails closed when the active ticket status read has GraphQL errors', async () => {
   axiosRequest.mockResolvedValue({ data: { data: { getUpdateTicket: null }, errors: [{ message: 'Synthetic failure' }] } });
@@ -90,4 +145,48 @@ it('restores saved negative dental answers during revision', async () => {
     oralApplianceProfile: { appliances: [] },
   });
   expect(form).toMatchObject({ hasDentalProcedures: false, hasOralAppliances: false });
+});
+
+it.each(['Student', 'Employee'])('restages saved photo IDs on every %s revision attempt', async profileType => {
+  let saveAttempts = 0;
+  axiosRequest.mockReset().mockImplementation(async config => {
+    if (config.method === 'GET') return { data: new Blob(['synthetic photo'], { type: 'image/png' }) };
+    const query = config.data.query;
+    if (query.includes('GetUpdateTicketStatus')) return { data: { data: { getUpdateTicket: { id: '42', status: 'Revision', scope: 'Dental' } } } };
+    if (query.includes('SaveRecordUpdate')) {
+      saveAttempts += 1;
+      if (saveAttempts === 1) return { data: { data: { createDentalPhotoRecord: null }, errors: [{ message: 'FILE_NOT_FOUND' }] } };
+      return { data: { data: {} } };
+    }
+    if (query.includes('SubmitUpdateTicket')) return { data: { data: { submitUpdateTicket: 'RevisionSubmitted' } } };
+    throw new Error('Unexpected request');
+  });
+  axiosRequest.post.mockReset()
+    .mockResolvedValueOnce({ data: { fileId: 'staged-upper-1' } })
+    .mockResolvedValueOnce({ data: { fileId: 'staged-lower-1' } })
+    .mockResolvedValueOnce({ data: { fileId: 'staged-upper-2' } })
+    .mockResolvedValueOnce({ data: { fileId: 'staged-lower-2' } });
+  const form = { profileType, upperTeethPhoto: { id: 'saved-upper' }, lowerTeethPhoto: { id: 'saved-lower' } };
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const submission = submitUpdateRecord(form, 'dental', { skipPersonalUpdate: true, revisionTicketId: '42' });
+    if (attempt === 1) {
+      await expect(submission).rejects.toThrow();
+      expect(axiosRequest.mock.calls.some(([config]) => config.data?.query.includes('SubmitUpdateTicket'))).toBe(false);
+    } else {
+      await expect(submission).resolves.toMatchObject({ finalStatus: 'RevisionSubmitted' });
+    }
+    const batch = axiosRequest.mock.calls.filter(([config]) => config.data?.query.includes('SaveRecordUpdate')).at(-1)[0];
+    const photoInput = Object.values(batch.data.variables).find(input => Object.hasOwn(input, 'upperTeeth'));
+    expect(photoInput).toEqual({ upperTeeth: `staged-upper-${attempt}`, lowerTeeth: `staged-lower-${attempt}` });
+  }
+  expect(form.upperTeethPhoto.id).toBe('saved-upper');
+  expect(axiosRequest.mock.calls.filter(([config]) => config.method === 'GET')).toHaveLength(4);
+});
+
+it('stops before record writes when a saved photo is unavailable', async () => {
+  axiosRequest.mockReset().mockRejectedValue(new Error('Synthetic missing file'));
+  axiosRequest.post.mockClear();
+  await expect(submitDentalUpdate({ upperTeethPhoto: { id: 'missing-photo' } })).rejects.toThrow('Please upload both teeth photos again');
+  expect(axiosRequest.post).not.toHaveBeenCalled();
+  expect(axiosRequest.mock.calls.every(([config]) => config.method === 'GET')).toBe(true);
 });

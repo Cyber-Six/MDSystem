@@ -528,7 +528,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     
     try {
       console.log('[Employee Record Form] Submitting to backend...');
-      const result = await createInitialEmployeeRecord(sanitizedData, { isRevision });
+      const result = await createInitialEmployeeRecord(sanitizedData, { isRevision, catalogs: catalogs.catalogsLoading || catalogs.catalogsError ? null : catalogs });
       console.log('[Employee Record Form] Submission successful!', result);
       clearRecordFormDraft(draftFlow);
       setSubmittedRecord(result);

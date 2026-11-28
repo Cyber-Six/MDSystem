@@ -584,7 +584,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       console.log('[Initial Medical Record Form] Submitting to backend...');
       
       // Submit to backend via GraphQL service
-      const result = await createInitialMedicalRecord(sanitizedData, { isRevision });
+      const result = await createInitialMedicalRecord(sanitizedData, { isRevision, catalogs: catalogs.catalogsLoading || catalogs.catalogsError ? null : catalogs });
       
       console.log('[Initial Medical Record Form] Submission successful!', result);
       clearRecordFormDraft(draftFlow);

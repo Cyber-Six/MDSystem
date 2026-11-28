@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { axiosRequest } from '../../../../packages-core-adapter';
 import RecordUpdateForm from '../record-update-form';
-import { fetchUpdateRevisionPrefill, fetchUpdateRecordPrefill, getUpdateRevisionStatus, getUpdateTicketStatus } from '../update-record-service';
+import { fetchUpdateRevisionPrefill, fetchUpdateRecordPrefill, getUpdateTicketStatus } from '../update-record-service';
 import { saveRecordFormDraft } from '../../record-form-draft-storage';
 
 jest.mock('../../../../packages-core-adapter', () => ({ axiosRequest: Object.assign(jest.fn(), { post: jest.fn() }) }));
@@ -12,7 +12,6 @@ jest.mock('../../../notification/notification-context', () => {
   return { usePatientNotifications: () => ({ subscribe }) };
 });
 jest.mock('../update-record-service', () => ({
-  getUpdateRevisionStatus: jest.fn().mockResolvedValue(null),
   getUpdateTicketStatus: jest.fn().mockResolvedValue(null),
   fetchUpdateRevisionPrefill: jest.fn(),
   fetchUpdateRecordPrefill: jest.fn(),
@@ -53,7 +52,7 @@ describe('approved patient opening an update', () => {
   it.each(['Pending', 'Revision', 'InProgress'])('shows the %s ticket and blocks new choices', async status => {
     getUpdateTicketStatus.mockResolvedValue({ id: '42', status, scope: 'Dental' });
     await act(async () => root.render(<RecordUpdateForm />));
-    expect(container.textContent).toContain('Your dental update is');
+    expect(container.textContent).toContain(status === 'Revision' ? 'Corrections requested' : status === 'Pending' ? 'Awaiting staff review' : 'Update in progress');
     expect(container.querySelectorAll('button')).toBeTruthy();
     expect([...container.querySelectorAll('button')].some(button => button.textContent.includes('Medical Update'))).toBe(false);
     expect(fetchUpdateRecordPrefill).not.toHaveBeenCalled();
@@ -175,7 +174,7 @@ describe('approved patient opening an update', () => {
   it('waits for the update draft before starting a revision', async () => {
     const notes = 'Please update your emergency contact.';
     let resolvePrefill;
-    getUpdateRevisionStatus.mockResolvedValueOnce({ id: '12', status: 'Revision', scope: 'Both', notes });
+    getUpdateTicketStatus.mockResolvedValueOnce({ id: '12', status: 'Revision', scope: 'Both', notes });
     fetchUpdateRevisionPrefill.mockReturnValueOnce(new Promise(resolve => { resolvePrefill = resolve; }));
     axiosRequest.post.mockResolvedValueOnce({ data: { data: { getMyProfile: employee } } });
 
@@ -206,7 +205,7 @@ describe('approved patient opening an update', () => {
 
   it('restores a revision draft without replacing it with the older prefill', async () => {
     localStorage.setItem('patient_refreshToken', 'synthetic-user:device:token');
-    getUpdateRevisionStatus.mockResolvedValueOnce({ id: '12', status: 'Revision', scope: 'Medical', notes: 'Please update your contact.' });
+    getUpdateTicketStatus.mockResolvedValueOnce({ id: '12', status: 'Revision', scope: 'Medical', notes: 'Please update your contact.' });
     fetchUpdateRevisionPrefill.mockResolvedValueOnce({ emergencyContact1Name: 'Old server contact' });
     saveRecordFormDraft('record-update-revision', {
       currentStep: 0,

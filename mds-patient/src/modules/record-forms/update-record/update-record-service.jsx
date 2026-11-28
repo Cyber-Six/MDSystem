@@ -78,7 +78,15 @@ async function sendGraphQLRequest(query, variables = {}, { strict = false } = {}
 
     // Handle GraphQL errors gracefully
     if (response.data.errors && response.data.errors.length > 0) {
-      if (strict) throw new Error('Stored records could not be loaded.');
+      if (strict) {
+        const error = new Error('Stored records could not be loaded.');
+        // Preserve the GraphQL messages for the form's safe, user-facing error mapper.
+        // Do not attach response data, variables, or extensions that may contain PHI or internals.
+        error.graphQLErrors = response.data.errors
+          .map(({ message }) => ({ message }))
+          .filter(({ message }) => typeof message === 'string' && message.length > 0);
+        throw error;
+      }
 
       // If we have partial data (field-level errors in scope-aware queries), accept it
       // This happens when querying only Dental fields but backend returns "No active profile" 
@@ -118,6 +126,7 @@ export async function getUpdateTicketStatus({ strict = false } = {}) {
         id
         status
         scope
+        notes
       }
     }
   `;
@@ -144,36 +153,7 @@ export async function getUpdateTicketStatus({ strict = false } = {}) {
  * @returns {Promise<{id, status, notes} | null>} Ticket details or null if no ticket
  */
 export async function getUpdateRevisionStatus() {
-  const query = `
-    query GetUpdateTicket {
-      getUpdateTicket {
-        id
-        status
-        scope
-        notes
-      }
-    }
-  `;
-
-  try {
-
-    const response = await sendGraphQLRequest(query, {});
-
-    if (response.getUpdateTicket) {
-      const ticket = response.getUpdateTicket;
-
-      if (ticket.status === 'Revision') {
-
-      }
-
-      return ticket;
-    }
-
-    return null;
-  } catch (error) {
-
-    return null;
-  }
+  return getUpdateTicketStatus();
 }
 
 /**
@@ -181,10 +161,12 @@ export async function getUpdateRevisionStatus() {
  * Builds a scope-specific query based on the revision scope (Medical/Dental/Both)
  * @returns {Promise<object>} Previous form data to pre-fill the revision form
  */
-export async function fetchUpdateRevisionPrefill() {
+export async function fetchUpdateRevisionPrefill(ticket = null) {
   try {
-    const ticket = await getUpdateTicketStatus();
-    return await fetchUpdatePrefill(ticket?.scope || 'Both');
+    const revisionTicket = ticket || await getUpdateTicketStatus();
+    // Revision prefill must restore photo bytes, not reuse permanent media IDs as
+    // upload IDs. Dental photo mutations promote staged uploads only.
+    return await fetchUpdatePrefill(revisionTicket?.scope || 'Both', { stageExistingPhotos: true });
   } catch {
     return {};
   }
@@ -196,7 +178,7 @@ export async function fetchUpdateRecordPrefill(recordType) {
   return fetchUpdatePrefill(scope, { approved: true });
 }
 
-async function fetchUpdatePrefill(scope, { approved = false } = {}) {
+async function fetchUpdatePrefill(scope, { approved = false, stageExistingPhotos = approved } = {}) {
   try {
     // Build query based on scope - only request fields relevant to the revision scope
     let query = `query ${approved ? 'GetApprovedUpdatePrefill' : 'GetRevisionEMRData'} {`;
@@ -281,7 +263,7 @@ async function fetchUpdatePrefill(scope, { approved = false } = {}) {
       query = query.replace(/(\bget[A-Z]\w*)(\s*\{)/g, '$1(approved: true)$2');
     }
     const response = await sendGraphQLRequest(query, {}, { strict: approved });
-    return await mapRevisionDataToFormData(response, { stageExistingPhotos: approved });
+    return await mapRevisionDataToFormData(response, { stageExistingPhotos });
   } catch (error) {
     if (approved) throw error;
     return {};
@@ -812,7 +794,7 @@ export async function cancelUpdateTicket() {
  * Creates medical history profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createMedicalHistory(formData) {
+export async function createMedicalHistory(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateMedicalHistory($input: MedicalHistoryInput!) {
       createMedicalHistory(input: $input) {
@@ -836,7 +818,7 @@ export async function createMedicalHistory(formData) {
   ];
   const input = { conditions };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createMedicalHistory;
 }
@@ -845,7 +827,7 @@ export async function createMedicalHistory(formData) {
  * Creates allergy profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createAllergyProfile(formData) {
+export async function createAllergyProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateAllergyProfile($input: AllergyProfileInput!) {
       createAllergyProfile(input: $input) {
@@ -890,7 +872,7 @@ export async function createAllergyProfile(formData) {
     notes: allergyNotes
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createAllergyProfile;
 }
@@ -899,7 +881,7 @@ export async function createAllergyProfile(formData) {
  * Creates lifestyle profile
  * Following emr-service.js pattern
  */
-export async function createLifestyle(formData) {
+export async function createLifestyle(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateLifestyle($input: LifestyleInput!) {
       createLifestyle(input: $input) {
@@ -929,7 +911,7 @@ export async function createLifestyle(formData) {
     notes: null
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createLifestyle;
 }
@@ -939,7 +921,7 @@ export async function createLifestyle(formData) {
  * NOTE: Initial record skips this due to backend bugs with null acuity
  * Following same pattern - create empty note only
  */
-export async function createVisualAcuityProfile(formData) {
+export async function createVisualAcuityProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateVisualAcuityProfile($input: VisualAcuityProfileInput!) {
       createVisualAcuityProfile(input: $input) {
@@ -968,7 +950,7 @@ export async function createVisualAcuityProfile(formData) {
       : null
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createVisualAcuityProfile;
 }
@@ -977,7 +959,7 @@ export async function createVisualAcuityProfile(formData) {
  * Creates OB-GYN history (for female patients only)
  * Following emr-service.js pattern
  */
-export async function createObgynHistory(formData) {
+export async function createObgynHistory(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateObgynHistory($input: ObgynHistoryInput!) {
       createObgynHistory(input: $input) {
@@ -1005,7 +987,7 @@ export async function createObgynHistory(formData) {
     notes: obgyneNotes
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createObgynHistory;
 }
@@ -1014,7 +996,7 @@ export async function createObgynHistory(formData) {
  * Creates immunization profile
  * Stores vaccine choices, dates, and doses.
  */
-export async function createImmunizationProfile(formData) {
+export async function createImmunizationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateImmunizationProfile($input: ImmunizationProfileInput!) {
       createImmunizationProfile(input: $input) {
@@ -1048,7 +1030,7 @@ export async function createImmunizationProfile(formData) {
     immunizations, // Vaccine objects include date and dose
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createImmunizationProfile;
 }
@@ -1057,7 +1039,7 @@ export async function createImmunizationProfile(formData) {
  * Creates hospitalization profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createHospitalizationProfile(formData) {
+export async function createHospitalizationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateHospitalizationProfile($input: HospitalizationProfileInput!) {
       createHospitalizationProfile(input: $input) {
@@ -1096,7 +1078,7 @@ export async function createHospitalizationProfile(formData) {
     notes: hospitalizationNotes.length > 0 ? hospitalizationNotes.join('; ') : null
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createHospitalizationProfile;
 }
@@ -1105,7 +1087,7 @@ export async function createHospitalizationProfile(formData) {
  * Creates operation profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createOperationProfile(formData) {
+export async function createOperationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateOperationProfile($input: OperationProfileInput!) {
       createOperationProfile(input: $input) {
@@ -1143,7 +1125,7 @@ export async function createOperationProfile(formData) {
     notes: operationNotes.length > 0 ? operationNotes.join('; ') : null
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createOperationProfile;
 }
@@ -1152,7 +1134,7 @@ export async function createOperationProfile(formData) {
  * Creates medication profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createMedicationProfile(formData) {
+export async function createMedicationProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateMedicationProfile($input: MedicationProfileInput!) {
       createMedicationProfile(input: $input) {
@@ -1189,7 +1171,7 @@ export async function createMedicationProfile(formData) {
     notes: medicationNotes.length > 0 ? medicationNotes.join('; ') : null
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createMedicationProfile;
 }
@@ -1200,7 +1182,7 @@ export async function createMedicationProfile(formData) {
  * Creates dental history
  * Following emr-service.js pattern
  */
-export async function createDentalHistory(formData) {
+export async function createDentalHistory(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateDentalHistory($input: DentalHistoryInput!) {
       createDentalHistory(input: $input) {
@@ -1222,7 +1204,7 @@ export async function createDentalHistory(formData) {
     lastVisitDate: normalizedLastVisitDate
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createDentalHistory;
 }
@@ -1231,7 +1213,7 @@ export async function createDentalHistory(formData) {
  * Creates oral appliance profile
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createOralApplianceProfile(formData) {
+export async function createOralApplianceProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateOralApplianceProfile($input: OralApplianceProfileInput!) {
       createOralApplianceProfile(input: $input) {
@@ -1258,7 +1240,7 @@ export async function createOralApplianceProfile(formData) {
     otherArch: formData.oralApplianceOtherArch || 'None'
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createOralApplianceProfile;
 }
@@ -1267,7 +1249,7 @@ export async function createOralApplianceProfile(formData) {
  * Creates dental procedure profile  
  * Following emr-service.js pattern: empty arrays + notes field
  */
-export async function createDentalProcedureProfile(formData) {
+export async function createDentalProcedureProfile(formData, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateDentalProcedureProfile($input: DentalProcedureProfileInput!) {
       createDentalProcedureProfile(input: $input) {
@@ -1290,58 +1272,81 @@ export async function createDentalProcedureProfile(formData) {
     notes: formData.dentalProcedureNotes || null
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createDentalProcedureProfile;
 }
 
 // ==================== ORCHESTRATION (Following Initial Record Pattern) ====================
 
+function createMutationCollector() {
+  const fields = [];
+  const definitions = [];
+  const variables = {};
+  const request = async (document, values) => {
+    const type = document.match(/\$input\s*:\s*([A-Za-z][A-Za-z0-9_]*!)/)?.[1];
+    const body = document.slice(document.indexOf('{') + 1, document.lastIndexOf('}')).trim();
+    const field = body.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\(/)?.[1];
+    if (!type || !field || !Object.hasOwn(values, 'input')) throw new Error('Invalid update mutation.');
+    const variableName = `input${fields.length}`;
+    definitions.push(`$${variableName}: ${type}`);
+    fields.push(body.replace(/\$input\b/g, `$${variableName}`));
+    variables[variableName] = values.input;
+    return { [field]: null };
+  };
+  const submit = () => sendGraphQLRequest(
+    `mutation SaveRecordUpdate(${definitions.join(', ')}) { ${fields.join('\n')} }`,
+    variables,
+    { strict: true }
+  );
+  return { request, submit };
+}
+
 /**
  * Submits medical update record
  * Following emr-service.js pattern: ALWAYS create all required records
  */
-export async function submitMedicalUpdate(formData) {
+export async function submitMedicalUpdate(formData, request = sendGraphQLRequest) {
 
   const results = {};
 
   try {
     // Medical History (REQUIRED by backend)
 
-    results.medicalHistory = await createMedicalHistory(formData);
+    results.medicalHistory = await createMedicalHistory(formData, request);
 
     // Allergy Profile (REQUIRED by backend)
 
-    results.allergyProfile = await createAllergyProfile(formData);
+    results.allergyProfile = await createAllergyProfile(formData, request);
 
     // Hospitalization Profile (REQUIRED by backend)
 
-    results.hospitalizationProfile = await createHospitalizationProfile(formData);
+    results.hospitalizationProfile = await createHospitalizationProfile(formData, request);
 
     // Operation Profile (REQUIRED by backend)
 
-    results.operationProfile = await createOperationProfile(formData);
+    results.operationProfile = await createOperationProfile(formData, request);
 
     // Medication Profile (REQUIRED by backend)
 
-    results.medicationProfile = await createMedicationProfile(formData);
+    results.medicationProfile = await createMedicationProfile(formData, request);
 
     // Immunization Profile (REQUIRED by backend)
 
-    results.immunizationProfile = await createImmunizationProfile(formData);
+    results.immunizationProfile = await createImmunizationProfile(formData, request);
 
     // Lifestyle
 
-    results.lifestyle = await createLifestyle(formData);
+    results.lifestyle = await createLifestyle(formData, request);
 
     // Visual Acuity Profile (REQUIRED by backend)
 
-    results.visualAcuityProfile = await createVisualAcuityProfile(formData);
+    results.visualAcuityProfile = await createVisualAcuityProfile(formData, request);
 
     // OB-GYN (Female only)
     if (formData.sex === 'Female') {
 
-      results.obgynHistory = await createObgynHistory(formData);
+      results.obgynHistory = await createObgynHistory(formData, request);
     } else {
 
     }
@@ -1357,56 +1362,61 @@ export async function submitMedicalUpdate(formData) {
  * Submits dental update record
  * Following emr-service.js pattern: ALWAYS create all required records
  */
-export async function submitDentalUpdate(formData) {
+export async function submitDentalUpdate(formData, request = sendGraphQLRequest, onStagedPhoto = () => {}) {
 
   const results = {};
   let upperTeethFileId = null;
   let lowerTeethFileId = null;
 
   try {
-    // Handle dental photos
-    // For new uploads: upload the file and get a fileId
-    // For pre-filled revisions: use the existing ID from the previous submission
+    // A saved record's ID points at permanent media, never at staging. Resolve
+    // legacy/restored IDs through the authenticated media route before uploading.
+    // Always stage fresh bytes so retries cannot reuse an already promoted ID.
+    const stagePhoto = async (photo) => {
+      if (!photo) return null;
+      let file = photo.file;
+      if (!file && photo.id) {
+        try {
+          const response = await axiosRequest({
+            method: 'GET',
+            url: `/media/record/dentalPhoto/${encodeURIComponent(photo.id)}`,
+            responseType: 'blob',
+          });
+          file = response.data;
+        } catch {
+          throw new Error('The saved dental photo could not be loaded. Please upload both teeth photos again before submitting.');
+        }
+      }
+      if (!(file instanceof Blob) || !file.size) {
+        throw new Error('Please upload both upper and lower teeth photos again before submitting.');
+      }
+      const fileId = await uploadMediaFile(file);
+      if (!fileId) throw new Error('The dental photo upload did not complete. Please try again.');
+      onStagedPhoto(fileId);
+      return fileId;
+    };
 
     // Handle upper teeth photo
-    if (formData.upperTeethPhoto?.file) {
-      // New upload
-      const result = await uploadMediaFile(formData.upperTeethPhoto.file);
-      upperTeethFileId = result;
-
-    } else if (formData.upperTeethPhoto?.id) {
-      // Pre-filled from revision - use existing photo UUID
-      upperTeethFileId = formData.upperTeethPhoto.id;
-
-    }
+    upperTeethFileId = await stagePhoto(formData.upperTeethPhoto);
 
     // Handle lower teeth photo
-    if (formData.lowerTeethPhoto?.file) {
-      // New upload
-      const result = await uploadMediaFile(formData.lowerTeethPhoto.file);
-      lowerTeethFileId = result;
-
-    } else if (formData.lowerTeethPhoto?.id) {
-      // Pre-filled from revision - use existing photo UUID
-      lowerTeethFileId = formData.lowerTeethPhoto.id;
-
-    }
+    lowerTeethFileId = await stagePhoto(formData.lowerTeethPhoto);
 
     // Dental History
 
-    results.dentalHistory = await createDentalHistory(formData);
+    results.dentalHistory = await createDentalHistory(formData, request);
 
     // Dental Procedure Profile (REQUIRED by backend)
 
-    results.dentalProcedureProfile = await createDentalProcedureProfile(formData);
+    results.dentalProcedureProfile = await createDentalProcedureProfile(formData, request);
 
     // Oral Appliance Profile (REQUIRED by backend)
 
-    results.oralApplianceProfile = await createOralApplianceProfile(formData);
+    results.oralApplianceProfile = await createOralApplianceProfile(formData, request);
 
     // Dental Photo Record (REQUIRED by backend)
 
-    results.dentalPhotoRecord = await createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId);
+    results.dentalPhotoRecord = await createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId, request);
 
     return results;
   } catch (error) {
@@ -1428,7 +1438,7 @@ export async function submitDentalUpdate(formData) {
  * @param {string|null} upperTeethFileId - Staged fileId for upper teeth
  * @param {string|null} lowerTeethFileId - Staged fileId for lower teeth
  */
-async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId) {
+async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId, request = sendGraphQLRequest) {
   const mutation = `
     mutation CreateDentalPhotoRecord($input: DentalPhotoRecordInput!) {
       createDentalPhotoRecord(input: $input) {
@@ -1445,7 +1455,7 @@ async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId) {
     lowerTeeth: lowerTeethFileId
   };
 
-  const response = await sendGraphQLRequest(mutation, { input });
+  const response = await request(mutation, { input });
 
   return response.createDentalPhotoRecord;
 }
@@ -1459,6 +1469,7 @@ export async function submitUpdateRecord(formData, recordType, options = {}) {
 
   let ticketId = null;
   let createdTicket = false;
+  const stagedPhotoIds = [];
 
   try {
     // Step 1: Check for existing update ticket
@@ -1495,22 +1506,27 @@ export async function submitUpdateRecord(formData, recordType, options = {}) {
 
     }
 
-    // Step 4: Submit medical data only when scope includes medical
+    const batch = createMutationCollector();
+
+    // Step 4: Prepare medical data only when scope includes medical
     if (recordType === 'medical' || recordType === 'both') {
-      results.medical = await submitMedicalUpdate(formData);
+      results.medical = await submitMedicalUpdate(formData, batch.request);
     }
 
     // Step 5: Submit dental data only when scope includes dental
     if (recordType === 'dental' || recordType === 'both') {
-      results.dental = await submitDentalUpdate(formData);
+      results.dental = await submitDentalUpdate(formData, batch.request, fileId => stagedPhotoIds.push(fileId));
     }
 
     // Step 6: Submit the ticket for review
+    await batch.submit();
     const finalStatus = await submitUpdateTicket();
     results.finalStatus = finalStatus;
 
     return results;
   } catch (error) {
+
+    await Promise.all(stagedPhotoIds.map(unstageMediaFile));
 
     // Try to cancel the ticket if it was created
     if (createdTicket) {

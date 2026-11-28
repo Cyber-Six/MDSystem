@@ -280,9 +280,8 @@ const registerInitialProfile = async (identifier, personalInfo, { branch } = {})
   }
 };
 
-export const createInitialMedicalRecord = async (formData, { isRevision = false } = {}) => {
+export const createInitialMedicalRecord = async (formData, { isRevision = false, catalogs = null } = {}) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)', isRevision ? '(revision)' : '(new)');
-  console.log('[EMR Service] Form data received:', formData);
 
   let ticketCreated = false;
   // profileLogCreated tracks whether a NEW log was created (not an update).
@@ -342,13 +341,12 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     const parallelError = [ticketResult, upperResult, lowerResult].find(r => r.status === 'rejected');
     if (parallelError) throw parallelError.reason;
 
-    console.log('[EMR Service] Ticket + photos ready:', { ticketId: results.ticketId, upperTeethFileId, lowerTeethFileId });
 
     // ======== REQUEST 3: Batch all create mutations + submit in one request ========
     // submitUpdateTicket is appended as the last field in the same mutation document
     // so the server processes it after all creates complete (GraphQL serial execution).
     console.log('[EMR Service] [3/3] Fetching all catalogs & sending batched mutations...');
-    const allCatalogs = await fetchAllCatalogs();
+    const allCatalogs = catalogs || await fetchAllCatalogs();
     const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
@@ -391,7 +389,7 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
  * Create a complete initial medical record for an employee
  * Same 3-phase flow as createInitialMedicalRecord but uses employeeId as identifier
  */
-export const createInitialEmployeeRecord = async (formData, { isRevision = false } = {}) => {
+export const createInitialEmployeeRecord = async (formData, { isRevision = false, catalogs = null } = {}) => {
   console.log('[EMR Service] Starting initial EMPLOYEE medical record creation (batched)', isRevision ? '(revision)' : '(new)');
 
   let ticketCreated = false;
@@ -443,11 +441,10 @@ export const createInitialEmployeeRecord = async (formData, { isRevision = false
     const parallelError = [ticketResult, upperResult, lowerResult].find(r => r.status === 'rejected');
     if (parallelError) throw parallelError.reason;
 
-    console.log('[EMR Service] Ticket + photos ready:', { ticketId: results.ticketId, upperTeethFileId, lowerTeethFileId });
 
     // ======== REQUEST 3: Batch all create mutations + submit in one request ========
     console.log('[EMR Service] [3/3] Fetching all catalogs & sending batched mutations...');
-    const allCatalogs = await fetchAllCatalogs();
+    const allCatalogs = catalogs || await fetchAllCatalogs();
     const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
