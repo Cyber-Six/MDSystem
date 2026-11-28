@@ -51,6 +51,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
   // Revision form
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const [revisionNote, setRevisionNote] = useState('');
+  const revisionReasonRef = useRef(null);
 
   // Edit state per section
   const [editingSections, setEditingSections] = useState({});
@@ -177,6 +178,14 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const openRevisionForm = () => {
+    setShowRevisionForm(true);
+    requestAnimationFrame(() => {
+      revisionReasonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      revisionReasonRef.current?.focus({ preventScroll: true });
+    });
   };
 
   // ── Derived render values ───────────────────────────────────────────────────
@@ -476,6 +485,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                   </div>
                   <div className="p-4">
                     <textarea
+                      ref={revisionReasonRef}
                       value={revisionNote}
                       onChange={(e) => { setRevisionNote(e.target.value); setActionError(''); }}
                       rows={3}
@@ -542,7 +552,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               </button>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => setShowRevisionForm(true)}
+                  onClick={openRevisionForm}
                   disabled={actionLoading || loading || Boolean(fetchError)}
                   className="px-4 py-2 text-sm font-medium text-white bg-warning-500 hover:bg-warning-600 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
                 >

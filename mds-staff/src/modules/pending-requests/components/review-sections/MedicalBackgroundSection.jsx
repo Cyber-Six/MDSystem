@@ -5,6 +5,20 @@ const NoEntries = ({ children }) => (
   <p className="m-0 text-sm text-secondary-600 dark:text-neutral-300">{children}</p>
 );
 
+const groupedNotes = (items, sharedNote, getName) => {
+  const groups = new Map();
+  const keyOf = (value) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').toLowerCase() : '';
+  const sharedKey = keyOf(sharedNote);
+  items.forEach((item) => {
+    const key = keyOf(item.notes);
+    if (!key || key === sharedKey) return;
+    const group = groups.get(key) || { value: item.notes, names: [] };
+    group.names.push(getName(item));
+    groups.set(key, group);
+  });
+  return [...groups.values()];
+};
+
 const visualDetailsFromNotes = (notes) => {
   const prefix = 'VA_META::';
   if (typeof notes !== 'string' || !notes.startsWith(prefix)) return null;
@@ -54,9 +68,11 @@ const MedicalBackgroundSection = ({
   const getOriginal = (key, current) =>
     editedFields[key] !== undefined ? current : undefined;
 
-  const showSmokingDetails = !isEditing || getVal('smoker', lifestyle?.smoker ? 'Yes' : 'No') === 'Yes';
-  const showAlcoholDetails = !isEditing || getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : 'No') === 'Yes';
   const showVapingDetails = !isEditing || getVal('vaper', lifestyle?.vapeUser ? 'Yes' : 'No') === 'Yes';
+  const yesNo = (value) => value == null ? '' : value ? 'Yes' : 'No';
+  const smokerDisplay = `${yesNo(lifestyle?.smoker)}${lifestyle?.smoker && [lifestyle.numberOfCigarettesPerDay && `${lifestyle.numberOfCigarettesPerDay} sticks/day`, lifestyle.yearsSmoked && `${lifestyle.yearsSmoked} years`].filter(Boolean).length ? ` (${[lifestyle.numberOfCigarettesPerDay && `${lifestyle.numberOfCigarettesPerDay} sticks/day`, lifestyle.yearsSmoked && `${lifestyle.yearsSmoked} years`].filter(Boolean).join(', ')})` : ''}`;
+  const alcoholDisplay = `${yesNo(lifestyle?.alcoholConsumer)}${lifestyle?.alcoholConsumer && lifestyle.frequencyOfAlcoholConsumption ? ` (${lifestyle.frequencyOfAlcoholConsumption})` : ''}`;
+  const vaperDisplay = `${yesNo(lifestyle?.vapeUser)}${lifestyle?.vapeUser && [lifestyle.vapeType, lifestyle.vapeFrequency].filter(Boolean).length ? ` (${[lifestyle.vapeType, lifestyle.vapeFrequency].filter(Boolean).join(', ')})` : ''}`;
 
   const getCatalogName = (catalog, id, nameField = 'name') => {
     if (!catalog?.length || id === undefined || id === null) return null;
@@ -69,6 +85,10 @@ const MedicalBackgroundSection = ({
   const hospitalizations = hospitalizationProfile?.hospitalizations ?? [];
   const operations = operationProfile?.operations ?? [];
   const medications = medicationProfile?.medications ?? [];
+  const allergyNotes = groupedNotes(allergies, allergyProfile?.notes, item => catalogs.allergenCatalog?.find(entry => String(entry.id) === String(item.allergenCatalogId))?.allergen || 'Unresolved choice');
+  const hospitalizationNotes = groupedNotes(hospitalizations, hospitalizationProfile?.notes, item => getCatalogName(catalogs.hospitalizationCatalog, item.conditionId) || 'Unresolved choice');
+  const operationNotes = groupedNotes(operations, operationProfile?.notes, item => getCatalogName(catalogs.operationCatalog, item.procedureId) || 'Unresolved choice');
+  const medicationReasons = groupedNotes(medications.map(item => ({ ...item, notes: item.description })), null, item => getCatalogName(catalogs.medicationCatalog, item.medicineId) || 'Unresolved choice');
 
   const showLifestyle = [lifestyle?.smoker, lifestyle?.alcoholConsumer, lifestyle?.vapeUser, lifestyle?.notes,
     lifestyle?.numberOfCigarettesPerDay, lifestyle?.yearsSmoked, lifestyle?.frequencyOfAlcoholConsumption,
@@ -101,17 +121,18 @@ const MedicalBackgroundSection = ({
         ) : <NoEntries>No immunizations recorded for this ticket.</NoEntries>}
       </ReviewGroup>
 
-      <ReviewGroup title="Allergies">
+      <ReviewGroup title="Allergies" className="record-review-group record-review-allergies">
         {allergies.length > 0 ? (
           <>
             <dl><DataRow label="Has Allergies" value={true} /></dl>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <p className="mb-1 mt-2 text-sm text-secondary-900 dark:text-neutral-100">Selected Allergies</p>
+            <div className="flex flex-wrap gap-2">
               {allergies.map((item, index) => {
                 const allergen = catalogs.allergenCatalog?.find((entry) => String(entry.id) === String(item.allergenCatalogId));
-                const detail = [allergen?.type, item.severity, item.status, formatReviewDate(item.dateIdentified), item.notes]
-                  .filter(hasReviewValue).join(' · ');
+                const details = [allergen?.type, item.severity, item.status, formatReviewDate(item.dateIdentified)]
+                  .filter(hasReviewValue).join('; ');
                 return (
-                  <ReviewChip key={item.id ?? index} tone="condition" detail={detail} data-review-entry={`allergyProfile:${index}`}>
+                  <ReviewChip key={item.id ?? index} tone="condition" detail={details && `(${details})`} data-review-entry={`allergyProfile:${index}`}>
                     {allergen?.allergen || 'Unresolved choice'}
                   </ReviewChip>
                 );
@@ -120,6 +141,7 @@ const MedicalBackgroundSection = ({
           </>
         ) : <NoEntries>No allergy entries recorded for this ticket.</NoEntries>}
         <ReviewNote label="Allergy Notes" value={allergyProfile?.notes} />
+        {allergyNotes.map((note, index) => <ReviewNote key={index} label={`Allergy Notes (${note.names.join(', ')})`} value={note.value} />)}
       </ReviewGroup>
 
       <ReviewGroup title="Hospitalizations">
@@ -131,10 +153,10 @@ const MedicalBackgroundSection = ({
             <DataRow label={getCatalogName(catalogs.hospitalizationCatalog, item.conditionId) || 'Unresolved choice'}
               value={[item.admissionDate && `Admitted: ${formatReviewDate(item.admissionDate)}`,
                 item.dischargeDate && `Discharged: ${formatReviewDate(item.dischargeDate)}`].filter(Boolean).join(' · ') || 'Date not specified'} />
-            <DataRow label="Notes" value={item.notes} />
           </dl>
         ))}
         <ReviewNote label="Hospitalization Notes" value={hospitalizationProfile?.notes} />
+        {hospitalizationNotes.map((note, index) => <ReviewNote key={index} label={`Hospitalization Notes (${note.names.join(', ')})`} value={note.value} />)}
       </ReviewGroup>
 
       <ReviewGroup title="Surgery and Operations">
@@ -145,22 +167,27 @@ const MedicalBackgroundSection = ({
           <dl key={item.id ?? index} data-review-entry={`operationProfile:${index}`}>
             <DataRow label={getCatalogName(catalogs.operationCatalog, item.procedureId) || 'Unresolved choice'}
               value={formatReviewDate(item.operationDate) || 'Date not specified'} />
-            <DataRow label="Notes" value={item.notes} />
           </dl>
         ))}
         <ReviewNote label="Operation Notes" value={operationProfile?.notes} />
+        {operationNotes.map((note, index) => <ReviewNote key={index} label={`Operation Notes (${note.names.join(', ')})`} value={note.value} />)}
       </ReviewGroup>
 
       <ReviewGroup title="Medications">
         {medications.length > 0
           ? <dl><DataRow label="Maintenance Medications" value={true} /></dl>
           : <NoEntries>No medications recorded for this ticket.</NoEntries>}
-        {medications.map((item, index) => (
-          <dl key={item.id ?? index} data-review-entry={`medicationProfile:${index}`}>
-            <DataRow label="Medication" value={getCatalogName(catalogs.medicationCatalog, item.medicineId) || 'Unresolved choice'} />
-            <DataRow label="Medication Reason" value={item.description} />
-          </dl>
-        ))}
+        {medications.length > 0 && <>
+          <p className="mb-1 mt-2 text-sm text-secondary-900 dark:text-neutral-100">Selected Medications</p>
+          <div className="flex flex-wrap gap-2">
+            {medications.map((item, index) => (
+              <ReviewChip key={item.id ?? index} tone="medication" data-review-entry={`medicationProfile:${index}`}>
+                {getCatalogName(catalogs.medicationCatalog, item.medicineId) || 'Unresolved choice'}
+              </ReviewChip>
+            ))}
+          </div>
+        </>}
+        {medicationReasons.map((reason, index) => <ReviewNote key={index} label={`Medication Reason (${reason.names.join(', ')})`} value={reason.value} />)}
         <ReviewNote label="Medication Notes" value={medicationProfile?.notes} />
       </ReviewGroup>
 
@@ -172,68 +199,31 @@ const MedicalBackgroundSection = ({
           <dl className="space-y-0">
             <EditableField
               label="Smoker"
-              value={getVal('smoker', lifestyle?.smoker == null ? '' : lifestyle.smoker ? 'Yes' : 'No')}
+              value={isEditing ? getVal('smoker', yesNo(lifestyle?.smoker)) : smokerDisplay}
               originalValue={getOriginal('smoker', lifestyle?.smoker == null ? '' : lifestyle.smoker ? 'Yes' : 'No')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('smoker', v)}
               type="select"
               options={['Yes', 'No']}
             />
-            {showSmokingDetails && <EditableField
-              label="Cigarettes/Day"
-              value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
-              originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('cigarettesPerDay', v)}
-              type="number"
-            />}
-            {showSmokingDetails && <EditableField
-              label="Years Smoked"
-              value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
-              originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('yearsSmoked', v)}
-              type="number"
-            />}
             <EditableField
-              label="Alcohol Consumer"
-              value={getVal('alcoholConsumer', lifestyle?.alcoholConsumer == null ? '' : lifestyle.alcoholConsumer ? 'Yes' : 'No')}
+              label="Alcohol Drinker"
+              value={isEditing ? getVal('alcoholConsumer', yesNo(lifestyle?.alcoholConsumer)) : alcoholDisplay}
               originalValue={getOriginal('alcoholConsumer', lifestyle?.alcoholConsumer == null ? '' : lifestyle.alcoholConsumer ? 'Yes' : 'No')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('alcoholConsumer', v)}
               type="select"
               options={['Yes', 'No']}
             />
-            {showAlcoholDetails && <EditableField
-              label="Alcohol Frequency"
-              value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
-              originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
-            />}
             <EditableField
               label="Vaper"
-              value={getVal('vaper', lifestyle?.vapeUser == null ? '' : lifestyle.vapeUser ? 'Yes' : 'No')}
+              value={isEditing ? getVal('vaper', yesNo(lifestyle?.vapeUser)) : vaperDisplay}
               originalValue={getOriginal('vaper', lifestyle?.vapeUser == null ? '' : lifestyle.vapeUser ? 'Yes' : 'No')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('vaper', v)}
               type="select"
               options={['Yes', 'No']}
             />
-            {showVapingDetails && <EditableField
-              label="Vape Type"
-              value={getVal('vapeType', lifestyle?.vapeType ?? '')}
-              originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('vapeType', v)}
-            />}
-            {showVapingDetails && <EditableField
-              label="Vape Frequency"
-              value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
-              originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
-              isEditing={isEditing}
-              onChange={(v) => onFieldChange?.('vapeFrequency', v)}
-            />}
             {showVapingDetails && <DataRow label="Years Vaping" value={lifestyle?.yearsVaping} />}
             <EditableField
               label="Lifestyle Notes"
@@ -248,34 +238,29 @@ const MedicalBackgroundSection = ({
 
         {(showAcuity || isEditing || hasAcuityEdits) && (
           <dl className="space-y-0">
-            <DataRow label="Vision Assessment" value={acuityType} />
             {visualDetails && (
               <>
                 <DataRow label="Eyeglasses" value={visualDetails.eyeglasses} />
-                <DataRow label="Eyeglasses Grade (OD)" value={visualDetails.grades?.eyeglasses?.od} />
-                <DataRow label="Eyeglasses Grade (OS)" value={visualDetails.grades?.eyeglasses?.os} />
                 <DataRow label="Contact Lenses" value={visualDetails.contactLenses} />
-                <DataRow label="Contact Lens Grade (OD)" value={visualDetails.grades?.contactLenses?.od} />
-                <DataRow label="Contact Lens Grade (OS)" value={visualDetails.grades?.contactLenses?.os} />
+                <DataRow label="Grade OD" value={visualDetails.grades?.eyeglasses?.od ?? visualDetails.grades?.contactLenses?.od} />
+                <DataRow label="Grade OS" value={visualDetails.grades?.eyeglasses?.os ?? visualDetails.grades?.contactLenses?.os} />
               </>
             )}
-            <EditableField
+            {isEditing && <DataRow label="Vision Assessment" value={acuityType} />}
+            {isEditing && <EditableField
               label="Left Eye (OS)"
               value={getVal('acuityLeft', visualAcuityProfile?.acuity?.left_eye ?? '')}
               originalValue={getOriginal('acuityLeft', visualAcuityProfile?.acuity?.left_eye ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityLeft', v)}
-            />
-            <EditableField
+            />}
+            {isEditing && <EditableField
               label="Right Eye (OD)"
               value={getVal('acuityRight', visualAcuityProfile?.acuity?.right_eye ?? '')}
               originalValue={getOriginal('acuityRight', visualAcuityProfile?.acuity?.right_eye ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityRight', v)}
-            />
-            {visualAcuityProfile?.acuity?.recorded_at && (
-              <DataRow label="Recorded" value={formatReviewDate(visualAcuityProfile.acuity.recorded_at)} />
-            )}
+            />}
             {!visualDetails && <EditableField
               label="Notes"
               value={getVal('acuityNotes', visualAcuityProfile?.acuity?.notes ?? '')}

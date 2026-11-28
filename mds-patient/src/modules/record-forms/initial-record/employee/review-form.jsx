@@ -213,9 +213,9 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
           <div className="medical-review-group"><h5>Medications</h5>
           <DataRow label="Medications" value={formData.medicalBackground?.hasMedications} />
           <DataRow label="Medication Reason" value={formData.medicalBackground?.medicationReason} />
-          {formData.medicalBackground?.hasMedications === 'Yes' && Object.entries(formData.medicalBackground?.selectedMedications || {}).filter(([, selected]) => selected).map(([id]) => (
-            <DataRow key={`medication-${id}`} label="Medication" value={getCatalogName(catalogs?.medicationCatalog, id)} />
-          ))}
+          {formData.medicalBackground?.hasMedications === 'Yes' && <div className="flex flex-wrap gap-2 py-2">{Object.entries(formData.medicalBackground?.selectedMedications || {}).filter(([, selected]) => selected).map(([id]) => (
+            <span key={`medication-${id}`} className="inline-flex rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-800 dark:bg-teal-900/30 dark:text-teal-200">{getCatalogName(catalogs?.medicationCatalog, id)}</span>
+          ))}</div>}
           <ReviewNote label="Medication Notes" value={formData.medicalBackground?.medicationNotes} />
           </div>
           <div className="medical-review-group"><h5>Daily habits and vision</h5>

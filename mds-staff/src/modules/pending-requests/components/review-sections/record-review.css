@@ -73,6 +73,19 @@
   @apply bg-error-100 text-error-800 dark:bg-error-900/50 dark:text-error-200;
 }
 
+.record-review-allergies .record-review-chip[data-tone='condition'] {
+  background-color: #ffe1e2;
+  color: #991b1b;
+}
+
+.record-review-allergies .record-review-note {
+  @apply mt-4;
+}
+
+.record-review-allergies .record-review-note dt {
+  @apply uppercase;
+}
+
 .record-review-chip[data-tone='vaccine'] {
   @apply bg-success-100 text-success-800 dark:bg-success-900/50 dark:text-success-200;
 }
@@ -83,6 +96,10 @@
 
 .record-review-chip[data-tone='procedure'] {
   @apply bg-warning-100 text-warning-800 dark:bg-warning-900/50 dark:text-warning-200;
+}
+
+.record-review-chip[data-tone='medication'] {
+  @apply bg-accent-100 text-accent-800 dark:bg-accent-900/50 dark:text-accent-200;
 }
 
 .record-review-input {

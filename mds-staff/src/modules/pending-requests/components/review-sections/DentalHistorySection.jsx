@@ -241,7 +241,7 @@ const DentalHistorySection = ({
             <div className="flex flex-wrap gap-2">
               {appliances.map((item, index) => (
                 <ReviewChip key={item.id ?? index} tone="appliance" data-review-entry={`oralApplianceProfile:${index}`}
-                  detail={[item.arch && `Location: ${item.arch}`, item.status, formatReviewDate(item.dateIssued)].filter(Boolean).join(' · ')}>
+                  detail={[item.arch && `Location: ${item.arch}`, item.status].filter(Boolean).join(' · ')}>
                   {getCatalogName(catalogs.oralApplianceCatalog, item.tagId) || 'Unresolved choice'}
                 </ReviewChip>
               ))}
@@ -261,7 +261,7 @@ const DentalHistorySection = ({
           {procedures.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {procedures.map((item, index) => (
-                <ReviewChip key={item.id ?? index} tone="procedure" detail={formatReviewDate(item.procedureDate)} data-review-entry={`dentalProcedureProfile:${index}`}>
+                <ReviewChip key={item.id ?? index} tone="procedure" data-review-entry={`dentalProcedureProfile:${index}`}>
                   {getCatalogName(catalogs.dentalProcedureCatalog, item.procedureTypeId) || 'Unresolved choice'}
                 </ReviewChip>
               ))}
