@@ -3,6 +3,8 @@ import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup, RadioBut
 import { fetchAllMedicalCatalogs } from './medical-history-service';
 import { useBanner } from '../../../context/use-banner.js';
 import { additionalCatalogItems } from '../initial-record/review-components';
+import ExpandableOptionList from '../expandable-option-list';
+import CatalogActivityOverlay from '../catalog-activity-overlay';
 import {
   searchImmunizationCatalog,
   createImmunizationCatalog,
@@ -344,33 +346,30 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
           <>
             <div className="space-y-4 mb-8">
               <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Check any conditions that apply to you:</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {medicalConditions.map((condition) => (
+              <ExpandableOptionList items={medicalConditions} isSelected={condition => !!formData.selfConditions?.[condition.id]} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" renderItem={(condition) => (
                   <Checkbox
                     key={condition.id}
                     label={condition.label}
                     checked={formData.selfConditions?.[condition.id] || false}
                     onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                   />
-                ))}
-              </div>
+                )} />
               {/* Dynamically added medical conditions from search */}
               {medicalConditionOthers.dynamicItems.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                  {additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems).map((condition) => (
+                <div className="mt-3"><ExpandableOptionList items={additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" renderItem={(condition) => (
                     <Checkbox
                       key={condition.id}
                       label={condition.name}
                       checked={formData.selfConditions?.[condition.id] || false}
                       onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                     />
-                  ))}
-                </div>
+                  )} /></div>
               )}
               {/* Search or add medical conditions */}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
-                <div ref={medicalConditionOthers.wrapperRef}>
+                <div ref={medicalConditionOthers.wrapperRef} className="relative">
+                  <CatalogActivityOverlay action={medicalConditionOthers.creating ? 'adding' : medicalConditionOthers.searching ? 'searching' : null} />
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -523,7 +522,8 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                           {/* Search or add allergens */}
                           <div className="mt-2">
                             <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Allergens (search or add):</label>
-                            <div ref={allergenOthers.wrapperRef}>
+                            <div ref={allergenOthers.wrapperRef} className="relative">
+                              <CatalogActivityOverlay action={allergenOthers.creating ? 'adding' : allergenOthers.searching ? 'searching' : null} />
                               <input
                                 type="text"
                                 className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -802,7 +802,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
           <div className="space-y-4">
             <p className="text-sm text-secondary-600 mb-4">Select vaccines you have received and provide details:</p>
             <div className="space-y-2">
-              {immunizations.map((vaccine) => {
+              <ExpandableOptionList items={immunizations} isSelected={vaccine => (formData.immunizations || []).includes(vaccine.id)} className="grid grid-cols-1 md:grid-cols-2 gap-3" renderItem={(vaccine) => {
                 const isChecked = (formData.immunizations || []).includes(vaccine.id);
                 return (
                   <div key={vaccine.id}>
@@ -839,7 +839,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     )}
                   </div>
                 );
-              })}
+              }} />
             </div>
             {/* Dynamically added vaccines from search */}
             {immunizationOthers.dynamicItems.length > 0 && (
@@ -887,7 +887,8 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
             {/* Search or add vaccines */}
             <div className="mt-4">
               <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Vaccines (search or add):</label>
-              <div ref={immunizationOthers.wrapperRef}>
+              <div ref={immunizationOthers.wrapperRef} className="relative">
+                <CatalogActivityOverlay action={immunizationOthers.creating ? 'adding' : immunizationOthers.searching ? 'searching' : null} />
                 <input
                   type="text"
                   className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -963,7 +964,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.hospitalizations.length > 0 ? (
                   <div className="space-y-2">
-                    {catalogs.hospitalizations.map((condition) => {
+                    {catalogs.hospitalizations.slice(0, 12).map((condition) => {
                       const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
                       return (
                         <div key={condition.id}>
@@ -1029,7 +1030,8 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {/* Search or add hospitalization conditions */}
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
-                  <div ref={hospitalizationOthers.wrapperRef}>
+                  <div ref={hospitalizationOthers.wrapperRef} className="relative">
+                    <CatalogActivityOverlay action={hospitalizationOthers.creating ? 'adding' : hospitalizationOthers.searching ? 'searching' : null} />
                     <input
                       type="text"
                       className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -1113,7 +1115,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
                 ) : catalogs.operations.length > 0 ? (
                   <div className="space-y-2">
-                    {catalogs.operations.map((procedure) => {
+                    {catalogs.operations.slice(0, 12).map((procedure) => {
                       const isChecked = formData.operationConditions?.[procedure.id] || false;
                       return (
                         <div key={procedure.id}>
@@ -1167,7 +1169,8 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {/* Search or add operations */}
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Operations (search or add):</label>
-                  <div ref={operationOthers.wrapperRef}>
+                  <div ref={operationOthers.wrapperRef} className="relative">
+                    <CatalogActivityOverlay action={operationOthers.creating ? 'adding' : operationOthers.searching ? 'searching' : null} />
                     <input
                       type="text"
                       className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -1249,7 +1252,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <div className="space-y-4">
                 {catalogs.medications.length > 0 ? (
                   <div className="space-y-2">
-                    {catalogs.medications.map((medicine) => {
+                    {catalogs.medications.slice(0, 12).map((medicine) => {
                       const isChecked = formData.selectedMedications?.[medicine.id] || false;
                       return (
                         <div key={medicine.id}>
@@ -1283,7 +1286,8 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 {/* Search or add medications */}
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Medications (search or add):</label>
-                  <div ref={medicationOthers.wrapperRef}>
+                  <div ref={medicationOthers.wrapperRef} className="relative">
+                    <CatalogActivityOverlay action={medicationOthers.creating ? 'adding' : medicationOthers.searching ? 'searching' : null} />
                     <input
                       type="text"
                       className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -1357,8 +1361,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               Check any conditions that apply to your immediate family members and specify the relationship:
             </p>
             
-            <div className="space-y-3">
-              {medicalConditions.map((condition) => (
+            <ExpandableOptionList items={medicalConditions} isSelected={condition => !!formData.familyConditions?.[condition.id]?.checked} className="space-y-3" renderItem={(condition) => (
                 <div 
                   key={condition.id} 
                   className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"
@@ -1379,9 +1382,9 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     </div>
                   )}
                 </div>
-              ))}
+              )} />
               {/* Dynamically added family medical conditions from search */}
-              {additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems).map((condition) => (
+              <ExpandableOptionList items={additionalCatalogItems(medicalConditions, medicalConditionOthers.dynamicItems)} className="space-y-3" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"
@@ -1402,12 +1405,12 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )} />
             {/* Search or add family medical conditions */}
             <div className="mt-4">
               <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
-              <div ref={medicalConditionOthers.wrapperRef}>
+              <div ref={medicalConditionOthers.wrapperRef} className="relative">
+                <CatalogActivityOverlay action={medicalConditionOthers.creating ? 'adding' : medicalConditionOthers.searching ? 'searching' : null} />
                 <input
                   type="text"
                   className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"

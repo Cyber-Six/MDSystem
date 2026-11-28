@@ -9,6 +9,8 @@ import {
   createAllergenCatalogEntry,
 } from '@core/services/emr-service';
 import { additionalCatalogItems } from '../review-components';
+import ExpandableOptionList from '../../expandable-option-list';
+import CatalogActivityOverlay from '../../catalog-activity-overlay';
 
 const LIFESTYLE_FREQUENCY_OPTIONS = [
   { value: 'Daily',      label: 'Daily' },
@@ -305,8 +307,7 @@ const MedicalBackgroundForm = ({
           ) : immunizationCatalog.length === 0 ? (
             <p className="text-sm text-secondary-400 italic">No predefined vaccines available from server.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-              {immunizationCatalog.map((vaccine) => (
+            <ExpandableOptionList items={immunizationCatalog} isSelected={vaccine => !!data.immunizations?.[vaccine.id]} className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4" renderItem={(vaccine) => (
                 <div key={vaccine.id} className="space-y-2">
                   <Checkbox
                     label={vaccine.name}
@@ -332,8 +333,7 @@ const MedicalBackgroundForm = ({
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )} />
           )}
           {/* Dynamically added vaccines from "Others" search — always shown */}
           {immunizationOthers.dynamicItems.length > 0 && (
@@ -369,7 +369,8 @@ const MedicalBackgroundForm = ({
           )}
           <div className="mt-4">
             <label className="block text-sm font-medium text-secondary-700 mb-1">Other Vaccines (search or add):</label>
-            <div ref={immunizationOthers.wrapperRef}>
+            <div ref={immunizationOthers.wrapperRef} className="relative">
+              <CatalogActivityOverlay action={immunizationOthers.creating ? 'adding' : immunizationOthers.searching ? 'searching' : null} />
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -572,7 +573,8 @@ const MedicalBackgroundForm = ({
               )}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 mb-1">Other Allergens (search or add):</label>
-                <div ref={allergenOthers.wrapperRef}>
+                <div ref={allergenOthers.wrapperRef} className="relative">
+                  <CatalogActivityOverlay action={allergenOthers.creating ? 'adding' : allergenOthers.searching ? 'searching' : null} />
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -720,8 +722,7 @@ const MedicalBackgroundForm = ({
                 ) : hospitalizationCatalog.length === 0 ? (
                   <p className="text-sm text-secondary-400 italic">No conditions available.</p>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                    {hospitalizationCatalog.map((condition) => (
+                  <ExpandableOptionList items={hospitalizationCatalog} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(condition) => (
                       <div key={condition.id} className="space-y-2">
                         <Checkbox
                           label={condition.name}
@@ -745,8 +746,7 @@ const MedicalBackgroundForm = ({
                           </div>
                         )}
                       </div>
-                    ))}
-                  </div>
+                    )} />
                 )}
               </div>
               {/* Dynamically added hospitalizations from "Others" search */}
@@ -781,7 +781,8 @@ const MedicalBackgroundForm = ({
               )}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 mb-1">Other Hospitalizations (search or add):</label>
-                <div ref={hospitalizationOthers.wrapperRef}>
+                <div ref={hospitalizationOthers.wrapperRef} className="relative">
+                  <CatalogActivityOverlay action={hospitalizationOthers.creating ? 'adding' : hospitalizationOthers.searching ? 'searching' : null} />
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -900,8 +901,7 @@ const MedicalBackgroundForm = ({
                 ) : operationCatalog.length === 0 ? (
                   <p className="text-sm text-secondary-400 italic">No procedures available.</p>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                    {operationCatalog.map((procedure) => (
+                  <ExpandableOptionList items={operationCatalog} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(procedure) => (
                       <div key={procedure.id} className="space-y-2">
                         <Checkbox
                           label={procedure.name}
@@ -919,8 +919,7 @@ const MedicalBackgroundForm = ({
                           </div>
                         )}
                       </div>
-                    ))}
-                  </div>
+                    )} />
                 )}
               </div>
               {/* Dynamically added operations from "Others" search */}
@@ -949,7 +948,8 @@ const MedicalBackgroundForm = ({
               )}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 mb-1">Other Operations (search or add):</label>
-                <div ref={operationOthers.wrapperRef}>
+                <div ref={operationOthers.wrapperRef} className="relative">
+                  <CatalogActivityOverlay action={operationOthers.creating ? 'adding' : operationOthers.searching ? 'searching' : null} />
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -1064,16 +1064,14 @@ const MedicalBackgroundForm = ({
                 ) : medicationCatalog.length === 0 ? (
                   <p className="text-sm text-secondary-400 italic">No medications available.</p>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                    {medicationCatalog.map((medicine) => (
+                  <ExpandableOptionList items={medicationCatalog} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2" renderItem={(medicine) => (
                       <Checkbox
                         key={medicine.id}
                         label={medicine.name}
                         checked={data.selectedMedications?.[medicine.id] || false}
                         onChange={(e) => handleCatalogToggle('selectedMedications', medicine.id, e.target.checked)}
                       />
-                    ))}
-                  </div>
+                    )} />
                 )}
               </div>
               {/* Dynamically added medications from "Others" search */}
@@ -1091,7 +1089,8 @@ const MedicalBackgroundForm = ({
               )}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 mb-1">Other Medications (search or add):</label>
-                <div ref={medicationOthers.wrapperRef}>
+                <div ref={medicationOthers.wrapperRef} className="relative">
+                  <CatalogActivityOverlay action={medicationOthers.creating ? 'adding' : medicationOthers.searching ? 'searching' : null} />
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"

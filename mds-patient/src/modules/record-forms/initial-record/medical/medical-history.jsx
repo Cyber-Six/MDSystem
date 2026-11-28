@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Checkbox, Input } from './form-elements';
 import { searchDomainCatalog, createDomainCatalog } from '@core/services/emr-service';
 import { additionalCatalogItems } from '../review-components';
+import ExpandableOptionList from '../../expandable-option-list';
+import CatalogActivityOverlay from '../../catalog-activity-overlay';
 
 const isValidCatalogId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
 
@@ -32,9 +34,15 @@ function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name', 
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
+        const query = value.trim().toLowerCase();
+        const localMatches = [...catalog, ...dynamicItems].filter(item =>
+          String(item?.[nameKey] || '').toLowerCase().includes(query));
         const results = await searchFn(value.trim());
-        const allKnown = [...catalog, ...dynamicItems];
-        setSuggestions((results || []).filter(r => !allKnown.find(k => k.id === r.id)));
+        const merged = new Map();
+        [...localMatches, ...(results || [])].forEach(item => {
+          if (item?.id && !merged.has(item.id)) merged.set(item.id, item);
+        });
+        setSuggestions([...merged.values()]);
       } catch { setSuggestions([]); }
       setSearching(false);
     }, 300);
@@ -184,8 +192,7 @@ const MedicalHistoryForm = ({
           ) : medicalConditionCatalog.length === 0 ? (
             <p className="text-sm text-secondary-400 italic">No conditions available.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {medicalConditionCatalog.map((condition) => (
+            <ExpandableOptionList items={medicalConditionCatalog} isSelected={condition => !!data.self?.[condition.id]} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -196,14 +203,12 @@ const MedicalHistoryForm = ({
                     onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                   />
                 </div>
-              ))}
-            </div>
+              )} />
           )}
 
           {/* Dynamically added conditions from search */}
           {conditionOthers.dynamicItems.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems).map((condition) => (
+            <div className="mt-4"><ExpandableOptionList items={additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems)} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -214,13 +219,13 @@ const MedicalHistoryForm = ({
                     onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
                   />
                 </div>
-              ))}
-            </div>
+              )} /></div>
           )}
           {/* Search or add conditions */}
           <div className="mt-4">
             <label className="block text-sm font-medium text-secondary-700 mb-1">Other Conditions (search or add):</label>
-            <div ref={conditionOthers.wrapperRef}>
+            <div ref={conditionOthers.wrapperRef} className="relative">
+              <CatalogActivityOverlay action={conditionOthers.creating ? 'adding' : conditionOthers.searching ? 'searching' : null} />
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm bg-white text-secondary-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -289,8 +294,7 @@ const MedicalHistoryForm = ({
           ) : medicalConditionCatalog.length === 0 ? (
             <p className="text-sm text-secondary-400 italic">No conditions available.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {medicalConditionCatalog.map((condition) => (
+            <ExpandableOptionList items={medicalConditionCatalog} isSelected={condition => !!data.family?.[condition.id]} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -311,14 +315,12 @@ const MedicalHistoryForm = ({
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )} />
           )}
 
           {/* Dynamically added conditions from search */}
           {conditionOthers.dynamicItems.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems).map((condition) => (
+            <div className="mt-4"><ExpandableOptionList items={additionalCatalogItems(medicalConditionCatalog, conditionOthers.dynamicItems)} className="grid grid-cols-1 md:grid-cols-2 gap-4" renderItem={(condition) => (
                 <div
                   key={condition.id}
                   className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
@@ -339,13 +341,13 @@ const MedicalHistoryForm = ({
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              )} /></div>
           )}
           {/* Search or add conditions */}
           <div className="mt-4">
             <label className="block text-sm font-medium text-secondary-700 mb-1">Other Conditions (search or add):</label>
-            <div ref={conditionOthers.wrapperRef}>
+            <div ref={conditionOthers.wrapperRef} className="relative">
+              <CatalogActivityOverlay action={conditionOthers.creating ? 'adding' : conditionOthers.searching ? 'searching' : null} />
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm bg-white text-secondary-800 focus:outline-none focus:ring-2 focus:ring-primary-400"
