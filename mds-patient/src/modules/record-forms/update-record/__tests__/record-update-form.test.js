@@ -179,7 +179,7 @@ describe('approved patient opening an update', () => {
     axiosRequest.post.mockResolvedValueOnce({ data: { data: { getMyProfile: employee } } });
 
     await act(async () => root.render(<RecordUpdateForm />));
-    const start = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Start Revision'));
+    const start = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Preparing Revision'));
     expect(container.textContent).toContain('Corrections requested');
     expect(start.textContent).toContain('Preparing Revision');
     expect(start.disabled).toBe(true);
@@ -218,8 +218,7 @@ describe('approved patient opening an update', () => {
 
     await act(async () => root.render(<RecordUpdateForm />));
     await act(async () => { await Promise.resolve(); });
-    const start = [...container.querySelectorAll('button')].find(button => button.textContent.includes('Start Revision'));
-    act(() => start.click());
+    // A restored revision draft opens its saved step directly.
     expect(container.querySelector('[placeholder="Contact Name"]').value).toBe('Synthetic revised contact');
     expect(container.textContent).toContain('Saved draft restored.');
   });

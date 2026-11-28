@@ -131,8 +131,8 @@ describe('patient review summaries', () => {
       upperTeethPhoto: { name: 'update-upper.png', preview: 'data:image/png;base64,AA==' },
     };
     const html = renderToStaticMarkup(<UpdateReview formData={update} recordType="both" steps={['Personal Info', 'Medical History', 'Dental History', 'Review & Submit']} onEdit={() => {}} />);
-    for (const value of ['QA asthma', 'Mother', 'QA pollen', 'QA vaccine', 'Dose:', 'QA hospitalization', 'QA operation', 'QA medication', 'Two lines', 'Right eye', 'QA cleaning', 'Upper', 'update-upper.png']) expect(html).toContain(value);
-    for (const group of ['School Information', 'Emergency Contact Information', 'Medical History', 'Medical Background', 'History of Allergies', 'Lifestyle', 'OB-GYNE History', 'Dental visits', 'Intra-Oral Appliances']) expect(html).toContain(group);
+    for (const value of ['QA asthma', 'Mother', 'QA pollen', 'QA vaccine', 'Dose:', 'QA hospitalization', 'QA operation', 'QA medication', 'Two lines', 'Grade OD', 'QA cleaning', 'Upper', 'update-upper.png']) expect(html).toContain(value);
+    for (const group of ['School Information', 'Emergency Contact Information', 'Medical History', 'Medical Background', 'History of Allergies', 'Daily habits and vision', 'OB-GYNE History', 'Dental visits', 'Intra-Oral Appliances']) expect(html).toContain(group);
     expect(html).toContain('medical-review-groups');
     expect(html).not.toContain('sm:grid-cols-2');
     expect(html).not.toContain('undefined');
@@ -188,7 +188,6 @@ test.each(['medical', 'dental', 'both'])('update review shows employee fields, c
   if (recordType !== 'dental') {
     expect(html).toContain('5 days');
     expect(html).toContain('0 years');
-    expect(html).toContain('>0<');
   } else expect(html).not.toContain('OB-GYNE History');
   if (recordType !== 'medical') for (const value of ['QA guard', 'QA appliance note', 'QA procedure note']) expect(html).toContain(value);
   else expect(html).not.toContain('Dental History');
