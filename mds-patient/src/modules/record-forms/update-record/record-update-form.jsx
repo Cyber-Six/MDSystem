@@ -1,12 +1,12 @@
 import { getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import ProgressStepper from './progress-stepper';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import ProgressStepper, { getRecordScrollContainer } from './progress-stepper';
 import PersonalInfoStep from './personal-info-step';
 import MedicalHistoryStep from './medical-history-step';
 import DentalHistoryStep from './dental-history-step';
 import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
-import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill } from './update-record-service';
+import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill, fetchUpdateRecordPrefill } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
 import { sendGraphQLRequest } from '../../../utils/graphql-client';
 import { usePatientNotifications } from '../../notification/notification-context';
@@ -27,6 +27,10 @@ const RecordUpdateForm = ({
   isInactiveMode = false,
 }) => {
   const { subscribe } = usePatientNotifications();
+  const formRef = useRef(null);
+  const patientSessionId = useRef(localStorage.getItem('patient_refreshToken')?.split(':')[0]);
+  const isCurrentPatientSession = useCallback(() =>
+    localStorage.getItem('patient_refreshToken')?.split(':')[0] === patientSessionId.current, []);
   const draftFlowBase = forceRecordType ? `record-update-${forceRecordType}` : 'record-update';
   const [draftFlow, setDraftFlow] = useState(draftFlowBase);
   const [cachedDraft] = useState(() => readRecordFormDraft(draftFlow));
@@ -34,6 +38,9 @@ const RecordUpdateForm = ({
   const [currentStep, setCurrentStep] = useState(() => Number.isInteger(cachedDraft?.data?.currentStep) ? Math.max(0, Math.min(cachedDraft.data.currentStep, 3)) : 0);
   const [patientDefaults, setPatientDefaults] = useState({});
   const [profileLoadStatus, setProfileLoadStatus] = useState('loading');
+  const [loadedRecordType, setLoadedRecordType] = useState(null);
+  const [sessionChanged, setSessionChanged] = useState(false);
+  const [prefillAttempt, setPrefillAttempt] = useState(0);
   const [recordDraft, setRecordDraft] = useState(() => restoredRecordDraft);
   const formData = useMemo(() => ({ ...patientDefaults, ...recordDraft }), [patientDefaults, recordDraft]);
   const [draftRestored, setDraftRestored] = useState(Boolean(Object.keys(restoredRecordDraft).length || cachedDraft?.data?.recordType));
@@ -44,6 +51,10 @@ const RecordUpdateForm = ({
   const [recordType, setRecordType] = useState(() => cachedDraft?.data?.recordType || null); // 'medical', 'dental', or 'both'
   const effectiveRecordType = forceRecordType || recordType;
   const shouldShowRecordChoice = !effectiveRecordType && !hideRecordChoice;
+  const scrollToFormTop = () => {
+    const scrollTarget = getRecordScrollContainer(formRef.current) || window;
+    scrollTarget.scrollTo?.({ top: 0, behavior: 'instant' });
+  };
   const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
 
   // Revision tracking
@@ -65,6 +76,7 @@ const RecordUpdateForm = ({
   const [showValidationModal, setShowValidationModal] = useState(false);
 
   useEffect(() => {
+    if (sessionChanged || !isCurrentPatientSession()) return;
     if (!Object.keys(recordDraft).length && !recordType) return;
     const dentalPhotos = {
       upperTeethPhoto: recordDraft.upperTeethPhoto,
@@ -72,14 +84,17 @@ const RecordUpdateForm = ({
     };
     const hasAnyPhoto = Boolean(dentalPhotos.upperTeethPhoto || dentalPhotos.lowerTeethPhoto);
     const photoReminder = needsPhotoReupload || hasAnyPhoto;
-    const persistedDraft = { ...recordDraft, upperTeethPhoto: null, lowerTeethPhoto: null };
+    const persistedDraft = { ...recordDraft };
+    for (const field of ['upperTeethPhoto', 'lowerTeethPhoto']) {
+      if (Object.hasOwn(recordDraft, field)) persistedDraft[field] = null;
+    }
     saveRecordFormDraft(draftFlow, {
       formData: persistedDraft,
       currentStep,
       recordType: forceRecordType || recordType,
       requiresPhotoReupload: photoReminder,
     });
-  }, [draftFlow, forceRecordType, recordDraft, recordType, currentStep, needsPhotoReupload]);
+  }, [draftFlow, forceRecordType, recordDraft, recordType, currentStep, needsPhotoReupload, sessionChanged, isCurrentPatientSession]);
 
   useEffect(() => {
     if (recordDraft.upperTeethPhoto && recordDraft.lowerTeethPhoto) setNeedsPhotoReupload(false);
@@ -88,11 +103,12 @@ const RecordUpdateForm = ({
 
   const syncRevisionStatus = useCallback(async (source = 'mount') => {
     try {
-      console.log(`[RecordUpdateForm] Syncing revision status from ${source}...`);
+
       const ticket = await getUpdateRevisionStatus();
+      if (!isCurrentPatientSession()) return;
 
       if (ticket && ticket.status === 'Revision') {
-        console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
+
         setRevisionStatus(ticket);
         setShowRevisionBanner(true);
         setIsLoadingRevisionPrefill(true);
@@ -120,12 +136,13 @@ const RecordUpdateForm = ({
         // Pre-fetch previous data for revision
         try {
           const prefill = await fetchUpdateRevisionPrefill();
+          if (!isCurrentPatientSession()) return;
           if (prefill && Object.keys(prefill).length > 0) {
-            console.log('[RecordUpdateForm] ✅ Pre-fill data fetched:', prefill);
+
             setRevisionPrefillData(prefill); // Store for later use
           }
         } catch (err) {
-          console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
+
         } finally {
           setIsLoadingRevisionPrefill(false);
         }
@@ -136,9 +153,9 @@ const RecordUpdateForm = ({
       setShowRevisionBanner(false);
       setRevisionPrefillData(null);
       clearRecordFormDraft(`${draftFlowBase}-revision`);
-      console.log('[RecordUpdateForm] No revision pending');
+
     } catch (error) {
-      console.error('[RecordUpdateForm] Error checking revision status:', error.message);
+
     }
   }, [draftFlowBase]);
 
@@ -166,61 +183,74 @@ const RecordUpdateForm = ({
           data: { query: '{ getPersonalRecord { sex } }' }
         });
         const sex = response.data?.data?.getPersonalRecord?.sex;
+        if (!isCurrentPatientSession()) return;
         if (sex) {
           setPatientDefaults(prev => ({ ...prev, sex }));
         }
       } catch (error) {
-        console.warn('[RecordUpdateForm] Could not fetch user sex:', error.message);
+
       }
     };
     fetchUserSex();
   }, []);
 
   useEffect(() => {
-    const fetchProfileType = async () => {
-      try {
-        const { getMyProfile: profile } = await sendGraphQLRequest(`
-          query GetUpdateProfileType {
-            getMyProfile {
-              __typename
-              ... on StudentProfile { program year }
-              ... on EmployeeProfile { department role position employmentCategoryOther }
-            }
-          }`);
-        setProfileLoadStatus('ready');
-        if (!profile) return;
-        const employeeRoleByDatabaseRole = {
-          NonStaff: 'Teaching',
-          NonStaffOfficer: 'Teaching (Officer)',
-          Staff: 'Non-Teaching',
-          StaffOfficer: 'Non-Teaching (Officer)',
-        };
-        const employeeRole = employeeRoleByDatabaseRole[profile.role]
-          || (['Teaching', 'Teaching (Officer)', 'Non-Teaching', 'Non-Teaching (Officer)', 'Other'].includes(profile.role) ? profile.role : 'Other');
-        setPatientDefaults((previous) => ({
-          ...previous,
-          profileType: profile.__typename === 'EmployeeProfile' ? 'Employee' : 'Student',
-          ...(profile.__typename === 'EmployeeProfile' ? {
-            employeeDepartment: profile.department || '',
-            employeeRole,
-            employeePosition: profile.position || '',
-            employeeCategoryOther: employeeRole === 'Other' ? profile.employmentCategoryOther || (profile.role === 'Other' ? '' : profile.role || '') : '',
-          } : {}),
-        }));
-      } catch (error) {
-        setProfileLoadStatus('error');
-        console.warn('[RecordUpdateForm] Could not fetch patient profile type:', error.message);
+    const patientId = localStorage.getItem('patient_refreshToken')?.split(':')[0];
+    const onSessionChange = (event) => {
+      if (event.key !== 'patient_refreshToken' && event.key !== null) return;
+      if (localStorage.getItem('patient_refreshToken')?.split(':')[0] === patientId) return;
+      setSessionChanged(true);
+      setPatientDefaults({});
+      setRecordDraft({});
+      setRevisionPrefillData(null);
+      setRevisionStatus(null);
+      setShowRevisionBanner(false);
+    };
+    window.addEventListener('storage', onSessionChange);
+    return () => window.removeEventListener('storage', onSessionChange);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loadedPrefill;
+    const releasePhotoPreviews = (prefill) => {
+      for (const field of ['upperTeethPhoto', 'lowerTeethPhoto']) {
+        const preview = prefill?.[field]?.preview;
+        if (preview) URL.revokeObjectURL(preview);
       }
     };
-    fetchProfileType();
-  }, []);
+    if (!effectiveRecordType || sessionChanged) return undefined;
+    const recordTypeToLoad = effectiveRecordType;
+    setProfileLoadStatus('loading');
+    fetchUpdateRecordPrefill(recordTypeToLoad).then(prefill => {
+      if (cancelled || !isCurrentPatientSession()) {
+        releasePhotoPreviews(prefill);
+        return;
+      }
+      loadedPrefill = prefill;
+      setPatientDefaults(previous => ({ ...prefill, sex: previous.sex }));
+      setLoadedRecordType(recordTypeToLoad);
+      setProfileLoadStatus('ready');
+    }).catch(() => {
+      if (!cancelled) setProfileLoadStatus('error');
+    });
+    return () => {
+      cancelled = true;
+      releasePhotoPreviews(loadedPrefill);
+    };
+  }, [effectiveRecordType, prefillAttempt, sessionChanged]);
+
+  const updateRecordDraft = (nextFormData) => {
+    if (!isCurrentPatientSession()) return;
+    setRecordDraft(Object.fromEntries(Object.entries(nextFormData).filter(([field, value]) => value !== patientDefaults[field])));
+  };
 
   const steps = buildUpdateRecordSteps({
     effectiveRecordType,
     skipPersonalStep,
   });
   const safeCurrentStep = clampStepIndex(currentStep, steps.length);
-  const waitingForProfile = steps[safeCurrentStep] === 'Personal Info' && profileLoadStatus !== 'ready';
+  const waitingForProfile = sessionChanged || profileLoadStatus !== 'ready' || loadedRecordType !== effectiveRecordType;
   const canReturnToChoicePage = !forceRecordType && !hideRecordChoice;
   const backButtonState = getBackButtonState({
     currentStep: safeCurrentStep,
@@ -326,7 +356,7 @@ const RecordUpdateForm = ({
       const stepIndexForDental = (effectiveRecordType === 'both' && !skipPersonalStep)
         ? 2
         : 1;
-      
+
       // Dentist visit info is required
       if (formData.seenByDentist === undefined || formData.seenByDentist === null) {
         errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please indicate whether you have visited a dentist.' });
@@ -366,7 +396,7 @@ const RecordUpdateForm = ({
     if (errors.length > 0) {
       setValidationErrors(errors);
       setShowValidationModal(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToFormTop();
       return false;
     }
 
@@ -377,21 +407,21 @@ const RecordUpdateForm = ({
     if (!validateCurrentStep()) return;
     if (safeCurrentStep < steps.length - 1) {
       setCurrentStep(safeCurrentStep + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToFormTop();
     }
   };
 
   const handleBack = () => {
     if (safeCurrentStep > 0) {
       setCurrentStep(safeCurrentStep - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToFormTop();
     }
   };
 
   const handleCancelToChoice = () => {
     if (!canReturnToChoicePage) return;
     handleChangeType();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToFormTop();
   };
 
   const registerCatalogItem = useCallback((domain, item) => {
@@ -411,10 +441,11 @@ const RecordUpdateForm = ({
 
   const handleEdit = (step) => {
     setCurrentStep(step);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToFormTop();
   };
 
   const handleSubmit = async () => {
+    if (sessionChanged || !isCurrentPatientSession()) return;
     if (reviewHasUnresolvedChoices) return;
     if (!skipPersonalSubmit && !skipPersonalStep) {
       const lengthErrors = getPersonalLengthErrors();
@@ -491,30 +522,27 @@ const RecordUpdateForm = ({
   };
 
   const doSubmit = async () => {
+    if (sessionChanged || !isCurrentPatientSession()) return;
     setIsSubmitting(true);
     const resolvedRecordType = effectiveRecordType || 'both';
-    
+
     try {
-      console.log('[RecordUpdateForm] ==================== STARTING SUBMISSION ====================');
-      console.log('[RecordUpdateForm] Record Type:', resolvedRecordType);
-      console.log('[RecordUpdateForm] Form Data:', formData);
 
       // Submit all records (this creates ticket FIRST, then personal info, then medical/dental)
-      console.log('[RecordUpdateForm] Submitting all records...');
+
       const results = await submitUpdateRecord(formData, resolvedRecordType, {
         skipPersonalUpdate: Boolean(skipPersonalSubmit || skipPersonalStep),
       });
-      console.log('[RecordUpdateForm] ✅ Records submitted successfully:', results);
+
       clearRecordFormDraft(draftFlow);
-      
+
       // Show success modal!
       const recordTypeLabel = resolvedRecordType === 'both' ? 'Medical and Dental' : resolvedRecordType === 'medical' ? 'Medical' : 'Dental';
       setSuccessMessage(recordTypeLabel);
       setShowSuccessModal(true);
-      
-      console.log('[RecordUpdateForm] ==================== SUBMISSION COMPLETE ====================');
+
     } catch (error) {
-      console.error('[RecordUpdateForm] ❌ Submission failed:', error);
+
       const parsedErrors = parseSubmissionError(error);
       setDbErrors(parsedErrors);
       setShowDbErrorModal(true);
@@ -539,20 +567,25 @@ const RecordUpdateForm = ({
   };
 
   const renderStep = () => {
+    if (sessionChanged) {
+      return <p role="alert">Your sign-in changed. Reload this page before continuing.</p>;
+    }
+    if (waitingForProfile) {
+      return profileLoadStatus === 'error' ? (
+        <div role="alert">
+          <p>Your stored records could not be loaded.</p>
+          <button type="button" onClick={() => setPrefillAttempt(attempt => attempt + 1)} className="btn-secondary mt-3">Try again</button>
+        </div>
+      ) : <p role="status">Loading your saved records?</p>;
+    }
     const stepName = steps[safeCurrentStep];
-    
     switch (stepName) {
       case 'Personal Info':
-        if (waitingForProfile) {
-          return <p role="status">{profileLoadStatus === 'error'
-            ? 'Your profile could not be loaded. Refresh this page to try again.'
-            : 'Loading your profile…'}</p>;
-        }
-        return <PersonalInfoStep formData={formData} onChange={setRecordDraft} />;
+        return <PersonalInfoStep formData={formData} onChange={updateRecordDraft} />;
       case 'Medical History':
-        return <MedicalHistoryStep formData={formData} onChange={setRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
+        return <MedicalHistoryStep formData={formData} onChange={updateRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
       case 'Dental History':
-        return <DentalHistoryStep formData={formData} onChange={setRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
+        return <DentalHistoryStep formData={formData} onChange={updateRecordDraft} onCatalogItemSelected={registerCatalogItem} />;
       case 'Review & Submit':
         return (
           <ReviewStep 
@@ -592,7 +625,7 @@ const RecordUpdateForm = ({
   };
 
   return (
-    <div className="record-form-ui">
+    <div ref={formRef} className="record-form-ui">
       {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -740,21 +773,21 @@ const RecordUpdateForm = ({
                     'Both': 'both'
                   };
                   const recordTypeForRevision = scopeMap[revisionStatus?.scope] || 'medical';
-                  
+
                   // Merge pre-filled revision data into form
                   if (!revisionDraftRestored && revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
-                    console.log('[RecordUpdateForm] Merging pre-fill data into form');
+
                     setRecordDraft(prev => {
                       // Ensure toggle states match pre-filled data presence
                       const merged = { ...prev, ...revisionPrefillData };
-                      
+
                       // If we have pre-filled oral appliances, set the toggle to true
                       if (revisionPrefillData.oralAppliances?.length > 0 && merged.hasOralAppliances !== true) {
                         merged.hasOralAppliances = true;
                       }
-                      
+
                       // If we have pre-filled dental procedures, we'll sync with the local state via useEffect
-                      
+
                       return merged;
                     });
                   }
@@ -829,31 +862,32 @@ const RecordUpdateForm = ({
             </div>
           )}
           {/* Header Section */}
-          <div className="record-form-header sticky top-0 z-20 rounded-2xl px-4 py-3 sm:px-5 sm:py-4 mb-5 bg-primary-500 dark:bg-primary-950 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="record-form-header sticky top-0 z-20 rounded-2xl mb-5">
+            <div className="px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-2">
+              <div className="p-2 bg-primary-100 dark:bg-primary-800 rounded-xl">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h1 className="text-2xl font-heading font-bold text-white" style={{ margin: 0 }}>
+                <h1 className="text-lg sm:text-xl font-bold" style={{ margin: 0 }}>
                   Update {effectiveRecordType === 'medical' ? 'Medical Record' : effectiveRecordType === 'dental' ? 'Dental Record' : 'Medical & Dental Record'}
                 </h1>
-                <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>
+                <p className="text-sm" style={{ margin: 0 }}>
                   Keep your health information up-to-date
                 </p>
               </div>
               {effectiveRecordType && !forceRecordType && !hideRecordChoice && (
                 <button
+                  type="button"
                   onClick={handleChangeType}
-                  className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="min-h-11 text-sm font-semibold border border-primary-700/20 bg-primary-50 dark:border-primary-400/30 dark:bg-primary-900 px-3 py-2 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-800 transition-colors"
                 >
                   Cancel
                 </button>
               )}
             </div>
-            <ProgressStepper currentStep={safeCurrentStep} steps={steps} compact />
+            <ProgressStepper currentStep={safeCurrentStep} steps={steps} scrollContainerRef={formRef} compact />
           </div>
 
           {draftRestored && (

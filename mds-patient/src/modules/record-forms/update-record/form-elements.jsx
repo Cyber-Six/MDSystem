@@ -1,4 +1,5 @@
 import React from 'react';
+import RecordDisclosure from '../record-disclosure';
 
 export const Input = ({ id, label, required, error, reserveErrorSpace = false, className = '', ...props }) => {
   const generatedId = React.useId();
@@ -183,28 +184,25 @@ export const AccordionSection = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
     </button>
-    <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-      <div className="min-h-0 overflow-hidden">
+    <RecordDisclosure open={isOpen}>
       <div className="p-5 bg-white dark:bg-neutral-900">
         {children}
       </div>
-      </div>
-    </div>
+    </RecordDisclosure>
   </div>
 );
 
 // Tab Component
 export const TabGroup = ({ tabs, activeTab, onTabChange }) => (
   <div role="tablist" aria-label="Medical history category" className="relative flex border-b border-neutral-200 dark:border-neutral-700 mb-6">
-    {tabs.map((tab, index) => tab.id === activeTab && (
-      <span key={`indicator-${tab.id}`} aria-hidden="true" className="absolute bottom-0 h-0.5 rounded-full bg-primary-500 transition-all duration-300 ease-out" style={{ left: `${index * 104}px`, width: 104 }} />
-    ))}
+    <span aria-hidden="true" className="absolute bottom-0 h-0.5 rounded-full bg-primary-500 transition-transform duration-200 motion-reduce:transition-none" style={{ width: 104, transform: `translateX(${Math.max(0, tabs.findIndex(tab => tab.id === activeTab)) * 104}px)` }} />
     {tabs.map((tab) => (
       <button
         key={tab.id}
         type="button"
         role="tab"
         aria-selected={activeTab === tab.id}
+        style={{ width: 104 }}
         onClick={() => onTabChange(tab.id)}
         className={`min-h-11 px-6 font-medium text-sm transition-colors duration-200 relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset
                    ${activeTab === tab.id 
@@ -212,9 +210,6 @@ export const TabGroup = ({ tabs, activeTab, onTabChange }) => (
                      : 'text-neutral-500 dark:text-neutral-400 hover:text-primary-500'}`}
       >
         {tab.label}
-        {activeTab === tab.id && (
-          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 rounded-t-full" />
-        )}
       </button>
     ))}
   </div>

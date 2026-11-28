@@ -57,9 +57,16 @@ test.each([['initial/revision', Initial], ['update', Update]])('%s: existing all
   click(result);
   const checkbox = [...container.querySelectorAll('label')].find(label => label.textContent.trim() === 'Bleach')?.querySelector('input');
   expect(checkbox?.checked).toBe(true);
-  expect(container.querySelector('summary').textContent).toContain('1 selected');
+  const groupToggle = container.querySelector('.allergy-option-group > button');
+  expect(groupToggle.textContent).toContain('1 selected');
+  click(groupToggle);
+  expect(groupToggle.getAttribute('aria-expanded')).toBe('true');
+  expect(container.querySelector('.allergy-option-group .record-disclosure').hasAttribute('inert')).toBe(false);
   click(checkbox);
-  expect(container.querySelector('summary').textContent).toContain('0 selected');
+  expect(groupToggle.textContent).toContain('0 selected');
+  click(groupToggle);
+  expect(groupToggle.getAttribute('aria-expanded')).toBe('false');
+  expect(container.querySelector('.allergy-option-group .record-disclosure').hasAttribute('inert')).toBe(true);
   type(input, 'Bleach');
   expect([...container.querySelectorAll('button')].find(button => button.textContent.includes('Already in the list')).disabled).toBe(true);
   expect(service.createAllergenCatalogEntry).not.toHaveBeenCalled();

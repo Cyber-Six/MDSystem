@@ -42,6 +42,8 @@ function initPatientEMRGraphQL(app) {
       if (!req.body || !req.body.query) {
         throw new Error("Empty GraphQL request");
       }
+      req.res.setHeader("Cache-Control", "private, no-store");
+      req.res.setHeader("Pragma", "no-cache");
       return {
         schema: patientSchema,
         graphiql: true,

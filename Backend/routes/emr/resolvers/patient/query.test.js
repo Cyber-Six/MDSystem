@@ -67,6 +67,21 @@ const pendingProfileResolvers = [
   ['getMedicalHistory', '_getUserMedicalHistory'],
 ];
 
+test.each(activeProfileResolvers)('%s requires authentication before querying approved records', async (resolverName, wrapperName) => {
+  await expect(Query[resolverName](null, { approved: true, userId: 999 }, { res: {} })).rejects.toThrow('401:Unauthorized');
+  expect(Wrapper[wrapperName]).not.toHaveBeenCalled();
+});
+
+test.each([...activeProfileResolvers, ['getEmergencyContact', '_getUserEmergencyContact']])('%s reads only the authenticated patient approved records', async (resolverName, wrapperName) => {
+  const context = { user: { id: 21 }, res: {} };
+  const row = { id: 12, status: 'Approved' };
+  Wrapper[wrapperName].mockResolvedValueOnce([row]);
+  await expect(Query[resolverName](null, { approved: true, userId: 999 }, context)).resolves.toEqual(row);
+  expect(Wrapper[wrapperName]).toHaveBeenLastCalledWith(null, { userId: 21, offset: 0, limit: 1, statuses: ['Approved'] }, context);
+  Wrapper[wrapperName].mockResolvedValueOnce([]);
+  await expect(Query[resolverName](null, { approved: true }, context)).resolves.toBeNull();
+});
+
 test.each(pendingProfileResolvers)('%s can read only the signed-in patient pending record when requested', async (resolverName, wrapperName) => {
   const context = { user: { id: 21 }, res: {} };
   const row = { id: 'pending-1', status: 'Pending' };

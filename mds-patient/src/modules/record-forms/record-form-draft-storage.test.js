@@ -17,6 +17,17 @@ const makeStorage = () => {
 };
 
 describe('patient record form draft cache', () => {
+  it('uses exact patient IDs and discards drafts from the legacy hash namespace', () => {
+    const localStore = makeStorage();
+    const sessionStore = makeStorage();
+    localStore.setItem('patient_refreshToken', 'patient-a:device:token');
+    sessionStore.setItem('mds:patient-record-draft:v1:12345678:record-update', JSON.stringify({ data: { formData: { secret: 'legacy fixture' } } }));
+    saveRecordFormDraft('record-update', { formData: { marker: 'Patient A' } }, { localStore, sessionStore });
+    expect(sessionStore.getItem('mds:patient-record-draft:v1:12345678:record-update')).toBeNull();
+    expect(sessionStore.key(0)).toBe('mds:patient-record-draft:v2:patient-a:record-update');
+    localStore.setItem('patient_refreshToken', 'patient-b:device:token');
+    expect(readRecordFormDraft('record-update', { localStore, sessionStore })).toBeNull();
+  });
   it('saves and restores a draft only for the current patient session', () => {
     const localStore = makeStorage();
     const sessionStore = makeStorage();

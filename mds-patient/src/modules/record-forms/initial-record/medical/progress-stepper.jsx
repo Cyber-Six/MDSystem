@@ -1,9 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 const getScrollProgress = (element) => {
-  if (!element) return 0;
   const maxScroll = element.scrollHeight - element.clientHeight;
-  return maxScroll > 0 ? Math.min(1, Math.max(0, element.scrollTop / maxScroll)) : 0;
+  return maxScroll > 0 ? Math.min(1, Math.max(0, element.scrollTop / maxScroll)) : 1;
+};
+
+export const getRecordScrollContainer = (anchor) => {
+  for (let element = anchor; element && element !== document.body; element = element.parentElement) {
+    if (/^(auto|scroll|overlay)$/.test(window.getComputedStyle(element).overflowY)) return element;
+  }
+  return null;
 };
 
 const ProgressStepper = ({
@@ -26,37 +32,27 @@ const ProgressStepper = ({
     const anchor = scrollContainerRef?.current || stepperRef.current;
     if (typeof window === 'undefined') return undefined;
 
-    let scrollElement = anchor;
-    while (scrollElement && scrollElement !== document.body) {
-      const { overflowY } = window.getComputedStyle(scrollElement);
-      if (/(auto|scroll)/.test(overflowY) && scrollElement.scrollHeight > scrollElement.clientHeight) break;
-      scrollElement = scrollElement.parentElement;
-    }
-
-    const usesWindow = !scrollElement || scrollElement === document.body;
+    const scrollElement = getRecordScrollContainer(anchor);
     const updateProgress = () => {
-      let nextProgress;
-      if (!usesWindow) {
-        nextProgress = getScrollProgress(scrollElement);
-      } else {
-        const root = document.documentElement;
-        const maxScroll = root.scrollHeight - window.innerHeight;
-        nextProgress = maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0;
-      }
-      setScrollProgress(nextProgress);
+      const nextProgress = getScrollProgress(scrollElement || document.scrollingElement || document.documentElement);
+      if (!hideVisual) setScrollProgress(nextProgress);
       onProgressChange?.({ currentStep: safeCurrentStep, steps, scrollProgress: nextProgress });
     };
 
-    const eventTarget = usesWindow ? window : scrollElement;
+    const eventTarget = scrollElement || window;
     eventTarget.addEventListener('scroll', updateProgress, { passive: true });
     window.addEventListener('resize', updateProgress);
+    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(updateProgress) : null;
+    resizeObserver?.observe(scrollElement || document.documentElement);
+    for (const child of (scrollElement || document.body).children) resizeObserver?.observe(child);
     updateProgress();
 
     return () => {
+      resizeObserver?.disconnect();
       eventTarget.removeEventListener('scroll', updateProgress);
       window.removeEventListener('resize', updateProgress);
     };
-  }, [scrollContainerRef, onProgressChange, safeCurrentStep, steps, trackScroll]);
+  }, [scrollContainerRef, onProgressChange, safeCurrentStep, steps, trackScroll, hideVisual]);
 
   if (hideVisual) return null;
 
@@ -91,13 +87,13 @@ const ProgressStepper = ({
 
           return (
             <li key={step} aria-current={index === safeCurrentStep ? 'step' : undefined} className="min-w-0 flex-1">
-              <span className="block h-1.5 overflow-hidden rounded-full bg-primary-200 dark:bg-neutral-600">
+              <span className="record-progress-track">
                 <span
-                  className="block h-full rounded-full bg-primary-500 transition-[width] duration-200 ease-out"
+                  className="record-progress-fill"
                   style={{ width: `${segmentProgress * 100}%` }}
                 />
               </span>
-              <span className={'mt-2 hidden text-xs leading-snug sm:block ' + (index === safeCurrentStep ? 'font-semibold text-secondary-900 dark:text-primary-100' : 'text-secondary-500 dark:text-neutral-400')}>
+              <span className="record-progress-label mt-2 hidden text-xs leading-snug sm:block">
                 {step}
               </span>
               <span className="sr-only sm:hidden">{step}</span>

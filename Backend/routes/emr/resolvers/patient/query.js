@@ -8,15 +8,18 @@ const dotenv = require("dotenv");
 
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
-const getPatientRecord = async (resolver, _, { pending = false }, { user, res }) => {
-  const statuses = pending ? ["Pending"] : null;
+const getPatientRecord = async (resolver, _, { pending = false, approved = false }, { user, res }) => {
+  if (!user?.id) {
+    throwGraphQLError(res).message("Unauthorized").status(401).throw();
+  }
+  const statuses = approved ? ["Approved"] : pending ? ["Pending"] : null;
   const result = await Wrapper[resolver](_, {
     userId: user.id, offset: 0, limit: 1, statuses,
   }, { user, res });
   if (result.length === 0) return null;
 
   const row = result[0];
-  const allowedStatuses = pending ? ["Pending"] : ["InProgress", "Revision"];
+  const allowedStatuses = approved ? ["Approved"] : pending ? ["Pending"] : ["InProgress", "Revision"];
   if (allowedStatuses.includes(row.status)) return row;
 
   throwGraphQLError(res).message("No active profile found.").status(404).throw();
@@ -32,13 +35,7 @@ const Query = {
     return result; // return scalar ID
   },
 
-  getProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null }, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getProfile: (_, args, context) => getPatientRecord("_getUserProfile", _, args, context),
 
   // Returns the most recent profile record of any status — used by profile display components
   // to show the patient's year level / program / department without requiring an active form.
@@ -49,37 +46,13 @@ const Query = {
   },
 
 
-  getDentalPhotoRecord: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserDentalPhotoRecord(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
+  getDentalPhotoRecord: (_, args, context) => getPatientRecord("_getUserDentalPhotoRecord", _, args, context),
 
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getObgynHistory: (_, args, context) => getPatientRecord("_getUserObgynHistory", _, args, context),
 
-  getObgynHistory: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserObgynHistory(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
+  getLifestyle: (_, args, context) => getPatientRecord("_getUserLifestyle", _, args, context),
 
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
-
-  getLifestyle: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserLifestyle(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
-
-  getDentalHistory: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserDentalHistory(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getDentalHistory: (_, args, context) => getPatientRecord("_getUserDentalHistory", _, args, context),
   
   getOralApplianceProfile: (_, args, context) => getPatientRecord("_getUserOralApplianceProfile", _, args, context),
 
@@ -87,7 +60,7 @@ const Query = {
     const statuses = approved ? ["Approved"] : null;
     const result = await Wrapper._getUserEmergencyContact(_, {userId: user.id, offset: 0, limit: 1, statuses}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision" || result[0].status === "Approved") return result[0];
+    else if ((approved ? ["Approved"] : ["InProgress", "Revision", "Approved"]).includes(result[0].status)) return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -96,13 +69,7 @@ const Query = {
 
   getMedicationProfile: (_, args, context) => getPatientRecord("_getUserMedicationProfile", _, args, context),
 
-  getDentalProcedureProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserDentalProcedureProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getDentalProcedureProfile: (_, args, context) => getPatientRecord("_getUserDentalProcedureProfile", _, args, context),
 
   getImmunizationProfile: (_, args, context) => getPatientRecord("_getUserImmunizationProfile", _, args, context),
 
@@ -112,13 +79,7 @@ const Query = {
 
   getMedicalHistory: (_, args, context) => getPatientRecord("_getUserMedicalHistory", _, args, context),
 
-  getVisualAcuityProfile: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserVisualAcuityProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
+  getVisualAcuityProfile: (_, args, context) => getPatientRecord("_getUserVisualAcuityProfile", _, args, context),
 
   getProcedureDomain: async (_, __, { user, res }) => {
     const result = await Wrapper._getProcedureDomain(_, {}, { user, res });

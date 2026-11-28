@@ -153,14 +153,58 @@
 .record-form-ui .btn-primary,
 .record-form-ui button.bg-primary-500 { color: var(--color-gray-900); }
 .record-form-ui .record-form-header {
+  border-top: 4px solid var(--color-primary-500);
+  background: var(--color-primary-100);
   color: var(--color-gray-900);
   box-shadow: 0 1px 0 rgb(28 25 23 / 0.08);
 }
 .dark .record-form-ui .record-form-header {
+  background: var(--color-primary-950);
   color: var(--color-primary-100);
 }
 .record-form-ui .record-form-header :is(h1, p, svg, button) {
   color: inherit;
+}
+.record-progress-track {
+  display: block;
+  height: 0.375rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: var(--color-primary-200);
+}
+.dark .record-progress-track { background: var(--color-gray-600); }
+.record-progress [aria-current="step"] .record-progress-track { background: var(--color-primary-300); }
+.dark .record-progress [aria-current="step"] .record-progress-track { background: var(--color-primary-800); }
+.record-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary-700);
+  transition: width 180ms ease-out;
+}
+.dark .record-progress-fill { background: var(--color-primary-500); }
+.record-progress-label { opacity: 0.8; }
+.record-progress [aria-current="step"] .record-progress-label { font-weight: 700; opacity: 1; }
+.record-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 220ms ease, opacity 180ms ease;
+}
+.record-disclosure[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.record-disclosure-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.record-history-panel {
+  animation: record-history-enter 180ms ease-out;
+}
+@keyframes record-history-enter {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .record-form-ui .record-form-footer { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
 @media (prefers-reduced-motion: reduce) {

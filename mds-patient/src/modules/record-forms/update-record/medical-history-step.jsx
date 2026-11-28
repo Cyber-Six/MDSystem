@@ -1,3 +1,4 @@
+import RecordDisclosure from '../record-disclosure';
 import AllergyOptionGroup from '../allergy-option-group';
 import useCatalogSearch from '../use-catalog-search';
 import React, { useState, useEffect } from 'react';
@@ -254,7 +255,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
         <TabGroup tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
         {/* Yourself Tab Content */}
         {activeTab === 'yourself' && (
-          <div role="tabpanel" className="animate-in fade-in slide-in-from-right-2 duration-200 motion-reduce:animate-none">
+          <div role="tabpanel" aria-label="Yourself" className="record-history-panel">
           <>
             <div className="space-y-4 mb-8">
               <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Check any conditions that apply to you:</p>
@@ -350,7 +351,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     <RadioButton label="Yes" name="hasAllergies" value="yes" checked={formData.hasAllergies === 'yes'} onChange={(e) => handleInputChange('hasAllergies', e.target.value)} />
                     <RadioButton label="No" name="hasAllergies" value="no" checked={formData.hasAllergies === 'no'} onChange={(e) => handleInputChange('hasAllergies', e.target.value)} />
                   </div>
-                  {formData.hasAllergies === 'yes' && (
+                  <RecordDisclosure open={formData.hasAllergies === 'yes'}>
                     <div className="space-y-4">
                       {catalogs.allergens.length > 0 ? (
                         <div className="space-y-5">
@@ -373,7 +374,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                           checked={isChecked}
                                           onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
                                         />
-                                        {isChecked && (
+                                        <RecordDisclosure open={isChecked}>
                                           <div className="ml-6 mt-1 mb-1 flex gap-2">
                                             <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
                                               <option value="Unknown">Severity: Unknown</option>
@@ -387,7 +388,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                               <option value="Suspected">Status: Suspected</option>
                                             </select>
                                           </div>
-                                        )}
+                                        </RecordDisclosure>
                                       </div>
                                     );
                                   })}
@@ -410,7 +411,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                         checked={isChecked}
                                         onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
                                       />
-                                      {isChecked && (
+                                      <RecordDisclosure open={isChecked}>
                                         <div className="ml-6 mt-1 mb-1 flex gap-2">
                                           <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
                                             <option value="Unknown">Severity: Unknown</option>
@@ -424,7 +425,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                             <option value="Suspected">Status: Suspected</option>
                                           </select>
                                         </div>
-                                      )}
+                                      </RecordDisclosure>
                                     </div>
                                   );
                                 })}
@@ -535,7 +536,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                         onChange={(e) => handleInputChange('allergiesNotes', e.target.value)}
                       />
                     </div>
-                  )}
+                  </RecordDisclosure>
                 </div>
               </AccordionSection>
 
@@ -555,7 +556,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 <RadioButton label="No" name="smoker" value="no" checked={formData.smoker === 'no'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
                 <RadioButton label="Yes" name="smoker" value="yes" checked={formData.smoker === 'yes'} onChange={(e) => handleInputChange('smoker', e.target.value)} />
               </div>
-              {formData.smoker === 'yes' && (
+              <RecordDisclosure open={formData.smoker === 'yes'}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Input
                     label="Sticks per day"
@@ -572,7 +573,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     onChange={(e) => handleInputChange('smokerYears', e.target.value)}
                   />
                 </div>
-              )}
+              </RecordDisclosure>
             </div>
 
             {/* Alcohol Section */}
@@ -582,14 +583,14 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 <RadioButton label="No" name="alcoholDrinker" value="no" checked={formData.alcoholDrinker === 'no'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
                 <RadioButton label="Yes" name="alcoholDrinker" value="yes" checked={formData.alcoholDrinker === 'yes'} onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)} />
               </div>
-              {formData.alcoholDrinker === 'yes' && (
+              <RecordDisclosure open={formData.alcoholDrinker === 'yes'}>
                 <Select
                   label="Frequency"
                   options={LIFESTYLE_FREQUENCY_OPTIONS}
                   value={formData.alcoholFrequency || ''}
                   onChange={(e) => handleInputChange('alcoholFrequency', e.target.value)}
                 />
-              )}
+              </RecordDisclosure>
             </div>
 
             {/* Vaper Section */}
@@ -599,7 +600,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                 <RadioButton label="No" name="vaper" value="no" checked={formData.vaper === 'no'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
                 <RadioButton label="Yes" name="vaper" value="yes" checked={formData.vaper === 'yes'} onChange={(e) => handleInputChange('vaper', e.target.value)} />
               </div>
-              {formData.vaper === 'yes' && (
+              <RecordDisclosure open={formData.vaper === 'yes'}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Select
                     label="Vape Type"
@@ -614,7 +615,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                     onChange={(e) => handleInputChange('vapeFrequency', e.target.value)}
                   />
                 </div>
-              )}
+              </RecordDisclosure>
             </div>
           </div>
         </AccordionSection>
@@ -633,7 +634,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="visualAcuity" value="yes" checked={formData.visualAcuity === 'yes'} onChange={(e) => handleInputChange('visualAcuity', e.target.value)} />
               <RadioButton label="No" name="visualAcuity" value="no" checked={formData.visualAcuity === 'no'} onChange={(e) => handleInputChange('visualAcuity', e.target.value)} />
             </div>
-            {formData.visualAcuity === 'yes' && (
+            <RecordDisclosure open={formData.visualAcuity === 'yes'}>
               <div className="space-y-4">
                 {catalogs.visualAcuity.length > 0 && (
                   <Select
@@ -664,7 +665,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   />
                 </div>
               </div>
-            )}
+            </RecordDisclosure>
             <Textarea
               label="Visual Acuity Notes (Optional)"
               placeholder="Any additional information about your vision, glasses, or eye health."
@@ -723,7 +724,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                       checked={isChecked}
                       onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
                     />
-                    {isChecked && (
+                    <RecordDisclosure open={isChecked}>
                       <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                         <Input
                           label="Date Received"
@@ -748,7 +749,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                           }}
                         />
                       </div>
-                    )}
+                    </RecordDisclosure>
                   </div>
                 );
               }} />
@@ -765,7 +766,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                         checked={isChecked}
                         onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
                       />
-                      {isChecked && (
+                      <RecordDisclosure open={isChecked}>
                         <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                           <Input
                             label="Date Received"
@@ -790,7 +791,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             }}
                           />
                         </div>
-                      )}
+                      </RecordDisclosure>
                     </div>
                   );
                 })}
@@ -870,7 +871,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="hasHospitalizations" value="yes" checked={formData.hasHospitalizations === 'yes'} onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)} />
               <RadioButton label="No" name="hasHospitalizations" value="no" checked={formData.hasHospitalizations === 'no'} onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)} />
             </div>
-            {formData.hasHospitalizations === 'yes' && (
+            <RecordDisclosure open={formData.hasHospitalizations === 'yes'}>
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
@@ -885,7 +886,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                               <Input
                                 label="Admission Date"
@@ -900,7 +901,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -918,7 +919,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                               <Input
                                 label="Admission Date"
@@ -933,7 +934,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -1003,7 +1004,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   onChange={(e) => handleInputChange('hospitalizationNotes', e.target.value)}
                 />
               </div>
-            )}
+            </RecordDisclosure>
           </div>
         </AccordionSection>
 
@@ -1021,7 +1022,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="hasSurgeries" value="yes" checked={formData.hasSurgeries === 'yes'} onChange={(e) => handleInputChange('hasSurgeries', e.target.value)} />
               <RadioButton label="No" name="hasSurgeries" value="no" checked={formData.hasSurgeries === 'no'} onChange={(e) => handleInputChange('hasSurgeries', e.target.value)} />
             </div>
-            {formData.hasSurgeries === 'yes' && (
+            <RecordDisclosure open={formData.hasSurgeries === 'yes'}>
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
@@ -1036,7 +1037,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1">
                               <Input
                                 label="Date of Operation"
@@ -1045,7 +1046,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -1063,7 +1064,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                             checked={isChecked}
                             onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1">
                               <Input
                                 label="Date of Operation"
@@ -1072,7 +1073,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                                 onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
                               />
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -1142,7 +1143,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   onChange={(e) => handleInputChange('surgeryNotes', e.target.value)}
                 />
               </div>
-            )}
+            </RecordDisclosure>
           </div>
         </AccordionSection>
 
@@ -1160,7 +1161,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
               <RadioButton label="Yes" name="hasMedications" value="yes" checked={formData.hasMedications === 'yes'} onChange={() => onChange({ ...formData, hasMedications: 'yes', selectedMedications: formData.selectedMedications || {} })} />
               <RadioButton label="No" name="hasMedications" value="no" checked={formData.hasMedications === 'no'} onChange={() => onChange({ ...formData, hasMedications: 'no', selectedMedications: {} })} />
             </div>
-            {formData.hasMedications === 'yes' && (
+            <RecordDisclosure open={formData.hasMedications === 'yes'}>
               <div className="space-y-4">
                 {catalogs.medications.length > 0 ? (
                   <div className="space-y-2">
@@ -1259,7 +1260,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
                   onChange={(e) => handleInputChange('medicationNotes', e.target.value)}
                 />
               </div>
-            )}
+            </RecordDisclosure>
           </div>
         </AccordionSection>
       </div>
@@ -1269,7 +1270,7 @@ const MedicalHistoryStep = ({ formData, onChange, onCatalogItemSelected = () => 
 
         {/* Family Tab Content - Matching Initial Record Format */}
         {activeTab === 'family' && (
-          <div role="tabpanel" className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-200 motion-reduce:animate-none">
+          <div role="tabpanel" aria-label="Family" className="space-y-4 record-history-panel">
             <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">
               Check any conditions that apply to your immediate family members and specify the relationship:
             </p>

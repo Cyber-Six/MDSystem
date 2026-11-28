@@ -11,6 +11,7 @@ endpointContract(__dirname, {
       "init": "initPatientEMRGraphQL",
       "route": "/emr/patient",
       "role": "patient",
+      "privateResponse": true,
       "resolver": "patient",
       "rejectEmpty": true
     },

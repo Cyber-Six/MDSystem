@@ -1,7 +1,6 @@
 const db  = require("../../../config/query.js");
 
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
-const logger = require("../../../utils/logger.js");
 const { decodeOralApplianceNotes, employeeCategoryFromRole } = require("../custom-choice-storage.js");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -30,7 +29,7 @@ const Query = {
       );
 
     const ticket = result.rows[0];
-    logger.debug("Fetched Update Ticket:", ticket);
+
     if (ticket && ticket.status === "InProgress") {
       const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
       const createdAt = new Date(ticket.created_at).getTime();
@@ -46,12 +45,11 @@ const Query = {
     return { ...ticket, patientId: userId}; // return scalar ID
   },
 
-
   _getUserProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses}, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
-    
+
     const query = `
       SELECT pr.id, pr.profile_type,
              sp."programId", sp.year,
@@ -77,7 +75,6 @@ const Query = {
       statuses || null
     ]);
 
-    logger.debug("User Profile Query Result:", result.rows);
     if (result.rows.length === 0) return [];
 
     return result.rows.map(row => {
@@ -86,6 +83,7 @@ const Query = {
           __typename: "StudentProfile",
           id: row.id,
           profile_type: row.profile_type,
+          programId: row.programId,
           program: row.program_label,
           year: row.year,
           created_at: row.created_at,
@@ -132,7 +130,7 @@ const Query = {
     ]);
 
     if (result.rows.length === 0) return [];
-    logger.debug("User Dental Photos Query Result:", result.rows);
+
     return result.rows;
   },
 
@@ -158,11 +156,10 @@ const Query = {
       new Date(from),
       statuses || null
     ]);
-    logger.debug("User ObGyn History Query Result:", result.rows);
+
     if (result.rows.length === 0) return [];
     return result.rows;
   },
-
 
   _getUserLifestyle: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
     if (!user?.id) {
@@ -186,7 +183,7 @@ const Query = {
       new Date(from),
       statuses || null
     ]);
-    logger.debug("User Lifestyle Query Result:", result.rows);
+
     if (result.rows.length === 0) return [];
     return result.rows;
   },
@@ -215,7 +212,7 @@ const Query = {
     ]);
 
     if (result.rows.length === 0) return [];
-    logger.debug("User Dental History Query Result:", result.rows);
+
     return result.rows;
   },
 
@@ -254,7 +251,7 @@ const Query = {
       const ApplianceProfiles = await db.query(appliancesQuery, [row.id]);
       row.appliances = ApplianceProfiles.rows;
     } 
-    logger.debug("User Oral Appliance Profile with Appliances:", result.rows);
+
     return result.rows;
   },
 
@@ -296,7 +293,6 @@ const Query = {
       row.secondContact = numbers.find(n => n.id === row.secondNumber) || null;
     }
 
-    logger.debug("User Emergency Contact with Numbers:", result.rows);
     return result.rows; 
   },
 
@@ -334,7 +330,7 @@ const Query = {
       const AllergenCatalog = await db.query(catalogQuery, [row.id]);
       row.allergies = AllergenCatalog.rows || [];
     }
-    logger.debug("User Allergy Profile with Allergies:", result.rows);
+
     return result.rows;
   },
 
@@ -372,7 +368,6 @@ const Query = {
       row.medications = DomainCatalog.rows || [];
     }
 
-    logger.debug("User Medication Profile with Medications:", result.rows);
     return result.rows;
   },
 
@@ -410,7 +405,6 @@ const Query = {
       row.procedures = DomainCatalog.rows || [];
     }
 
-    logger.debug("User Dental Procedure Profile with Procedures:", result.rows);
     return result.rows;
   },
 
@@ -448,7 +442,6 @@ const Query = {
       row.immunizations = DomainCatalog.rows || [];
     }
 
-    logger.debug("User Immunization Profile with Immunizations:", result.rows);
     return result.rows;
   },
 
@@ -486,7 +479,6 @@ const Query = {
       row.operations = DomainCatalog.rows || [];
     }
 
-    logger.debug("User Operation Profile with Operations:", result.rows);
     return result.rows;
   },
 
@@ -524,7 +516,6 @@ const Query = {
       row.hospitalizations = DomainCatalog.rows || [];
     }
 
-    logger.debug("User Hospitalization Profile with Hospitalizations:", result.rows);
     return result.rows;
   },
 
@@ -561,10 +552,9 @@ const Query = {
       row.conditions = DomainCatalog.rows || [];
     }
 
-    logger.debug("User Medical History with Conditions:", result.rows);
     return result.rows;
   },
-  
+
   _getUserVisualAcuityProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
@@ -598,17 +588,17 @@ const Query = {
       const AcuityRecords = await db.query(acuityQuery, [row.id]);
       row.acuity = AcuityRecords.rows[0] || null;
     }
-    logger.debug("User Visual Acuity Profile with Acuity Records:", result.rows);
+
     return result.rows;
   },
-  
+
   _getProcedureDomain: async (_, __, { user, res }) => {
     const domains = ["VisualAcuity", "Medication", "Hospitalization", "Operation", "Immunization", "DentalProcedure"];
     return domains;
   },
 
   _getDomainCatalogs: async (_, { domain, filterIsValid, offset, limit }, { user, res }) => {
-    logger.debug("Fetching Domain Catalogs:", { domain, filterIsValid, offset, limit });
+
     const query = `
     SELECT *
     FROM "DomainTypeCatalog"
@@ -625,10 +615,9 @@ const Query = {
       limit || 10,
       offset || 0
     ]);
-    logger.debug("Domain Catalogs Query Result:", result.rows);
+
     return result.rows;
   },
-
 
   _getAllergenCatalogs: async (_, { type, filterIsValid, offset, limit }, { user, res }) => {
     const query = `
@@ -646,7 +635,7 @@ const Query = {
       limit || 10,
       offset || 0
     ]);
-    logger.debug("Allergen Catalogs Query Result:", result.rows);
+
     return result.rows;
   },
 
@@ -665,7 +654,6 @@ const Query = {
       offset || 0
     ]);
 
-    logger.debug("User Oral Appliance Profile with Appliances:", result.rows);
     return result.rows;
   },
 
@@ -712,7 +700,6 @@ const Query = {
       offset || 0
     ]);
 
-    logger.debug("User Status Update Tickets with Statuses:", result.rows);
     return result.rows;
   },
 
@@ -736,7 +723,6 @@ const Query = {
       filterIsValid === undefined ? null : filterIsValid
     ]);
 
-    logger.debug("Searched Domain Catalogs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -758,7 +744,6 @@ const Query = {
       filterIsValid === undefined ? null : filterIsValid
     ]);
 
-    logger.debug("Searched Allergen Catalogs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -776,7 +761,6 @@ const Query = {
       filterIsValid === undefined ? null : filterIsValid
     ]);
 
-    logger.debug("Searched Oral Appliance Catalogs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -795,7 +779,6 @@ const Query = {
       offset || 0
     ]);
 
-    logger.debug("Searched Student Program Query Result:", result.rows);
     return result.rows;
   },
 
@@ -817,7 +800,6 @@ const Query = {
       return null;
     }
 
-    logger.debug("Ticket VitalSignsId Query Result:", result.rows[0]);
     return result.rows[0];
   },
 
@@ -839,7 +821,6 @@ const Query = {
       return null;
     }
 
-    logger.debug("Ticket DentalRecordId Query Result:", result.rows[0]);
     return result.rows[0];
   },
 
@@ -871,7 +852,6 @@ const Query = {
       statuses || null
     ]);
 
-    logger.debug("User Ticket IDs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -997,7 +977,7 @@ const Query = {
     if (result.rows[0]) {
       result.rows[0].employmentCategoryOther = employeeCategoryFromRole(result.rows[0].role, result.rows[0].employmentCategoryOther);
     }
-    logger.debug('getPatientBasicInfo result:', result.rows[0]);
+
     return result.rows[0] || null;
   },
 
@@ -1127,12 +1107,8 @@ const Query = {
       row.employmentCategoryOther = employeeCategoryFromRole(row.role, row.employmentCategoryOther);
     }
 
-    logger.debug(
-      `Patient search for "${term}" returned ${result.rows.length} results (includeLatestTicket=${includeLatestTicketFields})`
-    );
     return result.rows;
   },
 };
-
 
 module.exports = Query;

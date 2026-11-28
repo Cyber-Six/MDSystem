@@ -1,3 +1,4 @@
+import RecordDisclosure from '../../record-disclosure';
 import AllergyOptionGroup from '../../allergy-option-group';
 import useCatalogSearch from '../../use-catalog-search';
 import React, { useState } from 'react';
@@ -221,7 +222,7 @@ const MedicalBackgroundForm = ({
                     checked={data.immunizations?.[vaccine.id] || false}
                     onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
                   />
-                  {data.immunizations?.[vaccine.id] && (
+                  <RecordDisclosure open={data.immunizations?.[vaccine.id]}>
                     <div className="ml-6 space-y-1">
                       <Input
                         label="Date of Immunization:"
@@ -238,7 +239,7 @@ const MedicalBackgroundForm = ({
                         onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>
-                  )}
+                  </RecordDisclosure>
                 </div>
               )} />
           )}
@@ -252,7 +253,7 @@ const MedicalBackgroundForm = ({
                     checked={data.immunizations?.[vaccine.id] || false}
                     onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
                   />
-                  {data.immunizations?.[vaccine.id] && (
+                  <RecordDisclosure open={data.immunizations?.[vaccine.id]}>
                     <div className="ml-6 space-y-1">
                       <Input
                         label="Date of Immunization:"
@@ -269,7 +270,7 @@ const MedicalBackgroundForm = ({
                         onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>
-                  )}
+                  </RecordDisclosure>
                 </div>
               ))}
             </div>
@@ -372,7 +373,7 @@ const MedicalBackgroundForm = ({
             </div>
           </div>
           
-          {data.hasAllergies === 'Yes' && (
+          <RecordDisclosure open={data.hasAllergies === 'Yes'}>
             <div className="mt-4">
               <p className="text-sm text-secondary-600 mb-3">What are you allergic to? (Select all that apply)</p>
               {catalogsLoading ? (
@@ -401,7 +402,7 @@ const MedicalBackgroundForm = ({
                                   checked={isChecked}
                                   onChange={(e) => handleAllergyToggle(allergen.id, e.target.checked)}
                                 />
-                                {isChecked && (
+                                <RecordDisclosure open={isChecked}>
                                   <div className="ml-6 mt-1 mb-1 flex gap-2">
                                     <select
                                       className="form-input text-xs py-1 px-2"
@@ -423,7 +424,7 @@ const MedicalBackgroundForm = ({
                                       <option value="Suspected">Status: Suspected</option>
                                     </select>
                                   </div>
-                                )}
+                                </RecordDisclosure>
                               </div>
                             );
                           })}
@@ -449,7 +450,7 @@ const MedicalBackgroundForm = ({
                             checked={isChecked}
                             onChange={(e) => handleAllergyToggle(allergen.id, e.target.checked)}
                           />
-                          {isChecked && (
+                          <RecordDisclosure open={isChecked}>
                             <div className="ml-6 mt-1 mb-1 flex gap-2">
                               <select
                                 className="form-input text-xs py-1 px-2"
@@ -471,7 +472,7 @@ const MedicalBackgroundForm = ({
                                 <option value="Suspected">Status: Suspected</option>
                               </select>
                             </div>
-                          )}
+                          </RecordDisclosure>
                         </div>
                       );
                     })}
@@ -573,7 +574,7 @@ const MedicalBackgroundForm = ({
                 />
               </div>
             </div>
-          )}
+          </RecordDisclosure>
         </AccordionSection>
 
         {/* History of Hospitalizations */}
@@ -620,7 +621,7 @@ const MedicalBackgroundForm = ({
             )}
           </div>
           
-          {data.hasHospitalization === 'Yes' && (
+          <RecordDisclosure open={data.hasHospitalization === 'Yes'}>
             <div className="mt-4 space-y-4">
               <div>
                 <label className="form-label mb-2">Reason(s) for Hospitalization: <span className="text-xs text-secondary-500">(Select all that apply)</span></label>
@@ -636,7 +637,7 @@ const MedicalBackgroundForm = ({
                           checked={data.hospitalizationConditions?.[condition.id] || false}
                           onChange={(e) => handleCatalogToggle('hospitalizationConditions', condition.id, e.target.checked)}
                         />
-                        {data.hospitalizationConditions?.[condition.id] && (
+                        <RecordDisclosure open={data.hospitalizationConditions?.[condition.id]}>
                           <div className="ml-6 grid grid-cols-2 gap-2">
                             <Input
                               label="Admission Date:"
@@ -651,7 +652,7 @@ const MedicalBackgroundForm = ({
                               onChange={(e) => onChange({ ...data, hospitalizationDates: { ...data.hospitalizationDates, [condition.id]: { ...data.hospitalizationDates?.[condition.id], dischargeDate: e.target.value } } })}
                             />
                           </div>
-                        )}
+                        </RecordDisclosure>
                       </div>
                     )} />
                 )}
@@ -666,7 +667,7 @@ const MedicalBackgroundForm = ({
                         checked={data.hospitalizationConditions?.[condition.id] || false}
                         onChange={(e) => handleCatalogToggle('hospitalizationConditions', condition.id, e.target.checked)}
                       />
-                      {data.hospitalizationConditions?.[condition.id] && (
+                      <RecordDisclosure open={data.hospitalizationConditions?.[condition.id]}>
                         <div className="ml-6 grid grid-cols-2 gap-2">
                           <Input
                             label="Admission Date:"
@@ -681,7 +682,7 @@ const MedicalBackgroundForm = ({
                             onChange={(e) => onChange({ ...data, hospitalizationDates: { ...data.hospitalizationDates, [condition.id]: { ...data.hospitalizationDates?.[condition.id], dischargeDate: e.target.value } } })}
                           />
                         </div>
-                      )}
+                      </RecordDisclosure>
                     </div>
                   ))}
                 </div>
@@ -752,7 +753,7 @@ const MedicalBackgroundForm = ({
                 />
               </div>
             </div>
-          )}
+          </RecordDisclosure>
         </AccordionSection>
 
         {/* History of Operation */}
@@ -799,7 +800,7 @@ const MedicalBackgroundForm = ({
             )}
           </div>
           
-          {data.hasOperation === 'Yes' && (
+          <RecordDisclosure open={data.hasOperation === 'Yes'}>
             <div className="mt-4 space-y-4">
               <div>
                 <label className="form-label mb-2">Type of Operation(s): <span className="text-xs text-secondary-500">(Select all that apply)</span></label>
@@ -815,7 +816,7 @@ const MedicalBackgroundForm = ({
                           checked={data.operationConditions?.[procedure.id] || false}
                           onChange={(e) => handleCatalogToggle('operationConditions', procedure.id, e.target.checked)}
                         />
-                        {data.operationConditions?.[procedure.id] && (
+                        <RecordDisclosure open={data.operationConditions?.[procedure.id]}>
                           <div className="ml-6">
                             <Input
                               label="Date of Operation:"
@@ -824,7 +825,7 @@ const MedicalBackgroundForm = ({
                               onChange={(e) => onChange({ ...data, operationDates: { ...data.operationDates, [procedure.id]: e.target.value } })}
                             />
                           </div>
-                        )}
+                        </RecordDisclosure>
                       </div>
                     )} />
                 )}
@@ -839,7 +840,7 @@ const MedicalBackgroundForm = ({
                         checked={data.operationConditions?.[procedure.id] || false}
                         onChange={(e) => handleCatalogToggle('operationConditions', procedure.id, e.target.checked)}
                       />
-                      {data.operationConditions?.[procedure.id] && (
+                      <RecordDisclosure open={data.operationConditions?.[procedure.id]}>
                         <div className="ml-6">
                           <Input
                             label="Date of Operation:"
@@ -848,7 +849,7 @@ const MedicalBackgroundForm = ({
                             onChange={(e) => onChange({ ...data, operationDates: { ...data.operationDates, [procedure.id]: e.target.value } })}
                           />
                         </div>
-                      )}
+                      </RecordDisclosure>
                     </div>
                   ))}
                 </div>
@@ -919,7 +920,7 @@ const MedicalBackgroundForm = ({
                 />
               </div>
             </div>
-          )}
+          </RecordDisclosure>
         </AccordionSection>
 
         {/* Medications */}
@@ -962,7 +963,7 @@ const MedicalBackgroundForm = ({
             </div>
           </div>
           
-          {data.hasMedications === 'Yes' && (
+          <RecordDisclosure open={data.hasMedications === 'Yes'}>
             <div className="mt-4 space-y-4">
               <div>
                 <label className="form-label mb-2">Select Medication(s): <span className="text-xs text-secondary-500">(Select all that apply)</span></label>
@@ -1069,7 +1070,7 @@ const MedicalBackgroundForm = ({
                 />
               </div>
             </div>
-          )}
+          </RecordDisclosure>
         </AccordionSection>
 
         {/* Lifestyle */}
@@ -1113,7 +1114,7 @@ const MedicalBackgroundForm = ({
                   <span className="text-secondary-700">Yes</span>
                 </label>
               </div>
-              {data.smoker === 'yes' && (
+              <RecordDisclosure open={data.smoker === 'yes'}>
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Input
                     label="Sticks per day"
@@ -1130,7 +1131,7 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('smokerYears', e.target.value)}
                   />
                 </div>
-              )}
+              </RecordDisclosure>
             </div>
 
             {/* Alcohol */}
@@ -1161,7 +1162,7 @@ const MedicalBackgroundForm = ({
                   <span className="text-secondary-700">Yes</span>
                 </label>
               </div>
-              {data.alcoholDrinker === 'yes' && (
+              <RecordDisclosure open={data.alcoholDrinker === 'yes'}>
                 <div className="mt-4">
                   <Select
                     label="Frequency"
@@ -1170,7 +1171,7 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('alcoholFrequency', e.target.value)}
                   />
                 </div>
-              )}
+              </RecordDisclosure>
             </div>
 
             {/* Vaper */}
@@ -1201,7 +1202,7 @@ const MedicalBackgroundForm = ({
                   <span className="text-secondary-700">Yes</span>
                 </label>
               </div>
-              {data.vaper === 'yes' && (
+              <RecordDisclosure open={data.vaper === 'yes'}>
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Select
                     label="Vape Type"
@@ -1216,7 +1217,7 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleChange('vapeFrequency', e.target.value)}
                   />
                 </div>
-              )}
+              </RecordDisclosure>
             </div>
           </div>
         </AccordionSection>
@@ -1251,7 +1252,7 @@ const MedicalBackgroundForm = ({
                 />
               </div>
             </div>
-            {hasVisualAcuity && !hasDualLensTypes && (
+            <RecordDisclosure open={hasVisualAcuity && !hasDualLensTypes}>
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -1268,8 +1269,8 @@ const MedicalBackgroundForm = ({
                   />
                 </div>
               </>
-            )}
-            {hasDualLensTypes && (
+            </RecordDisclosure>
+            <RecordDisclosure open={hasDualLensTypes}>
               <div className="space-y-4">
                 <div className="rounded-xl border border-primary-200 bg-primary-50/40 p-4">
                   <h4 className="text-sm font-semibold text-primary-800 mb-3">Eyeglasses Grade</h4>
@@ -1307,7 +1308,7 @@ const MedicalBackgroundForm = ({
                   </div>
                 </div>
               </div>
-            )}
+            </RecordDisclosure>
           </div>
         </AccordionSection>
       </div>

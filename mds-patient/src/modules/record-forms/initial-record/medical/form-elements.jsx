@@ -1,4 +1,5 @@
 import React from 'react';
+import RecordDisclosure from '../../record-disclosure';
 
 export const Input = ({ id, label, required, error, reserveErrorSpace = false, className = '', ...props }) => {
   const generatedId = React.useId();
@@ -139,12 +140,10 @@ export const AccordionSection = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
     </button>
-    <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-      <div className="min-h-0 overflow-hidden">
+    <RecordDisclosure open={isOpen}>
       <div className="p-6 bg-white">
         {children}
       </div>
-      </div>
-    </div>
+    </RecordDisclosure>
   </div>
 );

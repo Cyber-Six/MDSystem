@@ -475,6 +475,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     setFieldErrors({});
 
     if (validateStep(currentStep)) {
+      if (formContentRef.current) formContentRef.current.scrollTop = 0;
       // Skip OB-GYNE step if gender is not Female
       if (currentStep === 3 && formData.personalInfo.gender !== 'Female') {
         setCurrentStep(5); // Skip to Review
@@ -487,6 +488,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   const handleBack = () => {
     // Clear field errors when navigating to a different step
     setFieldErrors({});
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
 
     if (currentStep === 5 && formData.personalInfo.gender !== 'Female') {
       setCurrentStep(3);
@@ -497,6 +499,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
 
   const handleEdit = (stepIndex) => {
     setCurrentStep(stepIndex);
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
   };
 
   const handleSubmit = async () => {

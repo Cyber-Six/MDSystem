@@ -517,6 +517,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     setFieldErrors({});
 
     if (validateStep(currentStep)) {
+      if (formContentRef.current) formContentRef.current.scrollTop = 0;
       // Skip OB-GYNE step if gender is not Female
       if (currentStep === 3 && formData.personalInfo.gender !== 'Female') {
         console.log('[Initial Medical Record Form] Skipping OB-GYNE step (not female)');
@@ -532,6 +533,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
 
     // Clear field errors when navigating to a different step
     setFieldErrors({});
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
 
     // Skip OB-GYNE step when going back if gender is not Female
     if (currentStep === 5 && formData.personalInfo.gender !== 'Female') {
@@ -545,6 +547,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
   const handleEdit = (stepIndex) => {
     console.log('[Initial Medical Record Form] Edit requested for step:', stepIndex);
     setCurrentStep(stepIndex);
+    if (formContentRef.current) formContentRef.current.scrollTop = 0;
   };
 
   const handleSubmit = async () => {

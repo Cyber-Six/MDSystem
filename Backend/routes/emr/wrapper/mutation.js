@@ -15,7 +15,6 @@ const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } =
 
 const { validateUpdateTicket } = require("../resolvers/record-validator.js");
 
-
 const Mutation = {
   _StaffUpdateTicket: async (_, {args, recordId, scope}, { user, res }) => {
     let newStatus = args.status;
@@ -25,7 +24,7 @@ const Mutation = {
         .message("Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.")
         .throw();
       }
-    
+
     if (newStatus === 'Approved') { // approval require check again
       const missingRecords = await validateUpdateTicket(recordId, scope);
       if (missingRecords.length > 0) {
@@ -57,15 +56,14 @@ const Mutation = {
         // users that were intentionally marked Inactive.
         await reloadCredentialStatus(_, { userId: args.userId, client, caller:"emr" }, { user, res });
       }
-      
+
       await client.query('COMMIT');
       logger.info(`User ID ${user.id} updated ticket ID ${recordId} to status ${newStatus}`);
 
-      
       return newStatus;
     } catch (error) {
       await client.query('ROLLBACK');
-      logger.error('Error updating ticket status:', error);
+      logger.error('Error updating ticket status', { code: error.code });
       throwGraphQLError(res).message("Internal server error").status(500).throw();
     } finally {
       client.release();
@@ -80,7 +78,7 @@ const Mutation = {
         .message("User identity mismatch. Only students can create student profiles.")
         .throw();
       }
-    
+
     await db.query(
       `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
         ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
@@ -101,7 +99,7 @@ const Mutation = {
         args.input.year
       ]
     );
-    logger.debug("Upserted Student Profile:", result.rows[0]);
+
     return {...result.rows[0], id: recordId, archived_at: null};
   },
 
@@ -141,7 +139,6 @@ const Mutation = {
       ]
     );
 
-    logger.debug("Upserted Employee Profile:", result.rows[0]);
     //return result.rows[0];
     return {...(args.input), id: recordId, archived_at: null};
   },
@@ -178,7 +175,6 @@ const Mutation = {
       );
 
       await client.query('COMMIT');
-      logger.debug("Inserted Vital Signs + Updated Log:", result.rows[0]);
 
       return {
         ...(args.input),
@@ -187,7 +183,7 @@ const Mutation = {
       };
     } catch (error) {
       await client.query('ROLLBACK');
-      logger.error('Error inserting Vital Signs:', error);
+      logger.error('Error inserting Vital Signs', { code: error.code });
       throwGraphQLError(res)
         .status(400)
         .message(`Failed to save edits: Vital signs: ${error.message}`)
@@ -239,7 +235,7 @@ const Mutation = {
           RETURNING *;
         `;
         toothPlacementsResult = await db.queryControlledClient(client, query, params);
-        logger.debug("Inserted Tooth Placements:", toothPlacementsResult.rows);
+
       }
 
       // Oral Findings
@@ -270,8 +266,8 @@ const Mutation = {
       };
     } catch (err) {
       await client.query('ROLLBACK');
-      
-      logger.error("Error inserting Dental Record:", err);
+
+      logger.error("Error inserting Dental Record", { code: err.code });
       if (err.code === '23503') { // foreign key violation
         throwGraphQLError(res)
           .status(400)
@@ -287,8 +283,6 @@ const Mutation = {
       client.release();
     }
   },
-
-
 
   _DentalHistory: async (_, {args, recordId}, { user, res }) => {
     const result = await db.query(
@@ -310,7 +304,6 @@ const Mutation = {
       ]
     );  
 
-    logger.debug("Upserted Dental History:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -331,7 +324,7 @@ const Mutation = {
           args.input.notes
         ]
       );
-    logger.debug("Upserted ObGynHistory:", result.rows[0]);
+
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -366,7 +359,6 @@ const Mutation = {
         args.input.yearsVaping,
       ]
     );
-    logger.debug("Upserted Lifestyle:", result.rows[0]);
 
     return {...(args.input), id: recordId, archived_at: null};
   },
@@ -406,7 +398,6 @@ const Mutation = {
     return {...record, id: recordId, isValid: result.rows[0].isValid, archived_at: null};
   },
 
-  
   _OralApplianceProfile: async (_, {args, recordId}, { user, res }) => {
     const profile = await anchor.OralAppliance(recordId, args.input.notes, {
       otherDescription: args.input.otherDescription,
@@ -439,7 +430,7 @@ const Mutation = {
             appliance.arch
             ]
           );
-        logger.debug("Inserted Oral Appliance:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -451,7 +442,6 @@ const Mutation = {
         else throw err;
       }
     }
-    logger.warn("Inserted Oral Appliances:", inserted);
     return {
       id: recordId,
       appliances: inserted,
@@ -475,7 +465,6 @@ const Mutation = {
        RETURNING *;`,
       [recordId, firstNumber.id, secondNumber.id]
     );
-    logger.debug("Upserted Emergency Contact:", result.rows[0]);
 
     return {
       id: recordId,
@@ -523,7 +512,6 @@ const Mutation = {
       );
 
       const acuityRecord = result.rows[0];
-      logger.debug("Upserted Visual Acuity Profile:", acuityRecord);
 
       // Return the proper shape expected by GraphQL
       return {
@@ -542,7 +530,6 @@ const Mutation = {
       }
     }
   },
-
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {
     await anchor.MedicalHistory(recordId);
@@ -564,13 +551,13 @@ const Mutation = {
             condition.diagnosedDate || null
             ]
           );
-        logger.debug("Inserted Medical Condition:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
       }
     }
-    logger.debug("Inserted Medical Conditions:", inserted);
+
     return {
       id: recordId,
       conditions: inserted,
@@ -579,7 +566,6 @@ const Mutation = {
   },
 
   _HospitalizationProfile: async (_, {args, recordId}, { user, res }) => {
-    console.log(args.input);
 
     await anchor.Hospitalization(recordId);
     await remove.HospitalizationRecord(recordId);
@@ -612,13 +598,13 @@ const Mutation = {
             hospitalization.notes || null
             ]
           );
-        logger.debug("Inserted Hospitalization:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
       }
     }
-    logger.debug("Inserted Hospitalizations:", inserted);
+
     return {
       id: recordId,
       hospitalizations: inserted,
@@ -627,7 +613,6 @@ const Mutation = {
   },
 
   _OperationProfile: async (_, {args, recordId}, { user, res }) => {
-    console.log(args.input);
 
     await anchor.Operation(recordId);
     await remove.OperationRecord(recordId);
@@ -658,7 +643,7 @@ const Mutation = {
             operation.notes || null
             ]
           );
-        logger.debug("Inserted Operation:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
@@ -690,7 +675,7 @@ const Mutation = {
             immunization.doseNumber
             ]
           );
-        logger.debug("Inserted Immunization:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
@@ -704,7 +689,6 @@ const Mutation = {
   },
 
   _DentalProcedureProfile: async (_, {args, recordId}, { user, res }) => {
-    console.log(args.input);
 
     await anchor.DentalProcedure(recordId);
     await remove.DentalProcedureRecord(recordId);
@@ -731,7 +715,7 @@ const Mutation = {
             procedure.procedureDate
             ]
           );
-        logger.debug("Inserted Dental Procedure:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -751,7 +735,6 @@ const Mutation = {
   },
 
   _AllergyProfile: async (_, {args, recordId}, { user, res }) => {
-    console.log(args.input);
 
     await anchor.Allergy(recordId);
     await remove.AllergyRecord(recordId);
@@ -784,7 +767,7 @@ const Mutation = {
             allergy.date_identified || null
             ]
           );
-        logger.debug("Inserted Allergy:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -805,7 +788,6 @@ const Mutation = {
   },
 
   _MedicationProfile: async (_, {args, recordId}, { user, res }) => {
-    console.log(args.input);
 
     await anchor.MaintenanceMedication(recordId, args.input.notes);
     await remove.MedicationRecord(recordId);
@@ -832,7 +814,7 @@ const Mutation = {
             medication.description || null
             ]
           );
-        logger.debug("Inserted Medication:", result.rows[0]);
+
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -904,7 +886,7 @@ const Mutation = {
         rows.push(inserted.rows[0]);
       }
       await client.query('COMMIT');
-      logger.debug("Resolved DomainTypeCatalogs:", rows);
+
       return rows;
     } catch (err) {
       await client.query('ROLLBACK');
@@ -967,7 +949,7 @@ const Mutation = {
         rows.push(inserted.rows[0]);
       }
       await client.query('COMMIT');
-      logger.debug("Resolved AllergenCatalogs:", rows);
+
       return rows;
     } catch (err) {
       await client.query('ROLLBACK');
@@ -1002,7 +984,7 @@ const Mutation = {
     `;
 
     const result = await db.queryControlled(query, params);
-    logger.debug("Inserted OralApplianceCatalogs:", result.rows);
+
     return result.rows;
   },
 
@@ -1052,7 +1034,6 @@ const Mutation = {
         .message(`No matching domain catalogs found.`)
         .throw();
     }
-    logger.debug("Updated DomainTypeCatalogs:", result.rows);
 
     return result.rows;
   }, // update catalog
@@ -1099,7 +1080,6 @@ const Mutation = {
         .message(`No matching allergen catalogs found.`)
         .throw();
     }
-    logger.debug("Updated AllergenCatalogs:", result.rows);
 
     return result.rows;
   },
@@ -1148,7 +1128,6 @@ const Mutation = {
         .message(`No matching oral appliance catalogs found.`)
         .throw();
     }
-    logger.debug("Updated OralApplianceCatalogs:", result.rows);
 
     return result.rows;
   },

@@ -80,7 +80,7 @@ const InitialRecordModal = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Banner */}
-        <div className={`record-form-header shrink-0 rounded-t-2xl border-t-4 border-primary-400 bg-primary-500 dark:border-primary-500 dark:bg-primary-950`}>
+        <div className="record-form-header shrink-0 rounded-t-2xl">
           <div className="px-4 py-3 sm:px-6 sm:py-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-3 flex-1">
               <div className="p-2 bg-primary-100 dark:bg-primary-800 rounded-xl">
@@ -124,7 +124,6 @@ const InitialRecordModal = ({
             </div>
           </div>
 
-          {/* Staff Note — attached flush to the bottom of the header, no gap */}
           {recordProgress?.steps?.length > 0 && (
             <ProgressStepper
               currentStep={recordProgress.currentStep}
