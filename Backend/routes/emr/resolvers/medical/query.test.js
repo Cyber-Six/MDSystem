@@ -138,6 +138,13 @@ test('clamps approval ticket branches to the permitted staff branch and requires
   expect(Wrapper._getStatusUpdateTickets).toHaveBeenLastCalledWith(null, { branch: 'Both' }, context);
 });
 
+test.each([null, undefined, 'Invalid'])('rejects ticket listing when the permission branch is %s', async branch => {
+  permit.isMedicalPermitted.mockResolvedValueOnce({ permitted: true, branch });
+  Wrapper._getStatusUpdateTickets.mockClear();
+  await expect(Query.getStatusUpdateTickets(null, { branch: 'Both' }, { user: { id: 3 }, res: {} })).rejects.toThrow('401:Unauthorized');
+  expect(Wrapper._getStatusUpdateTickets).not.toHaveBeenCalled();
+});
+
 test('masks restricted Superior information, returns permitted details, and handles patient search rules', async () => {
   const context = { user: { id: 3 }, res: {} };
   const args = { userId: 9, branch: 'Manila' };

@@ -315,7 +315,7 @@ const Query = {
 
   getStatusUpdateTickets: async (_, args, { user, res }) => {
     const { permitted, branch: permBranch } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
-    if (!permitted) {
+    if (!permitted || !['Manila', 'QuezonCity', 'Both'].includes(permBranch)) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getStatusUpdateTickets`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
