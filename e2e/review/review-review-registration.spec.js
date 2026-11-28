@@ -48,7 +48,7 @@ test('staff can open a pending patient record for read-only review', async ({ pa
   }).toBe(1);
   const patientRow = patientRows.first();
   await expect(patientRow.getByRole('cell').nth(3)).toHaveText('Pending');
-  await patientRow.getByRole('button', { name: /^Review/ }).click();
+  await patientRow.click();
 
   await page.getByRole('button', { name: 'Review Full Record', exact: true }).click();
   await expect(page.getByText('Personal Information', { exact: true })).toBeVisible({ timeout: 20_000 });

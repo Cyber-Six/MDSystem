@@ -3,7 +3,9 @@ import { ClipboardList, FilePlus2, Files, FilePenLine, Search, X } from 'lucide-
 import InitialRecordList from '../modules/pending-requests/components/initial-record-list';
 import RecordUpdateList from '../modules/pending-requests/components/review-sections/record-update/record-update-list';
 import CombinedRequestList from '../modules/pending-requests/components/combined-request-list';
-import { STATUS_OPTIONS } from '../modules/pending-requests/components/request-list-utils';
+import StatusFilter from '../modules/pending-requests/components/status-filter';
+import { DEFAULT_REQUEST_STATUSES } from '../modules/pending-requests/components/request-list-utils';
+import '../modules/pending-requests/components/review-sections/record-review.css';
 
 const REQUEST_TYPES = [
   { value: 'all', label: 'All requests', icon: Files },
@@ -13,7 +15,7 @@ const REQUEST_TYPES = [
 
 const PendingRequests = () => {
   const [filterType, setFilterType] = useState('Initial Record');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState(DEFAULT_REQUEST_STATUSES);
   const [searchQuery, setSearchQuery] = useState('');
   const listProps = { externalStatusFilter: filterStatus, showStatusFilter: false, searchQuery };
 
@@ -46,15 +48,10 @@ const PendingRequests = () => {
               <input type="search" aria-label="Search loaded requests" placeholder="Name, email, or identifier" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
             </span>
           </label>
-          <label className="request-field request-status-field">
-            <span>Status</span>
-            <select aria-label="Status" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
-              <option value="all">All statuses</option>
-              {STATUS_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          {(searchQuery || filterStatus !== 'all') && (
-            <button type="button" className="request-reset" onClick={() => { setSearchQuery(''); setFilterStatus('all'); }}>
+          <StatusFilter value={filterStatus} onChange={setFilterStatus} />
+          {(searchQuery || filterStatus.length !== DEFAULT_REQUEST_STATUSES.length
+            || !DEFAULT_REQUEST_STATUSES.every((status) => filterStatus.includes(status))) && (
+            <button type="button" className="request-reset" onClick={() => { setSearchQuery(''); setFilterStatus(DEFAULT_REQUEST_STATUSES); }}>
               <X size={16} aria-hidden="true" />Clear filters
             </button>
           )}

@@ -1,18 +1,34 @@
 import React, { useId, useState } from 'react';
-import { AlertCircle, ArrowRight, ChevronLeft, ChevronRight, FilePenLine, FilePlus2, Inbox, LoaderCircle, RefreshCw } from 'lucide-react';
+import {
+  AlertCircle, Ban, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight,
+  CircleAlert, Clock3, FilePenLine, FilePlus2, Inbox, LoaderCircle, RefreshCw,
+  RotateCcw, XCircle,
+} from 'lucide-react';
 import PatientTypeBadge from './patient-type-badge';
 import { STATUS_OPTIONS } from './request-list-utils';
 import './requests.css';
 
-const dateLabel = (value) => {
+const dateTimeLabel = (value) => {
   const date = value ? new Date(value) : null;
   return date && Number.isFinite(date.getTime())
-    ? date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+    ? date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
 };
 
 function StatusBadge({ status }) {
   const label = STATUS_OPTIONS.find((option) => option.value === status)?.label || status;
-  return <span className="request-status-badge" data-status={status}><span aria-hidden="true" />{label}</span>;
+  const icons = {
+    Pending: Clock3,
+    RevisionSubmitted: RotateCcw,
+    Approved: CheckCircle2,
+    Revision: CircleAlert,
+    Rejected: XCircle,
+    Expired: CalendarClock,
+    Cancelled: Ban,
+  };
+  const Icon = icons[status] || CircleAlert;
+  return <span className="request-status-badge" data-status={status}>
+    <Icon size={14} strokeWidth={2.2} aria-hidden="true" />{label}
+  </span>;
 }
 
 const PAGE_SIZE = 10;
@@ -50,7 +66,13 @@ export default function RequestListPanel({ kind, tickets, loading, error, filter
           <span>{loading ? 'Refreshing' : 'Refresh'}</span>
         </button>
       </div>
-      <div className="request-local-filters">{filters}</div>
+      <div className="request-local-filters">
+        <div className="request-filter-group">{filters}</div>
+        {isCombined && <div className="request-type-legend" aria-label="Request type indicator legend">
+          <span><i data-type="initial" aria-hidden="true" />Initial record</span>
+          <span><i data-type="update" aria-hidden="true" />Record update</span>
+        </div>}
+      </div>
 
       {error ? (
         <div className="request-feedback request-error" role="alert">
@@ -73,33 +95,36 @@ export default function RequestListPanel({ kind, tickets, loading, error, filter
         <>
           <table className="request-table" role="table" aria-labelledby={headingId}>
             <thead role="rowgroup"><tr role="row">
-              {['Patient', 'Ticket ID', ...(isCombined ? ['Request type'] : []), ...(isUpdate || isCombined ? ['Scope'] : []), 'Submitted', ...(isUpdate || isCombined ? ['Expires'] : []), 'Status', 'Action'].map((label) => (
-                <th key={label} scope="col" role="columnheader" className={label === 'Action' ? 'request-action-heading' : ''}>{label}</th>
+              {['Ticket ID', 'Patient', 'Submitted', 'Status'].map((label) => (
+                <th key={label} scope="col" role="columnheader">{label}</th>
               ))}
             </tr></thead>
             <tbody role="rowgroup">
               {pagedTickets.map((ticket) => {
                 const name = `${ticket.first_name || ''} ${ticket.last_name || ''}`.trim();
-                const expiresAt = ticket.created_at ? new Date(new Date(ticket.created_at).getTime() + 7 * 86400000) : null;
-                return <tr key={ticket.id} role="row">
+                const openReview = () => onReview(ticket);
+                return <tr key={ticket.id} role="row" tabIndex={0}
+                  aria-label={`Review ticket #${ticket.id}${name ? ` for ${name}` : ''}`}
+                  onClick={openReview}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openReview();
+                    }
+                  }}
+                  className={`request-clickable-row ${isCombined ? 'request-type-row' : ''}`}
+                  data-request-type={ticket.requestType}>
+                  <td data-label="Ticket ID" className="request-ticket-cell" role="cell">
+                    <span className="request-ticket-id">#{ticket.id}</span>
+                  </td>
                   <td className="request-patient-cell" role="cell">
                     <div className="request-patient">
                       <span className="request-avatar" aria-hidden="true">{[ticket.first_name, ticket.last_name].filter(Boolean).map((part) => part.trim().charAt(0)).join('').toUpperCase() || '—'}</span>
                       <div><span className="request-patient-name">{name || `Patient ID ${ticket.patientId}`}</span><PatientTypeBadge profileType={ticket.profile_type} /></div>
                     </div>
                   </td>
-                  <td data-label="Ticket ID" role="cell"><span className="request-ticket-id">#{ticket.id}</span></td>
-                  {isCombined && <td data-label="Request type" role="cell"><span className="request-scope">{ticket.requestType === 'initial' ? 'Initial record' : 'Record update'}</span></td>}
-                  {(isUpdate || isCombined) && <td data-label="Scope" role="cell"><span className="request-scope" data-scope={ticket.scope}>{ticket.scope || '—'}</span></td>}
-                  <td data-label="Submitted" role="cell">{dateLabel(ticket.created_at)}</td>
-                  {(isUpdate || isCombined) && <td data-label="Expires" role="cell">{ticket.requestType === 'initial' ? '—' : dateLabel(expiresAt)}</td>}
+                  <td data-label="Submitted" role="cell" className="request-date-cell">{dateTimeLabel(ticket.created_at)}</td>
                   <td data-label="Status" role="cell"><StatusBadge status={ticket._displayStatus || ticket.status} /></td>
-                  <td className="request-action-cell" role="cell">
-                    <button type="button" className="request-review" onClick={() => onReview(ticket)}
-                      aria-label={`Review ticket #${ticket.id}${name ? ` for ${name}` : ''}`}>
-                      Review<ArrowRight size={15} aria-hidden="true" />
-                    </button>
-                  </td>
                 </tr>;
               })}
             </tbody>

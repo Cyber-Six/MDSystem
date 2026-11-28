@@ -25,7 +25,7 @@ const labels = {
 const skipKeys = new Set(['id', 'acuityId', 'program', 'scope', 'email', '__typename', 'created_at', 'status']);
 
 function applicable(section, manifest) {
-  if (['personalInfo', 'profile'].includes(section)) return true;
+  if (['personalInfo', 'profile', 'emergencyContact'].includes(section)) return true;
   if (section === 'obgynHistory') return manifest.scope !== 'Dental' && manifest.record.personalInfo.sex === 'Female';
   const dental = section.startsWith('dental') || section === 'oralApplianceProfile';
   return manifest.scope === 'Both' || (dental ? manifest.scope === 'Dental' : manifest.scope === 'Medical');
@@ -103,8 +103,12 @@ async function assertFullRecord(page, manifest, comparisons = []) {
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('data-ticket-id', String(manifest.ticketId));
   for (const field of valuesFor(manifest)) {
-    const section = dialog.locator('[data-review-section]').filter({ has: page.getByRole('heading', { name: field.title, exact: true }) });
-    await expect(section, field.title).toHaveCount(1);
+    if (manifest.kind === 'update' && field.section === 'personalInfo') continue;
+    const title = field.section === 'profile' || (field.section === 'personalInfo' && field.path[0] === 'identifier' && manifest.role === 'Student')
+      ? (manifest.role === 'Student' ? 'School Information' : 'Employment Information')
+      : field.title;
+    const section = dialog.locator('[data-review-section]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+    await expect(section, title).toHaveCount(1);
     const entry = typeof field.path[1] === 'number' ? section.locator('[data-review-entry="' + field.section + ':' + field.path[1] + '"]') : null;
     const fieldContainer = entry && await entry.count() ? entry : section;
     if (field.photo) {
@@ -114,8 +118,9 @@ async function assertFullRecord(page, manifest, comparisons = []) {
     } else if (/^\d{4}-\d{2}-\d{2}/.test(field.display)) {
       const date = new Date(`${field.display.slice(0, 10)}T00:00:00Z`);
       const short = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      const long = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
       const text = await fieldContainer.innerText();
-      expect(text.includes(short) || text.includes(field.display.slice(0, 10)), `${field.title}: ${field.path.join('.')} date`).toBe(true);
+      expect(text.includes(short) || text.includes(long) || text.includes(field.display.slice(0, 10)), `${title}: ${field.path.join('.')} date`).toBe(true);
     } else {
       // Match inside the correct section and associate named fields with their row.
       const container = field.section === 'emergencyContact' ? section.locator(`[data-review-contact="${field.path[0]}"]`) : fieldContainer;

@@ -725,6 +725,7 @@ type UpdateTicket {
   patientId: ID!
   status: UpdateStatus!
   scope: UpdateScope
+  vitalSignsId: ID
   first_name: String
   last_name: String
   email: String
@@ -808,7 +809,7 @@ type Query {
   # Miscellaneous 
 
   getUpdateTicket: UpdateTicket
-  getUserUpdateTicket(userId: ID!): UpdateTicket
+  getUserUpdateTicket(userId: ID!, ticketId: ID): UpdateTicket
 
   getUserIDViaEntityId(entityId: String!, branch: DesignationBranch!): [UserProfile!]
   getUserIdViaName(Name: String!, branch: DesignationBranch!): [UserProfile!]
@@ -829,19 +830,19 @@ type Query {
   # Categories
   getProfile(approved: Boolean = false): UserProfile
   getMyProfile: UserProfile
-  getUserProfile(userId: ID!, from: Date, offset: Int, limit: Int): [UserProfile!]
+  getUserProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [UserProfile!]
 
   getDentalPhotoRecord(approved: Boolean = false): DentalPhotoRecord
-  getUserDentalPhotoRecord(userId: ID!, from: Date, offset: Int, limit: Int): [DentalPhotoRecord!]
+  getUserDentalPhotoRecord(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [DentalPhotoRecord!]
 
   getObgynHistory(approved: Boolean = false): ObgynHistory
-  getUserObgynHistory(userId: ID!, from: Date, offset: Int, limit: Int): [ObgynHistory!] # for medical
+  getUserObgynHistory(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [ObgynHistory!] # for medical
   
   getLifestyle(approved: Boolean = false): Lifestyle
-  getUserLifestyle(userId: ID!, from: Date, offset: Int, limit: Int): [Lifestyle!]
+  getUserLifestyle(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [Lifestyle!]
 
   getDentalHistory(approved: Boolean = false): DentalHistory
-  getUserDentalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [DentalHistory!]
+  getUserDentalHistory(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [DentalHistory!]
 
   # VitalSigns and DentalRecord queries moved to /staff/emr
   # Use /staff/emr queries: getPatientVitalSigns, getPatientDentalRecord, getVitalSignsById, getDentalRecordById
@@ -851,34 +852,34 @@ type Query {
   # getUserVitalSigns(userId: ID!, from: Date, offset: Int, limit: Int): [VitalSigns!]
 
   getOralApplianceProfile(pending: Boolean = false, approved: Boolean = false): OralApplianceProfile
-  getUserOralApplianceProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OralApplianceProfile!]
+  getUserOralApplianceProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [OralApplianceProfile!]
 
   getEmergencyContact(approved: Boolean): EmergencyContact
-  getUserEmergencyContact(userId: ID!, from: Date, offset: Int, limit: Int): [EmergencyContact!]
+  getUserEmergencyContact(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [EmergencyContact!]
 
   getAllergyProfile(pending: Boolean = false, approved: Boolean = false): AllergyProfile
-  getUserAllergyProfile(userId: ID!, from: Date, offset: Int, limit: Int): [AllergyProfile!]
+  getUserAllergyProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [AllergyProfile!]
 
   getMedicationProfile(pending: Boolean = false, approved: Boolean = false): MedicationProfile
-  getUserMedicationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [MedicationProfile!]
+  getUserMedicationProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [MedicationProfile!]
 
   getDentalProcedureProfile(approved: Boolean = false): DentalProcedureProfile
-  getUserDentalProcedureProfile(userId: ID!, from: Date, offset: Int, limit: Int): [DentalProcedureProfile!]
+  getUserDentalProcedureProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [DentalProcedureProfile!]
 
   getImmunizationProfile(pending: Boolean = false, approved: Boolean = false): ImmunizationProfile
-  getUserImmunizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [ImmunizationProfile!]
+  getUserImmunizationProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [ImmunizationProfile!]
 
   getOperationProfile(pending: Boolean = false, approved: Boolean = false): OperationProfile
-  getUserOperationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OperationProfile!]
+  getUserOperationProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [OperationProfile!]
   
   getHospitalizationProfile(pending: Boolean = false, approved: Boolean = false): HospitalizationProfile
-  getUserHospitalizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [HospitalizationProfile!]
+  getUserHospitalizationProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [HospitalizationProfile!]
 
   getMedicalHistory(pending: Boolean = false, approved: Boolean = false): MedicalHistory
-  getUserMedicalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [MedicalHistory!]
+  getUserMedicalHistory(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [MedicalHistory!]
 
   getVisualAcuityProfile(approved: Boolean = false): VisualAcuityProfile
-  getUserVisualAcuityProfile(userId: ID!, from: Date, offset: Int, limit: Int): [VisualAcuityProfile!]
+  getUserVisualAcuityProfile(userId: ID!, from: Date, offset: Int, limit: Int, ticketId: ID): [VisualAcuityProfile!]
   
 
   # Ticket IDs queries

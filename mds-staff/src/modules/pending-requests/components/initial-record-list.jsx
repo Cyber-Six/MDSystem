@@ -1,5 +1,5 @@
 import RequestListPanel from './request-list-panel';
-import { matchesRequestSearch, STATUS_OPTIONS } from './request-list-utils';
+import { matchesRequestSearch, normalizeStatuses, STATUS_OPTIONS } from './request-list-utils';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePermissions } from '../../../context/permissions-context';
 import { useStaffNotifications } from '../../notification/notification-context';
@@ -10,7 +10,7 @@ import {
   getStatusUpdateTickets,
 } from '../initial-record-service';
 import { enrichWithInitialFlag } from './ticket-type-helper';
-import InitialRecordDetailModal from './initial-record-detail-modal';
+import RecordReviewModal from './record-review-modal';
 import { formatBranchLabel } from '../../../utils/branch-utils';
 
 /**
@@ -20,7 +20,7 @@ import { formatBranchLabel } from '../../../utils/branch-utils';
  * Provides:
  *  • Branch selector   (Manila / QuezonCity / Both)
  *  • Status filter     (Pending, RevisionSubmitted, Approved, …)
- *  • Click-to-review modal (InitialRecordDetailModal)
+ *  • Click-to-review full record modal (RecordReviewModal)
  *
  * The component reflects the backend's UpdateTicket shape:
  *   { id, patientId, status, scope, created_at, first_name, last_name, branch }
@@ -49,22 +49,8 @@ const InitialRecordList = ({
   const [selectedTicket, setSelectedTicket] = useState(null);
 
   const effectiveStatusFilter = externalStatusFilter ?? statusFilter;
-  const queryStatuses = useMemo(
-    () => (
-      effectiveStatusFilter === 'all'
-        ? [
-            TICKET_STATUS.PENDING,
-            TICKET_STATUS.REVISION_SUBMITTED,
-            TICKET_STATUS.APPROVED,
-            TICKET_STATUS.REVISION,
-            TICKET_STATUS.REJECTED,
-            TICKET_STATUS.EXPIRED,
-            TICKET_STATUS.CANCELLED,
-          ]
-        : [effectiveStatusFilter]
-    ),
-    [effectiveStatusFilter],
-  );
+  const queryStatuses = useMemo(() => [...new Set(normalizeStatuses(effectiveStatusFilter).flatMap((status) =>
+    status === TICKET_STATUS.EXPIRED ? [TICKET_STATUS.PENDING] : [status]))], [effectiveStatusFilter]);
 
   // ── Fetch ----------------------------------------------------------------
 
@@ -112,7 +98,7 @@ const InitialRecordList = ({
           <label className="request-field"><span>Branch</span>
             <select aria-label="Branch" value={branch} onChange={(event) => setBranch(event.target.value)} disabled={allowedBranches().length === 1}>
               {ALL_BRANCHES.filter((value) => allowedBranches().includes(value)).map((value) => (
-                <option key={value} value={value}>{formatBranchLabel(value)}</option>
+                <option key={value} value={value}>{value === BRANCH.BOTH ? 'All branches' : formatBranchLabel(value)}</option>
               ))}
             </select>
           </label>
@@ -123,7 +109,7 @@ const InitialRecordList = ({
           </label>}
         </>}
       />
-      {selectedTicket && <InitialRecordDetailModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)}
+      {selectedTicket && <RecordReviewModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)}
         onAction={(updated) => { handleAction(updated); setSelectedTicket(null); }} staffRole={staffRole} />}
     </>
   );

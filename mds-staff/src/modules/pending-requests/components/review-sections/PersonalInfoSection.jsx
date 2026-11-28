@@ -1,6 +1,6 @@
 import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
-import React from 'react';
-import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
+import React, { useState } from 'react';
+import SectionWrapper, { DataRow, EditableField, formatReviewDate, hasReviewValue } from './SectionWrapper';
 import { formatBranchLabel } from '../../../../utils/branch-utils';
 
 /**
@@ -18,7 +18,10 @@ const PersonalInfoSection = ({
   onToggleEdit,
   isPending = false,
 }) => {
-  const hasEdits = Object.keys(editedFields).length > 0;
+  const [isProfileEditing, setProfileEditing] = useState(false);
+  const profileKeys = ['program', 'year', 'department', 'role', 'position'];
+  const hasProfileEdits = Object.keys(editedFields).some((key) => profileKeys.includes(key));
+  const hasPersonalEdits = Object.keys(editedFields).some((key) => !profileKeys.includes(key));
 
   const getVal = (key, fallback) =>
     editedFields[key] !== undefined ? editedFields[key] : fallback;
@@ -37,130 +40,134 @@ const PersonalInfoSection = ({
     return map[year] ?? year;
   };
 
-  const isStudent = basicInfo?.profile_type === 'Student' || profile?.program;
-  const isEmployee = basicInfo?.profile_type === 'Employee' || profile?.department;
+  const isStudent = profile?.__typename === 'StudentProfile' || Boolean(profile?.program) || basicInfo?.profile_type === 'Student';
+  const isEmployee = profile?.__typename === 'EmployeeProfile' || Boolean(profile?.department) || basicInfo?.profile_type === 'Employee';
+  const givenNames = [getVal('first_name', basicInfo?.first_name), getVal('middle_name', basicInfo?.middle_name)].filter(hasReviewValue).join(' ');
+  const fullName = [getVal('last_name', basicInfo?.last_name), givenNames].filter(hasReviewValue).join(', ');
+  const originalName = [basicInfo?.last_name, [basicInfo?.first_name, basicInfo?.middle_name].filter(hasReviewValue).join(' ')]
+    .filter(hasReviewValue).join(', ');
+  const schoolProgram = profile?.program ?? basicInfo?.program;
+  const schoolYear = formatYear(profile?.year ?? basicInfo?.year);
+  const department = profile?.department ?? basicInfo?.department;
+  const role = profile?.role ?? basicInfo?.role;
+  const categoryDescription = profile?.employmentCategoryOther ?? basicInfo?.employmentCategoryOther;
 
   return (
-    <SectionWrapper
-      title="Personal Information"
-      scopeLabel="Medical"
-      icon={
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      }
-      isEditing={isEditing}
-      onToggleEdit={onToggleEdit}
-      hasEdits={hasEdits}
-      isPending={isPending}
-    >
-      {/* Basic Info */}
-      <div className="space-y-1">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Personal Details
-        </h4>
-        <dl className="space-y-0">
-          <EditableField
-            label="Last Name"
-            maxLength={personalInfoLimits.surname}
-            value={getVal('last_name', basicInfo?.last_name)}
-            originalValue={getOriginal('last_name', basicInfo?.last_name)}
-            isEditing={isEditing}
-            onChange={(v) => onFieldChange?.('last_name', v)}
-          />
-          <EditableField
-            label="First Name"
-            maxLength={personalInfoLimits.firstName}
-            value={getVal('first_name', basicInfo?.first_name)}
-            originalValue={getOriginal('first_name', basicInfo?.first_name)}
-            isEditing={isEditing}
-            onChange={(v) => onFieldChange?.('first_name', v)}
-          />
-          <EditableField
-            label="Middle Name"
-            maxLength={personalInfoLimits.middleName}
-            value={getVal('middle_name', basicInfo?.middle_name)}
-            originalValue={getOriginal('middle_name', basicInfo?.middle_name)}
-            isEditing={isEditing}
-            onChange={(v) => onFieldChange?.('middle_name', v)}
-          />
-          <EditableField
-            label="Suffix"
-            maxLength={personalInfoLimits.suffix}
-            value={getVal('suffix', basicInfo?.suffix)}
-            originalValue={getOriginal('suffix', basicInfo?.suffix)}
-            isEditing={isEditing}
-            onChange={(v) => onFieldChange?.('suffix', v)}
-          />
-          <EditableField
-            label="Sex"
-            value={getVal('sex', basicInfo?.sex)}
-            originalValue={getOriginal('sex', basicInfo?.sex)}
-            isEditing={isEditing}
-            onChange={(v) => onFieldChange?.('sex', v)}
-            type="select"
-            options={['Male', 'Female']}
-          />
-          {isEmployee ? (
-            <>
+    <>
+      {basicInfo && <SectionWrapper
+        title="Personal Information"
+        isEditing={isEditing}
+        onToggleEdit={onToggleEdit}
+        hasEdits={hasPersonalEdits}
+        isPending={isPending}
+      >
+        {/* Basic Info */}
+        <div className="space-y-1">
+          <dl className="space-y-0">
+            {!isEditing && <DataRow label="Full Name" value={fullName} isEdited={fullName !== originalName} originalValue={originalName} />}
+            {isEditing && <>
               <EditableField
-                label="Identifier"
-                maxLength={10}
-                value={getVal('identifier', basicInfo?.identifier)}
-                originalValue={getOriginal('identifier', basicInfo?.identifier)}
+                label="Last Name"
+                maxLength={personalInfoLimits.surname}
+                value={getVal('last_name', basicInfo?.last_name)}
+                originalValue={getOriginal('last_name', basicInfo?.last_name)}
                 isEditing={isEditing}
-                onChange={(v) => { if (/^[0-9]*$/.test(v) && Number(v) <= 2147483647) onFieldChange?.('identifier', v); }}
+                onChange={(v) => onFieldChange?.('last_name', v)}
               />
               <EditableField
-                label="Branch"
-                value={getVal('branch', basicInfo?.branch)}
-                originalValue={getOriginal('branch', basicInfo?.branch)}
+                label="First Name"
+                maxLength={personalInfoLimits.firstName}
+                value={getVal('first_name', basicInfo?.first_name)}
+                originalValue={getOriginal('first_name', basicInfo?.first_name)}
                 isEditing={isEditing}
-                onChange={(v) => onFieldChange?.('branch', v)}
-                type="select"
-                options={[
-                  { value: 'Manila', label: 'Manila' },
-                  { value: 'QuezonCity', label: 'Quezon City' },
-                ]}
+                onChange={(v) => onFieldChange?.('first_name', v)}
               />
-            </>
-          ) : (
-            <>
-              <DataRow label="Identifier" value={basicInfo?.identifier} />
-              <DataRow label="Branch" value={formatBranchLabel(basicInfo?.branch)} />
-            </>
-          )}
-        </dl>
-        <dl>
-          <DataRow label="Birthday" value={basicInfo?.date_of_birth?.slice(0, 10)} />
-          <DataRow label="Civil Status" value={basicInfo?.civil_status} />
-          <DataRow label="Nationality" value={basicInfo?.nationality} />
-          <DataRow label="Religion" value={basicInfo?.religion} />
-          <DataRow label="Contact Number" value={basicInfo?.contactNumber} />
-          <DataRow label="Present Address" value={basicInfo?.present_address} />
-          <DataRow label="Province Address" value={basicInfo?.province_address} />
-        </dl>
-      </div>
+              <EditableField
+                label="Middle Name"
+                maxLength={personalInfoLimits.middleName}
+                value={getVal('middle_name', basicInfo?.middle_name)}
+                originalValue={getOriginal('middle_name', basicInfo?.middle_name)}
+                isEditing={isEditing}
+                onChange={(v) => onFieldChange?.('middle_name', v)}
+              />
+            </>}
+            <DataRow label="Birthday" value={formatReviewDate(basicInfo?.date_of_birth)} />
+            <EditableField
+              label="Suffix"
+              maxLength={personalInfoLimits.suffix}
+              value={getVal('suffix', basicInfo?.suffix)}
+              originalValue={getOriginal('suffix', basicInfo?.suffix)}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('suffix', v)}
+            />
+            <EditableField
+              label="Sex"
+              value={getVal('sex', basicInfo?.sex)}
+              originalValue={getOriginal('sex', basicInfo?.sex)}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('sex', v)}
+              type="select"
+              options={['Male', 'Female']}
+            />
+            {isEmployee ? (
+              <>
+                <EditableField
+                  label="Identifier"
+                  maxLength={10}
+                  value={getVal('identifier', basicInfo?.identifier)}
+                  originalValue={getOriginal('identifier', basicInfo?.identifier)}
+                  isEditing={isEditing}
+                  onChange={(v) => { if (/^[0-9]*$/.test(v) && Number(v) <= 2147483647) onFieldChange?.('identifier', v); }}
+                />
+                <EditableField
+                  label="Branch"
+                  value={getVal('branch', basicInfo?.branch)}
+                  originalValue={getOriginal('branch', basicInfo?.branch)}
+                  isEditing={isEditing}
+                  onChange={(v) => onFieldChange?.('branch', v)}
+                  type="select"
+                  options={[
+                    { value: 'Manila', label: 'Manila' },
+                    { value: 'QuezonCity', label: 'Quezon City' },
+                  ]}
+                />
+              </>
+            ) : (
+              <>
+                {!isStudent && <DataRow label="Identifier" value={basicInfo?.identifier} />}
+                <DataRow label="Branch" value={basicInfo?.branch ? formatBranchLabel(basicInfo.branch) : null} />
+              </>
+            )}
+          </dl>
+          <dl>
+            <DataRow label="Civil Status" value={basicInfo?.civil_status} />
+            <DataRow label="Nationality" value={basicInfo?.nationality} />
+            <DataRow label="Religion" value={basicInfo?.religion} />
+            <DataRow label="Contact Number" value={basicInfo?.contactNumber} />
+            <DataRow label="Present Address" value={basicInfo?.present_address} />
+            <DataRow label="Province Address" value={basicInfo?.province_address} />
+          </dl>
+        </div>
+      </SectionWrapper>}
 
       {/* School / Work Info */}
-      {isStudent && (
-        <div className="space-y-1 mt-4">
-          <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-            School Information
-          </h4>
+      {isStudent && [schoolProgram, schoolYear, basicInfo?.identifier].some(hasReviewValue) && (
+        <SectionWrapper title="School Information" isEditing={isProfileEditing} hasEdits={hasProfileEdits}
+          onToggleEdit={() => setProfileEditing((current) => !current)} isPending={isPending}>
           <dl className="space-y-0">
             <EditableField
               label="Program"
-              value={getVal('program', profile?.program ?? basicInfo?.program)}
-              originalValue={getOriginal('program', profile?.program ?? basicInfo?.program)}
-              isEditing={isEditing}
+              value={getVal('program', schoolProgram)}
+              originalValue={getOriginal('program', schoolProgram)}
+              isEditing={isProfileEditing}
               onChange={(v) => onFieldChange?.('program', v)}
             />
+            <DataRow label="Student Number" value={basicInfo?.identifier} />
             <EditableField
               label="Year Level"
-              value={getVal('year', formatYear(profile?.year ?? basicInfo?.year))}
-              originalValue={getOriginal('year', formatYear(profile?.year ?? basicInfo?.year))}
-              isEditing={isEditing}
+              value={getVal('year', schoolYear)}
+              originalValue={getOriginal('year', schoolYear)}
+              isEditing={isProfileEditing}
               onChange={(v) => onFieldChange?.('year', v)}
               type="select"
               options={[
@@ -169,43 +176,41 @@ const PersonalInfoSection = ({
               ]}
             />
           </dl>
-        </div>
+        </SectionWrapper>
       )}
 
-      {isEmployee && (
-        <div className="space-y-1 mt-4">
-          {profile?.role === 'Other' && <DataRow label="Employment Category Description" value={profile?.employmentCategoryOther ?? basicInfo?.employmentCategoryOther} />}
-          <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-            Employment Information
-          </h4>
+      {isEmployee && [department, role, profile?.position, categoryDescription].some(hasReviewValue) && (
+        <SectionWrapper title="Employment Information" isEditing={isProfileEditing} hasEdits={hasProfileEdits}
+          onToggleEdit={() => setProfileEditing((current) => !current)} isPending={isPending}>
           <dl className="space-y-0">
             <EditableField
               label="Department"
               maxLength={personalInfoLimits.department}
-              value={getVal('department', profile?.department)}
-              originalValue={getOriginal('department', profile?.department)}
-              isEditing={isEditing}
+              value={getVal('department', department)}
+              originalValue={getOriginal('department', department)}
+              isEditing={isProfileEditing}
               onChange={(v) => onFieldChange?.('department', v)}
             />
             <EditableField
               label="Role"
-              value={getVal('role', profile?.role)}
-              originalValue={getOriginal('role', profile?.role)}
-              isEditing={isEditing}
+              value={getVal('role', role)}
+              originalValue={getOriginal('role', role)}
+              isEditing={isProfileEditing}
               onChange={(v) => onFieldChange?.('role', v)}
             />
+            <DataRow label="Employment Category Description" value={categoryDescription} />
             <EditableField
               label="Position"
               maxLength={personalInfoLimits.position}
               value={getVal('position', profile?.position)}
               originalValue={getOriginal('position', profile?.position)}
-              isEditing={isEditing}
+              isEditing={isProfileEditing}
               onChange={(v) => onFieldChange?.('position', v)}
             />
           </dl>
-        </div>
+        </SectionWrapper>
       )}
-    </SectionWrapper>
+    </>
   );
 };
 

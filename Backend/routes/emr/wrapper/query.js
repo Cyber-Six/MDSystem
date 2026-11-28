@@ -11,7 +11,7 @@ const UPDATE_TICKET_EXPIRY_SEC = parseInt(process.env.UPDATE_TICKET_EXPIRY_SEC, 
 const DEFAULT_DATE_STRING = '1970-01-01T00:00:00Z';
 
 const Query = {
-  _getUserUpdateTicket: async (_, { userId }, { user, res }) => {
+  _getUserUpdateTicket: async (_, { userId, ticketId }, { user, res }) => {
     if (!userId) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -20,15 +20,17 @@ const Query = {
        `SELECT pul.id, pul.status, pul.scope, pul.notes, 
         pul."dentalRecordId", pul."vitalSignsId", pul.created_at
         FROM "patientUpdateLog" AS pul
-        JOIN "Patients" AS p ON p.id = pul."patientId"
-        WHERE p.id = $1
+        ${ticketId == null ? 'JOIN "Patients" AS p ON p.id = pul."patientId"' : ""}
+        WHERE pul."patientId" = $1
+        ${ticketId == null ? "" : "AND pul.id = $2"}
         ORDER BY pul.created_at DESC
         LIMIT 1;
         `,
-      [userId]
+      ticketId == null ? [userId] : [userId, ticketId]
       );
 
     const ticket = result.rows[0];
+    if (ticketId != null) return ticket ? { ...ticket, patientId: userId } : null;
 
     if (ticket && ticket.status === "InProgress") {
       const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
@@ -45,7 +47,7 @@ const Query = {
     return { ...ticket, patientId: userId}; // return scalar ID
   },
 
-  _getUserProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses}, { user, res }) => {
+  _getUserProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -63,6 +65,7 @@ const Query = {
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -72,7 +75,8 @@ const Query = {
       limit || 10,
       offset || 0,
       from || new Date(0),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -106,7 +110,7 @@ const Query = {
     });
   },
 
-  _getUserDentalPhotoRecord: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserDentalPhotoRecord: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -117,6 +121,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = dpr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -126,7 +131,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -134,7 +140,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserObgynHistory: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserObgynHistory: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -145,6 +151,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = ogh.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -154,14 +161,15 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
     return result.rows;
   },
 
-  _getUserLifestyle: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserLifestyle: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -172,6 +180,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = ls.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -181,14 +190,15 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
     return result.rows;
   },
 
-  _getUserDentalHistory: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserDentalHistory: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -199,6 +209,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = dh.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -208,7 +219,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -216,7 +228,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserOralApplianceProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserOralApplianceProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -227,6 +239,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = oa.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -236,7 +249,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -255,7 +269,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserEmergencyContact: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserEmergencyContact: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -266,6 +280,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = ec.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -275,7 +290,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -296,7 +312,7 @@ const Query = {
     return result.rows; 
   },
 
-  _getUserAllergyProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserAllergyProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -307,6 +323,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = al.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -316,7 +333,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -334,7 +352,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserMedicationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserMedicationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
@@ -344,6 +362,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = mm.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -353,7 +372,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -371,7 +391,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserDentalProcedureProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserDentalProcedureProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
@@ -381,6 +401,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = dp.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -390,7 +411,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -408,7 +430,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserImmunizationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserImmunizationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
@@ -418,6 +440,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = im.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -427,7 +450,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -445,7 +469,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserOperationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserOperationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
@@ -455,6 +479,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = op.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -464,7 +489,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -482,7 +508,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserHospitalizationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserHospitalizationProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
@@ -492,6 +518,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = hp.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -501,7 +528,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -519,7 +547,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserMedicalHistory: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserMedicalHistory: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
@@ -529,6 +557,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = mh.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -538,7 +567,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];
@@ -555,7 +585,7 @@ const Query = {
     return result.rows;
   },
 
-  _getUserVisualAcuityProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+  _getUserVisualAcuityProfile: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses, ticketId }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
       }
@@ -565,6 +595,7 @@ const Query = {
       JOIN "patientUpdateLog" pul ON pul.id = vap.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+        ${ticketId == null ? "" : "AND pul.id = $6"}
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -574,7 +605,8 @@ const Query = {
       limit || 10,
       offset || 0,
       new Date(from),
-      statuses || null
+      statuses || null,
+      ...(ticketId == null ? [] : [ticketId])
     ]);
 
     if (result.rows.length === 0) return [];

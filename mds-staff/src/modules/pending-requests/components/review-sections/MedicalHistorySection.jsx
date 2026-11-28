@@ -1,94 +1,34 @@
 import React from 'react';
-import SectionWrapper, { DataRow } from './SectionWrapper';
+import SectionWrapper, { formatReviewDate, ReviewChip, ReviewGroup } from './SectionWrapper';
 
-/**
- * MedicalHistorySection
- *
- * Displays patient's medical conditions (self-reported and family-reported)
- * from the MedicalHistory profile data.
- */
-const MedicalHistorySection = ({
-  medicalHistory,
-  catalogs = {},
-  isLocked = false,
-}) => {
-  const getCatalogName = (catalog, id) => {
-    if (!catalog?.length || id === undefined || id === null) return null;
-    const item = catalog.find((c) => String(c.id) === String(id));
-    return item?.name ?? null;
-  };
-
+export default function MedicalHistorySection({ medicalHistory, catalogs = {}, isLocked = false }) {
   const conditions = medicalHistory?.conditions ?? [];
-  const selfConditions = conditions.filter((c) => !c.relationship);
-  const familyConditions = conditions.filter((c) => c.relationship);
+  if (!conditions.length) return null;
 
-  const formatDate = (d) => {
-    if (!d) return null;
-    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
-  };
+  const groups = [
+    { title: 'Yourself', entries: conditions.filter((condition) => !condition.relationship) },
+    { title: 'Family', entries: conditions.filter((condition) => condition.relationship) },
+  ];
 
   return (
-    <SectionWrapper
-      title="Medical History"
-      scopeLabel="Medical"
-      isLocked={isLocked}
-      icon={
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      }
-    >
-      {/* Self-reported conditions */}
-      <div>
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Personal Conditions
-        </h4>
-        {selfConditions.length > 0 ? (
+    <SectionWrapper title="Medical History" isLocked={isLocked}>
+      {groups.filter(({ entries }) => entries.length > 0).map(({ title, entries }) => (
+        <ReviewGroup key={title} title={title}>
           <div className="flex flex-wrap gap-2">
-            {selfConditions.map((cond, i) => (
-              <span
-                key={cond.id ?? i} data-review-entry={`medicalHistory:${conditions.indexOf(cond)}`}
-                className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-error-100 dark:bg-error-900/20 text-error-800 dark:text-error-400 font-medium"
-              >
-                {getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || 'Unresolved choice'}
-                {cond.diagnosedDate && (
-                  <span className="ml-1 text-xs text-error-500 dark:text-error-500">
-                    ({formatDate(cond.diagnosedDate)})
-                  </span>
-                )}
-              </span>
-            ))}
+            {entries.map((condition) => {
+              const index = conditions.indexOf(condition);
+              const name = catalogs.medicalConditionCatalog?.find((item) => String(item.id) === String(condition.conditionId))?.name;
+              const detail = [condition.relationship, formatReviewDate(condition.diagnosedDate), name && condition.description]
+                .filter(Boolean).join(' · ');
+              return (
+                <ReviewChip key={condition.id ?? index} tone="condition" detail={detail} data-review-entry={`medicalHistory:${index}`}>
+                  {name || condition.description || 'Unresolved choice'}
+                </ReviewChip>
+              );
+            })}
           </div>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">
-            No personal conditions reported
-          </p>
-        )}
-      </div>
-
-      {/* Family conditions */}
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-          Family History
-        </h4>
-        {familyConditions.length > 0 ? (
-          <dl className="space-y-0">
-            {familyConditions.map((cond, i) => (
-              <div key={cond.id ?? i} data-review-entry={`medicalHistory:${conditions.indexOf(cond)}`}><DataRow
-                label={getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || 'Unresolved choice'}
-                value={cond.relationship}
-              /></div>
-            ))}
-          </dl>
-        ) : (
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">
-            No family conditions reported
-          </p>
-        )}
-      </div>
-
+        </ReviewGroup>
+      ))}
     </SectionWrapper>
   );
-};
-
-export default MedicalHistorySection;
+}

@@ -3,13 +3,12 @@ import { usePermissions } from '../../../context/permissions-context';
 import { useStaffNotifications } from '../../notification/notification-context';
 import { ALL_BRANCHES, BRANCH, TICKET_STATUS, getStatusUpdateTickets } from '../initial-record-service';
 import { enrichWithInitialFlag } from './ticket-type-helper';
-import InitialRecordDetailModal from './initial-record-detail-modal';
+import RecordReviewModal from './record-review-modal';
 import RequestListPanel from './request-list-panel';
-import { matchesRequestSearch, STATUS_OPTIONS } from './request-list-utils';
+import { matchesRequestSearch, normalizeStatuses, STATUS_OPTIONS } from './request-list-utils';
 import { formatBranchLabel } from '../../../utils/branch-utils';
 
 const EXPIRY_DAYS = 7;
-const ALL_STATUSES = STATUS_OPTIONS.map(({ value }) => value);
 const isAgeExpired = (ticket) => ticket.created_at
   && Date.now() - new Date(ticket.created_at).getTime() >= EXPIRY_DAYS * 86400000;
 
@@ -22,9 +21,9 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const statuses = useMemo(() => statusFilter === 'all'
-    ? ALL_STATUSES
-    : statusFilter === TICKET_STATUS.EXPIRED ? [TICKET_STATUS.PENDING] : [statusFilter], [statusFilter]);
+  const selectedStatuses = useMemo(() => normalizeStatuses(statusFilter), [statusFilter]);
+  const statuses = useMemo(() => [...new Set(selectedStatuses.flatMap((status) =>
+    status === TICKET_STATUS.EXPIRED ? [TICKET_STATUS.PENDING] : [status]))], [selectedStatuses]);
 
   useEffect(() => { if (permittedBranch) setBranch(permittedBranch); }, [permittedBranch]);
 
@@ -38,9 +37,8 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
         const isInitial = Boolean(ticket.is_initial);
         const expired = !isInitial && isAgeExpired(ticket);
         const displayStatus = expired ? TICKET_STATUS.EXPIRED : ticket.status;
-        if (statusFilter === TICKET_STATUS.EXPIRED && !expired) return [];
-        if (statusFilter === TICKET_STATUS.PENDING && expired) return [];
-        if (statusFilter !== 'all' && statusFilter !== TICKET_STATUS.EXPIRED && displayStatus !== statusFilter) return [];
+        if (expired && !selectedStatuses.includes(TICKET_STATUS.EXPIRED) && selectedStatuses.includes(TICKET_STATUS.PENDING)) return [];
+        if (!selectedStatuses.includes(displayStatus)) return [];
         return [{ ...ticket, requestType: isInitial ? 'initial' : 'update', _displayStatus: displayStatus }];
       });
       setTickets(combined);
@@ -49,7 +47,7 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
     } finally {
       setLoading(false);
     }
-  }, [branch, statusFilter, statuses]);
+  }, [branch, selectedStatuses, statuses]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => subscribe('updateTicket', () => refresh({ force: true })), [subscribe, refresh]);
@@ -66,7 +64,7 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
           <select aria-label="Branch" value={branch} disabled={allowedBranches().length === 1}
             onChange={(event) => setBranch(event.target.value)}>
             {ALL_BRANCHES.filter((value) => allowedBranches().includes(value)).map((value) =>
-              <option key={value} value={value}>{formatBranchLabel(value)}</option>)}
+              <option key={value} value={value}>{value === BRANCH.BOTH ? 'All branches' : formatBranchLabel(value)}</option>)}
           </select>
         </label>
         <label className="request-field"><span>Scope</span>
@@ -77,7 +75,7 @@ export default function CombinedRequestList({ statusFilter, searchQuery }) {
         </label>
       </>}
     />
-    {selectedTicket && <InitialRecordDetailModal key={`${selectedTicket.requestType}:${selectedTicket.id}`}
+    {selectedTicket && <RecordReviewModal key={`${selectedTicket.requestType}:${selectedTicket.id}`}
       ticket={{ ...selectedTicket, is_initial: selectedTicket.requestType === 'initial' }}
       onClose={() => setSelectedTicket(null)}
       onAction={() => { setTickets((current) => current.filter((ticket) => ticket.id !== selectedTicket.id)); setSelectedTicket(null); }} />}

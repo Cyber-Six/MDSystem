@@ -8,6 +8,14 @@ export const STATUS_OPTIONS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ];
 
+export const DEFAULT_REQUEST_STATUSES = ['Pending', 'RevisionSubmitted'];
+
+export function normalizeStatuses(statuses) {
+  if (Array.isArray(statuses)) return statuses;
+  if (statuses === 'all') return STATUS_OPTIONS.map(({ value }) => value);
+  return statuses ? [statuses] : DEFAULT_REQUEST_STATUSES;
+}
+
 export function matchesRequestSearch(ticket, query) {
   const term = query.trim().toLocaleLowerCase();
   const name = `${ticket.first_name || ''} ${ticket.last_name || ''}`.trim().toLocaleLowerCase();

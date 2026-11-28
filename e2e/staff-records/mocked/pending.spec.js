@@ -73,7 +73,7 @@ test('queue pagination, search, branch and scope filters preserve the review ent
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
   await expect(page.getByText('Alex Rivera 1', { exact: true })).toBeVisible();
   await page.getByLabel('Search loaded requests', { exact: true }).fill('#13');
-  const review = page.getByRole('button', { name: 'Review ticket #13 for Alex Rivera 13', exact: true });
+  const review = page.getByRole('row', { name: 'Review ticket #13 for Alex Rivera 13', exact: true });
   await review.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('button', { name: 'Review Full Record', exact: true })).toBeVisible();
@@ -97,7 +97,7 @@ test('light and dark queues reflow without horizontal overflow at phone, tablet 
     for (const width of [375, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await expect(page.getByRole('button', { name: 'Review ticket #21 for Sam Cruz', exact: true })).toBeVisible();
+      await expect(page.getByRole('row', { name: 'Review ticket #21 for Sam Cruz', exact: true })).toBeVisible();
       // Also verify the space left by the staff app's expanded desktop sidebar.
       if (width >= 768) {
         await page.locator('main').evaluate((main, availableWidth) => { main.style.width = `${availableWidth}px`; }, width - 224);

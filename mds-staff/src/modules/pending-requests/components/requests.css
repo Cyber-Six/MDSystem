@@ -18,6 +18,24 @@
 .request-search-input input { @apply min-w-0 flex-1 border-0 bg-transparent py-2 text-sm text-secondary-800 outline-none placeholder:text-secondary-500 dark:text-neutral-100 dark:placeholder:text-neutral-400; }
 .request-search-input:focus-within { @apply outline outline-2 outline-offset-2 outline-accent-600 dark:outline-primary-300; }
 .request-status-field { @apply min-w-[190px]; }
+.request-status-picker { @apply relative flex min-w-[220px] flex-col gap-1.5 text-xs font-medium text-secondary-500 dark:text-neutral-300; }
+.request-status-picker details { @apply relative; }
+.request-status-picker summary { @apply flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 text-sm font-medium text-secondary-800 hover:border-neutral-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100; }
+.request-status-picker summary::-webkit-details-marker { display: none; }
+.request-status-picker summary:focus-visible { @apply outline outline-2 outline-offset-2 outline-accent-600 dark:outline-primary-300; }
+.request-status-picker summary > span:first-of-type { @apply min-w-0 flex-1 truncate; }
+.request-status-count { @apply rounded-full bg-neutral-100 px-2 py-0.5 text-xs tabular-nums text-secondary-600 dark:bg-neutral-700 dark:text-neutral-200; }
+.request-picker-chevron { @apply transition-transform; }
+.request-status-picker details[open] .request-picker-chevron { @apply rotate-180; }
+.request-status-menu { @apply absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-neutral-200 bg-white p-2 shadow-xl dark:border-neutral-600 dark:bg-neutral-800; }
+.request-status-menu-heading { @apply flex items-center justify-between px-2 py-2 text-xs font-semibold text-secondary-500 dark:text-neutral-300; }
+.request-status-menu-heading button { @apply min-h-8 cursor-pointer rounded px-2 text-xs font-semibold text-accent-700 hover:bg-accent-50 dark:text-primary-300 dark:hover:bg-neutral-700; }
+.request-status-option { @apply flex min-h-10 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-sm text-secondary-700 hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-700; }
+.request-status-option input { @apply sr-only; }
+.request-checkbox { @apply flex h-4 w-4 items-center justify-center rounded border border-neutral-400 text-white dark:border-neutral-500; }
+.request-status-option input:checked + .request-checkbox { @apply border-accent-700 bg-accent-700 dark:border-primary-500 dark:bg-primary-500; }
+.request-status-option input:focus-visible + .request-checkbox { @apply outline outline-2 outline-offset-2 outline-accent-600 dark:outline-primary-300; }
+.request-status-hint { @apply mb-0 mt-1 border-t border-neutral-200 px-2 pt-2 text-xs text-secondary-500 dark:border-neutral-700 dark:text-neutral-400; }
 .request-reset { @apply flex min-h-11 cursor-pointer items-center gap-1.5 px-2 text-sm font-medium text-secondary-600 hover:text-secondary-900 dark:text-neutral-300 dark:hover:text-white; }
 .request-panel { @apply min-w-0 rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-800; }
 .request-panel-heading { @apply flex flex-wrap items-center gap-3 px-5 py-5; }
@@ -29,25 +47,46 @@
 .request-count { @apply inline-flex rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium tabular-nums text-secondary-600 dark:bg-neutral-700 dark:text-neutral-300; }
 .request-panel-title p { @apply mb-0 mt-1 text-sm leading-5 text-secondary-500 dark:text-neutral-300; }
 .request-refresh { @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-secondary-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700; }
-.request-local-filters { @apply flex flex-wrap items-end gap-3 border-t border-neutral-200 bg-neutral-50/70 px-5 py-3 dark:border-neutral-700 dark:bg-neutral-900/25; }
-.request-local-filters .request-field { @apply flex-row flex-wrap items-center gap-2; }
-.request-local-filters select { @apply min-h-10; }
-.request-table { @apply w-full border-collapse text-left text-sm text-secondary-600 dark:text-neutral-300; }
+.request-local-filters { @apply flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50/70 px-5 py-2.5 dark:border-neutral-700 dark:bg-neutral-900/25; }
+.request-filter-group { @apply flex flex-wrap items-center gap-2; }
+.request-local-filters .request-field { @apply flex-row flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-800; }
+.request-local-filters .request-field > span { @apply font-semibold text-secondary-500 dark:text-neutral-300; }
+.request-local-filters select { @apply min-h-8 cursor-pointer border-0 bg-transparent py-1 pl-0 pr-7 text-sm font-semibold text-secondary-800 outline-none ring-0 focus:ring-0 dark:text-neutral-100; }
+.request-type-legend { @apply flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-secondary-500 dark:text-neutral-300; }
+.request-type-legend span { @apply inline-flex items-center gap-2; }
+.request-type-legend i { @apply h-3 w-1 rounded-full bg-primary-500; }
+.request-type-legend i[data-type='update'] { @apply bg-accent-500; }
+.request-table { @apply w-full border-collapse table-fixed text-left text-sm text-secondary-600 dark:text-neutral-300; }
+.request-table th:nth-child(1), .request-table td:nth-child(1) { width: 8%; }
+.request-table th:nth-child(2), .request-table td:nth-child(2) { width: 34%; }
+.request-table th:nth-child(3), .request-table td:nth-child(3) { width: 28%; }
+.request-table th:nth-child(4), .request-table td:nth-child(4) { width: 30%; }
 .request-table thead { @apply border-y border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900/40; }
-.request-table th { @apply px-5 py-3 text-xs font-semibold uppercase tracking-wider text-secondary-500 dark:text-neutral-300; }
-.request-table td { @apply px-5 py-4 leading-5; }
+.request-table th { @apply px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-secondary-500 dark:text-neutral-300; }
+.request-table td { @apply px-3 py-1.5 leading-5; }
 .request-table tbody tr { @apply border-b border-neutral-200 transition-colors hover:bg-neutral-50 focus-within:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-700/25 dark:focus-within:bg-neutral-700/25; }
-.request-patient { @apply flex min-w-0 items-center gap-3; }
-.request-patient > div { @apply flex min-w-0 flex-col items-start gap-1.5; }
-.request-avatar { @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-neutral-100 text-xs font-semibold text-secondary-600 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200; }
+.request-table tbody tr.request-clickable-row { @apply cursor-pointer; }
+.request-table tbody tr.request-clickable-row:focus-visible { @apply relative z-10 outline outline-2 outline-offset-[-2px] outline-accent-600 dark:outline-primary-300; }
+.request-table td.request-date-cell { @apply whitespace-nowrap text-xs tabular-nums; }
+.request-type-row[data-request-type='initial'] td:first-child { box-shadow: inset 3px 0 0 theme('colors.primary.500'); }
+.request-type-row[data-request-type='update'] td:first-child { box-shadow: inset 3px 0 0 theme('colors.accent.500'); }
+.request-table tbody tr.request-type-row td { @apply px-3 py-1.5; }
+.request-panel-heading { @apply py-4; }
+.request-local-filters { @apply py-2; }
+.request-list-footer { @apply py-2; }
+.request-patient { @apply flex min-w-0 items-center gap-2; }
+.request-patient > div { @apply flex min-w-0 flex-col items-start gap-1; }
+.request-avatar { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-neutral-100 text-xs font-semibold text-secondary-600 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200; }
 .request-patient-name { @apply font-semibold text-secondary-800 dark:text-neutral-100; overflow-wrap: anywhere; }
 .request-ticket-id { @apply font-mono text-xs text-secondary-500 dark:text-neutral-300; }
-.request-status-badge { @apply inline-flex w-fit items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-secondary-600 dark:bg-neutral-700 dark:text-neutral-200; }
-.request-status-badge > span { @apply h-1.5 w-1.5 shrink-0 rounded-full bg-current; }
-.request-status-badge[data-status='Pending'] { @apply bg-warning-50 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300; }
-.request-status-badge[data-status='RevisionSubmitted'] { @apply bg-accent-50 text-accent-800 dark:bg-accent-900/30 dark:text-accent-300; }
-.request-status-badge[data-status='Approved'] { @apply bg-success-50 text-success-800 dark:bg-success-900/30 dark:text-success-300; }
-.request-status-badge[data-status='Revision'], .request-status-badge[data-status='Rejected'] { @apply bg-error-50 text-error-800 dark:bg-error-900/30 dark:text-error-300; }
+.request-ticket-cell { @apply w-24 whitespace-nowrap font-semibold; }
+.request-status-badge { @apply inline-flex w-fit items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-xs font-semibold leading-4 text-secondary-700 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100; }
+.request-status-badge svg { @apply shrink-0; }
+.request-status-badge[data-status='Pending'] { @apply border-warning-200 bg-warning-50 text-warning-800 dark:border-warning-800 dark:bg-warning-900/35 dark:text-warning-200; }
+.request-status-badge[data-status='RevisionSubmitted'] { @apply border-accent-200 bg-accent-50 text-accent-800 dark:border-accent-800 dark:bg-accent-900/35 dark:text-accent-200; }
+.request-status-badge[data-status='Approved'] { @apply border-success-200 bg-success-50 text-success-800 dark:border-success-800 dark:bg-success-900/35 dark:text-success-200; }
+.request-status-badge[data-status='Revision'], .request-status-badge[data-status='Rejected'] { @apply border-error-200 bg-error-50 text-error-800 dark:border-error-800 dark:bg-error-900/35 dark:text-error-200; }
+.request-status-badge[data-status='Expired'], .request-status-badge[data-status='Cancelled'] { @apply border-neutral-300 bg-neutral-100 text-secondary-700 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200; }
 .request-scope { @apply inline-flex rounded-md border border-neutral-200 px-2 py-0.5 text-xs font-medium text-secondary-600 dark:border-neutral-600 dark:text-neutral-200; }
 .request-review { @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-950 transition-colors hover:border-primary-400 hover:bg-primary-100 dark:border-primary-900 dark:bg-primary-900/20 dark:text-primary-300 dark:hover:border-primary-600 dark:hover:bg-primary-900/40; }
 .request-action-cell, .request-action-heading { @apply text-right; }
@@ -87,16 +126,17 @@
   .request-section-icon { @apply hidden; }
   .request-panel-title { flex-basis: calc(100% - 115px); }
   .request-panel-title p { @apply hidden; }
-  .request-local-filters { @apply px-4; }
+  .request-local-filters { @apply items-stretch px-4; }
   .request-local-filters .request-field { @apply flex-1 flex-col items-stretch; }
+  .request-type-legend { @apply w-full; }
   .request-table, .request-table tbody { @apply block; }
+  .request-table td { width: auto; }
   .request-table thead { @apply sr-only; }
-  .request-table tbody tr { @apply grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-4; }
+  .request-table tbody tr { @apply grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3; }
   .request-table td { @apply block min-w-0 p-0; }
   .request-table td[data-label]::before { content: attr(data-label); @apply mb-1 block text-xs font-medium text-secondary-500 dark:text-neutral-400; }
   .request-table .request-patient-cell { @apply col-span-2 pb-1; }
+  .request-table .request-ticket-cell { @apply col-span-2 order-first; }
   .request-avatar { @apply flex; }
-  .request-table .request-action-cell { @apply col-span-2 pt-1; }
-  .request-review { @apply w-full; }
   .request-list-footer { @apply px-4; }
 }

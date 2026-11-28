@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
+import React, { useState, useEffect, useRef } from 'react';
+import SectionWrapper, { DataRow, EditableField, formatReviewDate, hasReviewValue, ReviewChip, ReviewNote } from './SectionWrapper';
 import { axiosRequest } from '../../../../packages-core-adapter';
 
 const DENTAL_CLEANING_CHOICES = [
@@ -18,6 +18,17 @@ const AuthenticatedImage = ({ path, alt, className }) => {
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const previewButtonRef = useRef(null);
+  const closePreviewRef = useRef(null);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const previewButton = previewButtonRef.current;
+    closePreviewRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (previewButton?.isConnected) previewButton.focus({ preventScroll: true });
+    };
+  }, [isExpanded]);
 
   useEffect(() => {
     let objectUrl = null;
@@ -66,9 +77,10 @@ const AuthenticatedImage = ({ path, alt, className }) => {
   return (
     <>
       <button
+        ref={previewButtonRef}
         type="button"
         onClick={() => setIsExpanded(true)}
-        className="block w-full text-left"
+        className="block w-full max-w-xs rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600 dark:focus-visible:outline-primary-300"
         title="Click to enlarge"
       >
         <img
@@ -80,14 +92,24 @@ const AuthenticatedImage = ({ path, alt, className }) => {
 
       {isExpanded && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={alt}
           className="fixed inset-0 z-[1200] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center"
           onClick={() => setIsExpanded(false)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape' && event.key !== 'Tab') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.key === 'Escape') setIsExpanded(false);
+          }}
         >
           <div
             className="relative max-w-6xl w-full"
             onClick={(e) => e.stopPropagation()}
           >
             <button
+              ref={closePreviewRef}
               type="button"
               onClick={() => setIsExpanded(false)}
               className="absolute -top-10 right-0 text-white/90 hover:text-white text-sm font-medium"
@@ -127,7 +149,7 @@ const DentalHistorySection = ({
   const hasEdits = Object.keys(editedFields).length > 0;
 
   const formatCleaningRange = (value) => {
-    if (value === null || value === undefined || value === '') return '';
+    if (value === null || value === undefined || value === '') return value;
     const text = String(value).trim();
     const match = DENTAL_CLEANING_CHOICES.find((choice) => choice.value === text.replace(/\s+/gu, ''));
     if (match) return match.label;
@@ -146,31 +168,25 @@ const DentalHistorySection = ({
     return item?.name ?? null;
   };
 
-  const formatDate = (d) => {
-    if (!d) return '—';
-    try {
-      return new Date(d).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    } catch {
-      return String(d);
-    }
-  };
+  const procedures = dentalProcedureProfile?.procedures ?? [];
+  const appliances = oralApplianceProfile?.appliances ?? [];
+  const hasVisit = [dentalHistory?.seenByDentist, dentalHistory?.lastDentalCleaning,
+    dentalHistory?.lastVisitDate, dentalHistory?.purpose].some(hasReviewValue);
+  const hasApplianceDetails = [oralApplianceProfile?.otherDescription, oralApplianceProfile?.otherArch,
+    oralApplianceProfile?.notes].some(hasReviewValue);
+  const hasPhotos = Boolean(dentalPhotoRecord?.upperTeeth || dentalPhotoRecord?.lowerTeeth);
+  const seenByDentist = dentalHistory?.seenByDentist == null ? '' : dentalHistory.seenByDentist ? 'Yes' : 'No';
+  const originalCleaning = getOriginal('lastDentalCleaning', dentalHistory?.lastDentalCleaning ?? '');
 
-  /* ---- Dental Visit History ---- */
-  const renderDentalVisitHistory = () => {
-    if (!dentalHistory) {
-      return <p className="text-sm text-neutral-400 italic">No dental visit history on file.</p>;
-    }
+  if (!(hasVisit || procedures.length || hasReviewValue(dentalProcedureProfile?.notes) ||
+    appliances.length || hasApplianceDetails || hasPhotos || hasEdits)) return null;
 
-    return (
+  const renderDentalVisitHistory = () => (
       <dl className="space-y-0">
         <EditableField
           label="Seen by Dentist"
-          value={getVal('seenByDentist', dentalHistory.seenByDentist ? 'Yes' : 'No')}
-          originalValue={getOriginal('seenByDentist', dentalHistory.seenByDentist ? 'Yes' : 'No')}
+          value={getVal('seenByDentist', seenByDentist)}
+          originalValue={getOriginal('seenByDentist', seenByDentist)}
           isEditing={isEditing}
           onChange={(v) => onFieldChange?.('seenByDentist', v)}
           type="select"
@@ -180,10 +196,10 @@ const DentalHistorySection = ({
           label="Last Dental Cleaning"
           value={
             isEditing
-              ? getVal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? '')
-              : formatCleaningRange(getVal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? ''))
+              ? getVal('lastDentalCleaning', dentalHistory?.lastDentalCleaning ?? '')
+              : formatCleaningRange(getVal('lastDentalCleaning', dentalHistory?.lastDentalCleaning ?? ''))
           }
-          originalValue={formatCleaningRange(getOriginal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? ''))}
+          originalValue={isEditing ? originalCleaning : formatCleaningRange(originalCleaning)}
           isEditing={isEditing}
           onChange={(v) => onFieldChange?.('lastDentalCleaning', v)}
           type="select"
@@ -191,174 +207,74 @@ const DentalHistorySection = ({
         />
         <EditableField
           label="Purpose"
-          value={getVal('purpose', dentalHistory.purpose ?? '')}
-          originalValue={getOriginal('purpose', dentalHistory.purpose ?? '')}
+          value={getVal('purpose', dentalHistory?.purpose ?? '')}
+          originalValue={getOriginal('purpose', dentalHistory?.purpose ?? '')}
           isEditing={isEditing}
           onChange={(v) => onFieldChange?.('purpose', v)}
         />
         <EditableField
           label="Last Visit Date"
-          value={getVal('lastVisitDate', dentalHistory.lastVisitDate ? String(dentalHistory.lastVisitDate).split('T')[0] : '')}
-          originalValue={getOriginal('lastVisitDate', dentalHistory.lastVisitDate ? String(dentalHistory.lastVisitDate).split('T')[0] : '')}
+          value={getVal('lastVisitDate', dentalHistory?.lastVisitDate ? String(dentalHistory?.lastVisitDate).split('T')[0] : '')}
+          originalValue={getOriginal('lastVisitDate', dentalHistory?.lastVisitDate ? String(dentalHistory?.lastVisitDate).split('T')[0] : '')}
           isEditing={isEditing}
           onChange={(v) => onFieldChange?.('lastVisitDate', v)}
           type="date"
         />
       </dl>
-    );
-  };
-
-  /* ---- Dental Procedures ---- */
-  const renderDentalProcedures = () => {
-    const procedures = dentalProcedureProfile?.procedures;
-    if (!procedures || procedures.length === 0) {
-      return <><p className="text-sm text-neutral-400 italic">No dental procedures recorded.</p><DataRow label="Notes" value={dentalProcedureProfile?.notes} /></>;
-    }
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-neutral-200 dark:border-neutral-700">
-              <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Procedure
-              </th>
-              <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Date
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {procedures.map((proc, idx) => (
-              <tr
-                key={proc.id || idx}
-                className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
-              >
-                <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  {getCatalogName(catalogs.dentalProcedureCatalog, proc.procedureTypeId) || 'Unresolved choice'}
-                </td>
-                <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  {formatDate(proc.procedureDate)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {dentalProcedureProfile?.notes && (
-          <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400 italic">
-            Notes: {dentalProcedureProfile.notes}
-          </p>
-        )}
-      </div>
-    );
-  };
-
-  /* ---- Oral Appliances ---- */
-  const renderOralAppliances = () => {
-    const appliances = oralApplianceProfile?.appliances;
-    if (!appliances || appliances.length === 0) {
-      return <dl><DataRow label="Other Appliance Description" value={oralApplianceProfile?.otherDescription} /><DataRow label="Other Appliance Location" value={oralApplianceProfile?.otherArch} /><DataRow label="Appliance Notes" value={oralApplianceProfile?.notes} /></dl>;
-    }
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-neutral-200 dark:border-neutral-700">
-              <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Tag
-              </th>
-              <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Status
-              </th>
-              <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Date Issued
-              </th>
-              <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Arch
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {appliances.map((a, idx) => (
-              <tr
-                key={a.id || idx}
-                className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
-              >
-                <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  {getCatalogName(catalogs.oralApplianceCatalog, a.tagId) || 'Unresolved choice'}
-                </td>
-                <td className="py-2 px-3">
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                      a.status === 'Active'
-                        ? 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400'
-                        : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-                    }`}
-                  >
-                    {a.status}
-                  </span>
-                </td>
-                <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  {formatDate(a.dateIssued)}
-                </td>
-                <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">{a.arch}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {oralApplianceProfile?.notes && (
-          <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400 italic">
-            Notes: {oralApplianceProfile.notes}
-          </p>
-        )}
-      </div>
-    );
-  };
+  );
 
   return (
     <SectionWrapper
       title="Dental History"
-      scope="dental"
       isEditing={isEditing}
       hasEdits={hasEdits}
-      onToggleEdit={onToggleEdit}
+      onToggleEdit={hasVisit ? onToggleEdit : undefined}
       isPending={isPending}
       isLocked={isLocked}
     >
-      {/* Dental Visit History */}
-      <div className="mb-6">
-        <h4 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
-          Dental Visit History
-        </h4>
-        {renderDentalVisitHistory()}
-      </div>
+      {hasVisit && renderDentalVisitHistory()}
 
-      {/* Dental Procedures */}
-      <div className="mb-6">
-        <h4 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
-          Dental Procedures
-        </h4>
-        {renderDentalProcedures()}
-      </div>
+      {(appliances.length > 0 || hasApplianceDetails) && (
+        <div className="space-y-2">
+          <h4 className="m-0 text-sm font-semibold text-secondary-800 dark:text-neutral-100">Intra-Oral Appliances</h4>
+          {appliances.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {appliances.map((item, index) => (
+                <ReviewChip key={item.id ?? index} tone="appliance" data-review-entry={`oralApplianceProfile:${index}`}
+                  detail={[item.arch && `Location: ${item.arch}`, item.status, formatReviewDate(item.dateIssued)].filter(Boolean).join(' · ')}>
+                  {getCatalogName(catalogs.oralApplianceCatalog, item.tagId) || 'Unresolved choice'}
+                </ReviewChip>
+              ))}
+            </div>
+          )}
+          <dl>
+            <DataRow label="Other Appliance Description" value={oralApplianceProfile?.otherDescription} />
+            <DataRow label="Other Appliance Location" value={oralApplianceProfile?.otherArch} />
+          </dl>
+          <ReviewNote label="Appliance Notes" value={oralApplianceProfile?.notes} />
+        </div>
+      )}
 
-      {/* Oral Appliances */}
-      <div>
-        <h4 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
-          Oral Appliances
-        </h4>
-        {renderOralAppliances()}
-        {oralApplianceProfile?.appliances?.length > 0 && <dl><DataRow label="Other Appliance Description" value={oralApplianceProfile?.otherDescription} /><DataRow label="Other Appliance Location" value={oralApplianceProfile?.otherArch} /></dl>}
-      </div>
+      {(procedures.length > 0 || hasReviewValue(dentalProcedureProfile?.notes)) && (
+        <div className="space-y-2">
+          <h4 className="m-0 text-sm font-semibold text-secondary-800 dark:text-neutral-100">Dental Procedures</h4>
+          {procedures.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {procedures.map((item, index) => (
+                <ReviewChip key={item.id ?? index} tone="procedure" detail={formatReviewDate(item.procedureDate)} data-review-entry={`dentalProcedureProfile:${index}`}>
+                  {getCatalogName(catalogs.dentalProcedureCatalog, item.procedureTypeId) || 'Unresolved choice'}
+                </ReviewChip>
+              ))}
+            </div>
+          )}
+          <ReviewNote label="Dental Procedure Notes" value={dentalProcedureProfile?.notes} />
+        </div>
+      )}
 
       {/* Dental Photos */}
-      {dentalPhotoRecord && (dentalPhotoRecord.upperTeeth || dentalPhotoRecord.lowerTeeth) && (
+      {hasPhotos && (
         <div className="mt-2">
-          <h4 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
+          <h4 className="mb-3 mt-0 text-sm font-semibold text-secondary-800 dark:text-neutral-100">
             Dental Photos
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -370,7 +286,7 @@ const DentalHistorySection = ({
                 <AuthenticatedImage
                   path={`/media/record/dentalPhoto/${dentalPhotoRecord.upperTeeth}`}
                   alt="Upper teeth photo"
-                  className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 object-cover"
+                  className="aspect-[4/3] w-full rounded-lg border border-neutral-200 bg-neutral-50 object-contain dark:border-neutral-700 dark:bg-neutral-900"
                 />
               </div>
             )}
@@ -382,7 +298,7 @@ const DentalHistorySection = ({
                 <AuthenticatedImage
                   path={`/media/record/dentalPhoto/${dentalPhotoRecord.lowerTeeth}`}
                   alt="Lower teeth photo"
-                  className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 object-cover"
+                  className="aspect-[4/3] w-full rounded-lg border border-neutral-200 bg-neutral-50 object-contain dark:border-neutral-700 dark:bg-neutral-900"
                 />
               </div>
             )}

@@ -8,8 +8,9 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
-// Medical staff can view records in any active status (Approved = current live data)
 const reviewable_statuses = ["InProgress", "Pending", "RevisionSubmitted", "Revision", "Approved", "Rejected"];
+const ticketReviewStatuses = [...reviewable_statuses, "Cancelled", "Expired"];
+const getReviewStatuses = (ticketId) => ticketId == null ? reviewable_statuses : ticketReviewStatuses;
 
 function maskRestrictedSuperiorBasicInfo(row) {
   return {
@@ -55,7 +56,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
       
-    const result = await Wrapper._getUserUpdateTicket(_, { userId: args.userId }, { user, res });
+    const result = await Wrapper._getUserUpdateTicket(_, args, { user, res });
     return result; // return scalar ID
   },
 
@@ -66,9 +67,9 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return result;
+    else if (getReviewStatuses(args.ticketId).includes(result[0].status)) return result;
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -81,7 +82,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserDentalPhotoRecord(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserDentalPhotoRecord(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -93,7 +94,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserObgynHistory(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserObgynHistory(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result; 
   },
@@ -105,7 +106,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserLifestyle(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserLifestyle(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -117,7 +118,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserDentalHistory(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserDentalHistory(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -129,7 +130,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserOralApplianceProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserOralApplianceProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -141,7 +142,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserEmergencyContact(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserEmergencyContact(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -153,7 +154,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserAllergyProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserAllergyProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -165,7 +166,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserMedicationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserMedicationProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -177,7 +178,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserDentalProcedureProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserDentalProcedureProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result
   },
@@ -189,7 +190,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserImmunizationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserImmunizationProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -201,7 +202,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserOperationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserOperationProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -213,7 +214,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserHospitalizationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserHospitalizationProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -225,7 +226,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserMedicalHistory(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserMedicalHistory(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -237,7 +238,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserVisualAcuityProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
+    const result = await Wrapper._getUserVisualAcuityProfile(_, {...args, statuses: getReviewStatuses(args.ticketId)}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },

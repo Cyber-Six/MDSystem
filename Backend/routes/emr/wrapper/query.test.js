@@ -22,6 +22,22 @@ test('rejects missing IDs and expires an old validated in-progress ticket', asyn
   expect(db.setExpiredUpdateTickets).toHaveBeenCalledWith(5);
 });
 
+test('matches exact ticket reads to the patient and leaves the ticket status unchanged', async () => {
+  db.query.mockResolvedValueOnce({ rows: [{ id: 42, status: 'InProgress' }] });
+  const context = { user: { id: 3 }, res: {} };
+  await expect(Query._getUserUpdateTicket(null, { userId: 7, ticketId: '42' }, context))
+    .resolves.toMatchObject({ id: 42, patientId: 7, status: 'InProgress' });
+  expect(db.query.mock.lastCall).toEqual([expect.stringContaining('WHERE pul."patientId" = $1'), [7, '42']]);
+  expect(db.query.mock.lastCall[0]).toContain('AND pul.id = $2');
+  expect(db.setExpiredUpdateTickets).not.toHaveBeenCalled();
+
+  db.query.mockResolvedValueOnce({ rows: [] });
+  await expect(Query._getUserImmunizationProfile(null, { userId: 7, ticketId: '42', limit: 1 }, context)).resolves.toEqual([]);
+  expect(db.query.mock.lastCall[0]).toContain('pul."patientId" = $1');
+  expect(db.query.mock.lastCall[0]).toContain('AND pul.id = $6');
+  expect(db.query.mock.lastCall[1]).toEqual([7, 1, 0, new Date(0), null, '42']);
+});
+
 test('returns the stored custom employee category in readable profile data', async () => {
   db.query.mockResolvedValueOnce({ rows: [{ id: 12, profile_type: 'Employee', role: 'Other', employmentCategoryOther: 'Research officer' }] });
 
