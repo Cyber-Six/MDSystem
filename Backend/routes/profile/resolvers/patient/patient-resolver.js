@@ -1,4 +1,6 @@
 const Wrapper = require("../wrapper/wrapper.js");
+const { validatePersonalInput } = require('../../personal-input');
+const { validateIdentifier } = require('../../identifier');
 const { _getUserUpdateTicket } = require("../../../emr/wrapper/query.js");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -92,6 +94,8 @@ const Mutation = {
       if (!input.branch) input.branch = 'Both';
     }
 
+    validatePersonalInput(input, res);
+      input.identifier = validateIdentifier(input.identifier, res);
     const client = await db.connect();
 
     try {

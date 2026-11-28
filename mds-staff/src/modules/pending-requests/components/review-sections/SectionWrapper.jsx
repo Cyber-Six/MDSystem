@@ -170,6 +170,7 @@ export const EditableField = ({
   placeholder,
   options,        // for select type
   originalValue,
+  maxLength,
 }) => {
   const isEdited = originalValue !== undefined && value !== originalValue;
 
@@ -209,6 +210,7 @@ export const EditableField = ({
         ) : (
           <input
             type={type}
+            maxLength={maxLength}
             value={value ?? ''}
             onChange={(e) => onChange?.(e.target.value)}
             placeholder={placeholder}

@@ -1,4 +1,6 @@
 const db  = require("../../../../config/query.js");
+const { validatePersonalInput } = require('../../personal-input');
+const { validateIdentifier } = require('../../identifier');
 
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const logger = require("../../../../utils/logger.js");
@@ -47,7 +49,7 @@ const Query = {
         `,
       [userId]
       );
-     
+
     const ticket = result.rows[0];
     logger.debug("Fetched Update Personal Ticket:", ticket);
     if (ticket && ticket.status === "Pending") {
@@ -146,6 +148,7 @@ const Query = {
 const Mutation = {
   //continuation
   _PersonalRecordLog: async (_, { client = db.db(), userId, input }, { user, res }) => {
+    validatePersonalInput(input, res);
     const query = `
       INSERT INTO "UsersPersonalLog" (
         user_id,
@@ -179,7 +182,7 @@ const Mutation = {
     try {
       const { rows } = await db.queryClient(client, query, values);
 
-      console.log("Created personal record log with ID:", rows[0]);
+
       return rows[0];
     } catch (err) {
       logger.error("Error in _PersonalRecordLog:", err);
@@ -188,6 +191,7 @@ const Mutation = {
   },
 
   _UpdatePersonalRecordLog: async (_, { client = db.db(), userId, ticketId, input }, { user, res }) => {
+    validatePersonalInput(input, res);
     const fields = [];
     const values = [];
     let idx = 1;
@@ -226,7 +230,7 @@ const Mutation = {
         throwGraphQLError(res).message("No record found to update").status(404).throw();
       }
 
-      console.log("Updated personal record log with ID:", rows[0]);
+
       return rows[0];
     } catch (err) {
       logger.error("Error in _UpdatePersonalRecordLog:", err);
@@ -237,6 +241,11 @@ const Mutation = {
   _UserBranchIdentifier: async (_, { client = db.db(), userId, input }, { user, res }) => {
     if (!input.identifier || !input.branch) {
       throwGraphQLError(res).message("Both identifier and branch are required.").status(400).throw();
+    }
+
+    const identifier = validateIdentifier(input.identifier, res);
+    if (!['Manila', 'QuezonCity', 'Both'].includes(input.branch)) {
+      throwGraphQLError(res).message('Invalid branch.').status(400).throw();
     }
 
     const query = `
@@ -252,7 +261,7 @@ const Mutation = {
     // fallbacks were unreachable and obscured that contract.
     const values = [
       userId,
-      input.identifier,
+      identifier,
       input.branch
     ];
 
@@ -291,7 +300,7 @@ const Mutation = {
         await Mutation._reloadCredentialStatus(_, { userId, client }, { user, res }); // reload credential status after approval
         await applyUpdatePersonalRecord(_, { userId, input: rows[0], client }, { res, db });
         }
-        
+
       return rows[0].status;
     } catch (err) {
       await client.query('ROLLBACK');
@@ -314,7 +323,7 @@ const Mutation = {
           AND pul.status = 'Approved'
       );
     `;
-    
+
     const result = await client.query(checkQuery, [userId]);
     if (result.rows[0].exists) {
       const updateQuery = `
@@ -421,7 +430,7 @@ const Mutation = {
       params = [status, userId];
     }
 
-    
+
     try {
       const { rows } = await db.query(query, params);
       if (rows.length === 0) {

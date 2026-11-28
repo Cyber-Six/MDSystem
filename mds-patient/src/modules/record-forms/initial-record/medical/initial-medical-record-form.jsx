@@ -1,3 +1,4 @@
+import { getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressStepper from './progress-stepper';
@@ -236,6 +237,9 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
   const validateAllFields = (data) => {
     const errors = [];
     const pi = data.personalInfo || {};
+    for (const issue of getPersonalInfoLengthErrors(pi, { isEmployee: false })) {
+      errors.push({ section: 'Personal Information', sectionIndex: 0, ...issue });
+    }
 
     // ---- Personal Information (Step 0) ----
     if (!pi.surname?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Surname is required' });
@@ -250,7 +254,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     if (!pi.provinceAddress?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Province address is required' });
     if (!pi.programId) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program is required — please select one from the search results' });
     if (!pi.studentNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number is required' });
-    else if (!/^[a-zA-Z0-9\-]+$/.test(pi.studentNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number must contain only letters, numbers, and dashes' });
+    else if (!/^[0-9]+$/.test(pi.studentNumber.trim()) || Number(pi.studentNumber.trim()) > 2147483647) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number must contain digits only and be between 0 and 2147483647' });
     if (!pi.studentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student category is required' });
 
     // Emergency contacts
@@ -388,6 +392,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     const errors = {};
 
     stepErrors.forEach(err => {
+      if (err.field) errors[err.field] = err.message;
       const msg = err.message.toLowerCase();
 
       // Personal Information (Step 0)

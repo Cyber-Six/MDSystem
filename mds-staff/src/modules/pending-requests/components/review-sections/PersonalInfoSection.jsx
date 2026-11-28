@@ -1,3 +1,4 @@
+import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 import React from 'react';
 import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
 import { formatBranchLabel } from '../../../../utils/branch-utils';
@@ -61,6 +62,7 @@ const PersonalInfoSection = ({
         <dl className="space-y-0">
           <EditableField
             label="Last Name"
+            maxLength={personalInfoLimits.surname}
             value={getVal('last_name', basicInfo?.last_name)}
             originalValue={getOriginal('last_name', basicInfo?.last_name)}
             isEditing={isEditing}
@@ -68,6 +70,7 @@ const PersonalInfoSection = ({
           />
           <EditableField
             label="First Name"
+            maxLength={personalInfoLimits.firstName}
             value={getVal('first_name', basicInfo?.first_name)}
             originalValue={getOriginal('first_name', basicInfo?.first_name)}
             isEditing={isEditing}
@@ -75,6 +78,7 @@ const PersonalInfoSection = ({
           />
           <EditableField
             label="Middle Name"
+            maxLength={personalInfoLimits.middleName}
             value={getVal('middle_name', basicInfo?.middle_name)}
             originalValue={getOriginal('middle_name', basicInfo?.middle_name)}
             isEditing={isEditing}
@@ -82,6 +86,7 @@ const PersonalInfoSection = ({
           />
           <EditableField
             label="Suffix"
+            maxLength={personalInfoLimits.suffix}
             value={getVal('suffix', basicInfo?.suffix)}
             originalValue={getOriginal('suffix', basicInfo?.suffix)}
             isEditing={isEditing}
@@ -94,16 +99,17 @@ const PersonalInfoSection = ({
             isEditing={isEditing}
             onChange={(v) => onFieldChange?.('sex', v)}
             type="select"
-            options={['Male', 'Female', 'Other']}
+            options={['Male', 'Female']}
           />
           {isEmployee ? (
             <>
               <EditableField
                 label="Identifier"
+                maxLength={10}
                 value={getVal('identifier', basicInfo?.identifier)}
                 originalValue={getOriginal('identifier', basicInfo?.identifier)}
                 isEditing={isEditing}
-                onChange={(v) => onFieldChange?.('identifier', v)}
+                onChange={(v) => { if (/^[0-9]*$/.test(v) && Number(v) <= 2147483647) onFieldChange?.('identifier', v); }}
               />
               <EditableField
                 label="Branch"
@@ -175,6 +181,7 @@ const PersonalInfoSection = ({
           <dl className="space-y-0">
             <EditableField
               label="Department"
+              maxLength={personalInfoLimits.department}
               value={getVal('department', profile?.department)}
               originalValue={getOriginal('department', profile?.department)}
               isEditing={isEditing}
@@ -189,6 +196,7 @@ const PersonalInfoSection = ({
             />
             <EditableField
               label="Position"
+              maxLength={personalInfoLimits.position}
               value={getVal('position', profile?.position)}
               originalValue={getOriginal('position', profile?.position)}
               isEditing={isEditing}

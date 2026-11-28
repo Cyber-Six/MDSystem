@@ -1,3 +1,4 @@
+import { getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ProgressStepper from './progress-stepper';
 import PersonalInfoStep from './personal-info-step';
@@ -182,12 +183,22 @@ const RecordUpdateForm = ({
     }
   }, [currentStep, safeCurrentStep]);
 
+  const getPersonalLengthErrors = () => getPersonalInfoLengthErrors({
+    department: formData.employeeDepartment,
+    position: formData.employeePosition,
+    emergencyContacts: [
+      { contactNumber: formData.emergencyContact1Number },
+      { contactNumber: formData.emergencyContact2Number },
+    ],
+  }, { includeProfile: false, isEmployee: formData.profileType === 'Employee' }).map(issue => ({ section: 'Personal Info', sectionIndex: 0, ...issue }));
+
   // Validate required fields before allowing Next
   const validateCurrentStep = () => {
     const stepName = steps[safeCurrentStep];
     const errors = [];
 
     if (stepName === 'Personal Info') {
+      errors.push(...getPersonalLengthErrors());
       if (formData.profileType === 'Employee') {
         if (!formData.employeeDepartment) errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please enter your department before proceeding.' });
         if (!formData.employeeRole) errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your employment category before proceeding.' });
@@ -354,6 +365,14 @@ const RecordUpdateForm = ({
 
   const handleSubmit = async () => {
     if (reviewHasUnresolvedChoices) return;
+    if (!skipPersonalSubmit && !skipPersonalStep) {
+      const lengthErrors = getPersonalLengthErrors();
+      if (lengthErrors.length) {
+        setValidationErrors(lengthErrors);
+        setShowValidationModal(true);
+        return;
+      }
+    }
     // Check for an existing Pending ticket first and warn the patient before cancelling it
     try {
       const existing = await getUpdateTicketStatus();

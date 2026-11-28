@@ -1,3 +1,4 @@
+import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 /**
  * Personal Info Step — Step 0 of the initial record form
  */
@@ -179,11 +180,14 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
       <TextInput
         style={[...inputStyle, errors[errorKey || field] && styles.inputError]}
         value={String(pi[field] || '')}
-        onChangeText={(val) => onUpdate({ [field]: val })}
+        onChangeText={(val) => {
+          if ((field === 'studentNumber' || field === 'employeeId') && (!/^[0-9]*$/.test(val) || Number(val) > 2147483647)) return;
+          onUpdate({ [field]: val });
+        }}
         placeholder={placeholder}
         placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
         keyboardType={opts?.keyboardType}
-        maxLength={opts?.maxLength}
+        maxLength={opts?.maxLength ?? personalInfoLimits[field as keyof typeof personalInfoLimits]}
         returnKeyType="done"
       />
       {errors[errorKey || field] && <Text style={styles.errorText}>{errors[errorKey || field]}</Text>}
@@ -266,7 +270,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           onChangeText={v => updateContact('contactNumber', v)}
           placeholder="Contact Number (e.g. 09XXXXXXXXX)"
           keyboardType="phone-pad"
-          maxLength={11}
+          maxLength={personalInfoLimits.contactNumber}
           placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
           returnKeyType="done"
           onSubmitEditing={() => Keyboard.dismiss()}
@@ -299,6 +303,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           <View style={styles.fieldGroup}>
             <DatePickerInput
               label="Birthday"
+              maximumDate={new Date()}
               value={pi.birthday}
               onChange={(val) => onUpdate({ birthday: val })}
               isDark={isDark}
@@ -323,7 +328,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
           {renderField('Nationality', 'nationality', 'Enter nationality')}
           {renderField('Religion', 'religion', 'Enter religion')}
-          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad', maxLength: 11 })}
+          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad' })}
           {renderField('Present Address', 'address', 'Enter present address')}
           {renderField('Province Address', 'provinceAddress', 'Enter province address')}
         </>
@@ -336,7 +341,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
             Employee Information
           </Text>
 
-          {renderField('Employee ID Number', 'employeeId', 'Enter employee ID number')}
+          {renderField('Employee ID Number', 'employeeId', 'Enter employee ID number', undefined, { keyboardType: 'number-pad', maxLength: 10 })}
           {renderField('Department', 'department', 'Enter department')}
 
           {/* Employment Category */}
@@ -608,7 +613,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
             </Modal>
           </View>
 
-          {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
+          {renderField('Student Number', 'studentNumber', 'e.g. 202200001', undefined, { keyboardType: 'number-pad', maxLength: 10 })}
         </>
       )}
 

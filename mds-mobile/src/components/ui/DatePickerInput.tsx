@@ -11,6 +11,7 @@ interface Props {
   isDark: boolean;
   placeholder?: string;
   required?: boolean;
+  maximumDate?: Date;
 }
 
 const formatDate = (d: Date): string => {
@@ -33,6 +34,7 @@ export const DatePickerInput: React.FC<Props> = ({
   isDark,
   placeholder = 'Select date',
   required = false,
+  maximumDate,
 }) => {
   const [show, setShow] = useState(false);
   const dateValue = parseDate(value);
@@ -72,6 +74,7 @@ export const DatePickerInput: React.FC<Props> = ({
       {show && Platform.OS === 'android' && (
         <DateTimePicker
           value={dateValue}
+          maximumDate={maximumDate}
           mode="date"
           display="default"
           onChange={handleChange}
@@ -92,6 +95,7 @@ export const DatePickerInput: React.FC<Props> = ({
               </View>
               <DateTimePicker
                 value={dateValue}
+                maximumDate={maximumDate}
                 mode="date"
                 display="spinner"
                 onChange={handleChange}

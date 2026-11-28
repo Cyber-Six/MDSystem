@@ -1,3 +1,4 @@
+import { getPersonalInfoLengthErrors } from '@mdsystem/core/validation/personal-info';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressStepper from '../medical/progress-stepper';
@@ -222,6 +223,9 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   const validateAllFields = (data) => {
     const errors = [];
     const pi = data.personalInfo || {};
+    for (const issue of getPersonalInfoLengthErrors(pi, { isEmployee: true })) {
+      errors.push({ section: 'Personal Information', sectionIndex: 0, ...issue });
+    }
 
     // ---- Personal Information (Step 0) ----
     if (!pi.surname?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Surname is required' });
@@ -234,7 +238,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number must be a valid Philippine number (e.g. 09171234567 or +639171234567)' });
     if (!pi.address?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Address is required' });
     if (!pi.employeeId?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employee ID number is required' });
-    else if (!/^[a-zA-Z0-9\-]+$/.test(pi.employeeId.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employee ID must contain only letters, numbers, and dashes' });
+    else if (!/^[0-9]+$/.test(pi.employeeId.trim()) || Number(pi.employeeId.trim()) > 2147483647) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employee ID number must contain digits only and be between 0 and 2147483647' });
     if (!pi.department?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Department is required' });
     if (!pi.employmentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employment category is required' });
     if (pi.employmentCategory === 'Other' && !pi.employmentCategoryOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your employment category' });
@@ -297,6 +301,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     const errors = {};
 
     stepErrors.forEach(err => {
+      if (err.field) errors[err.field] = err.message;
       const msg = err.message.toLowerCase();
 
       // Personal Information (Step 0)

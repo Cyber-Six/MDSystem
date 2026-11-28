@@ -1,3 +1,4 @@
+import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 import React from 'react';
 import { Input, Select } from './form-elements';
 import { searchStudentProgram } from '@core/services/emr-service';
@@ -86,7 +87,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
       {formData.profileType === 'Employee' ? (
       <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
         <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white mb-5 pb-4 border-b border-neutral-200 dark:border-neutral-700">Employment Information</h3>
-        <Input label="Department" required placeholder="Enter department" value={formData.employeeDepartment || ''} onChange={(event) => onChange({ ...formData, employeeDepartment: event.target.value })} />
+        <Input maxLength={personalInfoLimits.department} label="Department" required placeholder="Enter department" value={formData.employeeDepartment || ''} onChange={(event) => onChange({ ...formData, employeeDepartment: event.target.value })} />
         <Select
           label="Employment Category"
           required
@@ -101,7 +102,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
           ]}
         />
         {formData.employeeRole === 'Other' && <Input label="Specify Employment Category" required placeholder="Enter your employment category" value={formData.employeeCategoryOther || ''} onChange={(event) => onChange({ ...formData, employeeCategoryOther: event.target.value })} />}
-        <Input label="Position" placeholder="Enter position" value={formData.employeePosition || ''} onChange={(event) => onChange({ ...formData, employeePosition: event.target.value })} />
+        <Input maxLength={personalInfoLimits.position} label="Position" placeholder="Enter position" value={formData.employeePosition || ''} onChange={(event) => onChange({ ...formData, employeePosition: event.target.value })} />
       </div>
       ) : (
       <>
@@ -220,6 +221,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               reserveErrorSpace
               placeholder="Contact Number"
+              maxLength={personalInfoLimits.contactNumber}
               value={formData.emergencyContact1Number || ''}
               onChange={(e) => handleInputChange('emergencyContact1Number', handlePhone('ec1', e.target.value))}
               error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : undefined}
@@ -259,6 +261,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               reserveErrorSpace
               placeholder="Contact Number"
+              maxLength={personalInfoLimits.contactNumber}
               value={formData.emergencyContact2Number || ''}
               onChange={(e) => handleInputChange('emergencyContact2Number', handlePhone('ec2', e.target.value))}
               error={phoneWarnings.ec2 ? 'Contact number cannot exceed 11 digits.' : undefined}

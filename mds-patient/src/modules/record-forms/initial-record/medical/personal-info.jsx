@@ -1,3 +1,4 @@
+import { personalInfoLimits } from '@mdsystem/core/validation/personal-info';
 import React from 'react';
 import { Input, Select } from './form-elements';
 import { searchStudentProgram } from '../../../../services/emr-service';
@@ -9,30 +10,14 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
     onChange({ ...data, [field]: value });
   };
 
-  const [phoneWarnings, setPhoneWarnings] = React.useState({});
 
-  // Strip non-phone chars and enforce a maximum of 11 digits
-  const handlePhone = (fieldKey, rawVal) => {
+  // Strip non-phone chars and enforce the storage length limit
+  const handlePhone = (rawVal) => {
     const filtered = rawVal.replace(/[^\d+\-\s()]/g, '');
-    const digits = filtered.replace(/\D/g, '');
-    if (digits.length > 11) {
-      let digitCount = 0;
-      let result = '';
-      for (const char of filtered) {
-        if (/\d/.test(char)) {
-          if (digitCount >= 11) break;
-          digitCount++;
-        }
-        result += char;
-      }
-      setPhoneWarnings(prev => ({ ...prev, [fieldKey]: true }));
-      return result;
-    }
-    setPhoneWarnings(prev => ({ ...prev, [fieldKey]: false }));
-    return filtered;
+    return filtered.slice(0, personalInfoLimits.contactNumber);
   };
-  // Strip any character that is not alphanumeric or a dash
-  const filterStudentNumber = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
+  // Reject nonnumeric identifier input
+  const filterStudentNumber = (val) => (/^[0-9]*$/.test(val) && Number(val) <= 2147483647 ? val : (data.studentNumber || ''));
 
   const handleEmergencyContactChange = (index, field, value) => {
     // Clear error for this emergency contact field when user starts typing
@@ -148,6 +133,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           <Input
             label="Surname"
             required
+            maxLength={personalInfoLimits.surname}
             value={data.surname || ''}
             onChange={(e) => handleChange('surname', e.target.value)}
             placeholder="Enter surname"
@@ -156,6 +142,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           <Input
             label="First Name"
             required
+            maxLength={personalInfoLimits.firstName}
             value={data.firstName || ''}
             onChange={(e) => handleChange('firstName', e.target.value)}
             placeholder="Enter first name"
@@ -163,12 +150,14 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           />
           <Input
             label="Middle Name"
+            maxLength={personalInfoLimits.middleName}
             value={data.middleName || ''}
             onChange={(e) => handleChange('middleName', e.target.value)}
             placeholder="Enter middle name"
           />
           <Input
             label="Suffix"
+            maxLength={personalInfoLimits.suffix}
             value={data.suffix || ''}
             onChange={(e) => handleChange('suffix', e.target.value)}
             placeholder="e.g., Jr., Sr., III"
@@ -176,6 +165,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           <Input
             label="Birthday"
             type="date"
+            max={new Date().toISOString().slice(0, 10)}
             required
             value={data.birthday || ''}
             onChange={(e) => handleChange('birthday', e.target.value)}
@@ -215,6 +205,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           <Input
             label="Nationality"
             required
+            maxLength={personalInfoLimits.nationality}
             value={data.nationality || ''}
             onChange={(e) => handleChange('nationality', e.target.value)}
             placeholder="Enter nationality"
@@ -222,6 +213,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           />
           <Input
             label="Religion"
+            maxLength={personalInfoLimits.religion}
             value={data.religion || ''}
             onChange={(e) => handleChange('religion', e.target.value)}
             placeholder="Enter religion"
@@ -231,17 +223,19 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             type="tel"
             required
             reserveErrorSpace
+            maxLength={personalInfoLimits.contactNumber}
             value={data.contactNumber || ''}
-            onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
+            onChange={(e) => handleChange('contactNumber', handlePhone(e.target.value))}
             placeholder="09XXXXXXXXX"
             className="mb-0"
-            error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
+            error={fieldErrors.contactNumber}
           />
         </div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label="Present Address"
             required
+            maxLength={personalInfoLimits.address}
             value={data.address || ''}
             onChange={(e) => handleChange('address', e.target.value)}
             placeholder="Enter current/present address"
@@ -250,6 +244,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           <Input
             label="Province Address"
             required
+            maxLength={personalInfoLimits.provinceAddress}
             value={data.provinceAddress || ''}
             onChange={(e) => handleChange('provinceAddress', e.target.value)}
             placeholder="Enter province/permanent address"
@@ -317,6 +312,9 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
           <Input
             label="Student Number"
             required
+            maxLength={10}
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={data.studentNumber || ''}
             onChange={(e) => handleChange('studentNumber', filterStudentNumber(e.target.value))}
             placeholder="Enter student number"
@@ -377,10 +375,11 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 type="tel"
                 required
                 reserveErrorSpace
+                maxLength={personalInfoLimits.contactNumber}
                 value={data.emergencyContacts[index]?.contactNumber || ''}
-                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', handlePhone(`ec${index}`, e.target.value))}
+                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', handlePhone(e.target.value))}
                 placeholder="Contact Number"
-                error={phoneWarnings[`ec${index}`] ? 'Contact number cannot exceed 11 digits.' : (index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber)}
+                error={fieldErrors.emergencyContact2ContactNumber)}
               />
             </div>
             <div className="mt-2">
