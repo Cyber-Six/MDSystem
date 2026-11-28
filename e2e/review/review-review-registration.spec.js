@@ -38,7 +38,7 @@ test('staff can open a pending patient record for read-only review', async ({ pa
   const pendingLink = page.getByRole('link', { name: /Pending Requests/ });
   await expect(pendingLink).toBeVisible();
   await pendingLink.click();
-  await expect(page.getByRole('heading', { name: /Initial Record Submissions/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Initial record submissions/i })).toBeVisible();
 
   const patientCell = page.getByText(patientName, { exact: true });
   const patientRows = page.getByRole('row').filter({ has: patientCell });
@@ -48,7 +48,7 @@ test('staff can open a pending patient record for read-only review', async ({ pa
   }).toBe(1);
   const patientRow = patientRows.first();
   await expect(patientRow.getByRole('cell').nth(3)).toHaveText('Pending');
-  await patientRow.click();
+  await patientRow.getByRole('button', { name: /^Review/ }).click();
 
   await page.getByRole('button', { name: 'Review Full Record', exact: true }).click();
   await expect(page.getByText('Personal Information', { exact: true })).toBeVisible({ timeout: 20_000 });

@@ -673,10 +673,13 @@ const Query = {
             pul.created_at    AS created_at,
             COALESCE(up.first_name, upl.first_name)   AS first_name,
             COALESCE(up.last_name,  upl.last_name)    AS last_name,
+            uc.email          AS email,
+            up.identifier::text AS identifier,
             up.branch         AS branch,
             p.profile::text   AS profile_type
           FROM "patientUpdateLog" pul
           JOIN "UsersPersonal" up ON up.id = pul."patientId"
+          LEFT JOIN "UserCredentials" uc ON uc.id = pul."patientId"
           LEFT JOIN "Patients" p ON p.id = pul."patientId"
           LEFT JOIN LATERAL (
             SELECT first_name, last_name

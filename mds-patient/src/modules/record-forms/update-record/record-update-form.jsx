@@ -115,6 +115,9 @@ const RecordUpdateForm = ({
       if (!isCurrentPatientSession()) return;
       setActiveTicket(ticket);
       setTicketStatusError(false);
+      // Render the ticket and staff note while revision data is still loading.
+      // The revision action remains disabled until the prefill request finishes.
+      setTicketStatusLoading(false);
       setUpdateReviewConfirmed(false);
       setReviewConfirmationError(false);
 

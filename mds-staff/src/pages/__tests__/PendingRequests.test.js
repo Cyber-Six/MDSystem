@@ -4,6 +4,8 @@ import PendingRequests from '../PendingRequests';
 import { getStatusUpdateTickets } from '../../modules/pending-requests/initial-record-service';
 import { fetchPatientRecordForReview } from '../../modules/pending-requests/patient-record-service';
 
+jest.mock('../../modules/pending-requests/components/requests.css', () => ({}));
+
 jest.mock('../../context/permissions-context', () => ({
   usePermissions: () => ({ branch: 'Manila', allowedBranches: () => ['Manila'] }),
 }));
@@ -84,25 +86,22 @@ test('filters by record type and applies the shared status to both lists', async
     tickets.filter((ticket) => statuses.includes(ticket.status)));
 
   await render();
-  expect(filters()[0].value).toBe('Initial Record');
-  expect(filters()[1].value).toBe('all');
-  expect(Array.from(filters()[0].options, (option) => option.text)).toEqual([
-    'All Types', 'Initial Record', 'Record Update',
-  ]);
+  expect(container.querySelector('button[aria-pressed="true"]').textContent).toBe('Initial records');
+  expect(filters()[0].value).toBe('all');
   expect(container.textContent).toContain('Alex Rivera');
   expect(container.textContent).not.toContain('Sam Cruz');
 
-  await select(0, 'Record Update');
+  await clickButton('Record updates');
   expect(container.textContent).toContain('Sam Cruz');
   expect(container.textContent).not.toContain('Alex Rivera');
 
-  await select(0, 'all');
+  await clickButton('All requests');
   expect(container.textContent).toContain('Alex Rivera');
   expect(container.textContent).toContain('Sam Cruz');
   expect(container.textContent).toContain('Ari Cruz');
 
   getStatusUpdateTickets.mockClear();
-  await select(1, 'RevisionSubmitted');
+  await select(0, 'RevisionSubmitted');
   expect(getStatusUpdateTickets.mock.calls).toEqual([
     [['RevisionSubmitted'], 'Manila', 0, 20, {}],
     [['RevisionSubmitted'], 'Manila', 0, 20, {}],
@@ -111,8 +110,8 @@ test('filters by record type and applies the shared status to both lists', async
   expect(container.textContent).toContain('No submissions found');
   expect(container.textContent).not.toContain('Sam Cruz');
 
-  await select(0, 'Initial Record');
-  expect(filters()[1].value).toBe('RevisionSubmitted');
+  await clickButton('Initial records');
+  expect(filters()[0].value).toBe('RevisionSubmitted');
   expect(container.textContent).not.toContain('Ari Cruz');
 });
 
@@ -123,7 +122,7 @@ test('shows each list loading and then its own empty state', async () => {
 
   await render();
   expect(container.textContent).toContain('Loading submissions…');
-  await select(0, 'all');
+  await clickButton('All requests');
   expect(container.textContent).toContain('Loading submissions…');
   expect(container.textContent).toContain('Loading requests…');
   expect(container.textContent).not.toContain('No submissions found');
@@ -144,7 +143,7 @@ test.each([
   fetchPatientRecordForReview.mockReturnValue(new Promise(() => {}));
 
   await render();
-  await select(0, type);
+  await clickButton(type === 'Initial Record' ? 'Initial records' : 'Record updates');
   await clickButton('Review');
   expect(container.textContent).toContain('Review Full Record');
   expect(fetchPatientRecordForReview).not.toHaveBeenCalled();
@@ -156,4 +155,44 @@ test.each([
   expect(fetchPatientRecordForReview).toHaveBeenCalledWith(
     ticket.patientId, ticket.scope, ticket.sex, ticket.id,
   );
+});
+
+async function search(value) {
+  const input = container.querySelector('input[type="search"]');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+test('searches both loaded lists by patient name or ticket ID without fetching again', async () => {
+  getStatusUpdateTickets.mockResolvedValue([initialTicket, updateTicket]);
+  await render();
+  await clickButton('All requests');
+  getStatusUpdateTickets.mockClear();
+  await search('  RIVERA  ');
+  expect(container.textContent).toContain('Alex Rivera');
+  expect(container.textContent).not.toContain('Sam Cruz');
+  await search('#22');
+  expect(container.textContent).toContain('Sam Cruz');
+  expect(container.textContent).not.toContain('Alex Rivera');
+  expect(getStatusUpdateTickets).not.toHaveBeenCalled();
+  await search('unknown patient');
+  expect(container.querySelectorAll('.request-feedback h3')).toHaveLength(2);
+  expect(container.textContent).toContain('No matching requests');
+  await clickButton('Clear filters');
+  expect(container.textContent).toContain('Alex Rivera');
+  expect(container.textContent).toContain('Sam Cruz');
+});
+
+test('reports a load failure without a misleading empty state and supports retry', async () => {
+  getStatusUpdateTickets.mockRejectedValueOnce(new Error('Service unavailable'));
+  await render();
+  expect(container.querySelector('[role="alert"]').textContent).toContain('Service unavailable');
+  expect(container.textContent).not.toContain('No submissions found');
+  getStatusUpdateTickets.mockResolvedValueOnce([initialTicket]);
+  await clickButton('Try again');
+  expect(getStatusUpdateTickets).toHaveBeenLastCalledWith(expect.any(Array), 'Manila', 0, 20, { force: true });
+  expect(container.textContent).toContain('Alex Rivera');
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });

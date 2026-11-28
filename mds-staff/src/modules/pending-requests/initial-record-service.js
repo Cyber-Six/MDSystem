@@ -112,6 +112,8 @@ export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit
          created_at
          first_name
          last_name
+         email
+         identifier
          profile_type
          branch
        }
